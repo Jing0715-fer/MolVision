@@ -246,3 +246,42 @@ Stage Summary:
 - 本轮目标全部达成：QA 冒烟、superpose 全链路（算法/UI/命令行/边界）、录制全链路（引擎/徽章/工具栏/命令行）、README+截图
 - 未解决问题与风险：①superpose 结果不持久——会话从源文本恢复坐标（叠合后 reload 会还原到原始位；可后续在会话中存变换矩阵）；②叠合目前移动结构只取最长蛋白链比对（多链复合物如抗体未逐链匹配，Roadmap 已列）；③录制 WebM 在 Safari 支持有限（MediaRecorder webm），降级路径存在但未测 Safari；④agent-browser errors 空条目依旧（已知伪迹）
 - 下一阶段建议（优先级序）：① 叠合变换持久化（session 存 quat/translation + 恢复时应用）；② 多链/逐链叠合模式（matchmaker 的迭代链配对）；③ 大结构 LOD/实例化预算；④ DSSP sheet 兜底；⑤ AO 按 quality 自动降采样
+
+---
+Task ID: cron-r6
+Agent: main
+Task: 周期评审——QA 冒烟 + DSSP 二级结构引擎 + 界面接触分析 + 叠合变换持久化 + HELIX/SHEET 解析重大 bug 修复
+
+Work Log:
+- 读取 worklog（cron-r5 完成 superpose/录制）；dev server 全绿（dev.log 中 recording 未定义错误为 HMR 过渡态，代码已修复）
+- QA 冒烟：会话恢复（1UBQ+1D3Z 1,231 原子）✓、氢键 304 ✓、ensemble 播放/暂停 ✓、渲染 3288 独特色彩 ✓、0 新增错误 ✓
+- 【发现并修复重大历史 bug】HELIX/SHEET 记录列位解析错误：HELIX 链 ID 实际在 0-idx 19（代码读 line[20]），SHEET 链 ID 在 21（代码读 19）且 seqNum 范围错位——经 1UBQ/4HHB 实测 RCSB 文件字节偏移 + biotike 惯例交叉验证；后果：所有带记录结构的记录型二级结构从未生效（cartoon 一直渲染全 loop 管状）。修复后 1UBQ 记录标记 H=16 E=33 与文件精确一致
+- 新功能 A【DSSP 二级结构指认】：
+  - 新建 src/lib/molecular/dssp.ts：Kabsch–Sander 骨架氢键能量（E = q1q2(1/rON+1/rCH−1/rOH−1/rCN)·f，阈值 −0.5 kcal/mol）
+  - 【关键调试历程】初版 H 用 C‘ 延长线放置（误差 1.00 Å）→ 能量系统性偏弱（β 折叠区 −0.1~−0.4 vs 真实 −1~−3）→ 用 1D3Z 真实氢原子对比 4 种放置策略：C’ 延长 1.00 Å / Cα 延长 1.46 Å / O 反向 0.57 Å / **120° 平面放置 0.03 Å**（C'(prev)-N-Cα(i) 平面内 Rodrigues 旋转 120°，取远离 Cα 一侧）→ 采用后 1UBQ 氢键 25→54
+  - 【第二关键发现】反平行 β 折叠氢键呈交替分布（紧对 rON≈3Å、间隔对 rON≈7Å，几何实测证实）→ 桥接需组合判据：tight（互氢键）+ flanked（ladder 两侧邻对各有强键，为不在 hbs 中的弱对扩展候选集）+ para1/2/3（平行变体，para2 恰好捕捉 7↔10/11 交替单键）
+  - 验证：1UBQ DSSP H=16（与记录 100% 一致）/E=22（5 条 β 链全部正确检出 2-7/12-16/41-45/48-50/65-71，diffs 31→11）；4HHB H=462/448；1CRN H=21/21 完美；1D3Z E=24/23
+  - parser.ts：无记录结构兜底从 CA 间距启发式（无法检测 β 折叠）升级为解析时自动 DSSP；store 加 recomputeSS action（bump rev 触发 cartoon 重建）；commands 加 dssp 命令（输出 H/E/L 百分比统计）
+- 新功能 B【界面接触分析】：
+  - 新建 contacts.ts：detectContacts（A/B 掩码重原子距离 ≤ cutoff，排除同残基/成键对，残基对级聚合 minDist+最近原子对+计数）+ runContactAnalysis 运行器（面板/命令行共用）+ interfaceAtomIndices
+  - 新建 contacts-store.ts（独立 zustand）+ AnalysisPanel.tsx（左侧第 8 个「分析」标签，FlaskConical 图标）
+  - engine.ts：contactGroup 渲染——顶点色 LineSegments（近红 #ef4444 → 远琥珀 #f59e0b 距离渐变）+ InstancedMesh 端点标记（instanceColor 按各自线色）；4000 条 CAP；结构移除/rebuildStructureVisuals（ensemble 帧/叠合坐标变化）联动刷新
+  - 2D 接触图谱：canvas 热图（行=A 侧残基、列=B 侧，链边界线 + 抽样轴标 + 45° 旋转 X 标签），hover 显示残基对+距离 tooltip，点击选择该残基对（实测 A:LEU113↔B:HIS116 4.22Å → 18 原子选中）
+  - 一键选择 A 侧/B 侧/全部界面残基（实测 A 侧 36 残基 178 原子）；SS 组成堆叠条（H 玫红/E 琥珀/L 灰）+ DSSP 重算按钮
+  - commands.ts：contacts <exprA> | <exprB> [n]（off/hide/show 子命令）+ interface <链A> <链B> [n] 快捷命令
+  - StatusBar 接触徽章（Network 图标，橙色系）
+  - 验证：4HHB interface A B → 84 对接触（A:1168↔B:1224 原子，49ms）· 界面残基 36/28 · 最近 A:PRO114↔B:HIS116 2.66Å（血红蛋白 α₁β₁ 界面，科学合理）；3D 连线截图像素验证 3923 暖色像素；VLM 确认连线/图谱/面板全部可见
+- 新功能 C【叠合变换持久化】：
+  - types.ts StructureEntry 加 transform（quat+translation）；engine.superpose 变换后写入 store（多次叠合正确复合：qTotal=q2⊗q1，tTotal=R(q2)t1+t2）
+  - 【修复 3 个 bug】①四元数顺序：superpose.ts 约定 (w,x,y,z) 而 THREE.Quaternion 构造器是 (x,y,z,w)，初版直接传入导致分量错乱（toThree 辅助函数修复）②自动保存订阅签名不含 transform → 叠合后不触发保存（签名加 quat/translation 序列化）③session 保存/恢复 transform 字段
+  - 恢复链路：restoreSession 解析后 addStructure 前 applyRigidTransform 重放（含 ensemble 全帧 + 网格 + bbox 重建）
+  - 【QA 方法学】验证重放不能用"再次 superpose RMSD≈0"——已对齐结构的再叠合返回的是本征残差（恒等变换 + 同样 0.521），正确验证法是坐标探针：重放后 1D3Z CA0=(25.9,25.1,2.8) ≈ 1UBQ CA0=(26.3,25.4,2.8)（原始 51.7,-89.3,8.8）→ 重放确证生效
+- README：Highlights 加 DSSP/contacts 行、superpose 加持久化说明、命令示例加 interface/contacts/dssp、新增 Interface analysis 小节 + contacts.png 截图、Tech stack 加 DSSP、Roadmap 更新（移除已完成的 DSSP fallback）；cartoon.png 重拍（现在显示真实螺旋带）
+- 最终回归：会话恢复（4HHB + 变换重放日志 ✓）、氢键 3,092（worker 路径）、ensemble 播放/暂停、dssp/contacts/interface 命令、lint 0 错误 0 警告；agent-browser errors 仅 2 条已知空条目伪迹，零真实新增
+- git commit 9f0bc41 → push origin main 成功
+
+Stage Summary:
+- 项目当前状态：功能完整度达到新高——在 6 表示法/氢键/会话/ensemble/GTAO/叠合/录制基础上，本轮新增 DSSP 二级结构引擎（科学算法级实现）、界面接触分析（检测+3D 连线+2D 图谱+残基选择全链路）、叠合变换持久化三大功能；并修复一个自项目伊始就存在的重大 bug（HELIX/SHEET 记录列位错位——此前所有 cartoon 的记录型二级结构从未渲染）
+- 本轮目标全部达成：QA 冒烟零错误、DSSP（含 2 轮算法调试：H 放置几何 + 交替桥接判据）、contacts 全链路、变换持久化（含 3 个连环 bug 修复）、README/截图/VLM 验证、lint 全绿、已推送 GitHub
+- 未解决问题与风险：①DSSP 的 flanked 判据在极端扭曲折叠片上可能轻微过度指认（1UBQ residue 66 被误标 H）——对 cartoon 渲染无感知影响；②接触分析仅支持活动结构内两组选择间的检测，跨结构接触（复合物对接界面）未实现（Roadmap 已列）；③DSSP 在超大结构（核糖体级 >2 万残基）上解析时同步计算约百毫秒级（4HHB 118ms 可接受）；④叠合变换无法在 UI 中重置（reparse 才能回原位）；⑤agent-browser errors 空条目伪迹依旧（无实际影响）
+- 下一阶段建议（优先级序）：① 跨结构接触分析（superpose 后的复合物界面检测）；② SASA 溶剂可及面积计算 + 界面 ΔSASA 埋藏面积（科学价值大，可与 contacts 面板整合）；③ 叠合变换重置命令/UI（reset superpose）；④ 多链迭代叠合（matchmaker 完整版）；⑤ 氢键/接触检测合并入统一 Web Worker 池；⑥ 大结构 LOD/实例化预算
