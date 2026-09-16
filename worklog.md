@@ -89,3 +89,27 @@ Work Log:
 Stage Summary:
 - README.md 与 LICENSE 写入并推送完成：远端 main 分支 2 commits，121 文件变更全部入库，README 截图链接验证可达（HTTP 200）
 - push 一次成功无需冲突处理；无任何敏感文件（node_modules/.next/db/.env）进入仓库；项目至此在 GitHub 公开可访问：https://github.com/Jing0715-fer/MolVision
+---
+Task ID: 9-final
+Agent: general-purpose
+Task: 最终冒烟测试与项目收尾
+
+Work Log:
+- dev server 健康检查：dev.log 160 行，最近输出全绿（多次 ✓ Compiled 140-390ms，GET / 与 /api/pdb/4HHB|1CRN|1BNA 均 200，仅含一条早前 Fast Refresh full reload 提示）；curl http://localhost:3000/ → HTTP 200
+- agent-browser open 首页成功（标题「MolVision — 3D 分子可视化工作台」），等待 4 秒后全量冒烟：
+  a. 点击「加载结构」→ 示例「1UBQ 泛素」→ 6 秒后截图 /tmp/final-1ubq.png；侧栏确认 660 原子 · 134 残基 · 1 链 · 1.8Å · 解析 16ms
+  b. z-ai vision 验证通过：确认 3D 视图显示蛋白质 Cartoon 带状结构（粉红色 ribbon、二级结构走向清晰）
+  c. 按 `2`（球棍）→ 截图 PIL 验证：独特颜色 3547（>> 50），非纯背景
+  d. 依次点击左侧 aside nav 7 个标签页（结构/表示法/颜色/选择/测量/场景/信息），每次点击后 agent-browser errors 计数恒为 13（与历史基线一致，零新增）；最终停在「信息」页确认内容正常渲染（1UBQ 条目元数据完整）
+  e. 主题切换测试发现真实 bug（见下），修复后重测：浅色主题 /tmp/final-light.png 全图平均亮度 245.8（> 150 达标），z-ai vision 确认白色背景下蛋白质结构对比度良好仍清晰可见
+  f. 切回深色主题：html class=dark，全图平均亮度 27.8，视口背景恢复 #101215 深色默认
+  g. 最终 agent-browser errors = 13 条，全部为 worklog 5-helper/7-shot 已记录的历史错误（2× 主题按钮水合不匹配 + 3× SequenceBar 旧 HMR chunk + 8× CDP 合成点击痕迹），本会话零新增
+- 【发现并修复 bug】设置改动不传导至渲染引擎：store.updateSettings 原本只改 state 不 bump visualRev，而 MolEngine.applySettings 仅在 sync()（挂载时或 visualRev 变化时）被调用 → 场景面板背景预设/自定义背景色/雾/FOV/正交/旋转/画质/hideH2O/hideW 及 `bg` 命令在挂载后全部静默失效（实测点击 #ffffff 预设后画布平均亮度仍 50）。修复：store.ts updateSettings 增加 visualRev bump（+4 行）；sync 为增量式（rep hash 未变不重建），代价可忽略
+- 【小修】主题切换时视口背景跟随：MolViewer.tsx 新增 resolvedTheme effect（+16 行）——仅当背景仍为主题默认值（#101215/#ffffff）时随主题切换（浅色→#ffffff，深色→#101215），用户自定义过背景则尊重用户选择不覆盖；配合上一修复使浅色主题整体白色系（平均亮度 245.8）达成验收标准
+- 修复验证：Scene 面板点击 #f5f2ea 纸白预设 → 画布 2 秒内变为平均亮度 214（修复前 50）；`2` 球棍预设修复后重测独特颜色 3729；bun run lint 退出码 0（0 错误 0 警告）
+- git add -A → commit → push origin main
+
+Stage Summary:
+- 项目整体状态：功能完成度高——PDB/mmCIF 解析、5 种表示法（cartoon/球棍/空间填充/线框/表面）、7 种着色方案、PyMOL 风格选择语言、命令行控制台、测量标注、L 标签、主题切换、多结构管理均已验证可用；本次收尾修复了设置系统不生效的核心 bug（updateSettings 不触发引擎 sync）并让视口背景随主题自适应。已知遗留：13 条历史浏览器错误中 2× 主题按钮 Sun/Moon SSR 水合不匹配仍未修（建议 suppressHydrationWarning 或挂载后渲染图标）；无会话持久化（刷新后结构列表清空）
+- 下一阶段建议（供 15 分钟周期评审任务参考）：① 氢键网络可视化（距离/角度判据 + 虚线渲染）；② SSAO 环境光遮蔽提升大结构立体感；③ NMR ensemble 多构象动画播放；④ 会话序列化保存/恢复（场景+相机+选择导出 JSON）；⑤ 结构叠合对比（序列比对 + 刚体拟合）；⑥ 浅色主题细节打磨（白色背景下雾/边缘光/标签描边对比度）；⑦ 大结构性能优化（4HHB 以上 60fps、LOD/实例化预算）
+- 优先修复项：主题按钮 SSR 水合不匹配（Toolbar.tsx L237-243，加 suppressHydrationWarning 或 mounted 状态后再渲染 Sun/Moon 图标）；会话持久化缺失导致刷新丢状态（可 localStorage 序列化 structures+settings）

@@ -515,7 +515,9 @@ export const useMolStore = create<MolState>()((set, get) => ({
   },
 
   updateSettings: (patch) => {
-    set(s => ({ settings: { ...s.settings, ...patch } }))
+    // bump visualRev：引擎仅在 visualRev 变化时重新 sync（applySettings），
+    // 否则背景/雾/FOV/正交/旋转/显隐水氢等设置改动不会传导到渲染器
+    set(s => ({ settings: { ...s.settings, ...patch }, visualRev: s.visualRev + 1 }))
   },
 
   setUi: (patch) => set(s => ({ ui: { ...s.ui, ...patch } })),

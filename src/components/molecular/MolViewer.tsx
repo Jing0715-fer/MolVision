@@ -21,7 +21,7 @@ export default function MolViewer() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; pick: AtomPick } | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const visualRev = useMolStore(s => s.visualRev)
-  const { theme, setTheme } = useTheme()
+  const { theme, setTheme, resolvedTheme } = useTheme()
 
   // 原子点击处理（先声明，供引擎回调引用）
   const handlePick = useCallback((pick: AtomPick | null, empty: boolean) => {
@@ -109,6 +109,20 @@ export default function MolViewer() {
   useEffect(() => {
     engine.current?.sync(useMolStore.getState())
   }, [visualRev])
+
+  // 主题切换时视口背景跟随：仅当背景仍为主题默认值（用户自定义过则尊重用户选择）
+  useEffect(() => {
+    if (!resolvedTheme) return
+    const DARK_DEFAULT = '#101215'
+    const LIGHT_DEFAULT = '#ffffff'
+    const store = useMolStore.getState()
+    const cur = store.settings.background.toLowerCase()
+    if (resolvedTheme === 'light' && cur === DARK_DEFAULT) {
+      store.updateSettings({ background: LIGHT_DEFAULT })
+    } else if (resolvedTheme === 'dark' && cur === LIGHT_DEFAULT) {
+      store.updateSettings({ background: DARK_DEFAULT })
+    }
+  }, [resolvedTheme])
 
   // 快捷键
   useEffect(() => {
