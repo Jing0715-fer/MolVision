@@ -1,11 +1,12 @@
 'use client'
 
-// 分析面板：界面接触检测（表达式组 A/B + 距离截断）+ 2D 接触图谱 + 界面残基选择 + DSSP 重算
+// 分析面板：界面接触检测（表达式组 A/B + 距离截断）+ 2D 接触图谱 + 界面残基选择 + SASA/ΔSASA + DSSP 重算
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Play, Trash2, MousePointerClick, Network, RefreshCw } from 'lucide-react'
+import { Play, Trash2, MousePointerClick, Network, RefreshCw, Droplets, Palette, Layers } from 'lucide-react'
 import { dataRegistry, engineRef, useMolStore, buildNamedMasks } from '@/lib/molecular/store'
-import { runContactAnalysis, interfaceAtomIndices } from '@/lib/molecular/contacts'
+import { runContactAnalysis, runBuriedSasa, interfaceAtomIndices } from '@/lib/molecular/contacts'
 import { useContactStore } from '@/lib/molecular/contacts-store'
+import { useSasaStore } from '@/lib/molecular/sasa-store'
 import { evaluateSelection } from '@/lib/molecular/selection'
 import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
@@ -42,6 +43,23 @@ export function AnalysisPanel() {
   const setCutoff = useContactStore(s => s.setCutoff)
   const setVisible = useContactStore(s => s.setVisible)
   const clear = useContactStore(s => s.clear)
+  // SASA 状态
+  const sasaComputing = useSasaStore(s => s.computing)
+  const sasaStructureId = useSasaStore(s => s.structureId)
+  const sasaTotal = useSasaStore(s => s.total)
+  const sasaHydrophobic = useSasaStore(s => s.hydrophobic)
+  const sasaPolar = useSasaStore(s => s.polar)
+  const sasaHet = useSasaStore(s => s.het)
+  const sasaMs = useSasaStore(s => s.ms)
+  const sasaProbe = useSasaStore(s => s.probe)
+  const sasaPoints = useSasaStore(s => s.nPoints)
+  const topResidues = useSasaStore(s => s.topResidues)
+  const buried = useSasaStore(s => s.buried)
+  const applyColor = useMolStore(s => s.applyColor)
+
+  // SASA 参数本地态（运行时才写入 store）
+  const [probe, setProbe] = useState(1.4)
+  const [nPoints, setNPoints] = useState(92)
 
   const entry = structures.find(s => s.id === activeId) ?? null
   const data = activeId ? dataRegistry.get(activeId) : null
@@ -69,6 +87,24 @@ export function AnalysisPanel() {
 
   const run = useCallback(() => {
     const outcome = runContactAnalysis()
+    appendLog(outcome.ok ? 'out' : 'err', outcome.message)
+  }, [appendLog])
+
+  // SASA 运行（小结构同步完成即有结果；大结构 worker 异步，完成后 sasa-store 更新）
+  const runSasa = useCallback(() => {
+    if (!activeId) return
+    const r = engineRef.current?.requestSasa(activeId, { probe, nPoints })
+    if (!r) return appendLog('err', '渲染引擎未就绪')
+    if (r.done && r.stats) {
+      const st = r.stats
+      appendLog('out', `SASA（Shrake–Rupley，probe ${probe} Å，${nPoints} 点）：总计 ${st.total.toFixed(0)} Å² · 疏水 ${st.hydrophobic.toFixed(0)} · 极性 ${st.polar.toFixed(0)} · ${st.ms.toFixed(0)} ms`)
+    } else {
+      appendLog('out', `SASA 计算中（Web Worker，probe ${probe} Å，${nPoints} 点）…`)
+    }
+  }, [activeId, probe, nPoints, appendLog])
+
+  const runBsa = useCallback(() => {
+    const outcome = runBuriedSasa()
     appendLog(outcome.ok ? 'out' : 'err', outcome.message)
   }, [appendLog])
 
@@ -355,6 +391,152 @@ export function AnalysisPanel() {
               </div>
             </>
           )}
+
+          <SectionTitle right={
+            <span className="text-[10px] font-normal text-muted-foreground">
+              {sasaStructureId === activeId && sasaTotal > 0 ? `${sasaProbe} Å · ${sasaPoints} 点 · ${sasaMs.toFixed(0)} ms` : 'Shrake–Rupley'}
+            </span>
+          }>
+            溶剂可及面积 (SASA)
+          </SectionTitle>
+          <div className="px-2">
+            <div className="rounded-lg border border-border/60 px-2.5 py-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">水探针半径</span>
+                <span className="font-mono font-semibold text-cyan-600 dark:text-cyan-400">{probe.toFixed(1)} Å</span>
+              </div>
+              <Slider
+                value={[probe]}
+                min={0.8} max={2.0} step={0.1}
+                onValueChange={([v]) => setProbe(v)}
+                className="mt-1.5"
+              />
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">采样点数/原子</span>
+                <div className="flex gap-1">
+                  {[64, 92, 128, 256].map(np => (
+                    <button
+                      key={np}
+                      onClick={() => setNPoints(np)}
+                      className={cn(
+                        'rounded px-1.5 py-0.5 font-mono text-[10px] transition',
+                        nPoints === np
+                          ? 'bg-cyan-500/20 font-semibold text-cyan-700 dark:text-cyan-300'
+                          : 'text-muted-foreground hover:bg-accent',
+                      )}
+                    >{np}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-1.5 flex gap-1.5">
+              <button
+                onClick={runSasa}
+                disabled={sasaComputing}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+              >
+                {sasaComputing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Droplets className="h-3.5 w-3.5" />}
+                {sasaComputing ? '计算中…' : '计算 SASA'}
+              </button>
+              <button
+                onClick={() => { applyColor('sasa'); appendLog('out', '已按 SASA 暴露度着色：埋藏蓝紫 → 暴露橙红（需先计算 SASA）') }}
+                title="按暴露度着色（埋藏蓝 → 暴露橙红）"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition hover:border-cyan-500/50 hover:text-cyan-600 dark:hover:text-cyan-300"
+              >
+                <Palette className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {sasaStructureId === activeId && sasaTotal > 0 && (
+              <>
+                <div className="mt-2 grid grid-cols-4 gap-1.5">
+                  <Stat label="总 SASA" value={sasaTotal.toFixed(0)} />
+                  <Stat label="疏水" value={sasaHydrophobic.toFixed(0)} tone="cyan" />
+                  <Stat label="极性" value={sasaPolar.toFixed(0)} tone="rose" />
+                  <Stat label="水/配体" value={sasaHet.toFixed(0)} />
+                </div>
+                <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full" title="疏水/极性/水与配体的面积占比">
+                  <div className="bg-cyan-500/70" style={{ width: `${sasaHydrophobic / sasaTotal * 100}%` }} />
+                  <div className="bg-rose-500/70" style={{ width: `${sasaPolar / sasaTotal * 100}%` }} />
+                  <div className="bg-muted" style={{ width: `${sasaHet / sasaTotal * 100}%` }} />
+                </div>
+                <div className="mol-scroll mt-2 max-h-40 overflow-y-auto rounded-lg border border-border/60 bg-card/40">
+                  <p className="sticky top-0 bg-card/95 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">Top 暴露残基（Å²）</p>
+                  {topResidues.map(({ resIdx, area }, i) => {
+                    const r = data?.residues[resIdx]
+                    if (!r) return null
+                    const max = topResidues[0]?.area || 1
+                    return (
+                      <button
+                        key={resIdx}
+                        onClick={() => {
+                          if (!activeId || !data) return
+                          const idx: number[] = []
+                          for (let ai = r.start; ai < r.end; ai++) idx.push(ai)
+                          setSelection(activeId, idx)
+                        }}
+                        className="group flex w-full items-center gap-2 px-2 py-1 text-left transition hover:bg-accent/50"
+                      >
+                        <span className="w-4 shrink-0 text-right font-mono text-[9px] text-muted-foreground">{i + 1}</span>
+                        <span className="w-20 shrink-0 truncate font-mono text-[10px] font-medium">{r.chainId.trim()}:{r.resName}{r.resSeq}</span>
+                        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                          <span className="block h-full rounded-full bg-gradient-to-r from-cyan-500/60 to-amber-500/80" style={{ width: `${area / max * 100}%` }} />
+                        </span>
+                        <span className="w-10 shrink-0 text-right font-mono text-[10px] text-cyan-600 dark:text-cyan-400">{area.toFixed(0)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            {hasResult && (
+              <div className="mt-2 rounded-lg border border-violet-500/30 bg-violet-500/5 px-2.5 py-2">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-300">
+                    <Layers className="h-3.5 w-3.5" />
+                    界面埋藏面积 (ΔSASA)
+                  </span>
+                  <button
+                    onClick={runBsa}
+                    disabled={buried?.computing}
+                    className="rounded-md bg-violet-500/80 px-2 py-1 text-[10px] font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
+                  >
+                    {buried?.computing ? '计算中…' : buried?.structureId === activeId ? '重算' : '计算'}
+                  </button>
+                </div>
+                {buried && buried.structureId === activeId && !buried.computing && (
+                  <div className="mt-1.5">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <Stat label="A 侧埋藏" value={`${buried.buriedA.toFixed(0)} Å²`} tone="rose" />
+                      <Stat label="B 侧埋藏" value={`${buried.buriedB.toFixed(0)} Å²`} tone="cyan" />
+                      <Stat label="合计" value={`${(buried.buriedA + buried.buriedB).toFixed(0)} Å²`} />
+                    </div>
+                    <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>核心界面残基（ΔSASA &gt; 1 Å²）：A {buried.coreA.length} · B {buried.coreB.length} · {buried.ms.toFixed(0)} ms</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (!activeId || !data) return
+                        const idx = [
+                          ...interfaceAtomIndices(data, buried.coreA),
+                          ...interfaceAtomIndices(data, buried.coreB),
+                        ]
+                        setSelection(activeId, idx)
+                        appendLog('out', `已选择界面核心残基：A ${buried.coreA.length} + B ${buried.coreB.length} 残基（${idx.length} 原子，ΔSASA > 1 Å²）`)
+                      }}
+                      className="mt-1.5 w-full rounded-md border border-violet-500/40 px-2 py-1.5 text-[10px] font-medium text-violet-600 transition hover:bg-violet-500/15 dark:text-violet-300"
+                    >
+                      选核心界面残基（ΔSASA 判据，比距离截断更准）
+                    </button>
+                  </div>
+                )}
+                {(!buried || buried.structureId !== activeId) && (
+                  <p className="mt-1 text-[10px] text-muted-foreground">基于接触 A/B 组三路 SASA（单独/单独/复合）计算埋藏面积，判据比距离截断更严格。</p>
+                )}
+              </div>
+            )}
+          </div>
 
           <SectionTitle>二级结构</SectionTitle>
           <div className="px-2">

@@ -18,6 +18,11 @@ import { detectHBonds, type HBond } from './hbonds'
 import { contactColor } from './contacts'
 import { useContactStore } from './contacts-store'
 import { superposeStructures, applyRigidTransform, type SuperposeResult } from './superpose'
+import {
+  computeSasa, computeBuriedSasa, sasaStats, compileRadii,
+  type SasaComputeOptions, type SasaStats, type BuriedSasaResult,
+} from './sasa'
+import { useSasaStore } from './sasa-store'
 import { useHBondStore } from './hbond-store'
 import { useEnsembleStore } from './ensemble-store'
 import { makeTextSprite, disposeSprite } from './textsprite'
@@ -76,6 +81,9 @@ const NULL_RESULT: SuperposeResult = {
 }
 /** 超过该原子数时氢键检测走 Web Worker（小结构同步更快） */
 const HBOND_WORKER_MIN_ATOMS = 2000
+/** 超过该原子数时 SASA 计算走 Web Worker；ΔSASA 三路计算阈值更低 */
+const SASA_WORKER_MIN_ATOMS = 2200
+const BSA_WORKER_MIN_ATOMS = 900
 /** 深色背景下的氢键青色 / 浅色背景下的深青色（对比度自适应） */
 const HBOND_COLOR_DARK = 0x4fd1c5
 const HBOND_COLOR_LIGHT = 0x0d9488
@@ -122,6 +130,12 @@ export class MolEngine {
   private hbondPending = new Map<string, string>()
   /** 最近一次 updateHBonds 的 state（异步结果到达时重渲用） */
   private lastHbondState: Parameters<MolEngine['sync']>[0] | null = null
+  // SASA / ΔSASA 计算 Web Worker（大结构异步）
+  private sasaWorker: Worker | null = null
+  private sasaWorkerFailed = false
+  private sasaReqId = 0
+  /** structureId → 计算中的 key（去重与过期丢弃） */
+  private sasaPending = new Map<string, string>()
   private lastPicksKey = ''
   /** ensemble 播放内部状态（插值帧号与时间戳） */
   private ensemblePlay: { frame: number; lastT: number } | null = null
@@ -595,6 +609,10 @@ export class MolEngine {
         this.views.delete(id)
         this.hbondCache.delete(id)
         this.hbondPending.delete(id)
+        this.sasaPending.delete(id)
+        // SASA 结果归属结构被移除 → 清空面板数据
+        const ss = useSasaStore.getState()
+        if (ss.structureId === id || ss.buried?.structureId === id) ss.clear()
         this.pickablesCache = null
         // 接触分析归属结构被移除 → 清空连线与结果
         const cs = useContactStore.getState()
@@ -1087,6 +1105,268 @@ export class MolEngine {
     return result
   }
 
+  /** 撤销叠合：用累计变换的逆变换把结构放回原始位姿（ensemble 帧/网格/包围盒同步） */
+  resetTransform(structureId: string): { ok: boolean; message: string } {
+    const store = useMolStore.getState()
+    const entry = store.structures.find(s => s.id === structureId)
+    const data = dataRegistry.get(structureId)
+    if (!entry || !data) return { ok: false, message: '结构不存在' }
+    if (!entry.transform) return { ok: false, message: '该结构未应用叠合变换' }
+    const t = entry.transform
+    // superpose.ts 约定 (w,x,y,z)；THREE.Quaternion 为 (x,y,z,w)
+    const q = new THREE.Quaternion(t.quat[1], t.quat[2], t.quat[3], t.quat[0])
+    const tr = new THREE.Vector3(t.translation[0], t.translation[1], t.translation[2])
+    const qInv = q.clone().invert()
+    const tInv = tr.clone().negate().applyQuaternion(qInv)
+    const [qx, qy, qz, qw] = qInv.toArray()
+    applyRigidTransform(data, [qw, qx, qy, qz], tInv.toArray() as [number, number, number])
+    // 清除累计变换（会话持久化不再重放）+ bump rev 重建
+    useMolStore.setState(s => ({
+      structures: s.structures.map(x => x.id === structureId
+        ? { ...x, transform: undefined, rev: x.rev + 1 }
+        : x),
+      visualRev: s.visualRev + 1,
+    }))
+    this.rebuildStructureVisuals(data)
+    return { ok: true, message: `已重置 ${entry.name} 到原始位姿` }
+  }
+
+  // ---------- SASA 溶剂可及面积（Shrake–Rupley，大结构走 Web Worker） ----------
+
+  /**
+   * 计算完整结构 per-atom SASA 并写回 data.sasa。
+   * 小结构同步完成返回 true；大结构投递 worker 返回 false（结果到达后自动 bump 重建）。
+   */
+  requestSasa(structureId: string, opts: SasaComputeOptions = {}): { done: boolean; stats?: SasaStats } {
+    const data = dataRegistry.get(structureId)
+    if (!data) return { done: false }
+    const { probe = 1.4, nPoints = 92 } = opts
+    const n = data.atoms.count
+    const key = `full|${probe}|${nPoints}|${n}`
+    // 小结构：同步计算直接落库
+    if (n < SASA_WORKER_MIN_ATOMS) {
+      const { perAtom, stats } = computeSasa(data, opts)
+      data.sasa = perAtom
+      this.applySasaResult(structureId, data, stats, probe, nPoints)
+      return { done: true, stats }
+    }
+    // 大结构：worker 异步
+    if (this.sasaPending.get(structureId) === key) return { done: false }
+    const w = this.ensureSasaWorker()
+    if (!w) {
+      const { perAtom, stats } = computeSasa(data, opts)
+      data.sasa = perAtom
+      this.applySasaResult(structureId, data, stats, probe, nPoints)
+      return { done: true, stats }
+    }
+    const isHydrogen = new Uint8Array(n)
+    for (let i = 0; i < n; i++) {
+      const e = data.atoms.elements[i]
+      if (e === 'H' || e === 'D') isHydrogen[i] = 1
+    }
+    this.sasaPending.set(structureId, key)
+    useSasaStore.getState().setComputing(true)
+    w.postMessage({
+      type: 'compute',
+      reqId: ++this.sasaReqId,
+      structureId,
+      key,
+      kind: 'full',
+      positions: data.atoms.positions,
+      radii: compileRadii(data.atoms.elements),
+      isHydrogen,
+      probe,
+      nPoints,
+    })
+    return { done: false }
+  }
+
+  /**
+   * 界面埋藏面积（ΔSASA）：A/B 掩码三路计算。
+   * 小结构同步；大结构 worker（结果写入 sasa-store.buried）。
+   */
+  requestBuriedSasa(
+    structureId: string,
+    maskA: Uint8Array,
+    maskB: Uint8Array,
+    opts: SasaComputeOptions = {},
+  ): { done: boolean; result?: BuriedSasaResult } {
+    const data = dataRegistry.get(structureId)
+    if (!data) return { done: false }
+    const { probe = 1.4, nPoints = 92 } = opts
+    const n = data.atoms.count
+    const key = `buried|${probe}|${nPoints}|${n}`
+    if (n < BSA_WORKER_MIN_ATOMS) {
+      const result = computeBuriedSasa(data, maskA, maskB, opts)
+      this.applyBuriedResult(structureId, data, result, maskA, maskB)
+      return { done: true, result }
+    }
+    if (this.sasaPending.get(structureId) === key) return { done: false }
+    const w = this.ensureSasaWorker()
+    if (!w) {
+      const result = computeBuriedSasa(data, maskA, maskB, opts)
+      this.applyBuriedResult(structureId, data, result, maskA, maskB)
+      return { done: true, result }
+    }
+    const isHydrogen = new Uint8Array(n)
+    for (let i = 0; i < n; i++) {
+      const e = data.atoms.elements[i]
+      if (e === 'H' || e === 'D') isHydrogen[i] = 1
+    }
+    this.sasaPending.set(structureId, key)
+    useSasaStore.getState().setBuriedComputing(true)
+    w.postMessage({
+      type: 'compute',
+      reqId: ++this.sasaReqId,
+      structureId,
+      key,
+      kind: 'buried',
+      positions: data.atoms.positions,
+      radii: compileRadii(data.atoms.elements),
+      isHydrogen,
+      probe,
+      nPoints,
+      maskA,
+      maskB,
+    })
+    return { done: false }
+  }
+
+  /** SASA 结果落库：统计入 store + 有 sasa 着色 rep 时 bump rev 触发重建 */
+  private applySasaResult(structureId: string, data: StructureData, stats: SasaStats, probe: number, nPoints: number) {
+    // Top 暴露残基（≤12，降序，跳过水/非聚合物）
+    const top: { resIdx: number; area: number }[] = []
+    for (let r = 0; r < data.residues.length; r++) {
+      const res = data.residues[r]
+      if (res.water || !res.polymer) continue
+      if (stats.perResidue[r] > 0) top.push({ resIdx: r, area: stats.perResidue[r] })
+    }
+    top.sort((a, b) => b.area - a.area)
+    useSasaStore.getState().setResult({
+      structureId,
+      total: stats.total,
+      hydrophobic: stats.hydrophobic,
+      polar: stats.polar,
+      het: stats.het,
+      ms: stats.ms,
+      probe,
+      nPoints,
+      topResidues: top.slice(0, 12),
+    })
+    // 若任何 rep 使用 sasa 着色 → bump rev 触发重着色（sasa 数据已就位）
+    const entry = useMolStore.getState().structures.find(s => s.id === structureId)
+    if (entry?.reps.some(rep => rep.colorScheme === 'sasa')) {
+      useMolStore.setState(s => ({
+        structures: s.structures.map(x => x.id === structureId ? { ...x, rev: x.rev + 1 } : x),
+        visualRev: s.visualRev + 1,
+      }))
+    }
+  }
+
+  /** ΔSASA 结果落库（worker / 同步共用） */
+  private applyBuriedResult(structureId: string, data: StructureData, result: BuriedSasaResult, maskA: Uint8Array, maskB: Uint8Array) {
+    void maskA; void maskB
+    useSasaStore.getState().setBuried({
+      computing: false,
+      structureId,
+      atomsA: result.atomsA,
+      atomsB: result.atomsB,
+      buriedA: result.buriedA,
+      buriedB: result.buriedB,
+      coreA: result.coreA,
+      coreB: result.coreB,
+      ms: result.ms,
+    })
+  }
+
+  /** 懒建 SASA worker（失败永久回退同步） */
+  private ensureSasaWorker(): Worker | null {
+    if (this.sasaWorkerFailed) return null
+    if (this.sasaWorker) return this.sasaWorker
+    try {
+      const w = new Worker(new URL('./sasa-worker.ts', import.meta.url))
+      w.onmessage = (e: MessageEvent) => this.onSasaWorkerResult(e.data)
+      w.onerror = () => {
+        this.sasaWorkerFailed = true
+        this.sasaPending.clear()
+        useSasaStore.getState().setComputing(false)
+      }
+      this.sasaWorker = w
+      return w
+    } catch {
+      this.sasaWorkerFailed = true
+      return null
+    }
+  }
+
+  /** worker 结果：full → 写 data.sasa + 统计 + 重建着色；buried → 写 store */
+  private onSasaWorkerResult(msg: {
+    type: string
+    reqId: number
+    structureId: string
+    key: string
+    kind: 'full' | 'buried'
+    sasa?: Float32Array
+    delta?: Float32Array
+    ms: number
+  }) {
+    if (!msg || msg.type !== 'result') return
+    if (this.sasaPending.get(msg.structureId) !== msg.key) return
+    this.sasaPending.delete(msg.structureId)
+    const data = dataRegistry.get(msg.structureId)
+    if (!data) {
+      if (this.sasaPending.size === 0) useSasaStore.getState().setComputing(false)
+      return
+    }
+    if (msg.kind === 'full' && msg.sasa) {
+      data.sasa = msg.sasa
+      const stats = sasaStats(data, msg.sasa)
+      stats.ms = msg.ms
+      const probe = parseFloat(msg.key.split('|')[1]) || 1.4
+      const nPoints = parseInt(msg.key.split('|')[2]) || 92
+      this.applySasaResult(msg.structureId, data, stats, probe, nPoints)
+      useMolStore.getState().appendLog('out', `SASA 完成（Web Worker，probe ${probe} Å，${nPoints} 点）：总计 ${stats.total.toFixed(0)} Å² · 疏水 ${stats.hydrophobic.toFixed(0)} · 极性 ${stats.polar.toFixed(0)} · ${stats.ms.toFixed(0)} ms`)
+    } else if (msg.kind === 'buried' && msg.delta) {
+      // 残基聚合 + 核心界面残基（>1 Å²）
+      const perResidue = new Float32Array(data.residues.length)
+      for (let i = 0; i < msg.delta.length; i++) {
+        if (msg.delta[i] > 0) perResidue[data.atomResidue[i]] += msg.delta[i]
+      }
+      const coreA: number[] = [], coreB: number[] = []
+      let buriedA = 0, buriedB = 0
+      // 侧别判定：A 掩码不可得（未回传）——用 contacts 结果掩码重建
+      const cs = useContactStore.getState()
+      let maskA: Uint8Array | null = null
+      if (cs.structureId === msg.structureId && cs.pairs.length) {
+        maskA = new Uint8Array(data.atoms.count)
+        for (const ri of cs.residuesA) {
+          const res = data.residues[ri]
+          for (let i = res.start; i < res.end; i++) maskA[i] = 1
+        }
+      }
+      for (let r = 0; r < data.residues.length; r++) {
+        if (perResidue[r] <= 1) continue
+        const res = data.residues[r]
+        if (maskA && maskA[res.start]) coreA.push(r)
+        else coreB.push(r)
+      }
+      for (let i = 0; i < msg.delta.length; i++) {
+        if (msg.delta[i] > 0) {
+          if (maskA && maskA[i]) buriedA += msg.delta[i]
+          else buriedB += msg.delta[i]
+        }
+      }
+      useSasaStore.getState().setBuried({
+        computing: false,
+        structureId: msg.structureId,
+        atomsA: cs.structureId === msg.structureId ? cs.atomsA : 0,
+        atomsB: cs.structureId === msg.structureId ? cs.atomsB : 0,
+        buriedA, buriedB, coreA, coreB, ms: msg.ms,
+      })
+      useMolStore.getState().appendLog('out', `ΔSASA 完成（Web Worker）：合计 ${(buriedA + buriedB).toFixed(0)} Å²（A ${buriedA.toFixed(0)} + B ${buriedB.toFixed(0)}）· 界面核心残基 A ${coreA.length} / B ${coreB.length} · ${msg.ms.toFixed(0)} ms`)
+    }
+  }
+
   // ---------- 动画录制（WebM） ----------
 
   get isRecording(): boolean {
@@ -1517,8 +1797,11 @@ export class MolEngine {
     }
     this.recorder = null
     this.hbondWorker?.terminate()
+    this.sasaWorker?.terminate()
+    this.sasaWorker = null
     this.hbondWorker = null
     this.hbondPending.clear()
+    this.sasaPending.clear()
     this.renderer.dispose()
     if (this.canvas.parentElement === this.container) this.container.removeChild(this.canvas)
   }

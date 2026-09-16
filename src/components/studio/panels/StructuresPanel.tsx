@@ -1,7 +1,7 @@
 'use client'
 
 // 结构面板：结构列表、链、配体、叠合
-import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine } from 'lucide-react'
+import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { engineRef, useMolStore } from '@/lib/molecular/store'
 import { cn } from '@/lib/utils'
@@ -82,6 +82,20 @@ export function StructuresPanel() {
                   title={`叠合到 ${structures.find(x => x.id === activeId)?.name ?? '活动结构'}（序列比对 + 刚体拟合）`}
                 >
                   <Combine className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {st.transform && (
+                <button
+                  onClick={() => {
+                    const r = engineRef.current?.resetTransform(st.id)
+                    if (!r) return
+                    if (!r.ok) return toast.error('重置失败', { description: r.message })
+                    toast.success(r.message, { description: 'untransform 命令可撤销指定结构的叠合' })
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded text-violet-500/70 opacity-0 transition hover:bg-violet-500/10 hover:text-violet-500 group-hover:opacity-100"
+                  title="撤销叠合变换，回到原始位姿（untransform）"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
                 </button>
               )}
               <button

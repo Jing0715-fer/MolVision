@@ -57,6 +57,8 @@ export interface StructureData {
   meta: { title: string; method: string; resolution: number | null; pdbId: string | null }
   ssFromRecords: boolean
   hasHydrogens: boolean
+  /** 逐原子溶剂可及面积（Shrake–Rupley，分析后填充；氢为 0）。用于 SASA 着色与统计 */
+  sasa?: Float32Array
   /** NMR ensemble：多构象坐标帧（frames[0] 即初始坐标副本，长度与 atoms.positions 相同） */
   ensemble?: { frames: Float32Array[] }
   /** 空间哈希网格（用于 within 选择、近邻查询） */

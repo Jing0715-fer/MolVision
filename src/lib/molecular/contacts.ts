@@ -196,3 +196,32 @@ export function interfaceAtomIndices(data: StructureData, residues: number[]): n
   }
   return out
 }
+
+// ---------- 界面埋藏面积（ΔSASA）运行器 ----------
+
+/** 对 contacts 的 A/B 组计算 ΔSASA（三路 Shrake–Rupley）；大结构走 Web Worker */
+export function runBuriedSasa(): RunContactOutcome {
+  const store = useMolStore.getState()
+  const cs = useContactStore.getState()
+  if (!store.activeId) return { ok: false, message: '没有活动结构' }
+  const data = dataRegistry.get(store.activeId)
+  if (!data) return { ok: false, message: '结构数据不存在' }
+  const A = cs.aExpr.trim(), B = cs.bExpr.trim()
+  if (!A || !B) return { ok: false, message: '请先设置 A/B 两组选择（contacts 或分析面板）' }
+  const named = buildNamedMasks(store.activeId, data)
+  const ra = evaluateSelection(A, { structure: data, named })
+  const rb = evaluateSelection(B, { structure: data, named })
+  if (ra.error || rb.error) return { ok: false, message: `表达式错误：${[ra.error, rb.error].filter(Boolean).join('；')}` }
+  if (ra.count === 0 || rb.count === 0) return { ok: false, message: `选择为空（A: ${ra.count}，B: ${rb.count}）` }
+  const eng = engineRef.current
+  if (!eng) return { ok: false, message: '渲染引擎未就绪' }
+  const r = eng.requestBuriedSasa(store.activeId, ra.mask, rb.mask)
+  if (r.done && r.result) {
+    const total = r.result.buriedA + r.result.buriedB
+    return {
+      ok: true,
+      message: `ΔSASA 界面埋藏面积：合计 ${total.toFixed(0)} Å²（A ${r.result.buriedA.toFixed(0)} + B ${r.result.buriedB.toFixed(0)}）· 界面核心残基 A ${r.result.coreA.length} / B ${r.result.coreB.length}（ΔSASA > 1 Å²）· ${r.result.ms.toFixed(0)} ms`,
+    }
+  }
+  return { ok: true, message: 'ΔSASA 计算中（Web Worker）——完成后将在此输出结果' }
+}

@@ -1,9 +1,10 @@
-// 颜色方案：element(CPK) / chain / spectrum / residue / ss / bfactor / uniform
+// 颜色方案：element(CPK) / chain / spectrum / residue / ss / bfactor / sasa / uniform
 import * as THREE from 'three'
 import { elementInfo, residueClass, type ResidueClass } from './chemistry'
 import type { StructureData } from './parser'
+import { maxAtomSasa } from './sasa'
 
-export type ColorScheme = 'element' | 'chain' | 'spectrum' | 'residue' | 'ss' | 'bfactor' | 'uniform'
+export type ColorScheme = 'element' | 'chain' | 'spectrum' | 'residue' | 'ss' | 'bfactor' | 'sasa' | 'uniform'
 
 export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
   element: '元素 (CPK)',
@@ -12,6 +13,7 @@ export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
   residue: '残基类型',
   ss: '二级结构',
   bfactor: 'B 因子',
+  sasa: '溶剂可及 (SASA)',
   uniform: '统一颜色',
 }
 
@@ -163,19 +165,64 @@ export function computeAtomColors(
     return out
   }
 
-  // bfactor
-  let min = Infinity, max = -Infinity
-  for (let i = 0; i < n; i++) {
-    const b = atoms.bfactors[i]
-    if (b < min) min = b
-    if (b > max) max = b
+  if (scheme === 'bfactor') {
+    let min = Infinity, max = -Infinity
+    for (let i = 0; i < n; i++) {
+      const b = atoms.bfactors[i]
+      if (b < min) min = b
+      if (b > max) max = b
+    }
+    const span = max - min || 1
+    for (let i = 0; i < n; i++) {
+      const c = bfactorColor((atoms.bfactors[i] - min) / span)
+      out[i * 3] = c.r; out[i * 3 + 1] = c.g; out[i * 3 + 2] = c.b
+    }
+    return out
   }
-  const span = max - min || 1
+
+  if (scheme === 'sasa') {
+    // 暴露分数 = 原子 SASA / 扩展球面积：埋藏蓝紫 → 暴露橙红（需先运行 SASA 分析，否则灰色）
+    const fallback = new THREE.Color('#b8bcc4')
+    const sasa = structure.sasa
+    for (let i = 0; i < n; i++) {
+      const c = sasa ? sasaExposureColor(sasa[i], atoms.elements[i], 1.4) : fallback
+      out[i * 3] = c.r; out[i * 3 + 1] = c.g; out[i * 3 + 2] = c.b
+    }
+    return out
+  }
+
+  // uniform 兜底（已被上方分支拦截，不会到达）
+  tmp.set(opts.uniformColor ?? '#cccccc')
   for (let i = 0; i < n; i++) {
-    const c = bfactorColor((atoms.bfactors[i] - min) / span)
-    out[i * 3] = c.r; out[i * 3 + 1] = c.g; out[i * 3 + 2] = c.b
+    out[i * 3] = tmp.r; out[i * 3 + 1] = tmp.g; out[i * 3 + 2] = tmp.b
   }
   return out
+}
+
+/** SASA 暴露分数渐变：0 埋藏（深蓝）→ 1 完全暴露（橙红），4 段过渡 */
+const SASA_STOPS: [number, string][] = [
+  [0.0, '#2e4a8f'], [0.3, '#4fa3c7'], [0.6, '#f2d74c'], [1.0, '#e0563d'],
+]
+const sasaColorCache = new Map<string, THREE.Color>()
+
+export function sasaExposureColor(atomSasa: number, element: string, probe: number): THREE.Color {
+  const maxA = maxAtomSasa(element, probe)
+  const f = Math.max(0, Math.min(1, atomSasa / maxA))
+  const key = element + '|' + f.toFixed(2)
+  const hit = sasaColorCache.get(key)
+  if (hit) return hit
+  const c = new THREE.Color()
+  for (let i = 0; i < SASA_STOPS.length - 1; i++) {
+    const [t0, c0] = SASA_STOPS[i]
+    const [t1, c1] = SASA_STOPS[i + 1]
+    if (f >= t0 && f <= t1) {
+      c.set(c0).lerp(new THREE.Color(c1), (f - t0) / (t1 - t0))
+      break
+    }
+  }
+  if (sasaColorCache.size > 600) sasaColorCache.clear()
+  sasaColorCache.set(key, c)
+  return c
 }
 
 /** CSS 颜色名 → hex（常用集） */

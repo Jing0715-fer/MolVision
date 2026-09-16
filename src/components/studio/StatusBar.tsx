@@ -1,12 +1,13 @@
 'use client'
 
 // 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示
-import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network } from 'lucide-react'
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { useHBondStore } from '@/lib/molecular/hbond-store'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 import { useContactStore } from '@/lib/molecular/contacts-store'
+import { useSasaStore } from '@/lib/molecular/sasa-store'
 import { cn } from '@/lib/utils'
 
 export function StatusBar() {
@@ -20,6 +21,7 @@ export function StatusBar() {
   const hbond = useHBondStore(s => s)
   const ens = useEnsembleStore(s => s)
   const contact = useContactStore(s => s)
+  const sasa = useSasaStore(s => s)
 
   const st = structures.find(x => x.id === activeId)
   const need = measureMode === 'distance' ? 2 : measureMode === 'angle' ? 3 : measureMode === 'dihedral' ? 4 : 0
@@ -94,6 +96,16 @@ export function StatusBar() {
           <Network className="h-3 w-3" />
           {contact.pairs.length.toLocaleString()} 接触
           <span className="text-[9px] text-muted-foreground/70">≤{contact.cutoff.toFixed(1)}Å</span>
+        </span>
+      )}
+
+      {/* SASA 分析结果（结构级） */}
+      {sasa.structureId === activeId && (sasa.computing || sasa.total > 0) && (
+        <span className="hidden shrink-0 items-center gap-1 rounded-full bg-cyan-500/15 px-2 py-0.5 font-medium text-cyan-600 dark:text-cyan-400 md:flex">
+          {sasa.computing
+            ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            : <Droplets className="h-3 w-3" />}
+          {sasa.computing ? 'SASA 计算中…' : `SASA ${sasa.total.toLocaleString(undefined, { maximumFractionDigits: 0 })} Å²`}
         </span>
       )}
 

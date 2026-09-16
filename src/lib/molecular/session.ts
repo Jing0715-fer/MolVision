@@ -61,6 +61,12 @@ export function saveSession(): boolean {
       transform: st.transform,
     })
   }
+  // 防脱节保护：内存有结构但全部拿不到源文本（HMR 模块替换后 textRegistry 重建、
+  // 或 registry 意外丢失）时，拒绝写入空会话覆盖旧档——保留旧存档等下次有效保存
+  if (structs.length === 0 && s.structures.length > 0) {
+    console.warn('[session] structures have no registered source text (HMR/registry desync) — skip saving to preserve existing archive')
+    return false
+  }
   const eng = engineRef.current
   const cam = eng
     ? {

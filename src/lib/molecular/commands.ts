@@ -1,12 +1,19 @@
 // PyMOL 风格命令行：select / show / hide / color / bg / zoom / spin / slab / label ...
-import { PRESETS, useMolStore, engineRef } from './store'
+import { PRESETS, useMolStore, engineRef, dataRegistry } from './store'
 import { saveSession, clearSession, sessionInfo } from './session'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
 import { useEnsembleStore } from './ensemble-store'
 import { useRecordStore } from './record-store'
-import { runContactAnalysis } from './contacts'
+import { runContactAnalysis, runBuriedSasa } from './contacts'
 import { useContactStore } from './contacts-store'
+import { useSasaStore } from './sasa-store'
+
+/** 数值裁剪（NaN 时取默认值） */
+function clampNum(v: number, min: number, max: number, dflt: number): number {
+  if (isNaN(v)) return dflt
+  return Math.max(min, Math.min(max, v))
+}
 
 const REP_ALIASES: Record<string, RepType> = {
   cartoon: 'cartoon', ribbon: 'cartoon',
@@ -22,6 +29,7 @@ const SCHEME_ALIASES: Record<string, ColorScheme> = {
   residue: 'residue', resn: 'residue', byresidue: 'residue',
   ss: 'ss', secondary: 'ss', secstr: 'ss',
   bfactor: 'bfactor', b: 'bfactor', temp: 'bfactor',
+  sasa: 'sasa', sas: 'sasa', accessibility: 'sasa',
   uniform: 'uniform',
 }
 
@@ -42,6 +50,9 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'dssp', desc: 'DSSP 重算二级结构（含无记录结构）', example: 'dssp' },
   { cmd: 'contacts <exprA> | <exprB> [n]', desc: '界面接触检测（残基对+连线）', example: 'contacts chain A | chain B 4.0' },
   { cmd: 'interface <链A> <链B> [n]', desc: '链间界面快捷命令', example: 'interface A B' },
+  { cmd: 'sasa [probe] [点数]', desc: '溶剂可及面积计算（Shrake–Rupley）', example: 'sasa 1.4 92' },
+  { cmd: 'bsa', desc: '界面埋藏面积 ΔSASA（需 contacts A/B）', example: 'bsa' },
+  { cmd: 'untransform [名]', desc: '撤销叠合变换回原始位姿', example: 'untransform 1D3Z' },
   { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'session save|info|clear', desc: '会话存档管理', example: 'session save' },
@@ -158,6 +169,17 @@ export function runCommand(raw: string): void {
     if (selExpr) {
       const res = s.selectFromExpr(selExpr)
       if (res.error) return err(`选择错误: ${res.error}`)
+    }
+    if (scheme === 'sasa') {
+      const data = dataRegistry.get(s.activeId)
+      if (data && !data.sasa) {
+        // 触发计算（小结构同步完成；大结构 worker）——applyColor 内部同样会尝试
+        const eng = engineRef.current
+        const r = eng?.requestSasa(s.activeId)
+        if (!r?.done) {
+          return ok('SASA 数据尚未就绪——已在后台开始计算（Web Worker），完成后再执行 color sasa 即可上色')
+        }
+      }
     }
     s.applyColor(scheme ?? css!)
     ok(`已上色: ${scheme ? COLOR_SCHEME_LABELS[scheme] : css}${selExpr ? ` (${selExpr})` : ''}`)
@@ -399,6 +421,55 @@ export function runCommand(raw: string): void {
     const outcome = runContactAnalysis(`chain ${chainA}`, `chain ${chainB}`, cutoff)
     if (!outcome.ok) return err(outcome.message)
     ok(outcome.message)
+    return
+  }
+
+  if (cmd === 'sasa' || cmd === 'area') {
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有活动结构')
+    const data = engineRef.current && dataRegistry.get(s.activeId)
+    if (!data) return err('结构数据不存在')
+    const probe = clampNum(parseFloat(parts[1]), 0.8, 2.0, 1.4)
+    const nPoints = Math.round(clampNum(parseFloat(parts[2]), 32, 512, 92))
+    const eng = engineRef.current!
+    const r = eng.requestSasa(s.activeId, { probe, nPoints })
+    if (r.done && r.stats) {
+      const st = r.stats
+      ok(`SASA（Shrake–Rupley，probe ${probe} Å，${nPoints} 点）：总计 ${st.total.toFixed(0)} Å² · 疏水 ${st.hydrophobic.toFixed(0)} · 极性 ${st.polar.toFixed(0)} · 水与配体 ${st.het.toFixed(0)} · ${st.ms.toFixed(0)} ms`)
+      ok('可用 color sasa 按暴露度着色（埋藏蓝 → 暴露橙红）；分析面板含 Top 暴露残基')
+    } else {
+      ok(`SASA 计算中（Web Worker，probe ${probe} Å，${nPoints} 点）——完成后将在此输出结果，并自动更新着色`)
+    }
+    return
+  }
+
+  if (cmd === 'bsa' || cmd === 'buried' || cmd === 'bsa-area') {
+    const outcome = runBuriedSasa()
+    if (!outcome.ok) return err(outcome.message)
+    ok(outcome.message)
+    if (useSasaStore.getState().buried?.computing === false && useSasaStore.getState().buried) {
+      ok('分析面板提供界面核心残基选择（ΔSASA > 1 Å² 判据）')
+    }
+    return
+  }
+
+  if (cmd === 'untransform' || cmd === 'unpose') {
+    const s = useMolStore.getState()
+    const nameArg = parts[1]
+    let targetId = s.activeId
+    if (nameArg) {
+      const found = s.structures.find(x =>
+        x.name.toLowerCase() === nameArg.toLowerCase() ||
+        x.name.toLowerCase().startsWith(nameArg.toLowerCase()) ||
+        x.meta.pdbId?.toLowerCase() === nameArg.toLowerCase())
+      if (!found) return err(`未找到结构 "${nameArg}"（可用：${s.structures.map(x => x.name).join('、')}）`)
+      targetId = found.id
+    }
+    if (!targetId) return err('没有活动结构')
+    const r = engineRef.current?.resetTransform(targetId)
+    if (!r) return err('引擎未就绪')
+    if (!r.ok) return err(r.message)
+    ok(r.message + '；会话存档中的变换已同步清除')
     return
   }
 
