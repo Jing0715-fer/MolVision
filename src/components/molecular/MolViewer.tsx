@@ -7,10 +7,12 @@ import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { loadFiles } from '@/lib/molecular/loader'
 import { PRESETS } from '@/lib/molecular/store'
+import { hasSession, restoreSession, saveSession } from '@/lib/molecular/session'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useTheme } from 'next-themes'
+import { toast } from 'sonner'
 
 interface HoverState { text: string; x: number; y: number; sub?: string }
 
@@ -97,7 +99,30 @@ export default function MolViewer() {
     engineRef.current = eng
     engine.current = eng
     eng.sync(useMolStore.getState())
+    // 恢复上次会话（结构/表示法/设置/相机）
+    if (hasSession() && useMolStore.getState().structures.length === 0) {
+      const n = restoreSession()
+      if (n > 0) {
+        toast.success(`已恢复上次会话`, { description: `${n} 个结构 · 表示法与相机视角已还原` })
+      }
+    }
+    // 会话自动保存（debounced）：结构/reps/设置/命名选择变化时
+    let saveTimer: ReturnType<typeof setTimeout> | null = null
+    let lastSig = ''
+    const unsub = useMolStore.subscribe((s, prev) => {
+      if (prev.structures === s.structures && prev.settings === s.settings && prev.namedSelections === s.namedSelections) return
+      const sig = `${s.structures.length}|${s.structures.map(x => x.rev).join(',')}|${JSON.stringify(s.settings)}|${s.namedSelections.length}`
+      if (sig === lastSig) return
+      lastSig = sig
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => saveSession(), 900)
+    })
+    const onBeforeUnload = () => saveSession()
+    window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
+      unsub()
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      if (saveTimer) clearTimeout(saveTimer)
       eng.dispose()
       engineRef.current = null
       engine.current = null
@@ -148,6 +173,9 @@ export default function MolViewer() {
           break
         case 'w': case 'W':
           store.updateSettings({ hideWater: !store.settings.hideWater })
+          break
+        case 'b': case 'B':
+          store.updateSettings({ showHBonds: !store.settings.showHBonds })
           break
         case 'l': case 'L':
           store.addLabelsForSelection()

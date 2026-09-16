@@ -113,3 +113,38 @@ Stage Summary:
 - 项目整体状态：功能完成度高——PDB/mmCIF 解析、5 种表示法（cartoon/球棍/空间填充/线框/表面）、7 种着色方案、PyMOL 风格选择语言、命令行控制台、测量标注、L 标签、主题切换、多结构管理均已验证可用；本次收尾修复了设置系统不生效的核心 bug（updateSettings 不触发引擎 sync）并让视口背景随主题自适应。已知遗留：13 条历史浏览器错误中 2× 主题按钮 Sun/Moon SSR 水合不匹配仍未修（建议 suppressHydrationWarning 或挂载后渲染图标）；无会话持久化（刷新后结构列表清空）
 - 下一阶段建议（供 15 分钟周期评审任务参考）：① 氢键网络可视化（距离/角度判据 + 虚线渲染）；② SSAO 环境光遮蔽提升大结构立体感；③ NMR ensemble 多构象动画播放；④ 会话序列化保存/恢复（场景+相机+选择导出 JSON）；⑤ 结构叠合对比（序列比对 + 刚体拟合）；⑥ 浅色主题细节打磨（白色背景下雾/边缘光/标签描边对比度）；⑦ 大结构性能优化（4HHB 以上 60fps、LOD/实例化预算）
 - 优先修复项：主题按钮 SSR 水合不匹配（Toolbar.tsx L237-243，加 suppressHydrationWarning 或 mounted 状态后再渲染 Sun/Moon 图标）；会话持久化缺失导致刷新丢状态（可 localStorage 序列化 structures+settings）
+
+---
+Task ID: cron-r2 (webDevReview 第 2 轮)
+Agent: main
+Task: 周期评审——QA 冒烟 + 氢键网络可视化 + 会话持久化
+
+Work Log:
+- 读取 worklog 了解进展；主线程 Bash 工具已恢复（上轮曾卡死）；dev server 全绿，页面 200
+- QA 冒烟：agent-browser 加载 1CRN 渲染正常（3620 triangles）；错误基线 13 条历史错误零新增；当前 reload 无 hydration 浮层（上轮 CSS 修复生效）
+- 小修：删除 engine.ts 中未使用的 THREE.Clock 声明（消除每次挂载的 deprecation 警告刷屏）
+- 新功能 A【氢键网络可视化】：
+  - 新建 src/lib/molecular/hbonds.ts：detectHBonds 算法——有氢结构用 D-H…A 几何（H…A≤maxDist 且角度≥120°，遍历供体氢取最优）；无氢结构（多数 X-ray PDB）用 D…A 重原子距离判据；排除同残基/直接成键/水-水；供受体限定 N/O/S；对称去重（lo*n+hi）
+  - 新建 hbond-store.ts（轻量 zustand，独立于主 store 避免 visualRev 循环）存 count/waterCount/visible
+  - engine.ts：新增 hbondGroup/hbondCache/lastHbondKey；sync() 末尾增量更新 updateHBonds()——检测缓存（detKey=maxDist|includeWater|entry.rev）、选择过滤（hbondSelOnly）、8000 条 CAP 保护；渲染 LineDashedMaterial 虚线（青色 #4fd1c5，dashSize 0.28）+ InstancedMesh 端点小球标记；结构移除时清理缓存
+  - types.ts Settings 扩展 showHBonds/hbondMaxDist/hbondIncludeWater/hbondSelOnly（默认 3.5Å）
+  - ScenePanel 新增「氢键网络」区块（开关+距离滑块+水介开关+仅选择相关开关+判据说明）；MolViewer 加 B 快捷键；StatusBar 显示氢键计数徽章；commands.ts 加 hbonds on|off [n] 命令；HelpDialog 快捷键表加 B
+- 新功能 B【会话持久化】：
+  - 新建 text-registry.ts（structureId→源文本，独立文件避免循环依赖）+ session.ts（saveSession/restoreSession/sessionInfo/clearSession）
+  - 保存：结构源文本（3.2MB 预算，超限跳过并降级）+reps+colorOverrides+visible+settings+相机 pos/target+命名选择（structureId→index 映射）
+  - 恢复：MolViewer 挂载时检测 localStorage 自动恢复（重解析文本、覆盖 reps、双 rAF 后恢复相机）；addStructure 后登记文本并 900ms debounce 自动保存；useMolStore.subscribe 监听 structures/settings/namedSelections 引用变化触发；beforeunload 兜底保存
+  - commands.ts 加 session save|info|clear / save 命令
+- README.md 更新：Highlights 加氢键行、Session persistence 小节、快捷键加 B、Roadmap 移除已完成的氢键与 sessions
+- 验证：
+  - 1CRN 按 B → 176 氢键，VLM 确认青色虚线清晰可见；4HHB → 2,964 氢键（4HHB 2788 + 1CRN 176）
+  - debugHBondScan 参数扫描确认单调性：4HHB 3.0→1443 / 3.2→1864 / 3.5→2788 / 4.0→3478 / 5.0→6105（中途发现"5.0 比 3.5 少"的假警报，实为测试正则 \d+ 被 toLocaleString 千位逗号截断，真实显示 "6,566 氢键" 正确；调试方法已删除）
+  - hbonds off → 隐藏 ✓；hbonds on 3.2 → 1,981 氢键 ✓（注意 React 受控输入需用原生 value setter + input 事件，直接设 DOM value 不触发 onChange）
+  - 会话持久化：reload 后 1CRN 自动恢复（含氢键设置 176 重新检测、相机视角还原）✓；loadStructureText 后 900ms 自动保存 ✓
+  - bun run lint 0 错误 0 警告；agent-browser errors 基线 13 条零新增；VLM 确认整体渲染无异常
+- git add -A → commit → push origin main
+
+Stage Summary:
+- 项目当前状态：核心功能完整且稳定（解析/6 种表示法/7 种配色/选择语言/命令行/测量/标注/序列条/主题/多结构），本轮新增氢键网络与会话持久化两大功能，均经 VLM 视觉与交互验证
+- 本轮目标全部达成：THREE.Clock 警告清除、氢键（算法+渲染+UI+命令行+快捷键）、会话持久化（自动保存+恢复+命令行）
+- 未解决问题与风险：①13 条历史错误中 2× 主题按钮 SSR 水合不匹配仍待 suppressHydrationWarning（低危，React 自动恢复）；②会话 localStorage 5MB 上限——超大结构（如核糖体级 cif）文本不保存，恢复时静默缺失（有 console.warn）；③氢键检测在大结构（>5 万原子）上是同步阻塞（4HHB 4779 原子 <50ms 无感知，核糖体级可能卡顿数秒，可考虑 Web Worker）
+- 下一阶段建议（优先级序）：① SSAO 环境光遮蔽（立体感）；② NMR ensemble 多模型动画播放（parser 已支持多模型过滤，需保留全部模型）；③ 结构叠合对比；④ 氢键检测移入 Web Worker + 进度条；⑤ 浅色主题下氢键/雾/标签对比度打磨；⑥ 导出会话为 .molvision 文件（超越 localStorage）

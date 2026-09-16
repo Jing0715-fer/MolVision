@@ -14,6 +14,7 @@
 | ⬤ **Space-fill (CPK)** | vdW-radius spheres, per-element Jmol palette |
 | 〰️ **Wireframe** | GPU line segments |
 | 🎈 **Molecular surface** | Metaball/gaussian implicit surface via marching cubes, per-atom vertex coloring, probe radius & opacity controls |
+| ⚡ **Hydrogen-bond network** | Distance/angle geometry criteria (D-H…A ≤ 2.5 Å & ≥ 120° with H; D…A ≤ 3.5 Å without), dashed teal lines with endpoint markers, optional water-mediated bonds & selection-scoped display — press `B` |
 
 ### Coloring schemes
 Element (CPK) · Chain (golden-angle palette) · Spectrum (rainbow per chain) · Residue class (10 biochemical categories) · Secondary structure · B-factor (blue→red) · Uniform — plus **per-atom color overrides** on any selection.
@@ -44,6 +45,9 @@ bg black · spin on · slab 20 · label on · preset surface
 - **Sequence viewer** with per-residue biochemical coloring, secondary-structure track, click-to-select / double-click-to-focus
 - **Context menu** (right-click): select atom/residue/chain/same-residue, measure-from-here, label, focus
 
+### Session persistence
+Structures, representations, colors, settings and camera orientation are auto-saved to localStorage (debounced) and restored on reload — no work lost. Manage with `session save / info / clear`.
+
 ### Scene & camera
 - Perspective/orthographic toggle, FOV control
 - **Depth-cue fog**, **slab clipping** (near/far planes along the view axis)
@@ -51,7 +55,7 @@ bg black · spin on · slab 20 · label on · preset surface
 - Hide/show hydrogens & water globally
 
 ## ⌨️ Shortcuts
-`1-7` presets · `F` fit view · `S` spin · `H` hydrogens · `W` waters · `L` label · `` ` `` console · `Esc` exit mode/clear · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
+`1-7` presets · `F` fit view · `S` spin · `H` hydrogens · `W` waters · `B` hydrogen bonds · `L` label · `` ` `` console · `Esc` exit mode/clear · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
 
 ## 🚀 Quick start
 
@@ -80,7 +84,7 @@ src/app/             single-page studio + /api/pdb proxy
 ```
 
 ## 🗺️ Roadmap
-- Hydrogen-bond networks · SSAO ambient occlusion · NMR ensemble animation · sessions & scene serialization · align/superpose · DSSP fallback for sheets
+- SSAO ambient occlusion · NMR ensemble animation · align/superpose · DSSP fallback for sheets · scene serialization to file
 
 ## License
 MIT

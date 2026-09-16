@@ -10,6 +10,8 @@ import {
 } from './representations'
 import type { StructureData } from './parser'
 import { evaluateSelection } from './selection'
+import { detectHBonds, type HBond } from './hbonds'
+import { useHBondStore } from './hbond-store'
 import { makeTextSprite, disposeSprite } from './textsprite'
 import { useMolStore, buildNamedMasks, dataRegistry } from './store'
 import type { AtomLabel, Measurement, RepConfig, Settings, StructureEntry } from './types'
@@ -77,12 +79,14 @@ export class MolEngine {
   private clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 0, 1), 1e9), new THREE.Plane(new THREE.Vector3(0, 0, -1), 1e9)]
   private settings: Settings | null = null
   private raf = 0
-  private clock = new THREE.Clock()
   private disposed = false
   private lastHoverTime = 0
   private downPos = { x: 0, y: 0, t: 0, button: -1 }
   private lastLabelsKey = ''
   private lastMeasureKey = ''
+  private hbondGroup = new THREE.Group()
+  private hbondCache = new Map<string, { key: string; hbonds: HBond[] }>()
+  private lastHbondKey = ''
   private lastPicksKey = ''
   private ro: ResizeObserver
   private pickablesCache: { obj: THREE.Object3D; pick: Pickable; structureId: string }[] | null = null
@@ -112,6 +116,7 @@ export class MolEngine {
     this.scene.background = new THREE.Color('#101215')
     this.scene.add(this.measureGroup)
     this.scene.add(this.pickMarkerGroup)
+    this.scene.add(this.hbondGroup)
 
     // 环境光照
     const pmrem = new THREE.PMREMGenerator(this.renderer)
@@ -438,6 +443,7 @@ export class MolEngine {
         for (const rv of view.reps.values()) rv.build.dispose()
         if (view.highlight) { view.highlight.geometry.dispose(); (view.highlight.material as THREE.Material).dispose() }
         this.views.delete(id)
+        this.hbondCache.delete(id)
         this.pickablesCache = null
       }
     }
@@ -458,7 +464,107 @@ export class MolEngine {
       this.lastPicksKey = picksKey
       this.updatePickMarkers(state.measurePicks)
     }
+    // 氢键网络
+    const hbondKey = [
+      state.settings.showHBonds, state.settings.hbondMaxDist, state.settings.hbondIncludeWater,
+      state.settings.hbondSelOnly, state.settings.hideWater,
+      state.structures.filter(s => s.visible).map(s => s.id).join('|'),
+      state.selection.structureId, state.selection.rev,
+    ].join('#')
+    if (hbondKey !== this.lastHbondKey) {
+      this.lastHbondKey = hbondKey
+      this.updateHBonds(state)
+    }
     this.hasContent = this.views.size > 0
+  }
+
+  /** 氢键网络检测与虚线渲染 */
+  private updateHBonds(state: Parameters<MolEngine['sync']>[0]) {
+    // 清空旧渲染
+    for (const child of [...this.hbondGroup.children]) {
+      this.hbondGroup.remove(child)
+      const any = child as THREE.LineSegments & THREE.Mesh
+      any.geometry?.dispose()
+      const mat = any.material as THREE.Material | THREE.Material[] | undefined
+      if (mat) (Array.isArray(mat) ? mat : [mat]).forEach(m => m.dispose())
+    }
+    const s = state.settings
+    if (!s.showHBonds) {
+      useHBondStore.getState().setStats(0, 0, false)
+      return
+    }
+    let total = 0, waterTotal = 0
+    for (const entry of state.structures) {
+      if (!entry.visible) continue
+      const data = dataRegistry.get(entry.id)
+      if (!data) continue
+      // 检测缓存
+      const detKey = `${s.hbondMaxDist}|${s.hbondIncludeWater}|${entry.rev}`
+      let cached = this.hbondCache.get(entry.id)
+      if (!cached || cached.key !== detKey) {
+        const hbonds = detectHBonds(data, {
+          maxHeavyDist: s.hbondMaxDist,
+          maxDist: Math.min(2.5, s.hbondMaxDist - 1),
+          includeWater: s.hbondIncludeWater,
+        })
+        cached = { key: detKey, hbonds }
+        this.hbondCache.set(entry.id, cached)
+      }
+      let hbonds = cached.hbonds
+      // 选择过滤
+      if (s.hbondSelOnly && state.selection.structureId === entry.id && state.selection.indices.length) {
+        const sel = new Set(state.selection.indices)
+        hbonds = hbonds.filter(hb => sel.has(hb.donor) || sel.has(hb.acceptor))
+      }
+      if (!hbonds.length) continue
+      // 上限保护
+      const CAP = 8000
+      const truncated = hbonds.length > CAP
+      const draw = truncated ? hbonds.slice(0, CAP) : hbonds
+      // 虚线几何：H...A 或 D...A
+      const pos = data.atoms.positions
+      const verts: number[] = []
+      const endPts: number[] = []
+      let waterN = 0
+      for (const hb of draw) {
+        const from = hb.hydrogen >= 0 ? hb.hydrogen : hb.donor
+        verts.push(pos[from * 3], pos[from * 3 + 1], pos[from * 3 + 2])
+        verts.push(pos[hb.acceptor * 3], pos[hb.acceptor * 3 + 1], pos[hb.acceptor * 3 + 2])
+        endPts.push(from, hb.acceptor)
+        if (data.residues[data.atomResidue[hb.donor]].water || data.residues[data.atomResidue[hb.acceptor]].water) waterN++
+      }
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
+      const mat = new THREE.LineDashedMaterial({
+        color: 0x4fd1c5,
+        dashSize: 0.28,
+        gapSize: 0.18,
+        transparent: true,
+        opacity: 0.92,
+        depthWrite: false,
+      })
+      const lines = new THREE.LineSegments(geo, mat)
+      lines.computeLineDistances()
+      lines.renderOrder = 8
+      this.hbondGroup.add(lines)
+      // 端点小标记（InstancedMesh）
+      const sphereGeo = new THREE.SphereGeometry(0.24, 10, 8)
+      const sphereMat = new THREE.MeshBasicMaterial({ color: 0x4fd1c5, transparent: true, opacity: 0.85, depthWrite: false })
+      const marker = new THREE.InstancedMesh(sphereGeo, sphereMat, endPts.length)
+      const m4 = new THREE.Matrix4()
+      for (let k = 0; k < endPts.length; k++) {
+        const i = endPts[k]
+        m4.makeTranslation(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])
+        marker.setMatrixAt(k, m4)
+      }
+      marker.instanceMatrix.needsUpdate = true
+      marker.renderOrder = 9
+      this.hbondGroup.add(marker)
+      total += draw.length
+      waterTotal += waterN
+      if (truncated) useMolStore.getState().appendLog('out', `氢键数量超过 ${CAP}，已截断显示（共 ${hbonds.length}）`)
+    }
+    useHBondStore.getState().setStats(total, waterTotal, true)
   }
 
   private buildRep(entry: StructureEntry, rep: RepConfig, data: StructureData, view: StructureView, settings: Settings, filtersKey: string) {

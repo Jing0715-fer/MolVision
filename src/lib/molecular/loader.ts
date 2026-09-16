@@ -2,6 +2,8 @@
 import { toast } from 'sonner'
 import { detectFormat, parseStructure } from './parser'
 import { useMolStore, engineRef } from './store'
+import { textRegistry } from './text-registry'
+import { saveSession } from './session'
 
 export const EXAMPLE_STRUCTURES: { id: string; title: string; desc: string }[] = [
   { id: '1CRN', title: 'Crambin', desc: '小蛋白 · 327 原子 · 高分辨率' },
@@ -51,6 +53,9 @@ export function loadStructureText(text: string, name: string, format?: 'pdb' | '
       const store = useMolStore.getState()
       const displayName = data.meta.pdbId ?? name
       const id = store.addStructure(data, displayName.toUpperCase() === displayName ? displayName : name, ms)
+      // 会话持久化：登记源文本并立即保存
+      textRegistry.set(id, text)
+      setTimeout(() => saveSession(), 600)
       useMolStore.setState({ loading: false, loadingMsg: '' })
       // 视角适配
       requestAnimationFrame(() => {

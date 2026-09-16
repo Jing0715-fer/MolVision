@@ -1,9 +1,10 @@
 'use client'
 
 // 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示
-import { Circle, Ruler, Triangle, Rotate3d, Layers } from 'lucide-react'
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
+import { useHBondStore } from '@/lib/molecular/hbond-store'
 import { cn } from '@/lib/utils'
 
 export function StatusBar() {
@@ -14,6 +15,7 @@ export function StatusBar() {
   const measureMode = useMolStore(s => s.measureMode)
   const measurePicks = useMolStore(s => s.measurePicks)
   const settings = useMolStore(s => s.settings)
+  const hbond = useHBondStore(s => s)
 
   const st = structures.find(x => x.id === activeId)
   const need = measureMode === 'distance' ? 2 : measureMode === 'angle' ? 3 : measureMode === 'dihedral' ? 4 : 0
@@ -55,6 +57,15 @@ export function StatusBar() {
           {settings.hideHydrogens && 'H'}
           {settings.hideHydrogens && settings.hideWater && '+'}
           {settings.hideWater && 'H₂O'} 已隐藏
+        </span>
+      )}
+
+      {/* 氢键网络 */}
+      {hbond.visible && (
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-teal-500/15 px-2 py-0.5 font-medium text-teal-600 dark:text-teal-400">
+          <Zap className="h-3 w-3" />
+          {hbond.count.toLocaleString()} 氢键
+          {hbond.waterCount > 0 && <span className="text-[9px] text-muted-foreground/70">（含水 {hbond.waterCount}）</span>}
         </span>
       )}
 

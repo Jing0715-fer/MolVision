@@ -1,5 +1,6 @@
 // PyMOL 风格命令行：select / show / hide / color / bg / zoom / spin / slab / label ...
 import { PRESETS, useMolStore, engineRef } from './store'
+import { saveSession, clearSession, sessionInfo } from './session'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
 
@@ -30,6 +31,8 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'zoom [sel]', desc: '缩放到选择/全部', example: 'zoom ligand' },
   { cmd: 'spin on|off', desc: '自动旋转', example: 'spin on' },
   { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
+  { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
+  { cmd: 'session save|info|clear', desc: '会话存档管理', example: 'session save' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
   { cmd: 'preset <名>', desc: '应用风格预设', example: 'preset surface' },
   { cmd: 'delete <名>', desc: '删除命名选择', example: 'delete site' },
@@ -232,6 +235,35 @@ export function runCommand(raw: string): void {
   if (cmd === 'orient') {
     engineRef.current?.fitView()
     return ok('视角已重置')
+  }
+
+  if (cmd === 'hbonds' || cmd === 'hbond' || cmd === 'hbon') {
+    const s = useMolStore.getState()
+    const arg = (parts[1] ?? 'on').toLowerCase()
+    if (arg === 'off' || arg === '0') {
+      s.updateSettings({ showHBonds: false })
+      return ok('氢键显示关闭')
+    }
+    let dist = parseFloat(parts[2] ?? '')
+    if (isNaN(dist)) dist = parseFloat(arg)
+    const patch: Partial<import('./types').Settings> = { showHBonds: true }
+    if (!isNaN(dist) && dist >= 2 && dist <= 6) patch.hbondMaxDist = dist
+    s.updateSettings(patch)
+    return ok(`氢键网络开启${!isNaN(dist) && dist >= 2 && dist <= 6 ? `（距离上限 ${dist} Å）` : '（默认 3.5 Å）'}，快捷键 B 切换`)
+  }
+
+  if (cmd === 'session' || cmd === 'save') {
+    const sub = (parts[1] ?? (cmd === 'save' ? 'save' : 'info')).toLowerCase()
+    if (cmd === 'save' || sub === 'save') {
+      const okSaved = saveSession()
+      const n = useMolStore.getState().structures.length
+      return okSaved && n > 0 ? ok(`会话已保存（${n} 个结构，含相机视角）`) : err('无可保存内容或保存失败')
+    }
+    if (sub === 'clear' || sub === 'reset') {
+      clearSession()
+      return ok('会话存档已清除（下次刷新不再恢复）')
+    }
+    return ok(sessionInfo())
   }
 
   if (cmd === 'measure' || cmd === 'dist') {

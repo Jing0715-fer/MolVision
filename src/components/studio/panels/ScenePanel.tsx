@@ -1,7 +1,7 @@
 'use client'
 
 // 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets } from 'lucide-react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
 import { SectionTitle, PanelHint } from '../LeftPanel'
@@ -139,6 +139,41 @@ export function ScenePanel() {
           </span>
           <Switch checked={settings.hideWater} onCheckedChange={v => updateSettings({ hideWater: v })} />
         </div>
+      </div>
+
+      <SectionTitle>氢键网络</SectionTitle>
+      <div className="space-y-3 px-3">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Zap className="h-3.5 w-3.5 text-teal-400" /> 显示氢键 (B)
+          </span>
+          <Switch checked={settings.showHBonds} onCheckedChange={v => updateSettings({ showHBonds: v })} />
+        </div>
+        {settings.showHBonds && (
+          <>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>重原子距离上限</span>
+                <span className="font-mono">{settings.hbondMaxDist.toFixed(1)} Å</span>
+              </div>
+              <Slider
+                value={[settings.hbondMaxDist]} min={2.5} max={5} step={0.1}
+                onValueChange={v => updateSettings({ hbondMaxDist: v[0] })}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">包含水介氢键</span>
+              <Switch checked={settings.hbondIncludeWater} onCheckedChange={v => updateSettings({ hbondIncludeWater: v })} />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">仅显示与选择相关的</span>
+              <Switch checked={settings.hbondSelOnly} onCheckedChange={v => updateSettings({ hbondSelOnly: v })} />
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+              判据：有氢结构用 D-H…A 几何（H…A ≤ 2.5Å 且角度 ≥ 120°），无氢结构用 D…A ≤ 距离上限。虚线 + 端点标记为青色。
+            </p>
+          </>
+        )}
       </div>
 
       <SectionTitle>渲染画质</SectionTitle>

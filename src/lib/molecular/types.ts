@@ -126,6 +126,11 @@ export interface Settings {
   hideHydrogens: boolean
   hideWater: boolean
   quality: 'low' | 'medium' | 'high'
+  /** 氢键网络 */
+  showHBonds: boolean
+  hbondMaxDist: number
+  hbondIncludeWater: boolean
+  hbondSelOnly: boolean
 }
 
 export function defaultSettings(): Settings {
@@ -142,5 +147,9 @@ export function defaultSettings(): Settings {
     hideHydrogens: false,
     hideWater: false,
     quality: 'high',
+    showHBonds: false,
+    hbondMaxDist: 3.5,
+    hbondIncludeWater: false,
+    hbondSelOnly: false,
   }
 }

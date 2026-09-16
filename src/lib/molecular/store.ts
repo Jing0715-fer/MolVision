@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { chainColor, computeAtomColors, parseCssColor, type ColorScheme } from './colors'
 import { parseStructure, type StructureData } from './parser'
 import { evaluateSelection, maskToIndices } from './selection'
+import { textRegistry } from './text-registry'
 import {
   defaultRep, defaultSettings, type AtomLabel, type ChainSummary, type LigandSummary,
   type MeasureMode, type Measurement, type NamedSelection, type RepConfig, type RepType,
@@ -231,6 +232,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
 
   removeStructure: (id) => {
     dataRegistry.delete(id)
+    textRegistry.delete(id)
     set(s => {
       const structures = s.structures.filter(x => x.id !== id)
       const activeId = s.activeId === id ? (structures[0]?.id ?? null) : s.activeId
