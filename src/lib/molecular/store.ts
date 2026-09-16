@@ -42,6 +42,8 @@ export interface MolState {
     loadOpen: boolean
   }
   consoleLog: { type: 'in' | 'out' | 'err'; text: string; time: string }[]
+  /** 本次页面生命周期内是否加载过结构（防止恢复失败后被空自动保存抹掉存档） */
+  everHadStructures: boolean
 
   // ---------- actions ----------
   addStructure: (data: StructureData, name: string, loadMs: number) => string
@@ -199,6 +201,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
     loadOpen: false,
   },
   consoleLog: [{ type: 'out', text: 'MolVision 命令行就绪。输入 help 查看命令列表。', time: '' }],
+  everHadStructures: false,
 
   addStructure: (data, name, loadMs) => {
     const id = nextId()
@@ -224,6 +227,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
     set(s => ({
       structures: [...s.structures, newEntry],
       activeId: id,
+      everHadStructures: true,
       visualRev: s.visualRev + 1,
       selection: { structureId: null, indices: [], rev: s.selection.rev + 1 },
     }))

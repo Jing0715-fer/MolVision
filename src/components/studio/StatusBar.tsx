@@ -1,7 +1,7 @@
 'use client'
 
 // 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示
-import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves } from 'lucide-react'
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { useHBondStore } from '@/lib/molecular/hbond-store'
@@ -62,12 +62,22 @@ export function StatusBar() {
         </span>
       )}
 
+      {/* 环境光遮蔽 */}
+      {settings.ssao && (
+        <span className="hidden shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-400 md:flex">
+          <SunMedium className="h-3 w-3" />
+          AO {settings.ssaoRadius.toFixed(0)}Å
+        </span>
+      )}
+
       {/* 氢键网络 */}
       {hbond.visible && (
         <span className="flex shrink-0 items-center gap-1 rounded-full bg-teal-500/15 px-2 py-0.5 font-medium text-teal-600 dark:text-teal-400">
-          <Zap className="h-3 w-3" />
-          {hbond.count.toLocaleString()} 氢键
-          {hbond.waterCount > 0 && <span className="text-[9px] text-muted-foreground/70">（含水 {hbond.waterCount}）</span>}
+          {hbond.computing
+            ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            : <Zap className="h-3 w-3" />}
+          {hbond.computing ? '氢键计算中…' : `${hbond.count.toLocaleString()} 氢键`}
+          {!hbond.computing && hbond.waterCount > 0 && <span className="text-[9px] text-muted-foreground/70">（含水 {hbond.waterCount}）</span>}
         </span>
       )}
 

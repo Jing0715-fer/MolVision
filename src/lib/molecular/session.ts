@@ -30,7 +30,11 @@ interface SessionData {
 export function saveSession(): boolean {
   const s = useMolStore.getState()
   if (!s.structures.length) {
-    try { localStorage.removeItem(KEY) } catch { /* ignore */ }
+    // 仅在本次生命周期确实加载过结构后才清除存档（用户主动清空）；
+    // 若从未加载过（如恢复失败），保留存档避免被空自动保存永久抹掉
+    if (s.everHadStructures) {
+      try { localStorage.removeItem(KEY) } catch { /* ignore */ }
+    }
     return false
   }
   // 序列化结构（预算内）

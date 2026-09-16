@@ -177,3 +177,36 @@ Stage Summary:
 - 本轮关键运维发现：①dev server 会僵死（文件监听失效但仍服务旧 bundle），QA 时若「改代码无效果」优先 tail dev.log 验证编译；沙箱后台进程需 Python double-fork 守护（bash setsid/nohup 跨调用必被清理）②agent-browser 点击对话框内元素必须精确到 button（外层 div 的 textContent 包含全部子文本，find 首个匹配是 wrapper）
 - 未解决问题与风险：①agent-browser errors 缓冲出现 ~1000 个空 ✗ 条目（无错误文本，疑似 ensemble 高频帧更新触发 CDP 事件被误解析为空错误，页面功能正常，reload 后基线重置）②ensemble 播放每帧全量重建 reps（1D3Z 602 原子流畅；>1 万原子的大 ensemble 会掉帧，可后续优化为 InstancedMesh 矩阵直更）③氢键检测仍是同步阻塞（worklog cron-r2 已知）④textRegistry 在 HMR 模块替换时会丢失旧结构文本（Fast Refresh 过渡态自动保存可能覆盖出空会话，生产构建无此问题；恢复即可）
 - 下一阶段建议（优先级序）：① SSAO 环境光遮蔽（立体感提升）② 结构叠合对比（序列比对+刚体拟合）③ 氢键检测移入 Web Worker ④ ensemble 大结构性能优化（矩阵直更路径）⑤ 浅色主题对比度打磨
+
+---
+Task ID: cron-r4
+Agent: main
+Task: 周期评审——QA 冒烟 + GTAO 环境光遮蔽 + 氢键 Web Worker + 会话存档保护
+
+Work Log:
+- 读取 worklog 了解进展（cron-r3 完成 ensemble/会话文件/rock）；dev server 全绿
+- QA 冒烟（全新浏览器会话 0 错误基线）：1CRN 加载 327 原子 ✓、球棍切换截图 3677 独特色彩 ✓、氢键 176 ✓、reload 会话恢复 ✓、测量面板（距离/键角/二面角）✓、命令行 select name CA → 46 原子 ✓，全程 0 新增错误
+- 新功能 A【GTAO 环境光遮蔽】：
+  - types.ts Settings 扩展 ssao/ssaoIntensity/ssaoRadius（默认 3Å）
+  - engine.ts：EffectComposer 管线（RenderPass → GTAOPass → OutputPass）懒建；tick 每帧 composer.setPixelRatio/setSize 刷新投影 uniform（FOV/正交 zoom 变化安全）+ blendIntensity + radius 纯 uniform 更新；相机类型切换（透视↔正交）重建管线；resize 同步；capture() 开 AO 时走 composer（透明底仍直接渲染）；dispose 清理
+  - 【QA 期间发现并修复重大 bug】ensureComposer 调用 gtao.updatePDMaterial —— 实际方法名是 updatePdMaterial（小写 d）！TypeError 导致 tick 每帧抛异常 → canvas 冻结在最后一帧（SSAO 前后截图仅 1% 差异全部来自 UI 徽章）+ ensureComposer 每帧 dispose/recreate churn 引发 CDP 超时。修复拼写 + try/catch 安全降级（gtaoFailed 标记防每帧异常循环）
+  - ScenePanel「环境光遮蔽」区块（开关 + 强度 0.2-2× + 半径 1-8Å 滑块 + 说明）；commands.ts ssao on|off [r] 命令（别名 ao/gtao）；StatusBar AO 徽章
+  - 验证：ao-off vs ao-on 分子区域 16.1% 像素变化、均值 47.1→45.5 变暗、暗像素 49492 vs 亮 8287（典型 AO 特征）；capture() composer 路径 314KB PNG 735ms ✓；SSAO 下相机移动画面更新（canvasAlive）✓；VLM 确认「转折处和重叠缝隙有明显环境光遮蔽效果，增强深度感和体积感，专业级渲染质量」
+- 新功能 B【氢键检测 Web Worker】：
+  - 新建 hbond-worker.ts（自包含：均匀空间网格 + 与 detectHBonds 相同判据；输入 positions/元素标志 Uint8/resWater 标志/键表；输出 triplets Int32 + values Float32，transfer 零拷贝回传）
+  - engine.ts：≥2000 原子走 worker（懒建，构造失败永久回退同步）；hbondPending Map 去重同 key 在飞行请求 + 过期结果丢弃；worker 结果写 hbondCache 后用 lastHbondState 重渲；ensemble 播放时 detKey 含 entry.rev 不变 → pending 去重保证同时最多 1 个请求（不洪泛）；结构移除/dispose 清理
+  - hbond-store 加 computing 标志 → StatusBar 显示「氢键计算中…」spinner 徽章
+  - 验证：4HHB（4779 原子）开氢键立即出现计算中徽章（主线程不阻塞），~4s 后 2,788 氢键 —— 与同步版基准（cron-r2 记录 2788）完全一致；血红素口袋缩放下像素级检出 2 万+ 青色虚线像素（整分子视图被 cartoon 遮挡属正常 3D 遮挡）
+- 新功能 C【会话存档保护】：
+  - 【QA 期间发现】saveSession 在 structures 空时无条件 removeItem —— 恢复失败后任何设置变更触发空自动保存会永久抹掉存档
+  - 修复：store 加 everHadStructures 标志（addStructure 置 true）；空结构时仅当 everHadStructures 才清存档（用户主动清空），从未加载过则保留存档
+  - 验证：构造损坏会话（垃圾 text）→ reload 恢复失败 → 按 B 触发设置变化 + 2.2s（>900ms 防抖）→ 存档仍在（修复前会被抹掉）✓；正常回合 load 1CRN → 自动保存 → reload 恢复 ✓
+- 样式细节：氢键颜色随背景亮度自适应（深底 #4fd1c5 / 浅底 #0d9488，hbondKey 加 background 触发重渲）；README 更新（Highlights hbond worker 行、Scene GTAO 条目、命令示例 ssao、Tech stack、Roadmap 移除已完成项、新截图 public/screenshots/ssao.png 6590 独特色彩）
+- 【QA 方法论发现】agent-browser close 会丢弃整个浏览器 profile：写入 localStorage 的 mv-test 标记 + 会话在 close 重开后全部消失 —— 「close 后会话丢失」是 QA 工具行为非应用 bug（同一浏览器会话内 reload 恢复多次验证正常）；另 body.textContent 匹配「4HHB」可能命中空状态提示「试试 4HHB（血红蛋白）」造成恢复误判，须用原子数/引擎 views 验证
+- lint 0 错误 0 警告；git add -A → commit → push origin main
+
+Stage Summary:
+- 项目当前状态：在 6 种表示法/氢键/会话/ensemble 基础上新增 GTAO 环境光遮蔽（可调强度与半径、命令行、徽章、截图走 composer）与氢键 Web Worker（大结构后台计算不卡 UI）两大功能，修复 updatePdMaterial 拼写引发的 canvas 冻结重大 bug 与空自动保存抹档风险，全部经交互/像素/VLM 三重验证
+- 本轮目标全部达成：QA 冒烟零错误、SSAO（含 1 个重大 bug 修复）、氢键 Worker 化、会话存档保护、氢键颜色背景自适应、README/截图更新
+- 未解决问题与风险：①agent-browser errors 缓冲的 ~1000 空条目依旧（reload/close 后重置，无实际错误文本，页面功能正常）；②GTAO 在超大结构 + 低端 GPU 上的性能未测（可考虑 quality=low 时自动降 AO 分辨率）；③ensemble 播放 + 氢键同开时氢键视觉滞后 1 帧级别（worker 串行，可接受）；④浅色主题下雾/标签对比度仍可继续打磨
+- 下一阶段建议（优先级序）：① 结构叠合对比（序列比对 + 刚体拟合，对标 ChimimeraX matchmaker）；② 大结构 LOD/实例化预算性能优化；③ DSSP sheet 兜底；④ AO 性能自适应（按 quality 降采样）；⑤ 导出视频/GIF 动画（rock/ensemble 录制）

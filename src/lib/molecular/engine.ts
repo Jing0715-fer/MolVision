@@ -1,7 +1,11 @@
-// MolEngine：Three.js 渲染引擎（场景/相机/拾取/高亮/测量/标签/裁剪/截图）
+// MolEngine：Three.js 渲染引擎（场景/相机/拾取/高亮/测量/标签/裁剪/截图/GTAO 遮蔽）
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
 import { computeAtomColors } from './colors'
 import { elementInfo } from './chemistry'
 import {
@@ -62,6 +66,17 @@ interface StructureView {
 
 const AMBER = 0xfbbf24
 const UP_VECTOR = new THREE.Vector3(0, 1, 0)
+/** 超过该原子数时氢键检测走 Web Worker（小结构同步更快） */
+const HBOND_WORKER_MIN_ATOMS = 2000
+/** 深色背景下的氢键青色 / 浅色背景下的深青色（对比度自适应） */
+const HBOND_COLOR_DARK = 0x4fd1c5
+const HBOND_COLOR_LIGHT = 0x0d9488
+
+/** 背景亮度判断（相对亮度 > 0.5 视为浅色） */
+function isLightBackground(css: string): boolean {
+  const c = new THREE.Color(css)
+  return c.r * 0.299 + c.g * 0.587 + c.b * 0.114 > 0.5
+}
 
 export class MolEngine {
   container: HTMLElement
@@ -89,6 +104,14 @@ export class MolEngine {
   private hbondGroup = new THREE.Group()
   private hbondCache = new Map<string, { key: string; hbonds: HBond[] }>()
   private lastHbondKey = ''
+  // 氢键检测 Web Worker（大结构异步计算）
+  private hbondWorker: Worker | null = null
+  private hbondWorkerFailed = false
+  private hbondReqId = 0
+  /** structureId → 检测中的 detKey（去重与过期丢弃） */
+  private hbondPending = new Map<string, string>()
+  /** 最近一次 updateHBonds 的 state（异步结果到达时重渲用） */
+  private lastHbondState: Parameters<MolEngine['sync']>[0] | null = null
   private lastPicksKey = ''
   /** ensemble 播放内部状态（插值帧号与时间戳） */
   private ensemblePlay: { frame: number; lastT: number } | null = null
@@ -99,6 +122,11 @@ export class MolEngine {
   private ro: ResizeObserver
   private pickablesCache: { obj: THREE.Object3D; pick: Pickable; structureId: string }[] | null = null
   private hasContent = false
+  // GTAO 后处理管线（ssao 开启时懒建；gtaoFailed 构建失败后永久回退）
+  private composer: EffectComposer | null = null
+  private gtaoPass: GTAOPass | null = null
+  private composerCamera: THREE.Camera | null = null
+  private gtaoFailed = false
 
   constructor(container: HTMLElement, private callbacks: EngineCallbacks = {}) {
     this.container = container
@@ -180,6 +208,10 @@ export class MolEngine {
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
     this.updateOrthoFrustum()
+    if (this.composer) {
+      this.composer.setPixelRatio(this.renderer.getPixelRatio())
+      this.composer.setSize(w, h)
+    }
     this.pickablesCache = null
   }
 
@@ -240,7 +272,75 @@ export class MolEngine {
       this.clippingPlanes[1].normal.copy(dir).negate()
       this.clippingPlanes[1].constant = dir.dot(cam.position) + half
     }
-    this.renderer.render(this.scene, cam)
+    // GTAO 环境光遮蔽：经 EffectComposer 渲染；否则直接渲染
+    if (this.settings?.ssao && !this.gtaoFailed) {
+      this.ensureComposer()
+      if (this.composer && this.gtaoPass) {
+        // 刷新投影矩阵 uniform（FOV / 正交 zoom / 相机切换后仍正确）
+        const w = this.container.clientWidth || 1
+        const h = this.container.clientHeight || 1
+        this.composer.setPixelRatio(this.renderer.getPixelRatio())
+        this.composer.setSize(w, h)
+        this.gtaoPass.blendIntensity = this.settings.ssaoIntensity
+        // 半径为纯 uniform 更新（无 shader 重编译），每帧同步保证滑块即时生效
+        this.gtaoPass.updateGtaoMaterial({ radius: this.settings.ssaoRadius })
+        this.composer.render()
+      } else {
+        this.renderer.render(this.scene, cam)
+      }
+    } else {
+      if (this.composer) this.disposeComposer()
+      this.renderer.render(this.scene, cam)
+    }
+  }
+
+  // ---------- GTAO 后处理管线 ----------
+  /** 懒建 EffectComposer（RenderPass → GTAOPass → OutputPass）；相机类型切换时重建；失败时安全降级 */
+  private ensureComposer() {
+    if (this.composer && this.composerCamera === this.activeCamera) return
+    if (this.composer) this.disposeComposer()
+    const w = this.container.clientWidth || 1
+    const h = this.container.clientHeight || 1
+    const pr = this.renderer.getPixelRatio()
+    try {
+      this.composer = new EffectComposer(this.renderer)
+      this.composer.addPass(new RenderPass(this.scene, this.activeCamera))
+      const gtao = new GTAOPass(this.scene, this.activeCamera, Math.round(w * pr), Math.round(h * pr))
+      gtao.output = GTAOPass.OUTPUT.Default
+      const s = this.settings
+      gtao.blendIntensity = s?.ssaoIntensity ?? 1
+      gtao.updateGtaoMaterial({
+        radius: s?.ssaoRadius ?? 3,
+        distanceExponent: 1,
+        thickness: 1,
+        scale: 1.25,
+        samples: 16,
+        distanceFallOff: 1,
+        screenSpaceRadius: false,
+      })
+      // 去噪参数（方法名为 updatePdMaterial，小写 d）
+      gtao.updatePdMaterial({ radius: 8, radiusExponent: 2, samples: 16, rings: 2 })
+      this.gtaoPass = gtao
+      this.composer.addPass(gtao)
+      this.composer.addPass(new OutputPass())
+      this.composer.setPixelRatio(pr)
+      this.composer.setSize(w, h)
+      this.composerCamera = this.activeCamera
+    } catch (e) {
+      // 构建失败：清掉半成品，标记禁用并回退直接渲染（避免每帧异常循环）
+      console.warn('[MolVision] GTAO 后处理初始化失败，已回退直接渲染', e)
+      this.gtaoFailed = true
+      this.disposeComposer()
+    }
+  }
+
+  private disposeComposer() {
+    if (!this.composer) return
+    for (const pass of this.composer.passes) pass.dispose?.()
+    this.composer.dispose()
+    this.composer = null
+    this.gtaoPass = null
+    this.composerCamera = null
   }
 
   // ---------- 指针事件 ----------
@@ -478,6 +578,7 @@ export class MolEngine {
         if (view.highlight) { view.highlight.geometry.dispose(); (view.highlight.material as THREE.Material).dispose() }
         this.views.delete(id)
         this.hbondCache.delete(id)
+        this.hbondPending.delete(id)
         this.pickablesCache = null
       }
     }
@@ -498,10 +599,10 @@ export class MolEngine {
       this.lastPicksKey = picksKey
       this.updatePickMarkers(state.measurePicks)
     }
-    // 氢键网络
+    // 氢键网络（key 含背景色：氢键颜色随背景亮度自适应需重渲）
     const hbondKey = [
       state.settings.showHBonds, state.settings.hbondMaxDist, state.settings.hbondIncludeWater,
-      state.settings.hbondSelOnly, state.settings.hideWater,
+      state.settings.hbondSelOnly, state.settings.hideWater, state.settings.background,
       state.structures.filter(s => s.visible).map(s => s.id).join('|'),
       state.selection.structureId, state.selection.rev,
     ].join('#')
@@ -512,8 +613,9 @@ export class MolEngine {
     this.hasContent = this.views.size > 0
   }
 
-  /** 氢键网络检测与虚线渲染 */
+  /** 氢键网络检测与虚线渲染（大结构经 Web Worker 异步） */
   private updateHBonds(state: Parameters<MolEngine['sync']>[0]) {
+    this.lastHbondState = state
     // 清空旧渲染
     for (const child of [...this.hbondGroup.children]) {
       this.hbondGroup.remove(child)
@@ -524,7 +626,9 @@ export class MolEngine {
     }
     const s = state.settings
     if (!s.showHBonds) {
+      this.hbondPending.clear()
       useHBondStore.getState().setStats(0, 0, false)
+      useHBondStore.getState().setComputing(false)
       return
     }
     let total = 0, waterTotal = 0
@@ -534,17 +638,23 @@ export class MolEngine {
       if (!data) continue
       // 检测缓存
       const detKey = `${s.hbondMaxDist}|${s.hbondIncludeWater}|${entry.rev}`
-      let cached = this.hbondCache.get(entry.id)
-      if (!cached || cached.key !== detKey) {
-        const hbonds = detectHBonds(data, {
+      let hbonds: HBond[] | null = null
+      const cached = this.hbondCache.get(entry.id)
+      if (cached && cached.key === detKey) {
+        hbonds = cached.hbonds
+      } else if (data.atoms.count >= HBOND_WORKER_MIN_ATOMS && this.requestHBondDetect(entry.id, detKey, data, s)) {
+        // 已投递 worker 异步检测：本轮先跳过，结果到达后重渲
+        hbonds = null
+      } else {
+        const detected = detectHBonds(data, {
           maxHeavyDist: s.hbondMaxDist,
           maxDist: Math.min(2.5, s.hbondMaxDist - 1),
           includeWater: s.hbondIncludeWater,
         })
-        cached = { key: detKey, hbonds }
-        this.hbondCache.set(entry.id, cached)
+        this.hbondCache.set(entry.id, { key: detKey, hbonds: detected })
+        hbonds = detected
       }
-      let hbonds = cached.hbonds
+      if (!hbonds) continue
       // 选择过滤
       if (s.hbondSelOnly && state.selection.structureId === entry.id && state.selection.indices.length) {
         const sel = new Set(state.selection.indices)
@@ -555,7 +665,8 @@ export class MolEngine {
       const CAP = 8000
       const truncated = hbonds.length > CAP
       const draw = truncated ? hbonds.slice(0, CAP) : hbonds
-      // 虚线几何：H...A 或 D...A
+      // 虚线几何：H...A 或 D...A（颜色随背景亮度自适应保证对比度）
+      const hbColor = isLightBackground(s.background) ? HBOND_COLOR_LIGHT : HBOND_COLOR_DARK
       const pos = data.atoms.positions
       const verts: number[] = []
       const endPts: number[] = []
@@ -570,7 +681,7 @@ export class MolEngine {
       const geo = new THREE.BufferGeometry()
       geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
       const mat = new THREE.LineDashedMaterial({
-        color: 0x4fd1c5,
+        color: hbColor,
         dashSize: 0.28,
         gapSize: 0.18,
         transparent: true,
@@ -583,7 +694,7 @@ export class MolEngine {
       this.hbondGroup.add(lines)
       // 端点小标记（InstancedMesh）
       const sphereGeo = new THREE.SphereGeometry(0.24, 10, 8)
-      const sphereMat = new THREE.MeshBasicMaterial({ color: 0x4fd1c5, transparent: true, opacity: 0.85, depthWrite: false })
+      const sphereMat = new THREE.MeshBasicMaterial({ color: hbColor, transparent: true, opacity: 0.85, depthWrite: false })
       const marker = new THREE.InstancedMesh(sphereGeo, sphereMat, endPts.length)
       const m4 = new THREE.Matrix4()
       for (let k = 0; k < endPts.length; k++) {
@@ -599,6 +710,103 @@ export class MolEngine {
       if (truncated) useMolStore.getState().appendLog('out', `氢键数量超过 ${CAP}，已截断显示（共 ${hbonds.length}）`)
     }
     useHBondStore.getState().setStats(total, waterTotal, true)
+    useHBondStore.getState().setComputing(this.hbondPending.size > 0)
+  }
+
+  // ---------- 氢键 Web Worker ----------
+
+  /** 懒建 worker（构造失败则永久回退同步检测） */
+  private ensureHBondWorker(): Worker | null {
+    if (this.hbondWorkerFailed) return null
+    if (this.hbondWorker) return this.hbondWorker
+    try {
+      const w = new Worker(new URL('./hbond-worker.ts', import.meta.url))
+      w.onmessage = (e: MessageEvent) => this.onHBondWorkerResult(e.data)
+      w.onerror = () => {
+        // worker 异常：标记失败并回退同步路径
+        this.hbondWorkerFailed = true
+        this.hbondPending.clear()
+        useHBondStore.getState().setComputing(false)
+      }
+      this.hbondWorker = w
+      return w
+    } catch {
+      this.hbondWorkerFailed = true
+      return null
+    }
+  }
+
+  /** 投递异步检测（同 key 在飞行中则去重）；返回是否成功投递 */
+  private requestHBondDetect(structureId: string, detKey: string, data: StructureData, s: Settings): boolean {
+    if (this.hbondPending.get(structureId) === detKey) return true // 同一请求在飞行中 → 视为已投递
+    const w = this.ensureHBondWorker()
+    if (!w) return false
+    const a = data.atoms
+    const n = a.count
+    // 预编译元素标志（避免传字符串数组）
+    const heteroFlag = new Uint8Array(n)
+    const isHydrogen = new Uint8Array(n)
+    for (let i = 0; i < n; i++) {
+      const e = a.elements[i]
+      if (e === 'N' || e === 'O' || e === 'S') heteroFlag[i] = 1
+      else if (e === 'H' || e === 'D') isHydrogen[i] = 1
+    }
+    const resWater = new Uint8Array(data.residues.length)
+    for (let r = 0; r < data.residues.length; r++) resWater[r] = data.residues[r].water ? 1 : 0
+    const reqId = ++this.hbondReqId
+    this.hbondPending.set(structureId, detKey)
+    w.postMessage({
+      type: 'detect',
+      reqId,
+      structureId,
+      key: detKey,
+      positions: a.positions,
+      heteroFlag,
+      isHydrogen,
+      atomResidue: data.atomResidue,
+      resWater,
+      bondA: data.bonds.a,
+      bondB: data.bonds.b,
+      hasH: data.hasHydrogens,
+      maxDist: Math.min(2.5, s.hbondMaxDist - 1),
+      maxHeavyDist: s.hbondMaxDist,
+      minAngle: 120,
+      includeWater: s.hbondIncludeWater,
+    })
+    return true
+  }
+
+  /** worker 结果：写入缓存并重渲氢键视觉 */
+  private onHBondWorkerResult(msg: {
+    type: string
+    reqId: number
+    structureId: string
+    key: string
+    count: number
+    triplets: Int32Array
+    values: Float32Array
+  }) {
+    if (!msg || msg.type !== 'result') return
+    // 过期结果（设置已变 → 新 key 已投递）：丢弃
+    if (this.hbondPending.get(msg.structureId) !== msg.key) return
+    this.hbondPending.delete(msg.structureId)
+    const hbonds: HBond[] = []
+    for (let i = 0; i < msg.count; i++) {
+      hbonds.push({
+        donor: msg.triplets[i * 3],
+        hydrogen: msg.triplets[i * 3 + 1],
+        acceptor: msg.triplets[i * 3 + 2],
+        dist: msg.values[i * 2],
+        angle: msg.values[i * 2 + 1],
+      })
+    }
+    this.hbondCache.set(msg.structureId, { key: msg.key, hbonds })
+    // 用最近一次 state 重渲（异步完成时 sync 不一定会再触发）
+    if (this.lastHbondState && this.settings?.showHBonds) {
+      this.updateHBonds(this.lastHbondState)
+    } else {
+      useHBondStore.getState().setComputing(this.hbondPending.size > 0)
+    }
   }
 
   // ---------- NMR ensemble 多构象动画 ----------
@@ -1052,16 +1260,28 @@ export class MolEngine {
     this.renderer.setPixelRatio(1)
     this.renderer.setSize(w * scale, h * scale, false)
     if (opts.transparent) {
+      // 透明底：绕过 composer 直接渲染（AO 需要不透明底）
       this.scene.background = null
       this.scene.fog = null
       this.renderer.setClearColor(0x000000, 0)
+      this.renderer.render(this.scene, this.activeCamera)
+    } else if (this.settings?.ssao && this.composer) {
+      // 开启 AO 时截图也走 composer（保持视觉一致）
+      this.composer.setPixelRatio(1)
+      this.composer.setSize(w * scale, h * scale)
+      this.composer.render()
+    } else {
+      this.renderer.render(this.scene, this.activeCamera)
     }
-    this.renderer.render(this.scene, this.activeCamera)
     const url = this.renderer.domElement.toDataURL('image/png')
     this.scene.background = prevBg
     this.scene.fog = prevFog
     this.renderer.setPixelRatio(prevRatio)
     this.renderer.setSize(w, h, false)
+    if (this.composer) {
+      this.composer.setPixelRatio(prevRatio)
+      this.composer.setSize(w, h)
+    }
     return url
   }
 
@@ -1084,6 +1304,10 @@ export class MolEngine {
       for (const rv of view.reps.values()) rv.build.dispose()
     }
     this.views.clear()
+    this.disposeComposer()
+    this.hbondWorker?.terminate()
+    this.hbondWorker = null
+    this.hbondPending.clear()
     this.renderer.dispose()
     if (this.canvas.parentElement === this.container) this.container.removeChild(this.canvas)
   }

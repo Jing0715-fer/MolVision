@@ -34,6 +34,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'rock on|off', desc: '相机摇摆（±26°）', example: 'rock on' },
   { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
   { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
+  { cmd: 'ssao on|off [r]', desc: '环境光遮蔽开关/半径', example: 'ssao on 3' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'session save|info|clear', desc: '会话存档管理', example: 'session save' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
@@ -260,6 +261,21 @@ export function runCommand(raw: string): void {
     if (!isNaN(dist) && dist >= 2 && dist <= 6) patch.hbondMaxDist = dist
     s.updateSettings(patch)
     return ok(`氢键网络开启${!isNaN(dist) && dist >= 2 && dist <= 6 ? `（距离上限 ${dist} Å）` : '（默认 3.5 Å）'}，快捷键 B 切换`)
+  }
+
+  if (cmd === 'ssao' || cmd === 'ao' || cmd === 'gtao') {
+    const s = useMolStore.getState()
+    const arg = (parts[1] ?? 'on').toLowerCase()
+    if (arg === 'off' || arg === '0') {
+      s.updateSettings({ ssao: false })
+      return ok('环境光遮蔽已关闭')
+    }
+    let radius = parseFloat(parts[2] ?? '')
+    if (isNaN(radius)) radius = parseFloat(arg)
+    const patch: Partial<import('./types').Settings> = { ssao: true }
+    if (!isNaN(radius) && radius >= 0.5 && radius <= 12) patch.ssaoRadius = radius
+    s.updateSettings(patch)
+    return ok(`GTAO 环境光遮蔽开启${!isNaN(radius) && radius >= 0.5 && radius <= 12 ? `（采样半径 ${radius} Å）` : '（默认 3 Å）'}，可在场景面板调节强度与半径`)
   }
 
   if (cmd === 'session' || cmd === 'save') {

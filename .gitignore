@@ -54,4 +54,4 @@ server.log
 /skills/
 
 # local sqlite database (runtime artifact)
-/db
+/dbtool-results/

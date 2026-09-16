@@ -14,7 +14,7 @@
 | ⬤ **Space-fill (CPK)** | vdW-radius spheres, per-element Jmol palette |
 | 〰️ **Wireframe** | GPU line segments |
 | 🎈 **Molecular surface** | Metaball/gaussian implicit surface via marching cubes, per-atom vertex coloring, probe radius & opacity controls |
-| ⚡ **Hydrogen-bond network** | Distance/angle geometry criteria (D-H…A ≤ 2.5 Å & ≥ 120° with H; D…A ≤ 3.5 Å without), dashed teal lines with endpoint markers, optional water-mediated bonds & selection-scoped display — press `B` |
+| ⚡ **Hydrogen-bond network** | Distance/angle geometry criteria (D-H…A ≤ 2.5 Å & ≥ 120° with H; D…A ≤ 3.5 Å without), dashed teal lines with endpoint markers, optional water-mediated bonds & selection-scoped display — press `B`. Structures ≥ 2,000 atoms are detected in a **background Web Worker** (UI never blocks, live progress badge) |
 | 🎬 **NMR ensemble animation** | Multi-model PDB/mmCIF ensembles playback with smooth frame interpolation, speed control (2-30 fps), loop mode and frame scrubbing — press `P`, try `load 1d3z` |
 
 ### Coloring schemes
@@ -38,7 +38,7 @@ color red site
 show cartoon chain A
 zoom site
 bg black · spin on · rock on · slab 20 · label on · preset surface
-ensemble play · ensemble frame 3 · ensemble fps 15
+ssao on 3 · hbonds on 3.2 · ensemble play · ensemble fps 15
 ```
 
 ### Measurement & annotation
@@ -55,10 +55,13 @@ Full sessions can also be **exported as `.molvision` files** (complete structure
 ![NMR ensemble animation](public/screenshots/ensemble.png)
 
 ### Scene & camera
+- **GTAO ambient occlusion** — ground-truth AO post-processing darkens crevices, pockets and contact regions for dramatically improved depth perception; adjustable intensity & sampling radius (Å-scale, `ssao on 3`)
 - Perspective/orthographic toggle, FOV control
 - **Depth-cue fog**, **slab clipping** (near/far planes along the view axis)
 - Auto-rotate (spin `S`), **camera rock** (`R`, ±26° oscillation for inspecting pockets & grooves), background presets, 2×/4×/transparent PNG export
 - Hide/show hydrogens & water globally
+
+![GTAO ambient occlusion](public/screenshots/ssao.png)
 
 ## ⌨️ Shortcuts
 `1-7` presets · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `` ` `` console · `Esc` exit mode/clear · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
@@ -74,7 +77,8 @@ Paste a **PDB ID** (e.g. `4HHB`) or drag & drop a local `.pdb` / `.cif` file ont
 
 ## 🏗️ Tech stack
 - **Next.js 16** (App Router) + React 19 + TypeScript
-- **Three.js** — InstancedMesh geometry, PMREM environment lighting, ACES tone mapping, clipping planes, MarchingCubes surfaces
+- **Three.js** — InstancedMesh geometry, PMREM environment lighting, ACES tone mapping, clipping planes, MarchingCubes surfaces, GTAO post-processing (EffectComposer)
+- **Web Worker** hydrogen-bond detection for large structures
 - **Zustand** state · **shadcn/ui** + Tailwind CSS 4 · **sonner** toasts
 - Zero-backend parsing: PDB & mmCIF parsed in-browser; RCSB fetched through a tiny API proxy (`/api/pdb/[id]`)
 
@@ -90,7 +94,7 @@ src/app/             single-page studio + /api/pdb proxy
 ```
 
 ## 🗺️ Roadmap
-- SSAO ambient occlusion · align/superpose · DSSP fallback for sheets · hydrogen-bond detection in a Web Worker
+- Structure superposition/alignment · DSSP fallback for sheets · ensemble GPU-matrix playback for very large systems
 
 ## License
 MIT

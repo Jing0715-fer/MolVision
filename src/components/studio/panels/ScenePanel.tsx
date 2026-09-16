@@ -2,7 +2,7 @@
 
 // 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤/会话管理
 import { useRef, useState } from 'react'
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves } from 'lucide-react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
@@ -203,7 +203,44 @@ export function ScenePanel() {
               <Switch checked={settings.hbondSelOnly} onCheckedChange={v => updateSettings({ hbondSelOnly: v })} />
             </div>
             <p className="text-[10px] leading-relaxed text-muted-foreground/70">
-              判据：有氢结构用 D-H…A 几何（H…A ≤ 2.5Å 且角度 ≥ 120°），无氢结构用 D…A ≤ 距离上限。虚线 + 端点标记为青色。
+              判据：有氢结构用 D-H…A 几何（H…A ≤ 2.5Å 且角度 ≥ 120°），无氢结构用 D…A ≤ 距离上限。虚线 + 端点标记为青色（浅色背景自动加深）。大结构（≥ 2000 原子）自动在后台线程计算，不卡交互。
+            </p>
+          </>
+        )}
+      </div>
+
+      <SectionTitle>环境光遮蔽</SectionTitle>
+      <div className="space-y-3 px-3">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <SunMedium className="h-3.5 w-3.5 text-amber-500" /> GTAO 遮蔽（AO）
+          </span>
+          <Switch checked={settings.ssao} onCheckedChange={v => updateSettings({ ssao: v })} />
+        </div>
+        {settings.ssao && (
+          <>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>遮蔽强度</span>
+                <span className="font-mono">{settings.ssaoIntensity.toFixed(1)}×</span>
+              </div>
+              <Slider
+                value={[settings.ssaoIntensity]} min={0.2} max={2} step={0.1}
+                onValueChange={v => updateSettings({ ssaoIntensity: v[0] })}
+              />
+            </div>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>采样半径</span>
+                <span className="font-mono">{settings.ssaoRadius.toFixed(1)} Å</span>
+              </div>
+              <Slider
+                value={[settings.ssaoRadius]} min={1} max={8} step={0.5}
+                onValueChange={v => updateSettings({ ssaoRadius: v[0] })}
+              />
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+              环境光遮蔽加深缝隙与口袋的阴影（GTAO 算法），大幅增强立体感与深度感知。建议蛋白质用 2–4 Å 半径，大复合物可增大。
             </p>
           </>
         )}

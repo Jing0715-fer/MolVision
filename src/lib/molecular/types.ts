@@ -133,6 +133,10 @@ export interface Settings {
   hbondMaxDist: number
   hbondIncludeWater: boolean
   hbondSelOnly: boolean
+  /** GTAO 环境光遮蔽（提升立体感） */
+  ssao: boolean
+  ssaoIntensity: number
+  ssaoRadius: number
 }
 
 export function defaultSettings(): Settings {
@@ -154,5 +158,8 @@ export function defaultSettings(): Settings {
     hbondMaxDist: 3.5,
     hbondIncludeWater: false,
     hbondSelOnly: false,
+    ssao: false,
+    ssaoIntensity: 1,
+    ssaoRadius: 3,
   }
 }
