@@ -1,0 +1,130 @@
+'use client'
+
+// 颜色面板：配色方案应用到当前选择、自定义颜色、重置
+import { useState } from 'react'
+import { Paintbrush, RotateCcw, Palette } from 'lucide-react'
+import { toast } from 'sonner'
+import { useMolStore } from '@/lib/molecular/store'
+import { COLOR_SCHEME_LABELS, NAMED_COLORS, type ColorScheme } from '@/lib/molecular/colors'
+import { cn } from '@/lib/utils'
+import { SectionTitle, PanelHint } from '../LeftPanel'
+import { Input } from '@/components/ui/input'
+
+const SCHEMES: { key: ColorScheme; swatches: string[] }[] = [
+  { key: 'element', swatches: ['#909090', '#3050f8', '#ff0d0d', '#ffff30', '#ff8000'] },
+  { key: 'chain', swatches: ['#e35d5d', '#6bbf6b', '#5da5e0', '#d5a54a', '#a06bd8'] },
+  { key: 'spectrum', swatches: ['#e05d5d', '#e8c17a', '#8fd694', '#4fb3c6', '#9a5fd4'] },
+  { key: 'residue', swatches: ['#f2c46d', '#8fd694', '#4fb3c6', '#e05d5d', '#c39bd3'] },
+  { key: 'ss', swatches: ['#ff5e5b', '#ffd166', '#9aa3ad'] },
+  { key: 'bfactor', swatches: ['#2c7bb6', '#66c2a5', '#f2c46d', '#e05d5d', '#b61515'] },
+]
+
+export function ColorsPanel() {
+  const applyColor = useMolStore(s => s.applyColor)
+  const resetColors = useMolStore(s => s.resetColors)
+  const selection = useMolStore(s => s.selection)
+  const activeId = useMolStore(s => s.activeId)
+  const structures = useMolStore(s => s.structures)
+  const [custom, setCustom] = useState('#e05d5d')
+
+  const st = structures.find(x => x.id === activeId)
+  const hasSelection = selection.structureId === activeId && selection.indices.length > 0
+  const overrideCount = st ? Object.keys(st.colorOverrides).length : 0
+
+  if (!st) {
+    return (
+      <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+        <Palette className="h-8 w-8 text-muted-foreground/40" />
+        <p className="text-xs text-muted-foreground">加载结构后可在此上色。</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="pb-4">
+      <SectionTitle>配色方案</SectionTitle>
+      <div className="space-y-1 px-2">
+        {SCHEMES.map(sc => (
+          <button
+            key={sc.key}
+            onClick={() => { applyColor(sc.key); toast.success(`已应用配色：${COLOR_SCHEME_LABELS[sc.key]}`) }}
+            className="flex w-full items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5"
+          >
+            <div className="flex -space-x-1">
+              {sc.swatches.map((c, i) => (
+                <span key={i} className="h-4 w-4 rounded-full border border-background shadow-sm" style={{ background: c }} />
+              ))}
+            </div>
+            <span className="flex-1 text-xs font-medium">{COLOR_SCHEME_LABELS[sc.key]}</span>
+            <Paintbrush className="h-3.5 w-3.5 text-muted-foreground/50" />
+          </button>
+        ))}
+      </div>
+
+      <SectionTitle>自定义颜色</SectionTitle>
+      <div className="flex items-center gap-2 px-3">
+        <input
+          type="color"
+          value={custom}
+          onChange={e => setCustom(e.target.value)}
+          className="h-8 w-10 cursor-pointer rounded-md border border-border/60 bg-background/60 p-0.5"
+        />
+        <Input
+          value={custom}
+          onChange={e => setCustom(e.target.value)}
+          className="h-8 flex-1 font-mono text-xs"
+          placeholder="#hex"
+        />
+        <button
+          onClick={() => { applyColor(custom); toast.success(`已上色 ${custom}`) }}
+          className="flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:opacity-90"
+        >
+          <Paintbrush className="h-3 w-3" /> 上色
+        </button>
+      </div>
+
+      <SectionTitle>常用色</SectionTitle>
+      <div className="flex flex-wrap gap-1.5 px-3">
+        {Object.entries(NAMED_COLORS).slice(0, 18).map(([name, hex]) => (
+          <button
+            key={name}
+            onClick={() => { applyColor(hex); toast.success(`已上色 ${name}`) }}
+            className="group relative flex items-center gap-1.5 rounded-md border border-border/60 py-1 pl-1 pr-2 transition hover:border-primary/40"
+            title={`上色 ${name}`}
+          >
+            <span className="h-3.5 w-3.5 rounded-sm border border-black/10" style={{ background: hex }} />
+            <span className="text-[10px] text-muted-foreground group-hover:text-foreground">{name}</span>
+          </button>
+        ))}
+      </div>
+
+      <SectionTitle>覆盖管理</SectionTitle>
+      <div className="flex items-center gap-2 px-3">
+        <button
+          onClick={() => resetColors('selection')}
+          disabled={!hasSelection}
+          className={cn(
+            'flex h-7 items-center gap-1 rounded-md border border-border/60 px-2.5 text-[11px] transition',
+            hasSelection ? 'hover:bg-accent' : 'opacity-40',
+          )}
+        >
+          <RotateCcw className="h-3 w-3" /> 重置所选
+        </button>
+        <button
+          onClick={() => resetColors('structure')}
+          disabled={overrideCount === 0}
+          className={cn(
+            'flex h-7 items-center gap-1 rounded-md border border-border/60 px-2.5 text-[11px] transition',
+            overrideCount > 0 ? 'hover:bg-accent' : 'opacity-40',
+          )}
+        >
+          <RotateCcw className="h-3 w-3" /> 重置全部 ({overrideCount.toLocaleString()})
+        </button>
+      </div>
+
+      <PanelHint>
+        上色会覆盖所选原子（无选择时作用于整个结构）的配色，优先级高于表示法的配色方案。
+      </PanelHint>
+    </div>
+  )
+}
