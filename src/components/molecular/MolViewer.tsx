@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
+import { EnsembleBar } from '@/components/studio/EnsembleBar'
+import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 
 interface HoverState { text: string; x: number; y: number; sub?: string }
 
@@ -166,7 +168,10 @@ export default function MolViewer() {
           engine.current?.fitView()
           break
         case 's': case 'S':
-          store.updateSettings({ spin: !store.settings.spin })
+          store.updateSettings({ spin: !store.settings.spin, ...(store.settings.spin ? {} : { rock: false }) })
+          break
+        case 'r': case 'R':
+          store.updateSettings({ rock: !store.settings.rock, ...(store.settings.rock ? {} : { spin: false }) })
           break
         case 'h': case 'H':
           store.updateSettings({ hideHydrogens: !store.settings.hideHydrogens })
@@ -177,6 +182,16 @@ export default function MolViewer() {
         case 'b': case 'B':
           store.updateSettings({ showHBonds: !store.settings.showHBonds })
           break
+        case 'p': case 'P': {
+          // ensemble 播放/暂停
+          const es = useEnsembleStore.getState()
+          const eng = engine.current
+          if (eng && es.structureId) {
+            if (es.playing) eng.pauseEnsemble()
+            else eng.playEnsemble(es.structureId)
+          }
+          break
+        }
         case 'l': case 'L':
           store.addLabelsForSelection()
           break
@@ -340,6 +355,9 @@ export default function MolViewer() {
 
       {/* 快捷预设浮层（右下角） */}
       <QuickPresets />
+
+      {/* NMR ensemble 播放条（底部居中，仅有 ensemble 数据时显示） */}
+      <EnsembleBar />
     </div>
   )
 }

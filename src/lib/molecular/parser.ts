@@ -56,6 +56,8 @@ export interface StructureData {
   meta: { title: string; method: string; resolution: number | null; pdbId: string | null }
   ssFromRecords: boolean
   hasHydrogens: boolean
+  /** NMR ensemble：多构象坐标帧（frames[0] 即初始坐标副本，长度与 atoms.positions 相同） */
+  ensemble?: { frames: Float32Array[] }
   /** 空间哈希网格（用于 within 选择、近邻查询） */
   grid: SpatialGrid
   bbox: { min: [number, number, number]; max: [number, number, number]; center: [number, number, number]; radius: number }
@@ -157,14 +159,25 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
   let pdbId: string | null = id || null
   let inFirstModel = true
   let seenModel = false
+  // NMR ensemble：非首 MODEL 的坐标缓冲
+  let modelNo = 0
+  let frameCoords: number[] | null = null
+  const extraFrames: Float32Array[] = []
 
   for (const line of lines) {
     const rec = line.slice(0, 6)
     if (rec === 'ATOM  ' || rec === 'HETATM') {
-      if (!inFirstModel) continue
       const het = rec === 'HETATM' ? 1 : 0
       const altLoc = line[16]
       if (altLoc !== ' ' && altLoc !== 'A' && altLoc !== '0') continue
+      const px = parseFloat(line.slice(30, 38)) || 0
+      const py = parseFloat(line.slice(38, 46)) || 0
+      const pz = parseFloat(line.slice(46, 54)) || 0
+      if (!inFirstModel) {
+        // ensemble 帧：只收集坐标（原子序与首 model 一致时有效）
+        if (frameCoords) frameCoords.push(px, py, pz)
+        continue
+      }
       const atomName = line.slice(12, 16)
       const resName = line.slice(17, 20).trim()
       const chainId = line[21] || ' '
@@ -172,9 +185,9 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
       const iCode = line[26] || ' '
       let el = line.slice(76, 78).trim().toUpperCase()
       if (!el) el = elementFromAtomName(atomName, het === 1)
-      x.push(parseFloat(line.slice(30, 38)) || 0)
-      y.push(parseFloat(line.slice(38, 46)) || 0)
-      z.push(parseFloat(line.slice(46, 54)) || 0)
+      x.push(px)
+      y.push(py)
+      z.push(pz)
       serial.push(parseInt(line.slice(6, 11), 10) || 0)
       names.push(atomName.trim())
       elements.push(el)
@@ -186,10 +199,16 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
       bfactors.push(parseFloat(line.slice(60, 66)) || 0)
       heteroFlags.push(het)
     } else if (rec === 'MODEL ') {
+      modelNo++
       if (seenModel) inFirstModel = false
       seenModel = true
+      if (modelNo > 1) frameCoords = []
     } else if (rec === 'ENDMDL') {
       if (seenModel) inFirstModel = false
+      if (frameCoords && frameCoords.length === x.length * 3) {
+        extraFrames.push(new Float32Array(frameCoords))
+      }
+      frameCoords = null
     } else if (rec === 'TITLE ') {
       title += (title ? ' ' : '') + line.slice(10, 80).trim()
     } else if (rec === 'HEADER') {
@@ -233,6 +252,7 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
     name, format: 'pdb', pdbId, title: title || name, method, resolution,
     x, y, z, serial, names, elements, resNames, resSeqs, iCodes, chainIds,
     bfactors, occupancies, heteroFlags, conects, helixRanges, sheetRanges,
+    extraFrames,
   })
 }
 
@@ -295,6 +315,7 @@ function parseCIF(text: string, name: string, id = ''): StructureData {
   const resSeqs: number[] = [], iCodes: string[] = [], chainIds: string[] = []
   const bfactors: number[] = [], occupancies: number[] = [], heteroFlags: number[] = []
   const conects: number[][] = []
+  const extraFrames: Float32Array[] = []
 
   for (let li = 0; li < lines.length; li++) {
     if (lines[li].trim() !== 'loop_') continue
@@ -318,6 +339,8 @@ function parseCIF(text: string, name: string, id = ''): StructureData {
     const iSerial = col('_atom_site.id')
     const nCol = tags.length
     let rowIdx = 0
+    // NMR ensemble：按 model num 分组缓冲额外帧坐标
+    const cifFrames = new Map<number, number[]>()
     while (lj < lines.length) {
       const line = lines[lj]
       const t = line.trim()
@@ -327,8 +350,14 @@ function parseCIF(text: string, name: string, id = ''): StructureData {
       const alt = iAlt >= 0 ? toks[iAlt] : '.'
       if (alt !== '.' && alt !== '?' && alt !== 'A') { lj++; rowIdx++; continue }
       const model = iModel >= 0 ? toks[iModel] : '1'
-      const isModel1 = model === '.' || model === '?' || parseInt(model, 10) === 1
-      if (!isModel1) { lj++; rowIdx++; continue }
+      const modelNum = (model === '.' || model === '?') ? 1 : (parseInt(model, 10) || 1)
+      if (modelNum > 1) {
+        // ensemble 帧：只收集坐标（原子序与首 model 一致时有效）
+        let buf = cifFrames.get(modelNum)
+        if (!buf) { buf = []; cifFrames.set(modelNum, buf) }
+        buf.push(parseFloat(toks[iX]) || 0, parseFloat(toks[iY]) || 0, parseFloat(toks[iZ]) || 0)
+        lj++; rowIdx++; continue
+      }
       const group = iGroup >= 0 ? toks[iGroup] : 'ATOM'
       const het = group.toUpperCase().startsWith('HETATM') ? 1 : 0
       const atomName = (iName >= 0 ? toks[iName] : '').replace(/"/g, '')
@@ -356,6 +385,11 @@ function parseCIF(text: string, name: string, id = ''): StructureData {
       heteroFlags.push(het)
       lj++; rowIdx++
     }
+    // 收集 ensemble 帧（按 model num 排序，原子数一致才有效）
+    for (const mnum of [...cifFrames.keys()].sort((a, b) => a - b)) {
+      const buf = cifFrames.get(mnum)!
+      if (buf.length === x.length * 3) extraFrames.push(new Float32Array(buf))
+    }
     // 跳到 loop 之后
     li = lj - 1
   }
@@ -364,6 +398,7 @@ function parseCIF(text: string, name: string, id = ''): StructureData {
     name, format: 'cif', pdbId: id || null, title: title || name, method, resolution,
     x, y, z, serial, names, elements, resNames, resSeqs, iCodes, chainIds,
     bfactors, occupancies, heteroFlags, conects: [], helixRanges: [], sheetRanges: [],
+    extraFrames,
   })
 }
 
@@ -378,6 +413,8 @@ interface RawAtoms {
   conects: number[][]
   helixRanges: { chain: string; start: number; end: number; ic1: string; ic2: string }[]
   sheetRanges: { chain: string; start: number; end: number; ic1: string; ic2: string }[]
+  /** NMR ensemble：非首 model 的额外坐标帧（每帧长度 = count*3） */
+  extraFrames?: Float32Array[]
 }
 
 function buildStructure(raw: RawAtoms): StructureData {
@@ -551,6 +588,12 @@ function buildStructure(raw: RawAtoms): StructureData {
     if (e === 'H' || e === 'D') { hasHydrogens = true; break }
   }
 
+  // NMR ensemble：初始坐标副本 + 额外帧（至少 2 帧才启用）
+  let ensemble: StructureData['ensemble'] | undefined
+  if (raw.extraFrames && raw.extraFrames.length >= 1 && raw.extraFrames.every(f => f.length === count * 3)) {
+    ensemble = { frames: [positions.slice(), ...raw.extraFrames] }
+  }
+
   return {
     id: '',
     name: raw.name,
@@ -569,6 +612,7 @@ function buildStructure(raw: RawAtoms): StructureData {
     },
     ssFromRecords,
     hasHydrogens,
+    ensemble,
     grid,
     bbox: { min, max, center, radius },
   }

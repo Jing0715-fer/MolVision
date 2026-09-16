@@ -1,9 +1,12 @@
 'use client'
 
-// 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap } from 'lucide-react'
+// 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤/会话管理
+import { useRef, useState } from 'react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves } from 'lucide-react'
+import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
+import { exportSessionFile, importSessionFile } from '@/lib/molecular/session'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
@@ -17,6 +20,25 @@ const BG_PRESETS = ['#101215', '#000000', '#ffffff', '#f5f2ea', '#1a2b32', '#2d2
 export function ScenePanel() {
   const settings = useMolStore(s => s.settings)
   const updateSettings = useMolStore(s => s.updateSettings)
+  const structures = useMolStore(s => s.structures)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [importing, setImporting] = useState(false)
+
+  const onImport = async (file: File) => {
+    setImporting(true)
+    try {
+      const n = await importSessionFile(file)
+      if (n > 0) {
+        toast.success(`会话已导入`, { description: `${n} 个结构 · 表示法与相机视角已还原` })
+      } else {
+        toast.error('会话文件中没有可恢复的结构')
+      }
+    } catch (e) {
+      toast.error('导入失败', { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setImporting(false)
+    }
+  }
 
   return (
     <div className="pb-4">
@@ -86,11 +108,17 @@ export function ScenePanel() {
       <div className="space-y-3 px-3">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Gauge className="h-3.5 w-3.5" /> 自动旋转
+            <Gauge className="h-3.5 w-3.5" /> 自动旋转 (S)
           </span>
-          <Switch checked={settings.spin} onCheckedChange={v => updateSettings({ spin: v })} />
+          <Switch checked={settings.spin} onCheckedChange={v => updateSettings({ spin: v, ...(v ? { rock: false } : {}) })} />
         </div>
-        {settings.spin && (
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Waves className="h-3.5 w-3.5 text-violet-400" /> 相机摇摆 (R)
+          </span>
+          <Switch checked={settings.rock} onCheckedChange={v => updateSettings({ rock: v, ...(v ? { spin: false } : {}) })} />
+        </div>
+        {(settings.spin || settings.rock) && (
           <div>
             <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
               <span>速度</span><span className="font-mono">{settings.spinSpeed.toFixed(1)}</span>
@@ -100,6 +128,11 @@ export function ScenePanel() {
               onValueChange={v => updateSettings({ spinSpeed: v[0] })}
             />
           </div>
+        )}
+        {settings.rock && (
+          <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+            摇摆模式：相机绕目标 ±26° 往复摆动，适合观察凹槽与结合口袋的深度。拖动视角后以新视角为基准。
+          </p>
         )}
       </div>
 
@@ -188,6 +221,54 @@ export function ScenePanel() {
             <SelectItem value="low" className="text-xs">低（大结构流畅）</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <SectionTitle>会话</SectionTitle>
+      <div className="space-y-2 px-3">
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            onClick={() => {
+              const ok = exportSessionFile()
+              if (!ok) toast.error('无可导出的会话（先加载结构）')
+              else toast.success('会话已导出为 .molvision 文件', { description: '含结构源文本 · 表示法 · 设置 · 相机视角' })
+            }}
+            disabled={!structures.length}
+            className={cn(
+              'flex h-8 items-center justify-center gap-1.5 rounded-md border border-border/60 bg-background/60 text-[11px] font-medium transition',
+              structures.length ? 'hover:border-primary/40 hover:bg-primary/5' : 'cursor-not-allowed opacity-40',
+            )}
+          >
+            <Download className="h-3.5 w-3.5 text-emerald-500" /> 导出会话
+          </button>
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className={cn(
+              'flex h-8 items-center justify-center gap-1.5 rounded-md border border-border/60 bg-background/60 text-[11px] font-medium transition',
+              !importing && 'hover:border-primary/40 hover:bg-primary/5',
+            )}
+          >
+            {importing
+              ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              : <Upload className="h-3.5 w-3.5 text-violet-500" />}
+            {importing ? '导入中…' : '导入会话'}
+          </button>
+        </div>
+        <p className="flex items-start gap-1 text-[10px] leading-relaxed text-muted-foreground/70">
+          <FileJson className="mt-0.5 h-3 w-3 shrink-0" />
+          .molvision 文件包含完整结构源文本与全部视图状态，可跨设备分享（导入将替换当前场景）。
+        </p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".molvision,.json"
+          className="hidden"
+          onChange={e => {
+            const f = e.target.files?.[0]
+            if (f) void onImport(f)
+            e.target.value = ''
+          }}
+        />
       </div>
 
       <PanelHint>

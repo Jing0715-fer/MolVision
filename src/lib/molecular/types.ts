@@ -121,6 +121,8 @@ export interface Settings {
   ortho: boolean
   spin: boolean
   spinSpeed: number
+  /** 相机摇摆（ChimeraX rock）：左右正弦摆动 ±25° */
+  rock: boolean
   slab: boolean
   slabThickness: number
   hideHydrogens: boolean
@@ -142,6 +144,7 @@ export function defaultSettings(): Settings {
     ortho: false,
     spin: false,
     spinSpeed: 2,
+    rock: false,
     slab: false,
     slabThickness: 18,
     hideHydrogens: false,

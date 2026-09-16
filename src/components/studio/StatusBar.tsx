@@ -1,10 +1,11 @@
 'use client'
 
 // 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示
-import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap } from 'lucide-react'
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { useHBondStore } from '@/lib/molecular/hbond-store'
+import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 import { cn } from '@/lib/utils'
 
 export function StatusBar() {
@@ -16,6 +17,7 @@ export function StatusBar() {
   const measurePicks = useMolStore(s => s.measurePicks)
   const settings = useMolStore(s => s.settings)
   const hbond = useHBondStore(s => s)
+  const ens = useEnsembleStore(s => s)
 
   const st = structures.find(x => x.id === activeId)
   const need = measureMode === 'distance' ? 2 : measureMode === 'angle' ? 3 : measureMode === 'dihedral' ? 4 : 0
@@ -66,6 +68,17 @@ export function StatusBar() {
           <Zap className="h-3 w-3" />
           {hbond.count.toLocaleString()} 氢键
           {hbond.waterCount > 0 && <span className="text-[9px] text-muted-foreground/70">（含水 {hbond.waterCount}）</span>}
+        </span>
+      )}
+
+      {/* NMR ensemble */}
+      {ens.structureId && ens.total >= 2 && (
+        <span className={cn(
+          'hidden shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium sm:flex',
+          ens.playing ? 'bg-violet-500/15 text-violet-600 dark:text-violet-300' : 'text-muted-foreground/70',
+        )}>
+          <Waves className={cn('h-3 w-3', ens.playing && 'animate-pulse')} />
+          {ens.playing ? `构象 ${ens.frame + 1}/${ens.total}` : `ensemble ${ens.total} 帧`}
         </span>
       )}
 

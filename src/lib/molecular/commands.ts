@@ -3,6 +3,7 @@ import { PRESETS, useMolStore, engineRef } from './store'
 import { saveSession, clearSession, sessionInfo } from './session'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
+import { useEnsembleStore } from './ensemble-store'
 
 const REP_ALIASES: Record<string, RepType> = {
   cartoon: 'cartoon', ribbon: 'cartoon',
@@ -30,8 +31,10 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'bg <颜色>', desc: '设置背景色', example: 'bg black' },
   { cmd: 'zoom [sel]', desc: '缩放到选择/全部', example: 'zoom ligand' },
   { cmd: 'spin on|off', desc: '自动旋转', example: 'spin on' },
+  { cmd: 'rock on|off', desc: '相机摇摆（±26°）', example: 'rock on' },
   { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
   { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
+  { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'session save|info|clear', desc: '会话存档管理', example: 'session save' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
   { cmd: 'preset <名>', desc: '应用风格预设', example: 'preset surface' },
@@ -178,11 +181,18 @@ export function runCommand(raw: string): void {
     return ok('缩放到全部结构')
   }
 
-  if (cmd === 'spin' || cmd === 'rock') {
+  if (cmd === 'spin') {
     const arg = (parts[1] ?? 'on').toLowerCase()
     const on = arg === 'on' || arg === '1' || arg === 'true'
-    useMolStore.getState().updateSettings({ spin: on })
-    return ok(on ? '自动旋转开启' : '自动旋转关闭')
+    useMolStore.getState().updateSettings({ spin: on, ...(on ? { rock: false } : {}) })
+    return ok(on ? '自动旋转开启（S 切换）' : '自动旋转关闭')
+  }
+
+  if (cmd === 'rock') {
+    const arg = (parts[1] ?? 'on').toLowerCase()
+    const on = arg === 'on' || arg === '1' || arg === 'true'
+    useMolStore.getState().updateSettings({ rock: on, ...(on ? { spin: false } : {}) })
+    return ok(on ? '相机摇摆开启（±26°，R 切换）' : '相机摇摆关闭')
   }
 
   if (cmd === 'slab') {
@@ -264,6 +274,53 @@ export function runCommand(raw: string): void {
       return ok('会话存档已清除（下次刷新不再恢复）')
     }
     return ok(sessionInfo())
+  }
+
+  if (cmd === 'ensemble' || cmd === 'ens') {
+    const eng = engineRef.current
+    const es = useEnsembleStore.getState()
+    if (!eng) return err('引擎未就绪')
+    const sub = (parts[1] ?? 'info').toLowerCase()
+    if (sub === 'play') {
+      if (!es.structureId) return err('当前无含 ensemble 的结构（试试 1D3Z）')
+      eng.playEnsemble(es.structureId)
+      return ok(`构象动画播放中（${es.total} 帧，P 暂停）`)
+    }
+    if (sub === 'pause' || sub === 'stop') {
+      eng.pauseEnsemble()
+      return ok('构象动画已暂停')
+    }
+    if (sub === 'reset') {
+      if (!es.structureId) return err('当前无含 ensemble 的结构')
+      eng.resetEnsemble(es.structureId)
+      return ok('已回到第 1 帧')
+    }
+    if (sub === 'frame' || sub === 'goto') {
+      if (!es.structureId) return err('当前无含 ensemble 的结构')
+      const n = parseInt(parts[2] ?? '', 10)
+      if (isNaN(n)) return err('用法：ensemble frame <1..N>')
+      eng.setEnsembleFrame(es.structureId, n - 1)
+      return ok(`已跳到第 ${n} 帧`)
+    }
+    if (sub === 'fps' || sub === 'speed') {
+      const v = parseFloat(parts[2] ?? '')
+      if (isNaN(v) || v < 0.5 || v > 60) return err('用法：ensemble fps <0.5-60>')
+      es.setFps(v)
+      return ok(`播放速度 ${v} 帧/秒`)
+    }
+    if (sub === 'interp') {
+      const on = (parts[2] ?? 'on').toLowerCase() !== 'off'
+      es.setInterp(on)
+      return ok(on ? '帧间插值开启（平滑）' : '帧间插值关闭（跳变）')
+    }
+    if (sub === 'loop') {
+      const on = (parts[2] ?? 'on').toLowerCase() !== 'off'
+      es.setLoop(on)
+      return ok(on ? '循环播放开启' : '循环播放关闭')
+    }
+    return es.structureId
+      ? ok(`ensemble：${es.total} 帧，当前第 ${es.frame + 1} 帧，${es.playing ? '播放中' : '已暂停'}，${es.fps} fps，插值${es.interp ? '开' : '关'}，循环${es.loop ? '开' : '关'}`)
+      : err('当前无含 ensemble 的结构（试试 load 1D3Z）')
   }
 
   if (cmd === 'measure' || cmd === 'dist') {

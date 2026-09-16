@@ -12,6 +12,7 @@ import type { StructureData } from './parser'
 import { evaluateSelection } from './selection'
 import { detectHBonds, type HBond } from './hbonds'
 import { useHBondStore } from './hbond-store'
+import { useEnsembleStore } from './ensemble-store'
 import { makeTextSprite, disposeSprite } from './textsprite'
 import { useMolStore, buildNamedMasks, dataRegistry } from './store'
 import type { AtomLabel, Measurement, RepConfig, Settings, StructureEntry } from './types'
@@ -60,6 +61,7 @@ interface StructureView {
 }
 
 const AMBER = 0xfbbf24
+const UP_VECTOR = new THREE.Vector3(0, 1, 0)
 
 export class MolEngine {
   container: HTMLElement
@@ -88,6 +90,12 @@ export class MolEngine {
   private hbondCache = new Map<string, { key: string; hbonds: HBond[] }>()
   private lastHbondKey = ''
   private lastPicksKey = ''
+  /** ensemble 播放内部状态（插值帧号与时间戳） */
+  private ensemblePlay: { frame: number; lastT: number } | null = null
+  /** rock 摇摆：基准偏移与相位 */
+  private rockBase: THREE.Vector3 | null = null
+  private rockT = 0
+  private lastTickT = 0
   private ro: ResizeObserver
   private pickablesCache: { obj: THREE.Object3D; pick: Pickable; structureId: string }[] | null = null
   private hasContent = false
@@ -194,7 +202,24 @@ export class MolEngine {
   private tick = () => {
     if (this.disposed) return
     this.raf = requestAnimationFrame(this.tick)
+    const now = performance.now()
+    const dt = this.lastTickT ? Math.min((now - this.lastTickT) / 1000, 0.1) : 0.016
+    this.lastTickT = now
     this.controls.update()
+    this.updateEnsemble()
+    // rock 摇摆：绕 target 上下轴正弦摆动（用户拖动时以新视角为基准）
+    if (this.settings?.rock) {
+      const cam = this.activeCamera
+      if (!this.rockBase) {
+        this.rockBase = cam.position.clone().sub(this.controls.target)
+        this.rockT = 0
+      }
+      this.rockT += dt * (this.settings.spinSpeed || 2) * 0.45
+      const angle = Math.sin(this.rockT) * (Math.PI / 7) // ±≈25.7°
+      const off = this.rockBase.clone().applyAxisAngle(UP_VECTOR, angle)
+      cam.position.copy(this.controls.target).add(off)
+      cam.lookAt(this.controls.target)
+    }
     const cam = this.activeCamera
     const dist = cam.position.distanceTo(this.controls.target)
     // 雾
@@ -252,6 +277,8 @@ export class MolEngine {
 
   private onPointerDown = (e: PointerEvent) => {
     this.downPos = { x: e.clientX, y: e.clientY, t: performance.now(), button: e.button }
+    // rock 摇摆中用户拖动：以拖动后视角为新基准
+    if (this.rockBase) this.rockBase = null
   }
 
   private onPointerUp = (e: PointerEvent) => {
@@ -439,6 +466,13 @@ export class MolEngine {
     // 移除消失的结构
     for (const [id, view] of this.views) {
       if (!seen.has(id)) {
+        // 若移除的结构正在播放 ensemble，先停止
+        if (useEnsembleStore.getState().structureId === id) {
+          this.ensemblePlay = null
+          const es = useEnsembleStore.getState()
+          es.setPlaying(false)
+          es.setTarget(null, 0)
+        }
         this.scene.remove(view.group)
         for (const rv of view.reps.values()) rv.build.dispose()
         if (view.highlight) { view.highlight.geometry.dispose(); (view.highlight.material as THREE.Material).dispose() }
@@ -565,6 +599,124 @@ export class MolEngine {
       if (truncated) useMolStore.getState().appendLog('out', `氢键数量超过 ${CAP}，已截断显示（共 ${hbonds.length}）`)
     }
     useHBondStore.getState().setStats(total, waterTotal, true)
+  }
+
+  // ---------- NMR ensemble 多构象动画 ----------
+
+  /** 开始播放 ensemble（结构必须有 ensemble 数据） */
+  playEnsemble(structureId: string) {
+    const data = dataRegistry.get(structureId)
+    if (!data?.ensemble || data.ensemble.frames.length < 2) return
+    const es = useEnsembleStore.getState()
+    this.ensemblePlay = { frame: this.ensemblePlay?.frame ?? es.frame, lastT: performance.now() }
+    es.setPlaying(true)
+  }
+
+  pauseEnsemble() {
+    this.ensemblePlay = null
+    useEnsembleStore.getState().setPlaying(false)
+  }
+
+  /** 跳到指定整数帧（暂停状态下拖动滑块） */
+  setEnsembleFrame(structureId: string, frame: number) {
+    const data = dataRegistry.get(structureId)
+    if (!data?.ensemble) return
+    const f = Math.max(0, Math.min(frame, data.ensemble.frames.length - 1))
+    this.ensemblePlay = null
+    useEnsembleStore.getState().setPlaying(false)
+    this.applyEnsembleFrame(data, f)
+    useEnsembleStore.getState().setFrame(f)
+  }
+
+  /** 重置到第 1 帧并刷新几何 */
+  resetEnsemble(structureId: string) {
+    const data = dataRegistry.get(structureId)
+    if (!data?.ensemble) return
+    this.ensemblePlay = null
+    const es = useEnsembleStore.getState()
+    es.setPlaying(false)
+    this.applyEnsembleFrame(data, 0)
+    es.setFrame(0)
+  }
+
+  /** 渲染循环驱动：推进插值帧并重建几何 */
+  private updateEnsemble() {
+    const es = useEnsembleStore.getState()
+    if (!es.playing || !es.structureId) return
+    const data = dataRegistry.get(es.structureId)
+    if (!data?.ensemble) { this.pauseEnsemble(); return }
+    if (!this.ensemblePlay) this.ensemblePlay = { frame: es.frame, lastT: performance.now() }
+    const ep = this.ensemblePlay
+    const now = performance.now()
+    const dt = Math.min((now - ep.lastT) / 1000, 0.12)
+    ep.lastT = now
+    const frames = data.ensemble.frames.length
+    ep.frame += dt * es.fps
+    if (ep.frame >= frames) {
+      if (es.loop) ep.frame %= frames
+      else {
+        ep.frame = frames - 1
+        this.applyEnsembleFrame(data, ep.frame)
+        const store = useEnsembleStore.getState()
+        store.setFrame(Math.floor(ep.frame))
+        this.pauseEnsemble()
+        return
+      }
+    }
+    this.applyEnsembleFrame(data, ep.frame)
+    // 节流同步 UI 帧号（避免 60Hz 全量 React 更新）
+    if (Math.abs(Math.floor(ep.frame) - useEnsembleStore.getState().frame) >= 1) {
+      useEnsembleStore.getState().setFrame(Math.floor(ep.frame))
+    }
+  }
+
+  /** 应用帧（含插值）到原子坐标并增量重建该结构全部视图 */
+  private applyEnsembleFrame(data: StructureData, frameF: number) {
+    if (!data.ensemble) return
+    const frames = data.ensemble.frames
+    const n = frames.length
+    const f = Math.max(0, Math.min(frameF, n - 1))
+    const f0 = Math.floor(f)
+    const f1 = Math.min(f0 + 1, n - 1)
+    const alpha = f - f0
+    const pos = data.atoms.positions
+    const a = frames[f0]
+    const b = frames[f1]
+    if (alpha > 1e-4 && f1 !== f0) {
+      for (let i = 0; i < pos.length; i++) pos[i] = a[i] + (b[i] - a[i]) * alpha
+    } else {
+      pos.set(a)
+    }
+    // 找到对应 entry 并重建 reps
+    const store = useMolStore.getState()
+    const entry = store.structures.find(s => s.id === data.id)
+    const view = this.views.get(data.id)
+    if (!entry || !view) return
+    const filtersKey = `${store.settings.hideHydrogens}|${store.settings.hideWater}|${store.settings.quality}`
+    for (const rep of entry.reps) {
+      const existing = view.reps.get(rep.id)
+      if (existing) {
+        view.repContainer.remove(existing.build.group)
+        existing.build.dispose()
+        view.reps.delete(rep.id)
+      }
+      this.buildRep(entry, rep, data, view, store.settings, filtersKey)
+    }
+    this.pickablesCache = null
+    // 高亮/标签/测量/拾取标记强制刷新（key 缓存需失效）
+    if (store.selection.structureId === data.id) {
+      this.updateHighlight(view, data, store.selection.indices)
+    }
+    this.lastLabelsKey = ''
+    this.updateLabels(store.labels)
+    this.lastMeasureKey = ''
+    this.updateMeasurements(store.measurements)
+    this.lastPicksKey = ''
+    this.updatePickMarkers(store.measurePicks)
+    // 氢键重算（清缓存使 detKey 失效）
+    this.hbondCache.delete(data.id)
+    this.lastHbondKey = ''
+    this.updateHBonds(store)
   }
 
   private buildRep(entry: StructureEntry, rep: RepConfig, data: StructureData, view: StructureView, settings: Settings, filtersKey: string) {
@@ -813,8 +965,9 @@ export class MolEngine {
       this.updateOrthoFrustum()
     }
     // 旋转
-    this.controls.autoRotate = settings.spin
+    this.controls.autoRotate = settings.spin && !settings.rock
     this.controls.autoRotateSpeed = settings.spinSpeed
+    if (!settings.rock) this.rockBase = null
     // slab
     if (!settings.slab) this.setClippingInfinite()
     // 画质

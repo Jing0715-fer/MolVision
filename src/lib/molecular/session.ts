@@ -118,6 +118,8 @@ export function restoreSession(): number {
       const store = useMolStore.getState()
       const id = store.addStructure(parsed, ss.name, 0)
       indexToId.set(idx, id)
+      // 登记源文本：恢复后的自动保存 / 会话导出才能包含结构数据
+      textRegistry.set(id, ss.text)
       // 覆盖 reps / overrides / visible
       useMolStore.setState(s => ({
         structures: s.structures.map(x => x.id === id
@@ -161,6 +163,58 @@ export function restoreSession(): number {
 
 export function clearSession() {
   try { localStorage.removeItem(KEY) } catch { /* ignore */ }
+}
+
+// ---------- 会话文件导出 / 导入（.molvision） ----------
+
+const SESSION_FILE_FORMAT = 'molvision-session'
+
+function timestampName(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `molvision-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.molvision`
+}
+
+/** 导出当前会话为 .molvision 文件（含结构源文本/表示法/设置/相机/命名选择） */
+export function exportSessionFile(): boolean {
+  saveSession()
+  let raw: string | null = null
+  try { raw = localStorage.getItem(KEY) } catch { /* ignore */ }
+  if (!raw) return false
+  let data: SessionData
+  try { data = JSON.parse(raw) as SessionData } catch { return false }
+  if (!data.structures?.length) return false
+  const withFormat = { format: SESSION_FILE_FORMAT, ...data }
+  const blob = new Blob([JSON.stringify(withFormat)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = timestampName()
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
+  return true
+}
+
+/** 从 .molvision 文件恢复会话：替换当前场景。返回恢复的结构数（-1 = 文件无效） */
+export async function importSessionFile(file: File): Promise<number> {
+  const text = await file.text()
+  let data: (SessionData & { format?: string }) | null = null
+  try { data = JSON.parse(text) as SessionData & { format?: string } } catch {
+    throw new Error('文件不是有效的 JSON')
+  }
+  if (!data || data.format !== SESSION_FILE_FORMAT || data.version !== 1 || !Array.isArray(data.structures)) {
+    throw new Error('不是有效的 MolVision 会话文件（.molvision）')
+  }
+  if (!data.structures.some(s => s.text)) {
+    throw new Error('会话文件中没有包含结构数据（可能导出时被裁剪）')
+  }
+  // 替换模式：清空现有结构后恢复
+  const store = useMolStore.getState()
+  for (const st of [...store.structures]) store.removeStructure(st.id)
+  try { localStorage.setItem(KEY, JSON.stringify({ ...data, format: undefined, savedAt: Date.now() })) } catch { /* ignore */ }
+  return restoreSession()
 }
 
 /** 供命令行/调试 */

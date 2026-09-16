@@ -15,6 +15,7 @@
 | 〰️ **Wireframe** | GPU line segments |
 | 🎈 **Molecular surface** | Metaball/gaussian implicit surface via marching cubes, per-atom vertex coloring, probe radius & opacity controls |
 | ⚡ **Hydrogen-bond network** | Distance/angle geometry criteria (D-H…A ≤ 2.5 Å & ≥ 120° with H; D…A ≤ 3.5 Å without), dashed teal lines with endpoint markers, optional water-mediated bonds & selection-scoped display — press `B` |
+| 🎬 **NMR ensemble animation** | Multi-model PDB/mmCIF ensembles playback with smooth frame interpolation, speed control (2-30 fps), loop mode and frame scrubbing — press `P`, try `load 1d3z` |
 
 ### Coloring schemes
 Element (CPK) · Chain (golden-angle palette) · Spectrum (rainbow per chain) · Residue class (10 biochemical categories) · Secondary structure · B-factor (blue→red) · Uniform — plus **per-atom color overrides** on any selection.
@@ -36,7 +37,8 @@ select site = within 5 of resn HEM
 color red site
 show cartoon chain A
 zoom site
-bg black · spin on · slab 20 · label on · preset surface
+bg black · spin on · rock on · slab 20 · label on · preset surface
+ensemble play · ensemble frame 3 · ensemble fps 15
 ```
 
 ### Measurement & annotation
@@ -45,17 +47,21 @@ bg black · spin on · slab 20 · label on · preset surface
 - **Sequence viewer** with per-residue biochemical coloring, secondary-structure track, click-to-select / double-click-to-focus
 - **Context menu** (right-click): select atom/residue/chain/same-residue, measure-from-here, label, focus
 
-### Session persistence
+### Session persistence & `.molvision` files
 Structures, representations, colors, settings and camera orientation are auto-saved to localStorage (debounced) and restored on reload — no work lost. Manage with `session save / info / clear`.
+
+Full sessions can also be **exported as `.molvision` files** (complete structure sources + view state) and re-imported on any device — Scene panel → Session → Export/Import.
+
+![NMR ensemble animation](public/screenshots/ensemble.png)
 
 ### Scene & camera
 - Perspective/orthographic toggle, FOV control
 - **Depth-cue fog**, **slab clipping** (near/far planes along the view axis)
-- Auto-rotate (spin), background presets, 2×/4×/transparent PNG export
+- Auto-rotate (spin `S`), **camera rock** (`R`, ±26° oscillation for inspecting pockets & grooves), background presets, 2×/4×/transparent PNG export
 - Hide/show hydrogens & water globally
 
 ## ⌨️ Shortcuts
-`1-7` presets · `F` fit view · `S` spin · `H` hydrogens · `W` waters · `B` hydrogen bonds · `L` label · `` ` `` console · `Esc` exit mode/clear · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
+`1-7` presets · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `` ` `` console · `Esc` exit mode/clear · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
 
 ## 🚀 Quick start
 
@@ -84,7 +90,7 @@ src/app/             single-page studio + /api/pdb proxy
 ```
 
 ## 🗺️ Roadmap
-- SSAO ambient occlusion · NMR ensemble animation · align/superpose · DSSP fallback for sheets · scene serialization to file
+- SSAO ambient occlusion · align/superpose · DSSP fallback for sheets · hydrogen-bond detection in a Web Worker
 
 ## License
 MIT

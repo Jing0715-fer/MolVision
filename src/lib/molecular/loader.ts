@@ -9,6 +9,7 @@ export const EXAMPLE_STRUCTURES: { id: string; title: string; desc: string }[] =
   { id: '1CRN', title: 'Crambin', desc: '小蛋白 · 327 原子 · 高分辨率' },
   { id: '4HHB', title: '血红蛋白', desc: '四聚体 · 血红素辅基' },
   { id: '1UBQ', title: '泛素', desc: '经典 β-grasp 折叠' },
+  { id: '1D3Z', title: '泛素 NMR', desc: 'ensemble · 10 构象动画' },
   { id: '1AKI', title: '溶菌酶', desc: '酶 · 129 残基' },
   { id: '1BNA', title: 'B-DNA', desc: '双链 DNA 十二聚体' },
   { id: '6LU7', title: 'SARS-CoV-2 主蛋白酶', desc: '药物靶点 · 二聚体' },
