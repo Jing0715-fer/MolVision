@@ -1,7 +1,7 @@
 'use client'
 
-// 结构面板：结构列表、链、配体
-import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube } from 'lucide-react'
+// 结构面板：结构列表、链、配体、叠合
+import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine } from 'lucide-react'
 import { toast } from 'sonner'
 import { engineRef, useMolStore } from '@/lib/molecular/store'
 import { cn } from '@/lib/utils'
@@ -62,6 +62,28 @@ export function StructuresPanel() {
                   {st.meta.title?.slice(0, 40) || st.format.toUpperCase()}
                 </span>
               </button>
+              {structures.length >= 2 && st.id !== activeId && (
+                <button
+                  onClick={() => {
+                    const eng = engineRef.current
+                    const store = useMolStore.getState()
+                    const ref = store.structures.find(x => x.id === activeId)
+                    if (!eng || !ref) return
+                    const res = eng.superpose(st.id, ref.id)
+                    if (!res.ok) {
+                      toast.error('叠合失败', { description: res.error })
+                      return
+                    }
+                    toast.success(`叠合完成：${st.name} → ${ref.name}`, {
+                      description: `链 ${res.mobileChain} ↔ 链 ${res.refChain} · 匹配 ${res.matched} 对 CA · RMSD ${res.rmsd.toFixed(2)} Å`,
+                    })
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
+                  title={`叠合到 ${structures.find(x => x.id === activeId)?.name ?? '活动结构'}（序列比对 + 刚体拟合）`}
+                >
+                  <Combine className="h-3.5 w-3.5" />
+                </button>
+              )}
               <button
                 onClick={() => setStructureVisible(st.id, !st.visible)}
                 className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
@@ -162,7 +184,7 @@ export function StructuresPanel() {
           </>
         )
       })()}
-      <PanelHint>点击链/配体可选择并聚焦；结构卡片点击切换活动结构。</PanelHint>
+      <PanelHint>点击链/配体可选择并聚焦；结构卡片点击切换活动结构；{structures.length >= 2 ? '⧉ 按钮将此结构叠合到活动结构（superpose）。' : ''}</PanelHint>
     </div>
   )
 }

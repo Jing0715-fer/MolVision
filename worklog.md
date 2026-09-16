@@ -210,3 +210,39 @@ Stage Summary:
 - 本轮目标全部达成：QA 冒烟零错误、SSAO（含 1 个重大 bug 修复）、氢键 Worker 化、会话存档保护、氢键颜色背景自适应、README/截图更新
 - 未解决问题与风险：①agent-browser errors 缓冲的 ~1000 空条目依旧（reload/close 后重置，无实际错误文本，页面功能正常）；②GTAO 在超大结构 + 低端 GPU 上的性能未测（可考虑 quality=low 时自动降 AO 分辨率）；③ensemble 播放 + 氢键同开时氢键视觉滞后 1 帧级别（worker 串行，可接受）；④浅色主题下雾/标签对比度仍可继续打磨
 - 下一阶段建议（优先级序）：① 结构叠合对比（序列比对 + 刚体拟合，对标 ChimimeraX matchmaker）；② 大结构 LOD/实例化预算性能优化；③ DSSP sheet 兜底；④ AO 性能自适应（按 quality 降采样）；⑤ 导出视频/GIF 动画（rock/ensemble 录制）
+
+---
+Task ID: cron-r5
+Agent: main
+Task: 周期评审——QA 冒烟 + 结构叠合 superpose（对标 ChimeraX matchmaker）+ 动画录制 WebM
+
+Work Log:
+- 读取 worklog（cron-r4 完成 GTAO/氢键 Worker/会话保护）；dev server 全绿
+- QA 冒烟：会话恢复（4HHB 4779 原子 + SSAO + 2788 氢键全部还原）、预设切换 1↔2、0 错误基线——稳定，进入新功能开发
+- 新功能 A【结构叠合 superpose】：
+  - 新建 src/lib/molecular/superpose.ts 纯算法模块：
+    · extractChainSequence/extractAllSequences：按链提取蛋白序列（residueOneLetter）+ 每残基 CA 原子索引，按长度降序
+    · alignSequences：Needleman-Wunsch 全局比对（Int32Array 线性空间 DP + 回溯；打分 match+3 / 相似残基（同生化类别）+1 / mismatch -2 / gap -2）
+    · jacobiEigen4：4×4 对称矩阵 Jacobi 对角化（双侧重旋转，64 轮迭代收敛）
+    · rigidFit：Horn 四元数法最优刚体拟合（构造 4×4 对称 K 矩阵 → 最大特征向量 = 旋转四元数 → R,t → RMSD），等价 Kabsch 但无需 SVD
+    · superposeStructures 主入口：移动取最长蛋白链、参考遍历蛋白链取比对得分最高（长度差>60% 跳过的性能保护+兜底全比对）→ 匹配位 CA 对 → rigidFit
+    · applyRigidTransform：positions + ensemble 全部帧刚体变换 + SpatialGrid 重建 + bbox 重算
+  - engine.ts：抽出共享 rebuildStructureVisuals（原 applyEnsembleFrame 的重建逻辑复用）；新增公开 superpose(mobileId, refId)：算法 → 变换 → 重建视觉（reps/高亮/标签/测量/拾取标记/氢键缓存）
+  - commands.ts：superpose <名> [onto <名>] 命令（别名 match/align/mm；省略 onto 参考活动结构；活动=移动时自动取其它结构作参考；名称前缀匹配）；输出链对/匹配数/RMSD/耗时，RMSD>3 提示构象差异
+  - StructuresPanel：≥2 结构时非活动卡片显示 ⧉（Combine 图标）按钮——点击叠合到活动结构 + toast 报告（链对/匹配 CA/RMSD）；PanelHint 更新
+  - 验证：1UBQ（X-ray）↔ 1D3Z（NMR）叠合 → 匹配 76 对 CA（泛素正好 76 残基，100% 匹配）、RMSD 0.521 Å、耗时 37ms——科学正确（X-ray vs NMR 泛素典型 0.5-1.5Å）；红/青着色后 VLM 确认「两结构紧密交织背靠背贴合，叠合精准」；ensemble 播放暂停到其它构象后再叠合 RMSD 1.339（不同构象对齐，符合预期）；边界：同名结构→「移动与参考结构不能相同」、不存在结构→「未找到（可用：...）」、单结构→「至少 2 个」均正确；面板按钮路径 toast 正常
+- 新功能 B【动画录制 WebM】：
+  - engine.ts：startRecording（canvas.captureStream(30) + MediaRecorder vp9→vp8→webm 降级 + 12Mbps + 250ms timeslice）/ stopRecording（Promise<Blob>）/ isRecording / recordingElapsed；dispose 时安全停止
+  - 新建 record-store.ts（轻量 zustand）+ RecordBadge.tsx（左上角毛玻璃胶囊：ping 红点 + REC m:ss 计时——ref 直更 DOM 文本零重渲染 + 停止按钮带时间戳下载）
+  - Toolbar 录制按钮（Video/CircleStop 图标切换）+ MolViewer 挂载 RecordBadge + commands.ts record start|stop（stop 走 Blob 下载 + 日志）
+  - 【lint 修复】react-hooks/set-state-in-effect：计时改 useRef 直更 textContent（避开 setState 且更高效）
+  - 验证：startRecording → 播放 ensemble 4s → stopRecording → 21KB video/webm Blob ✓；工具栏按钮开启（引擎探测确认 isRecording=true、徽章 REC 0:43 计时、正确坐标区域检出 1123 红色像素）→ 徽章停止按钮点击 → recording=false + 徽章消失 ✓
+- README 更新：Highlights 加 superpose/record 两行、命令示例加 superpose/record、Scene 条目加叠合说明与 1UBQ/1D3Z 示例、新截图 public/screenshots/superpose.png（RMSD 0.857 叠合 + AO，VLM 确认适合 README 展示）、Roadmap 移除已完成 superposition
+- 【QA 方法论】①agent-browser eval 中若焦点残留在命令行输入框，window keydown 快捷键不触发（onKey 对 INPUT target 早退）——验证快捷键前需 blur；②工具栏图标按钮无 title 属性（用 shadcn Tooltip），按效果探测（点击后检查引擎状态变化）
+- lint 0 错误 0 警告；最终回归：会话恢复 1UBQ+1D3Z ✓、预设切换 ✓、hbonds on 304 氢键（2 结构 4 渲染对象）✓、superpose 0.521Å ✓；git add -A → commit → push origin main
+
+Stage Summary:
+- 项目当前状态：新增结构叠合（NW 序列比对 + Horn 四元数刚体拟合 + 变换应用 + UI/命令行双入口）与动画录制（MediaRecorder WebM + REC 徽章）两大对标级功能；泛素 X-ray/NMR 叠合 RMSD 0.521 Å 验证算法科学正确性
+- 本轮目标全部达成：QA 冒烟、superpose 全链路（算法/UI/命令行/边界）、录制全链路（引擎/徽章/工具栏/命令行）、README+截图
+- 未解决问题与风险：①superpose 结果不持久——会话从源文本恢复坐标（叠合后 reload 会还原到原始位；可后续在会话中存变换矩阵）；②叠合目前移动结构只取最长蛋白链比对（多链复合物如抗体未逐链匹配，Roadmap 已列）；③录制 WebM 在 Safari 支持有限（MediaRecorder webm），降级路径存在但未测 Safari；④agent-browser errors 空条目依旧（已知伪迹）
+- 下一阶段建议（优先级序）：① 叠合变换持久化（session 存 quat/translation + 恢复时应用）；② 多链/逐链叠合模式（matchmaker 的迭代链配对）；③ 大结构 LOD/实例化预算；④ DSSP sheet 兜底；⑤ AO 按 quality 自动降采样

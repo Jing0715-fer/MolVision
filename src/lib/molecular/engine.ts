@@ -15,6 +15,7 @@ import {
 import type { StructureData } from './parser'
 import { evaluateSelection } from './selection'
 import { detectHBonds, type HBond } from './hbonds'
+import { superposeStructures, applyRigidTransform, type SuperposeResult } from './superpose'
 import { useHBondStore } from './hbond-store'
 import { useEnsembleStore } from './ensemble-store'
 import { makeTextSprite, disposeSprite } from './textsprite'
@@ -66,6 +67,11 @@ interface StructureView {
 
 const AMBER = 0xfbbf24
 const UP_VECTOR = new THREE.Vector3(0, 1, 0)
+/** superpose 空结果常量（失败时展开用） */
+const NULL_RESULT: SuperposeResult = {
+  ok: false, error: '', mobileChain: '?', refChain: '?', matched: 0,
+  rmsd: NaN, quat: [1, 0, 0, 0], translation: [0, 0, 0], pairs: [],
+}
 /** 超过该原子数时氢键检测走 Web Worker（小结构同步更快） */
 const HBOND_WORKER_MIN_ATOMS = 2000
 /** 深色背景下的氢键青色 / 浅色背景下的深青色（对比度自适应） */
@@ -127,6 +133,11 @@ export class MolEngine {
   private gtaoPass: GTAOPass | null = null
   private composerCamera: THREE.Camera | null = null
   private gtaoFailed = false
+  // 动画录制（WebM）
+  private recorder: MediaRecorder | null = null
+  private recordChunks: Blob[] = []
+  private recordStartT = 0
+  private recordResolve: ((blob: Blob | null) => void) | null = null
 
   constructor(container: HTMLElement, private callbacks: EngineCallbacks = {}) {
     this.container = container
@@ -895,6 +906,11 @@ export class MolEngine {
     } else {
       pos.set(a)
     }
+    this.rebuildStructureVisuals(data)
+  }
+
+  /** 坐标变化后重建该结构的全部视觉（reps/高亮/标签/测量/拾取标记/氢键） */
+  private rebuildStructureVisuals(data: StructureData) {
     // 找到对应 entry 并重建 reps
     const store = useMolStore.getState()
     const entry = store.structures.find(s => s.id === data.id)
@@ -925,6 +941,77 @@ export class MolEngine {
     this.hbondCache.delete(data.id)
     this.lastHbondKey = ''
     this.updateHBonds(store)
+  }
+
+  // ---------- 结构叠合（对标 ChimeraX matchmaker） ----------
+
+  /**
+   * 将 mobile 结构叠合到 ref 结构：序列比对 + Horn 四元数刚体拟合 + 变换应用
+   * 返回拟合统计（RMSD / 匹配数 / 链对）；失败返回 error
+   */
+  superpose(mobileId: string, refId: string): SuperposeResult {
+    const mobile = dataRegistry.get(mobileId)
+    const ref = dataRegistry.get(refId)
+    if (!mobile || !ref) return { ...NULL_RESULT, error: '结构不存在' }
+    if (mobileId === refId) return { ...NULL_RESULT, error: '移动与参考结构相同' }
+    const t0 = performance.now()
+    const result = superposeStructures(mobile, ref)
+    if (!result.ok) return result
+    // 应用变换：positions + ensemble 帧 + 网格/包围盒
+    applyRigidTransform(mobile, result.quat, result.translation)
+    // 重建视觉（reps/标签/测量/氢键等）
+    this.rebuildStructureVisuals(mobile)
+    // 选择/视图跟随：若当前选中的是 mobile，保持选择不变（高亮已重建）
+    const ms = Math.round(performance.now() - t0)
+    void ms
+    return result
+  }
+
+  // ---------- 动画录制（WebM） ----------
+
+  get isRecording(): boolean {
+    return this.recorder !== null && this.recorder.state === 'recording'
+  }
+
+  get recordingElapsed(): number {
+    return this.isRecording ? (performance.now() - this.recordStartT) / 1000 : 0
+  }
+
+  /** 开始录制画布（30fps WebM）；返回是否成功 */
+  startRecording(): boolean {
+    if (this.isRecording) return true
+    try {
+      const stream = this.canvas.captureStream(30)
+      const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m))
+      if (!mime) return false
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 })
+      this.recordChunks = []
+      rec.ondataavailable = e => {
+        if (e.data.size > 0) this.recordChunks.push(e.data)
+      }
+      rec.start(250)
+      this.recorder = rec
+      this.recordStartT = performance.now()
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** 停止录制并返回 WebM Blob（未在录制返回 null） */
+  stopRecording(): Promise<Blob | null> {
+    const rec = this.recorder
+    if (!rec || rec.state !== 'recording') return Promise.resolve(null)
+    return new Promise(resolve => {
+      this.recordResolve = resolve
+      rec.onstop = () => {
+        const blob = this.recordChunks.length ? new Blob(this.recordChunks, { type: 'video/webm' }) : null
+        this.recorder = null
+        this.recordResolve = null
+        resolve(blob)
+      }
+      rec.stop()
+    })
   }
 
   private buildRep(entry: StructureEntry, rep: RepConfig, data: StructureData, view: StructureView, settings: Settings, filtersKey: string) {
@@ -1305,6 +1392,10 @@ export class MolEngine {
     }
     this.views.clear()
     this.disposeComposer()
+    if (this.recorder && this.recorder.state === 'recording') {
+      try { this.recorder.stop() } catch { /* ignore */ }
+    }
+    this.recorder = null
     this.hbondWorker?.terminate()
     this.hbondWorker = null
     this.hbondPending.clear()

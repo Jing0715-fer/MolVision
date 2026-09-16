@@ -16,6 +16,8 @@
 | 🎈 **Molecular surface** | Metaball/gaussian implicit surface via marching cubes, per-atom vertex coloring, probe radius & opacity controls |
 | ⚡ **Hydrogen-bond network** | Distance/angle geometry criteria (D-H…A ≤ 2.5 Å & ≥ 120° with H; D…A ≤ 3.5 Å without), dashed teal lines with endpoint markers, optional water-mediated bonds & selection-scoped display — press `B`. Structures ≥ 2,000 atoms are detected in a **background Web Worker** (UI never blocks, live progress badge) |
 | 🎬 **NMR ensemble animation** | Multi-model PDB/mmCIF ensembles playback with smooth frame interpolation, speed control (2-30 fps), loop mode and frame scrubbing — press `P`, try `load 1d3z` |
+| 🔀 **Structure superposition** | ChimeraX matchmaker-style alignment: Needleman-Wunsch sequence pairing + Horn quaternion rigid-body fit (Kabsch-equivalent) with per-CA RMSD report — `superpose 4HHB onto 2HHB`, one-click ⧉ button in the Structures panel |
+| 🎥 **Animation recording** | Record ensemble playback / rock / spin as 30fps WebM video via MediaRecorder canvas capture — toolbar ⏺ button or `record start` |
 
 ### Coloring schemes
 Element (CPK) · Chain (golden-angle palette) · Spectrum (rainbow per chain) · Residue class (10 biochemical categories) · Secondary structure · B-factor (blue→red) · Uniform — plus **per-atom color overrides** on any selection.
@@ -39,6 +41,7 @@ show cartoon chain A
 zoom site
 bg black · spin on · rock on · slab 20 · label on · preset surface
 ssao on 3 · hbonds on 3.2 · ensemble play · ensemble fps 15
+superpose 4hhb onto 2hhb · record start
 ```
 
 ### Measurement & annotation
@@ -56,10 +59,14 @@ Full sessions can also be **exported as `.molvision` files** (complete structure
 
 ### Scene & camera
 - **GTAO ambient occlusion** — ground-truth AO post-processing darkens crevices, pockets and contact regions for dramatically improved depth perception; adjustable intensity & sampling radius (Å-scale, `ssao on 3`)
+- **Structure superposition** — align any two structures by sequence + rigid-body fit; try `load 1ubq` then `load 1d3z` then `superpose 1ubq onto 1d3z` (ubiquitin X-ray ↔ NMR, ≈ 0.5-1.5 Å RMSD)
+- **Animation recording** — capture molecular motion as WebM video (toolbar ⏺ / `record start`)
 - Perspective/orthographic toggle, FOV control
 - **Depth-cue fog**, **slab clipping** (near/far planes along the view axis)
 - Auto-rotate (spin `S`), **camera rock** (`R`, ±26° oscillation for inspecting pockets & grooves), background presets, 2×/4×/transparent PNG export
 - Hide/show hydrogens & water globally
+
+![Structure superposition](public/screenshots/superpose.png)
 
 ![GTAO ambient occlusion](public/screenshots/ssao.png)
 
@@ -94,7 +101,7 @@ src/app/             single-page studio + /api/pdb proxy
 ```
 
 ## 🗺️ Roadmap
-- Structure superposition/alignment · DSSP fallback for sheets · ensemble GPU-matrix playback for very large systems
+- Per-chain / multi-chain superposition modes · DSSP fallback for sheets · ensemble GPU-matrix playback for very large systems
 
 ## License
 MIT

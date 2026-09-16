@@ -14,6 +14,7 @@ import {
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { EnsembleBar } from '@/components/studio/EnsembleBar'
+import { RecordBadge } from '@/components/studio/RecordBadge'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 
 interface HoverState { text: string; x: number; y: number; sub?: string }
@@ -355,6 +356,9 @@ export default function MolViewer() {
 
       {/* 快捷预设浮层（右下角） */}
       <QuickPresets />
+
+      {/* 动画录制指示器（录制中显示） */}
+      <RecordBadge />
 
       {/* NMR ensemble 播放条（底部居中，仅有 ensemble 数据时显示） */}
       <EnsembleBar />

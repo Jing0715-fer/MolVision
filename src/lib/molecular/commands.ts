@@ -4,6 +4,7 @@ import { saveSession, clearSession, sessionInfo } from './session'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
 import { useEnsembleStore } from './ensemble-store'
+import { useRecordStore } from './record-store'
 
 const REP_ALIASES: Record<string, RepType> = {
   cartoon: 'cartoon', ribbon: 'cartoon',
@@ -35,6 +36,8 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
   { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
   { cmd: 'ssao on|off [r]', desc: '环境光遮蔽开关/半径', example: 'ssao on 3' },
+  { cmd: 'superpose <名> [onto <名>]', desc: '结构叠合（序列比对+刚体拟合）', example: 'superpose 4HHB onto 1A3N' },
+  { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'session save|info|clear', desc: '会话存档管理', example: 'session save' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
@@ -276,6 +279,83 @@ export function runCommand(raw: string): void {
     if (!isNaN(radius) && radius >= 0.5 && radius <= 12) patch.ssaoRadius = radius
     s.updateSettings(patch)
     return ok(`GTAO 环境光遮蔽开启${!isNaN(radius) && radius >= 0.5 && radius <= 12 ? `（采样半径 ${radius} Å）` : '（默认 3 Å）'}，可在场景面板调节强度与半径`)
+  }
+
+  if (cmd === 'superpose' || cmd === 'match' || cmd === 'align' || cmd === 'mm') {
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    const s = useMolStore.getState()
+    if (s.structures.length < 2) return err('叠合需要至少 2 个结构（当前 ' + s.structures.length + '）')
+    // 解析参数：<mobile> [onto <ref>]（省略 onto 时参考为当前活动结构）
+    let rest = input.slice(parts[0].length).trim()
+    let refName: string | null = null
+    const ontoM = rest.match(/\s+onto\s+(.+)$/i)
+    if (ontoM) {
+      refName = ontoM[1].trim()
+      rest = rest.slice(0, ontoM.index).trim()
+    }
+    const mobileName = rest || (s.activeId ? s.structures.find(x => x.id === s.activeId)?.name : null)
+    if (!mobileName) return err('用法：superpose <移动结构名> onto <参考结构名>（省略 onto 则叠合到当前活动结构）')
+    if (!refName) {
+      if (!s.activeId) return err('没有活动结构作为参考，请用 superpose <名> onto <参考名>')
+      const a = s.structures.find(x => x.id === s.activeId)
+      if (a && a.name.toUpperCase() === mobileName.toUpperCase()) {
+        // 移动=活动：改用第一个其它结构作参考
+        const other = s.structures.find(x => x.id !== s.activeId)
+        if (!other) return err('没有其它结构可作参考')
+        refName = other.name
+      } else {
+        refName = a?.name ?? null
+      }
+    }
+    const findByName = (name: string) => s.structures.find(x => x.name.toUpperCase() === name.toUpperCase() || x.name.toUpperCase().startsWith(name.toUpperCase()))
+    const mobile = findByName(mobileName)
+    const ref = refName ? findByName(refName) : null
+    if (!mobile) return err(`未找到移动结构 "${mobileName}"（可用：${s.structures.map(x => x.name).join(', ')}）`)
+    if (!ref) return err(`未找到参考结构 "${refName}"`)
+    if (mobile.id === ref.id) return err('移动与参考结构不能相同')
+    const t0 = performance.now()
+    const res = eng.superpose(mobile.id, ref.id)
+    const ms = Math.round(performance.now() - t0)
+    if (!res.ok) return err(`叠合失败：${res.error}`)
+    ok(`叠合完成：${mobile.name} → ${ref.name}（链 ${res.mobileChain} ↔ 链 ${res.refChain}）`)
+    ok(`匹配 ${res.matched} 对 CA 原子，对齐后 RMSD = ${res.rmsd.toFixed(3)} Å，耗时 ${ms} ms`)
+    if (res.rmsd > 3) ok('提示：RMSD 偏大，可能存在构象差异或序列相似度低')
+    return
+  }
+
+  if (cmd === 'record' || cmd === 'rec') {
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    const sub = (parts[1] ?? 'start').toLowerCase()
+    if (sub === 'start' || sub === 'on') {
+      if (eng.isRecording) return ok('已在录制中')
+      const okStart = eng.startRecording()
+      if (!okStart) return err('当前浏览器不支持画布录制（MediaRecorder）')
+      useRecordStore.getState().setRecording(true)
+      return ok('开始录制（30fps WebM）——可同时播放 ensemble / rock / spin；record stop 停止并下载')
+    }
+    if (sub === 'stop' || sub === 'off') {
+      if (!eng.isRecording) return err('当前未在录制')
+      void eng.stopRecording().then(blob => {
+        useRecordStore.getState().setRecording(false)
+        if (!blob || blob.size === 0) {
+          useMolStore.getState().appendLog('err', '录制内容为空')
+          return
+        }
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        const d = new Date()
+        const p = (n: number) => String(n).padStart(2, '0')
+        a.href = url
+        a.download = `molvision-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.webm`
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 5000)
+        useMolStore.getState().appendLog('out', `动画已导出：${(blob.size / 1024 / 1024).toFixed(1)} MB WebM`)
+      })
+      return ok('停止录制，正在生成 WebM…')
+    }
+    return err('用法：record start | record stop')
   }
 
   if (cmd === 'session' || cmd === 'save') {

@@ -5,11 +5,12 @@ import { useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle,
+  Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
+import { useRecordStore } from '@/lib/molecular/record-store'
 import type { MeasureMode } from '@/lib/molecular/types'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -40,6 +41,7 @@ export function Toolbar() {
   const ui = useMolStore(s => s.ui)
   const setUi = useMolStore(s => s.setUi)
   const structures = useMolStore(s => s.structures)
+  const recording = useRecordStore(s => s.recording)
 
   const capture = (scale: number, transparent: boolean) => {
     const eng = engineRef.current
@@ -193,6 +195,35 @@ export function Toolbar() {
             </button>
           </TooltipTrigger>
           <TooltipContent>自动旋转 (S)</TooltipContent>
+        </Tooltip>
+
+        {/* 录制动画（WebM） */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => {
+                const eng = engineRef.current
+                if (!eng) return
+                if (eng.isRecording) return // 停止由 REC 徽章负责（带下载逻辑）
+                const okStart = eng.startRecording()
+                if (okStart) {
+                  useRecordStore.getState().setRecording(true)
+                  toast.success('开始录制动画', {
+                    description: '可同时播放 ensemble / rock / spin —— 点击左上角 REC 徽章停止并下载 WebM',
+                  })
+                } else {
+                  toast.error('当前浏览器不支持画布录制（MediaRecorder）')
+                }
+              }}
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
+                recording ? 'bg-red-500/15 text-red-500' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {recording ? <CircleStop className="h-4 w-4" /> : <Video className="h-4 w-4" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{recording ? '停止录制（点击 REC 徽章下载）' : '录制动画为 WebM 视频'}</TooltipContent>
         </Tooltip>
 
         {/* 截图 */}
