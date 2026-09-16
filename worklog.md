@@ -73,3 +73,19 @@ Stage Summary:
 - 防御性修复完成：SequenceBar 的 data.chains 与 chain.residueIdx 均加 || [] 兜底，根治 5-helper 记录的 TypeError undefined.map 历史错误
 - 5 张 README 截图就绪（public/screenshots/{cartoon,ballstick,surface,overview,bindingsite}.png），PIL 内容验证全部通过；overview 与 cartoon 因预设映射确定性一致属正常
 - errors 缓冲仅含 13 条已知历史错误，本次操作零新增；遗留（非本任务范围）：主题按钮水合不匹配仍待 suppressHydrationWarning 修复
+---
+Task ID: 7-push
+Agent: general-purpose
+Task: 写 README/LICENSE 并推送 GitHub
+
+Work Log:
+- 读取 worklog 了解背景：7-prep 已建仓 Jing0715-fer/MolVision、配好 git 身份与 .gitignore；7-shot 已产出 5 张截图 public/screenshots/*.png 并修复 Toolbar 链接与 SequenceBar 防御
+- 写入 README.md（3,987 字节）：完整保留任务给定内容 —— Highlights（5 种表示法表格/7 种着色/选择语言语法/命令控制台/测量标注/场景相机）、Shortcuts、Quick start（bun install/dev）、Tech stack、Structure、Roadmap、MIT License；相对截图路径 public/screenshots/cartoon.png 原样保留，8 个代码围栏（4 对）、文件以换行结尾
+- 写入 LICENSE（1,069 字节）：标准 MIT 全文（Permission is hereby granted... / THE SOFTWARE IS PROVIDED "AS IS"...），版权行 `Copyright (c) 2026 Jing0715-fer`
+- git add -A → 暂存 121 个文件变更（120 新增 + 1 修改 .gitignore），共 16,411 行插入；敏感文件核查：node_modules / .next / db/ / .env* / dev.log 均未入库（唯一模式命中 src/app/api/pdb/[id]/route.ts 系 "pdb/" 子串误报，属正常源码，7-prep 的 check-ignore 验证继续有效）
+- git commit（feat: MolVision — 3D molecular visualization studio...）→ git remote add origin（token 内嵌）→ git branch -M main → git push -u origin main：一次成功，`* [new branch] main -> main`，无远端冲突，未动用 rebase/force
+- 验证：raw.githubusercontent.com 上 README.md / LICENSE / public/screenshots/cartoon.png 全部 HTTP 200（README 截图链接实际可用）；匿名 API 恰逢限流（60/60 用尽），改用 token 认证查询 commits → 远端共 2 commits（沙箱 Initial commit + 本次 feat 提交），最新提交即 feat: MolVision — 3D molecular visualization studio
+
+Stage Summary:
+- README.md 与 LICENSE 写入并推送完成：远端 main 分支 2 commits，121 文件变更全部入库，README 截图链接验证可达（HTTP 200）
+- push 一次成功无需冲突处理；无任何敏感文件（node_modules/.next/db/.env）进入仓库；项目至此在 GitHub 公开可访问：https://github.com/Jing0715-fer/MolVision
