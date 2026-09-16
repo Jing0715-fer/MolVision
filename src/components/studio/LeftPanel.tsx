@@ -1,9 +1,9 @@
 'use client'
 
-// 左侧面板：图标栏 + 分页面板（结构/表示/颜色/选择/测量/场景/信息）
+// 左侧面板：图标栏 + 分页面板（结构/表示/颜色/选择/测量/分析/场景/信息）
 import { useState } from 'react'
 import {
-  Boxes, Info, Palette, Ruler, Settings2, Shapes, Target, ChevronLeft,
+  Boxes, Info, Palette, Ruler, Settings2, Shapes, Target, ChevronLeft, FlaskConical,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ import { RepsPanel } from './panels/RepsPanel'
 import { ColorsPanel } from './panels/ColorsPanel'
 import { SelectionPanel } from './panels/SelectionPanel'
 import { MeasurePanel } from './panels/MeasurePanel'
+import { AnalysisPanel } from './panels/AnalysisPanel'
 import { ScenePanel } from './panels/ScenePanel'
 import { InfoPanel } from './panels/InfoPanel'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -23,6 +24,7 @@ const PANELS = [
   { key: 'colors', label: '颜色', icon: Palette },
   { key: 'selection', label: '选择', icon: Target },
   { key: 'measure', label: '测量', icon: Ruler },
+  { key: 'analysis', label: '分析', icon: FlaskConical },
   { key: 'scene', label: '场景', icon: Settings2 },
   { key: 'info', label: '信息', icon: Info },
 ] as const
@@ -51,6 +53,7 @@ export function LeftPanel() {
         {ui.panel === 'colors' && <ColorsPanel />}
         {ui.panel === 'selection' && <SelectionPanel />}
         {ui.panel === 'measure' && <MeasurePanel />}
+        {ui.panel === 'analysis' && <AnalysisPanel />}
         {ui.panel === 'scene' && <ScenePanel />}
         {ui.panel === 'info' && <InfoPanel />}
       </div>

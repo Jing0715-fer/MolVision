@@ -1,8 +1,9 @@
 // 会话持久化：结构源文本 + reps + 设置 + 相机 → localStorage 保存/恢复
 import { dataRegistry, engineRef, useMolStore } from './store'
 import { parseStructure } from './parser'
-import { defaultSettings, type RepConfig, type Settings } from './types'
+import { defaultSettings, type RepConfig, type Settings, type RigidTransform } from './types'
 import { textRegistry } from './text-registry'
+import { applyRigidTransform } from './superpose'
 
 const KEY = 'molvision-session-v1'
 /** 文本总预算（localStorage 通常 5MB） */
@@ -15,6 +16,8 @@ interface SessionStructure {
   reps: RepConfig[]
   colorOverrides: Record<number, string>
   visible: boolean
+  /** 叠合累计刚体变换（恢复时重放） */
+  transform?: RigidTransform
 }
 
 interface SessionData {
@@ -55,6 +58,7 @@ export function saveSession(): boolean {
       reps: st.reps,
       colorOverrides: st.colorOverrides,
       visible: st.visible,
+      transform: st.transform,
     })
   }
   const eng = engineRef.current
@@ -119,15 +123,20 @@ export function restoreSession(): number {
     try {
       const parsed = parseStructure(ss.text, ss.name, ss.format)
       if (parsed.atoms.count === 0) return
+      // 重放叠合变换（在 addStructure 前应用，使摘要/包围盒反映变换后坐标）
+      if (ss.transform) {
+        applyRigidTransform(parsed, ss.transform.quat, ss.transform.translation)
+        useMolStore.getState().appendLog('out', `已重放叠合变换：${ss.name}`)
+      }
       const store = useMolStore.getState()
       const id = store.addStructure(parsed, ss.name, 0)
       indexToId.set(idx, id)
       // 登记源文本：恢复后的自动保存 / 会话导出才能包含结构数据
       textRegistry.set(id, ss.text)
-      // 覆盖 reps / overrides / visible
+      // 覆盖 reps / overrides / visible / transform
       useMolStore.setState(s => ({
         structures: s.structures.map(x => x.id === id
-          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible }
+          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible, transform: ss.transform }
           : x),
       }))
       restored++

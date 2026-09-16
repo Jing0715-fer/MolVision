@@ -5,6 +5,8 @@ import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
 import { useEnsembleStore } from './ensemble-store'
 import { useRecordStore } from './record-store'
+import { runContactAnalysis } from './contacts'
+import { useContactStore } from './contacts-store'
 
 const REP_ALIASES: Record<string, RepType> = {
   cartoon: 'cartoon', ribbon: 'cartoon',
@@ -37,6 +39,9 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
   { cmd: 'ssao on|off [r]', desc: '环境光遮蔽开关/半径', example: 'ssao on 3' },
   { cmd: 'superpose <名> [onto <名>]', desc: '结构叠合（序列比对+刚体拟合）', example: 'superpose 4HHB onto 1A3N' },
+  { cmd: 'dssp', desc: 'DSSP 重算二级结构（含无记录结构）', example: 'dssp' },
+  { cmd: 'contacts <exprA> | <exprB> [n]', desc: '界面接触检测（残基对+连线）', example: 'contacts chain A | chain B 4.0' },
+  { cmd: 'interface <链A> <链B> [n]', desc: '链间界面快捷命令', example: 'interface A B' },
   { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'session save|info|clear', desc: '会话存档管理', example: 'session save' },
@@ -321,6 +326,79 @@ export function runCommand(raw: string): void {
     ok(`叠合完成：${mobile.name} → ${ref.name}（链 ${res.mobileChain} ↔ 链 ${res.refChain}）`)
     ok(`匹配 ${res.matched} 对 CA 原子，对齐后 RMSD = ${res.rmsd.toFixed(3)} Å，耗时 ${ms} ms`)
     if (res.rmsd > 3) ok('提示：RMSD 偏大，可能存在构象差异或序列相似度低')
+    return
+  }
+
+  if (cmd === 'dssp' || cmd === 'secstr') {
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有活动结构')
+    const entry = s.structures.find(x => x.id === s.activeId)
+    const r = s.recomputeSS(s.activeId)
+    if (r.error) return err(`DSSP 失败：${r.error}`)
+    const total = r.helix + r.strand + r.loop
+    const pct = (v: number) => total > 0 ? (v / total * 100).toFixed(0) : '0'
+    ok(`DSSP 二级结构指认完成：螺旋 ${r.helix}（${pct(r.helix)}%）· 折叠 ${r.strand}（${pct(r.strand)}%）· 环 ${r.loop}（${pct(r.loop)}%）`)
+    ok(`cartoon 已按新指认重建${entry?.hasSS ? '' : '（原无 HELIX/SHEET 记录）'}；helix / sheet 选择关键字同步更新`)
+    return
+  }
+
+  if (cmd === 'contacts' || cmd === 'contact' || cmd === 'clash') {
+    // contacts off | contacts <exprA> | <exprB> [cutoff] | contacts [cutoff]（用当前/默认表达式）
+    const arg = (parts[1] ?? '').toLowerCase()
+    if (arg === 'off' || arg === '0') {
+      useContactStore.getState().clear()
+      engineRef.current?.updateContacts()
+      return ok('接触分析已清除')
+    }
+    if (arg === 'hide') {
+      useContactStore.getState().setVisible(false)
+      engineRef.current?.updateContacts()
+      return ok('接触连线已隐藏（结果保留，用 contacts show 恢复）')
+    }
+    if (arg === 'show') {
+      useContactStore.getState().setVisible(true)
+      engineRef.current?.updateContacts()
+      return ok('接触连线已显示')
+    }
+    // 解析 "exprA | exprB [cutoff]"
+    const rest = input.slice(parts[0].length).trim()
+    const pipeM = rest.match(/^(.+?)\s*\|\s*(.+)$/)
+    let aExpr: string | undefined, bExpr: string | undefined, cutoff: number | undefined
+    if (pipeM) {
+      aExpr = pipeM[1].trim()
+      let bPart = pipeM[2].trim()
+      const lastSpace = bPart.lastIndexOf(' ')
+      if (lastSpace > 0) {
+        const maybeNum = parseFloat(bPart.slice(lastSpace + 1))
+        if (!isNaN(maybeNum) && maybeNum >= 2.5 && maybeNum <= 10) {
+          cutoff = maybeNum
+          bPart = bPart.slice(0, lastSpace).trim()
+        }
+      }
+      bExpr = bPart
+    } else {
+      const maybeNum = parseFloat(arg)
+      if (!isNaN(maybeNum) && maybeNum >= 2.5 && maybeNum <= 10) cutoff = maybeNum
+    }
+    const outcome = runContactAnalysis(aExpr, bExpr, cutoff)
+    if (!outcome.ok) return err(outcome.message)
+    ok(outcome.message)
+    ok('分析面板（左侧「分析」标签）提供 2D 接触图谱与界面残基选择；contacts off 清除')
+    return
+  }
+
+  if (cmd === 'interface' || cmd === 'iface') {
+    // interface <链A> <链B> [cutoff]：链间界面快捷命令
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有活动结构')
+    const chainA = parts[1], chainB = parts[2]
+    if (!chainA || !chainB) return err('用法：interface <链A> <链B> [cutoff]，如 interface A B 4.0')
+    let cutoff: number | undefined
+    const maybeNum = parseFloat(parts[3] ?? '')
+    if (!isNaN(maybeNum) && maybeNum >= 2.5 && maybeNum <= 10) cutoff = maybeNum
+    const outcome = runContactAnalysis(`chain ${chainA}`, `chain ${chainB}`, cutoff)
+    if (!outcome.ok) return err(outcome.message)
+    ok(outcome.message)
     return
   }
 

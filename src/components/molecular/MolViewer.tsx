@@ -114,7 +114,7 @@ export default function MolViewer() {
     let lastSig = ''
     const unsub = useMolStore.subscribe((s, prev) => {
       if (prev.structures === s.structures && prev.settings === s.settings && prev.namedSelections === s.namedSelections) return
-      const sig = `${s.structures.length}|${s.structures.map(x => x.rev).join(',')}|${JSON.stringify(s.settings)}|${s.namedSelections.length}`
+      const sig = `${s.structures.length}|${s.structures.map(x => x.rev).join(',')}|${s.structures.map(x => x.transform ? x.transform.quat.join(',') + ':' + x.transform.translation.join(',') : '-').join(';')}|${JSON.stringify(s.settings)}|${s.namedSelections.length}`
       if (sig === lastSig) return
       lastSig = sig
       if (saveTimer) clearTimeout(saveTimer)

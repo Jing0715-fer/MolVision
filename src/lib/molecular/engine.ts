@@ -15,6 +15,8 @@ import {
 import type { StructureData } from './parser'
 import { evaluateSelection } from './selection'
 import { detectHBonds, type HBond } from './hbonds'
+import { contactColor } from './contacts'
+import { useContactStore } from './contacts-store'
 import { superposeStructures, applyRigidTransform, type SuperposeResult } from './superpose'
 import { useHBondStore } from './hbond-store'
 import { useEnsembleStore } from './ensemble-store'
@@ -110,6 +112,8 @@ export class MolEngine {
   private hbondGroup = new THREE.Group()
   private hbondCache = new Map<string, { key: string; hbonds: HBond[] }>()
   private lastHbondKey = ''
+  // 接触界面连线（分析面板触发计算，引擎仅负责渲染）
+  private contactGroup = new THREE.Group()
   // 氢键检测 Web Worker（大结构异步计算）
   private hbondWorker: Worker | null = null
   private hbondWorkerFailed = false
@@ -164,6 +168,7 @@ export class MolEngine {
     this.scene.add(this.measureGroup)
     this.scene.add(this.pickMarkerGroup)
     this.scene.add(this.hbondGroup)
+    this.scene.add(this.contactGroup)
 
     // 环境光照
     const pmrem = new THREE.PMREMGenerator(this.renderer)
@@ -591,6 +596,12 @@ export class MolEngine {
         this.hbondCache.delete(id)
         this.hbondPending.delete(id)
         this.pickablesCache = null
+        // 接触分析归属结构被移除 → 清空连线与结果
+        const cs = useContactStore.getState()
+        if (cs.structureId === id) {
+          cs.clear()
+          this.updateContacts()
+        }
       }
     }
     // 标签
@@ -722,6 +733,84 @@ export class MolEngine {
     }
     useHBondStore.getState().setStats(total, waterTotal, true)
     useHBondStore.getState().setComputing(this.hbondPending.size > 0)
+  }
+
+  // ---------- 接触界面连线（分析面板触发计算，此处渲染） ----------
+
+  /** 接触上限保护（连线渲染用；检测本身不受限） */
+  private static readonly CONTACT_CAP = 4000
+
+  /** 渲染/清除接触连线（颜色按距离插值：近红远琥珀） */
+  updateContacts() {
+    // 清空旧渲染
+    for (const child of [...this.contactGroup.children]) {
+      this.contactGroup.remove(child)
+      const any = child as THREE.LineSegments & THREE.Mesh
+      any.geometry?.dispose()
+      const mat = any.material as THREE.Material | THREE.Material[] | undefined
+      if (mat) (Array.isArray(mat) ? mat : [mat]).forEach(m => m.dispose())
+    }
+    const cs = useContactStore.getState()
+    if (!cs.visible || !cs.structureId || !cs.pairs.length) return
+    const data = dataRegistry.get(cs.structureId)
+    if (!data) return
+    const pos = data.atoms.positions
+    const draw = cs.pairs.length > MolEngine.CONTACT_CAP ? cs.pairs.slice(0, MolEngine.CONTACT_CAP) : cs.pairs
+    if (cs.pairs.length > MolEngine.CONTACT_CAP) {
+      useMolStore.getState().appendLog('out', `接触连线超过 ${MolEngine.CONTACT_CAP}，仅渲染最近的 ${MolEngine.CONTACT_CAP} 条（共 ${cs.pairs.length} 对）`)
+    }
+    // 顶点色连线（近距离红 → 远距离琥珀）
+    const verts = new Float32Array(draw.length * 6)
+    const cols = new Float32Array(draw.length * 6)
+    const endPts: number[] = []
+    const endCols: number[] = []
+    const range = Math.max(0.5, cs.cutoff - 2.5)
+    for (let k = 0; k < draw.length; k++) {
+      const p = draw[k]
+      verts[k * 6] = pos[p.atomA * 3]
+      verts[k * 6 + 1] = pos[p.atomA * 3 + 1]
+      verts[k * 6 + 2] = pos[p.atomA * 3 + 2]
+      verts[k * 6 + 3] = pos[p.atomB * 3]
+      verts[k * 6 + 4] = pos[p.atomB * 3 + 1]
+      verts[k * 6 + 5] = pos[p.atomB * 3 + 2]
+      const t = (p.minDist - 2.5) / range
+      const [r, g, b] = contactColor(t)
+      for (let v = 0; v < 2; v++) {
+        cols[k * 6 + v * 3] = r
+        cols[k * 6 + v * 3 + 1] = g
+        cols[k * 6 + v * 3 + 2] = b
+      }
+      endPts.push(p.atomA, p.atomB)
+      endCols.push(r, g, b, r, g, b)
+    }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(verts, 3))
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3))
+    const mat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false,
+    })
+    const lines = new THREE.LineSegments(geo, mat)
+    lines.renderOrder = 7
+    this.contactGroup.add(lines)
+    // 端点小标记（按各自连线颜色着色）
+    const sphereGeo = new THREE.SphereGeometry(0.2, 8, 6)
+    const sphereMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false })
+    const marker = new THREE.InstancedMesh(sphereGeo, sphereMat, endPts.length)
+    const m4 = new THREE.Matrix4()
+    const colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(endCols), 3)
+    for (let k = 0; k < endPts.length; k++) {
+      const i = endPts[k]
+      m4.makeTranslation(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])
+      marker.setMatrixAt(k, m4)
+    }
+    marker.instanceMatrix.needsUpdate = true
+    marker.instanceColor = colorAttr
+    colorAttr.needsUpdate = true
+    marker.renderOrder = 9
+    this.contactGroup.add(marker)
   }
 
   // ---------- 氢键 Web Worker ----------
@@ -941,6 +1030,8 @@ export class MolEngine {
     this.hbondCache.delete(data.id)
     this.lastHbondKey = ''
     this.updateHBonds(store)
+    // 接触连线坐标已变化 → 重渲染
+    this.updateContacts()
   }
 
   // ---------- 结构叠合（对标 ChimeraX matchmaker） ----------
@@ -959,6 +1050,35 @@ export class MolEngine {
     if (!result.ok) return result
     // 应用变换：positions + ensemble 帧 + 网格/包围盒
     applyRigidTransform(mobile, result.quat, result.translation)
+    // 记录累计刚体变换（会话持久化：恢复时重放，保持叠合位姿）
+    // p' = R(q2)·(R(q1)·p + t1) + t2 → qTotal = q2⊗q1，tTotal = R(q2)·t1 + t2
+    // 注意：superpose/superpose.ts 的 quat 约定为 (w,x,y,z)，THREE.Quaternion 为 (x,y,z,w)
+    const store = useMolStore.getState()
+    const entry = store.structures.find(s => s.id === mobileId)
+    const prev = entry?.transform
+    /** (w,x,y,z) → THREE.Quaternion */
+    const toThree = (q: [number, number, number, number]) => new THREE.Quaternion(q[1], q[2], q[3], q[0])
+    const q2 = toThree(result.quat)
+    const t2 = new THREE.Vector3(result.translation[0], result.translation[1], result.translation[2])
+    let quatOut: [number, number, number, number]
+    let tOut: [number, number, number]
+    if (prev) {
+      const q1 = toThree(prev.quat)
+      const t1 = new THREE.Vector3(prev.translation[0], prev.translation[1], prev.translation[2])
+      const qTotal = q2.clone().multiply(q1)
+      const tTotal = t1.clone().applyQuaternion(q2).add(t2)
+      const [tx, ty, tz, tw] = qTotal.toArray()
+      quatOut = [tw, tx, ty, tz]
+      tOut = tTotal.toArray() as [number, number, number]
+    } else {
+      quatOut = [...result.quat] as [number, number, number, number]
+      tOut = [...result.translation] as [number, number, number]
+    }
+    useMolStore.setState(s => ({
+      structures: s.structures.map(x => x.id === mobileId
+        ? { ...x, transform: { quat: quatOut, translation: tOut } }
+        : x),
+    }))
     // 重建视觉（reps/标签/测量/氢键等）
     this.rebuildStructureVisuals(mobile)
     // 选择/视图跟随：若当前选中的是 mobile，保持选择不变（高亮已重建）

@@ -2,6 +2,7 @@
 import {
   AMINO_ACIDS, NUCLEIC_ACIDS, WATERS, SUGAR_LIKE, elementFromAtomName, elementInfo,
 } from './chemistry'
+import { computeDSSP } from './dssp'
 
 export type SSType = 'H' | 'E' | 'L' // helix / sheet / loop
 
@@ -223,20 +224,26 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
         if (!isNaN(v)) resolution = v
       }
     } else if (rec === 'HELIX ') {
+      // 列位（0-indexed，实测 RCSB 文件）：helixID 12-14 / initResName 15-17 /
+      // initChainID 19 / initSeqNum 右对齐至 24 / iCode 25 / endResName 27-29 /
+      // endChainID 31 / endSeqNum 右对齐至 36 / iCode 37
       helixRanges.push({
-        chain: line[20] || ' ',
+        chain: line[19] || ' ',
         start: parseInt(line.slice(21, 25), 10) || 0,
         end: parseInt(line.slice(33, 37), 10) || 0,
         ic1: (line[25] || ' ').trim(),
         ic2: (line[37] || ' ').trim(),
       })
     } else if (rec === 'SHEET ') {
+      // 列位（0-indexed，实测 RCSB 文件）：sheetID 11-13 / numStrands 15 /
+      // initResName 17-19 / initChainID 21 / initSeqNum 右对齐至 25 / iCode 26 /
+      // endResName 28-30 / endChainID 32 / endSeqNum 右对齐至 36 / iCode 37
       sheetRanges.push({
-        chain: line[19] || ' ',
-        start: parseInt(line.slice(20, 24), 10) || 0,
-        end: parseInt(line.slice(31, 35), 10) || 0,
-        ic1: (line[24] || ' ').trim(),
-        ic2: (line[35] || ' ').trim(),
+        chain: line[21] || ' ',
+        start: parseInt(line.slice(22, 26), 10) || 0,
+        end: parseInt(line.slice(33, 37), 10) || 0,
+        ic1: (line[26] || ' ').trim(),
+        ic2: (line[37] || ' ').trim(),
       })
     } else if (rec === 'CONECT') {
       const from = parseInt(line.slice(6, 11), 10)
@@ -505,7 +512,7 @@ function buildStructure(raw: RawAtoms): StructureData {
     for (let i = 0; i < count; i++) atomChain[i] = resChain[atomResidue[i]]
   }
 
-  // ---- 二级结构 ----
+  // ---- 二级结构：记录优先，DSSP 兜底（需网格，在网格构建后执行）----
   const ssFromRecords = raw.helixRanges.length + raw.sheetRanges.length > 0
   if (ssFromRecords) {
     const mark = (ranges: { chain: string; start: number; end: number; ic1: string; ic2: string }[], type: SSType) => {
@@ -524,40 +531,6 @@ function buildStructure(raw: RawAtoms): StructureData {
     }
     mark(raw.helixRanges, 'H')
     mark(raw.sheetRanges, 'E')
-  } else {
-    // CA 间距启发式：α螺旋 CA(i)-CA(i+4) ≈ 6.2 Å
-    for (const ch of chains) {
-      if (ch.type !== 'protein') continue
-      const cas: number[] = []
-      for (const ri of ch.residueIdx) {
-        const r = residues[ri]
-        let ca = -1
-        for (let i = r.start; i < r.end; i++) if (atoms.names[i] === 'CA') { ca = i; break }
-        cas.push(ca)
-      }
-      const n = cas.length
-      const isHelix = new Uint8Array(n)
-      for (let i = 0; i + 4 < n; i++) {
-        if (cas[i] < 0 || cas[i + 4] < 0) continue
-        const dx = atoms.positions[cas[i] * 3] - atoms.positions[cas[i + 4] * 3]
-        const dy = atoms.positions[cas[i] * 3 + 1] - atoms.positions[cas[i + 4] * 3 + 1]
-        const dz = atoms.positions[cas[i] * 3 + 2] - atoms.positions[cas[i + 4] * 3 + 2]
-        const d = Math.sqrt(dx * dx + dy * dy + dz * dz)
-        if (d > 5.4 && d < 6.9) {
-          isHelix[i] = 1; isHelix[i + 1] = 1; isHelix[i + 2] = 1; isHelix[i + 3] = 1; isHelix[i + 4] = 1
-        }
-      }
-      let runStart = -1
-      for (let i = 0; i <= n; i++) {
-        if (i < n && isHelix[i]) { if (runStart < 0) runStart = i }
-        else {
-          if (runStart >= 0 && i - runStart >= 5) {
-            for (let k = runStart; k < i; k++) residues[ch.residueIdx[k]].ss = 'H'
-          }
-          runStart = -1
-        }
-      }
-    }
   }
 
   // ---- 化学键 ----
@@ -586,6 +559,24 @@ function buildStructure(raw: RawAtoms): StructureData {
   for (let i = 0; i < count; i++) {
     const e = atoms.elements[i]
     if (e === 'H' || e === 'D') { hasHydrogens = true; break }
+  }
+
+  // 无 HELIX/SHEET 记录：DSSP 兜底（Kabsch–Sander 氢键能量指认螺旋/折叠，
+  // 取代旧 CA 间距启发式——旧方法无法检测 β 折叠）
+  if (!ssFromRecords) {
+    const partial = {
+      id: '', name: raw.name, format: raw.format, atoms, residues, chains, bonds,
+      atomResidue, atomChain,
+      meta: { title: raw.title || raw.name, method: raw.method, resolution: raw.resolution, pdbId: raw.pdbId },
+      ssFromRecords: false, hasHydrogens,
+      grid, bbox: { min, max, center, radius },
+    } as unknown as StructureData
+    try {
+      const dssp = computeDSSP(partial)
+      for (let ri = 0; ri < residues.length; ri++) {
+        residues[ri].ss = dssp.ss[ri] === 1 ? 'H' : dssp.ss[ri] === 2 ? 'E' : 'L'
+      }
+    } catch { /* DSSP 失败时保持 loop，不影响加载 */ }
   }
 
   // NMR ensemble：初始坐标副本 + 额外帧（至少 2 帧才启用）

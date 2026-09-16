@@ -4,6 +4,7 @@ import { chainColor, computeAtomColors, parseCssColor, type ColorScheme } from '
 import { parseStructure, type StructureData } from './parser'
 import { evaluateSelection, maskToIndices } from './selection'
 import { textRegistry } from './text-registry'
+import { computeDSSP } from './dssp'
 import {
   defaultRep, defaultSettings, type AtomLabel, type ChainSummary, type LigandSummary,
   type MeasureMode, type Measurement, type NamedSelection, type RepConfig, type RepType,
@@ -34,7 +35,7 @@ export interface MolState {
   loading: boolean
   loadingMsg: string
   ui: {
-    panel: 'structures' | 'reps' | 'colors' | 'selection' | 'measure' | 'scene' | 'info'
+    panel: 'structures' | 'reps' | 'colors' | 'selection' | 'measure' | 'analysis' | 'scene' | 'info'
     panelOpen: boolean
     sequenceOpen: boolean
     consoleOpen: boolean
@@ -70,6 +71,8 @@ export interface MolState {
   removeLabel: (id: string) => void
   clearLabels: (structureId?: string) => void
   updateSettings: (patch: Partial<Settings>) => void
+  /** 用 DSSP 重算指定结构的二级结构（无记录结构或强制重算） */
+  recomputeSS: (structureId: string) => { helix: number; strand: number; loop: number; error?: string }
   setUi: (patch: Partial<MolState['ui']>) => void
   appendLog: (type: 'in' | 'out' | 'err', text: string) => void
   bumpVisual: () => void
@@ -524,6 +527,27 @@ export const useMolStore = create<MolState>()((set, get) => ({
     // bump visualRev：引擎仅在 visualRev 变化时重新 sync（applySettings），
     // 否则背景/雾/FOV/正交/旋转/显隐水氢等设置改动不会传导到渲染器
     set(s => ({ settings: { ...s.settings, ...patch }, visualRev: s.visualRev + 1 }))
+  },
+
+  recomputeSS: (structureId) => {
+    const data = dataRegistry.get(structureId)
+    const entry = get().structures.find(x => x.id === structureId)
+    if (!data || !entry) return { helix: 0, strand: 0, loop: 0, error: '结构不存在' }
+    let dssp: import('./dssp').DSSPResult
+    try {
+      dssp = computeDSSP(data)
+    } catch (e) {
+      return { helix: 0, strand: 0, loop: 0, error: e instanceof Error ? e.message : 'DSSP 计算失败' }
+    }
+    for (let ri = 0; ri < data.residues.length; ri++) {
+      data.residues[ri].ss = dssp.ss[ri] === 1 ? 'H' : dssp.ss[ri] === 2 ? 'E' : 'L'
+    }
+    // bump entry.rev → rep hash 变化 → cartoon 重建
+    set(s => ({
+      structures: s.structures.map(x => x.id === structureId ? { ...x, hasSS: true, rev: x.rev + 1 } : x),
+      visualRev: s.visualRev + 1,
+    }))
+    return { helix: dssp.helixResidues, strand: dssp.strandResidues, loop: dssp.loopResidues }
   },
 
   setUi: (patch) => set(s => ({ ui: { ...s.ui, ...patch } })),

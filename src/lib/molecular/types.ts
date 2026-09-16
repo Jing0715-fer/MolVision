@@ -61,6 +61,12 @@ export interface LigandSummary {
   chainIds: string
 }
 
+/** 刚体变换（叠合累计，会话持久化用） */
+export interface RigidTransform {
+  quat: [number, number, number, number]
+  translation: [number, number, number]
+}
+
 export interface StructureEntry {
   id: string
   name: string
@@ -71,6 +77,8 @@ export interface StructureEntry {
   reps: RepConfig[]
   /** 原子级颜色覆盖 atomIdx → css color */
   colorOverrides: Record<number, string>
+  /** 累计刚体变换（superpose 应用后记录，会话恢复时重放） */
+  transform?: RigidTransform
   summary: {
     atoms: number; residues: number; chains: number; bonds: number
     hydrogens: number; waters: number; ligandResidues: number

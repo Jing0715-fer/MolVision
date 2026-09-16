@@ -1,11 +1,12 @@
 'use client'
 
 // 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示
-import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium } from 'lucide-react'
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { useHBondStore } from '@/lib/molecular/hbond-store'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
+import { useContactStore } from '@/lib/molecular/contacts-store'
 import { cn } from '@/lib/utils'
 
 export function StatusBar() {
@@ -18,6 +19,7 @@ export function StatusBar() {
   const settings = useMolStore(s => s.settings)
   const hbond = useHBondStore(s => s)
   const ens = useEnsembleStore(s => s)
+  const contact = useContactStore(s => s)
 
   const st = structures.find(x => x.id === activeId)
   const need = measureMode === 'distance' ? 2 : measureMode === 'angle' ? 3 : measureMode === 'dihedral' ? 4 : 0
@@ -78,6 +80,20 @@ export function StatusBar() {
             : <Zap className="h-3 w-3" />}
           {hbond.computing ? '氢键计算中…' : `${hbond.count.toLocaleString()} 氢键`}
           {!hbond.computing && hbond.waterCount > 0 && <span className="text-[9px] text-muted-foreground/70">（含水 {hbond.waterCount}）</span>}
+        </span>
+      )}
+
+      {/* 接触界面分析 */}
+      {contact.structureId === activeId && contact.pairs.length > 0 && (
+        <span
+          className={cn(
+            'hidden shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium md:flex',
+            contact.visible ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' : 'text-muted-foreground/60',
+          )}
+        >
+          <Network className="h-3 w-3" />
+          {contact.pairs.length.toLocaleString()} 接触
+          <span className="text-[9px] text-muted-foreground/70">≤{contact.cutoff.toFixed(1)}Å</span>
         </span>
       )}
 
