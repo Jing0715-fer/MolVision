@@ -3,7 +3,9 @@
 // 密度图 σ 控制图例（视口左下角，颜色标尺上方）：把等值面级别调节从左侧面板提到视口内
 // —— 差图正/负峰双滑块（绿/红）+ isomesh/isosurface 模式切换 + 可见性开关
 // （对标 PyMOL isolevel 滚动条工作流：视线不离结构即可调级）
-import { Box, Grid3x3, Layers, Eye, EyeOff } from 'lucide-react'
+// 顶部把手可拖拽移位（脱离左下停靠位后 ColorLegend 自动补位）；双击把手归位；位置持久化。
+import { Box, Grid3x3, Layers, Eye, EyeOff, GripHorizontal } from 'lucide-react'
+import { useCallback, useRef, useState } from 'react'
 import { useMapStore } from '@/lib/molecular/map-store'
 import { setMapLook } from '@/lib/molecular/map-load'
 import { useMolStore } from '@/lib/molecular/store'
@@ -17,12 +19,77 @@ const MODES: { key: 'mesh' | 'surface' | 'both'; label: string; icon: typeof Gri
   { key: 'both', label: '叠加', icon: Layers },
 ]
 
+/** 拖离停靠位后的自由位置持久化键（视口坐标） */
+const POS_KEY = 'molvision-maplegend-pos'
+
+interface FreePos { x: number; y: number }
+
+function loadPos(): FreePos | null {
+  try {
+    const raw = localStorage.getItem(POS_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw) as Partial<FreePos>
+    return typeof p?.x === 'number' && typeof p?.y === 'number' ? { x: p.x, y: p.y } : null
+  } catch {
+    return null
+  }
+}
+
+function savePos(p: FreePos | null) {
+  try {
+    if (p) localStorage.setItem(POS_KEY, JSON.stringify(p))
+    else localStorage.removeItem(POS_KEY)
+  } catch { /* 隐私模式等存储失败忽略 */ }
+}
+
 export function MapLegend() {
   const info = useMapStore(s => s.info)
   // 控制台打开时隐藏（底部命令行覆盖层遮挡图例区）
   const consoleOpen = useMolStore(s => s.ui.consoleOpen)
   const pos = useIsoThrottle('iso')
   const neg = useIsoThrottle('isoNeg')
+
+  // ---------- 拖拽移位（fixed 定位脱离左下图例列；null = 停靠模式） ----------
+  const cardRef = useRef<HTMLDivElement | null>(null)
+  // 惰性恢复上次拖放位置：SSR 时 info 必为 null（组件渲染 null），无 hydration 冲突
+  const [free, setFree] = useState<FreePos | null>(() => loadPos())
+  const drag = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null)
+
+  const clampToViewport = useCallback((x: number, y: number, w: number, h: number): FreePos => ({
+    x: Math.min(Math.max(8, x), Math.max(8, window.innerWidth - w - 8)),
+    y: Math.min(Math.max(8, y), Math.max(8, window.innerHeight - h - 8)),
+  }), [])
+  // 最新自由位置镜像（极快拖放时 React 未必及 flush，pointerup 闭包可能过期）；
+  // useRef 初值仅在首挂载求值 → 与 useState 惰性恢复值天然同步，此后由事件处理器维护
+  const freeRef = useRef<FreePos | null>(free)
+
+  const onHandlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const card = cardRef.current
+    if (!card) return
+    const rect = card.getBoundingClientRect()
+    drag.current = { startX: e.clientX, startY: e.clientY, baseX: rect.left, baseY: rect.top }
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* 合成/无效 pointerId 时降级为窗口级拖拽 */ }
+  }
+  const onHandlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current
+    const card = cardRef.current
+    if (!d || !card) return
+    const rect = card.getBoundingClientRect()
+    const p = clampToViewport(d.baseX + e.clientX - d.startX, d.baseY + e.clientY - d.startY, rect.width, rect.height)
+    freeRef.current = p
+    setFree(p)
+  }
+  const onHandlePointerUp = () => {
+    if (!drag.current) return
+    drag.current = null
+    savePos(freeRef.current)
+  }
+  const onHandleDoubleClick = () => {
+    drag.current = null
+    freeRef.current = null
+    setFree(null)
+    savePos(null)
+  }
 
   if (!info || consoleOpen) return null
 
@@ -31,17 +98,40 @@ export function MapLegend() {
 
   return (
     <div
+      ref={cardRef}
+      style={free ? { position: 'fixed', left: free.x, top: free.y, zIndex: 40 } : undefined}
       className={cn(
         'pointer-events-auto w-52 select-none rounded-lg border border-border/60 bg-card/90 p-2 shadow-lg backdrop-blur-sm transition-opacity',
         !info.visible && 'opacity-60',
       )}
       aria-label="密度图 σ 控制"
     >
+      {/* 拖拽把手：按住拖动移位 · 双击归位 */}
+      <div
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
+        onDoubleClick={onHandleDoubleClick}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="拖动移动密度图控制卡（双击归位）"
+        title="按住拖动移位 · 双击归位"
+        className={cn(
+          '-mx-2 -mt-2 mb-1 flex h-4 cursor-grab touch-none items-center justify-center rounded-t-lg text-muted-foreground/50 transition-colors hover:bg-accent/60 hover:text-muted-foreground active:cursor-grabbing',
+          free && 'text-primary/60',
+        )}
+      >
+        <GripHorizontal className="h-3 w-4" aria-hidden />
+      </div>
+
       {/* 标题行：等值面颜色点 + 名称 + 类型徽章 + 可见性开关 */}
       <div className="mb-1.5 flex items-center gap-1.5">
         <span
           className="h-2 w-2 shrink-0 rounded-full border border-black/20"
           style={{ background: info.color }}
+          title={info.difference
+            ? `正峰色（模型缺失信号，+σ 滑块绿）· 负峰为 ${info.negColor}（模型多余信号，−σ 滑块红）`
+            : `等值面颜色 ${info.color}`}
           aria-hidden
         />
         <span

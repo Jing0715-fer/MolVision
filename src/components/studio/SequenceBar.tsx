@@ -190,7 +190,7 @@ const ResidueCell = memo(function ResidueCell({
         className="absolute inset-x-0.5 top-0.5 h-[3px] rounded-[1px]"
         style={{ background: ssCssColor(ss), opacity: ss === 'L' ? 0.35 : 0.9 }}
       />
-      <span className="text-[10px] font-bold leading-none text-black/80">{letter}</span>
+      <span className="text-[10px] font-bold leading-none text-black/90 [text-shadow:0_0_1px_rgba(255,255,255,0.35)]">{letter}</span>
       {position % 10 === 0 && (
         <span className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 font-mono text-[8px] text-muted-foreground/70">{position}</span>
       )}

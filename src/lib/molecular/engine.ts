@@ -22,7 +22,7 @@ import { contactColor } from './contacts'
 import { useContactStore } from './contacts-store'
 import { superposeStructures, applyRigidTransform, type SuperposeResult } from './superpose'
 import {
-  computeSasa, computeBuriedSasa, sasaStats, compileRadii,
+  computeSasa, computeBuriedSasa, computeBuriedSasaArrays, sasaStats, compileRadii,
   type SasaComputeOptions, type SasaStats, type BuriedSasaResult,
 } from './sasa'
 import { useSasaStore } from './sasa-store'
@@ -233,6 +233,8 @@ export class MolEngine {
   private sasaReqId = 0
   /** structureId → 计算中的 key（去重与过期丢弃） */
   private sasaPending = new Map<string, string>()
+  /** 跨结构 ΔSASA 飞行中元信息（worker 结果回传时掩码不可得，用快照补齐 atoms 计数与标签） */
+  private xbsaMeta: { idA: string; idB: string; labelA: string; labelB: string; heavyA: number; heavyB: number } | null = null
   /** 挂起的 color sasa 烘焙请求（worker 完成后自动 applyColor） */
   private pendingSasaBake: string | null = null
 
@@ -1617,7 +1619,160 @@ export class MolEngine {
       coreA: result.coreA,
       coreB: result.coreB,
       ms: result.ms,
+      cross: null,
     })
+  }
+
+  // ---------- 跨结构 ΔSASA（两个独立 PDB 条目间的界面埋藏面积） ----------
+
+  /**
+   * 跨结构界面埋藏面积：把 A/B 两结构的原子拼接为联合坐标集做三路 SASA
+   * （A alone / B alone / A∪B）。当前位姿（superpose 变换已写入 positions）即为计算基准。
+   * 小结构同步；大结构 worker（kind='buried'，key 前缀 xburied 区分单结构路径）。
+   */
+  requestCrossBuriedSasa(
+    idA: string,
+    maskA: Uint8Array,
+    idB: string,
+    maskB: Uint8Array,
+    opts: SasaComputeOptions = {},
+  ): { done: boolean; result?: { buriedA: number; buriedB: number; coreA: number[]; coreB: number[]; atomsA: number; atomsB: number; ms: number } } {
+    const dataA = dataRegistry.get(idA)
+    const dataB = dataRegistry.get(idB)
+    if (!dataA || !dataB) return { done: false }
+    const { probe = 1.4, nPoints = 92 } = opts
+    const nA = dataA.atoms.count
+    const nB = dataB.atoms.count
+    const n = nA + nB
+    if (maskA.length !== nA || maskB.length !== nB) return { done: false }
+    // 联合数组（当前位姿）
+    const positions = new Float32Array(n * 3)
+    positions.set(dataA.atoms.positions, 0)
+    positions.set(dataB.atoms.positions, nA * 3)
+    const radii = new Float32Array(n)
+    radii.set(compileRadii(dataA.atoms.elements), 0)
+    radii.set(compileRadii(dataB.atoms.elements), nA)
+    const isHydrogen = new Uint8Array(n)
+    for (let i = 0; i < nA; i++) {
+      const e = dataA.atoms.elements[i]
+      if (e === 'H' || e === 'D') isHydrogen[i] = 1
+    }
+    for (let i = 0; i < nB; i++) {
+      const e = dataB.atoms.elements[i]
+      if (e === 'H' || e === 'D') isHydrogen[nA + i] = 1
+    }
+    const aMask = new Uint8Array(n)
+    aMask.set(maskA, 0)
+    const bMask = new Uint8Array(n)
+    bMask.set(maskB, nA)
+    // 重原子计数
+    let heavyA = 0, heavyB = 0
+    for (let i = 0; i < n; i++) {
+      if (aMask[i] && !isHydrogen[i]) heavyA++
+      if (bMask[i] && !isHydrogen[i]) heavyB++
+    }
+    const store = useMolStore.getState()
+    const labelA = store.structures.find(s => s.id === idA)?.meta.pdbId ?? idA
+    const labelB = store.structures.find(s => s.id === idB)?.meta.pdbId ?? idB
+
+    const key = `xburied|${idA}|${idB}|${probe}|${nPoints}|${n}`
+    if (n < BSA_WORKER_MIN_ATOMS) {
+      const t0 = performance.now()
+      const r = computeBuriedSasaArrays(positions, radii, isHydrogen, aMask, bMask, probe, nPoints)
+      this.applyCrossBuriedResult(idA, dataA, idB, dataB, r.delta, performance.now() - t0, heavyA, heavyB, labelA, labelB)
+      return { done: true, result: this.crossBuriedSummary(idA, dataA, idB, dataB, r.delta) }
+    }
+    if (this.sasaPending.get(idA) === key) return { done: false }
+    const w = this.ensureSasaWorker()
+    if (!w) {
+      const t0 = performance.now()
+      const r = computeBuriedSasaArrays(positions, radii, isHydrogen, aMask, bMask, probe, nPoints)
+      this.applyCrossBuriedResult(idA, dataA, idB, dataB, r.delta, performance.now() - t0, heavyA, heavyB, labelA, labelB)
+      return { done: true, result: this.crossBuriedSummary(idA, dataA, idB, dataB, r.delta) }
+    }
+    this.xbsaMeta = { idA, idB, labelA, labelB, heavyA, heavyB }
+    this.sasaPending.set(idA, key)
+    // 占位结果：面板立即可见「计算中」状态（worker 完成后替换）
+    useSasaStore.getState().setBuried({
+      computing: true,
+      structureId: idA,
+      atomsA: heavyA,
+      atomsB: heavyB,
+      buriedA: 0, buriedB: 0, coreA: [], coreB: [], ms: 0,
+      cross: { idA, idB, labelA, labelB },
+    })
+    w.postMessage({
+      type: 'compute',
+      reqId: ++this.sasaReqId,
+      structureId: idA,
+      key,
+      kind: 'buried',
+      positions,
+      radii,
+      isHydrogen,
+      probe,
+      nPoints,
+      maskA: aMask,
+      maskB: bMask,
+    })
+    return { done: false }
+  }
+
+  /** 跨结构 ΔSASA 结果落库：delta 拆回两侧结构 + 各自残基聚合 + 核心残基（>1 Å²） */
+  private applyCrossBuriedResult(
+    idA: string, dataA: StructureData, idB: string, dataB: StructureData,
+    delta: Float32Array, ms: number, atomsA: number, atomsB: number,
+    labelA: string, labelB: string,
+  ) {
+    const nA = dataA.atoms.count
+    const deltaA = delta.subarray(0, nA)
+    const deltaB = delta.subarray(nA)
+    const perResA = new Float32Array(dataA.residues.length)
+    for (let i = 0; i < deltaA.length; i++) {
+      if (deltaA[i] > 0) perResA[dataA.atomResidue[i]] += deltaA[i]
+    }
+    const perResB = new Float32Array(dataB.residues.length)
+    for (let i = 0; i < deltaB.length; i++) {
+      if (deltaB[i] > 0) perResB[dataB.atomResidue[i]] += deltaB[i]
+    }
+    let buriedA = 0, buriedB = 0
+    for (let i = 0; i < deltaA.length; i++) buriedA += deltaA[i]
+    for (let i = 0; i < deltaB.length; i++) buriedB += deltaB[i]
+    const coreA: number[] = [], coreB: number[] = []
+    for (let r = 0; r < perResA.length; r++) if (perResA[r] > 1) coreA.push(r)
+    for (let r = 0; r < perResB.length; r++) if (perResB[r] > 1) coreB.push(r)
+    useSasaStore.getState().setBuried({
+      computing: false,
+      structureId: idA,
+      atomsA, atomsB, buriedA, buriedB, coreA, coreB, ms,
+      cross: { idA, idB, labelA, labelB },
+    })
+    useMolStore.getState().appendLog('out', `跨结构 ΔSASA 完成（Web Worker）：合计 ${(buriedA + buriedB).toFixed(0)} Å²（${labelA} ${buriedA.toFixed(0)} + ${labelB} ${buriedB.toFixed(0)}）· 核心残基 ${labelA} ${coreA.length} / ${labelB} ${coreB.length} · ${ms.toFixed(0)} ms`)
+  }
+
+  /** 同步路径返回摘要（不动 store——applyCrossBuriedResult 已写入） */
+  private crossBuriedSummary(idA: string, dataA: StructureData, idB: string, dataB: StructureData, delta: Float32Array) {
+    const nA = dataA.atoms.count
+    const deltaA = delta.subarray(0, nA)
+    const deltaB = delta.subarray(nA)
+    const perResA = new Float32Array(dataA.residues.length)
+    for (let i = 0; i < deltaA.length; i++) {
+      if (deltaA[i] > 0) perResA[dataA.atomResidue[i]] += deltaA[i]
+    }
+    const perResB = new Float32Array(dataB.residues.length)
+    for (let i = 0; i < deltaB.length; i++) {
+      if (deltaB[i] > 0) perResB[dataB.atomResidue[i]] += deltaB[i]
+    }
+    const coreA: number[] = [], coreB: number[] = []
+    let buriedA = 0, buriedB = 0
+    for (let i = 0; i < deltaA.length; i++) buriedA += deltaA[i]
+    for (let i = 0; i < deltaB.length; i++) buriedB += deltaB[i]
+    for (let r = 0; r < perResA.length; r++) if (perResA[r] > 1) coreA.push(r)
+    for (let r = 0; r < perResB.length; r++) if (perResB[r] > 1) coreB.push(r)
+    let heavyA = 0, heavyB = 0
+    for (let i = 0; i < deltaA.length; i++) if (deltaA[i] > 0) heavyA++
+    for (let i = 0; i < deltaB.length; i++) if (deltaB[i] > 0) heavyB++
+    return { buriedA, buriedB, coreA, coreB, atomsA: heavyA, atomsB: heavyB, ms: 0 }
   }
 
   /** 懒建 SASA worker（失败永久回退同步） */
@@ -1640,7 +1795,7 @@ export class MolEngine {
     }
   }
 
-  /** worker 结果：full → 写 data.sasa + 统计 + 重建着色；buried → 写 store */
+  /** worker 结果：full → 写 data.sasa + 统计 + 重建着色；buried → 写 store（xburied 前缀走跨结构拆分） */
   private onSasaWorkerResult(msg: {
     type: string
     reqId: number
@@ -1654,6 +1809,19 @@ export class MolEngine {
     if (!msg || msg.type !== 'result') return
     if (this.sasaPending.get(msg.structureId) !== msg.key) return
     this.sasaPending.delete(msg.structureId)
+    // 跨结构 ΔSASA：delta 是两结构拼接后的联合数组，拆回各自结构落库
+    if (msg.kind === 'buried' && msg.delta && msg.key.startsWith('xburied|')) {
+      const meta = this.xbsaMeta
+      this.xbsaMeta = null
+      const dataA = dataRegistry.get(meta?.idA ?? '')
+      const dataB = dataRegistry.get(meta?.idB ?? '')
+      if (!meta || !dataA || !dataB) {
+        if (this.sasaPending.size === 0) useSasaStore.getState().setComputing(false)
+        return
+      }
+      this.applyCrossBuriedResult(meta.idA, dataA, meta.idB, dataB, msg.delta, msg.ms, meta.heavyA, meta.heavyB, meta.labelA, meta.labelB)
+      return
+    }
     const data = dataRegistry.get(msg.structureId)
     if (!data) {
       if (this.sasaPending.size === 0) useSasaStore.getState().setComputing(false)
@@ -1703,6 +1871,7 @@ export class MolEngine {
         atomsA: cs.structureId === msg.structureId ? cs.atomsA : 0,
         atomsB: cs.structureId === msg.structureId ? cs.atomsB : 0,
         buriedA, buriedB, coreA, coreB, ms: msg.ms,
+        cross: null,
       })
       useMolStore.getState().appendLog('out', `ΔSASA 完成（Web Worker）：合计 ${(buriedA + buriedB).toFixed(0)} Å²（A ${buriedA.toFixed(0)} + B ${buriedB.toFixed(0)}）· 界面核心残基 A ${coreA.length} / B ${coreB.length} · ${msg.ms.toFixed(0)} ms`)
     }

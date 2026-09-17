@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Play, Trash2, MousePointerClick, Network, RefreshCw, Droplets, Palette, Layers, ArrowLeftRight } from 'lucide-react'
 import { dataRegistry, engineRef, useMolStore, buildNamedMasks } from '@/lib/molecular/store'
-import { runContactAnalysis, runBuriedSasa, interfaceAtomIndices, runCrossContactAnalysis } from '@/lib/molecular/contacts'
+import { runContactAnalysis, runBuriedSasa, runCrossBuriedSasa, interfaceAtomIndices, runCrossContactAnalysis } from '@/lib/molecular/contacts'
 import { useContactStore } from '@/lib/molecular/contacts-store'
 import { useSasaStore } from '@/lib/molecular/sasa-store'
 import { evaluateSelection } from '@/lib/molecular/selection'
@@ -27,6 +27,7 @@ export function AnalysisPanel() {
   const activeId = useMolStore(s => s.activeId)
   const structures = useMolStore(s => s.structures)
   const setSelection = useMolStore(s => s.setSelection)
+  const setActive = useMolStore(s => s.setActive)
   const appendLog = useMolStore(s => s.appendLog)
   const recomputeSS = useMolStore(s => s.recomputeSS)
   const aExpr = useContactStore(s => s.aExpr)
@@ -146,6 +147,27 @@ export function AnalysisPanel() {
     const outcome = runBuriedSasa()
     appendLog(outcome.ok ? 'out' : 'err', outcome.message)
   }, [appendLog])
+
+  const runXbsa = useCallback(() => {
+    const outcome = runCrossBuriedSasa()
+    appendLog(outcome.ok ? 'out' : 'err', outcome.message)
+  }, [appendLog])
+
+  // 跨结构 ΔSASA 侧选：激活对应结构并选中其核心残基原子（掩码来自各自结构残基表）
+  const selectXbsaSide = useCallback((side: 'a' | 'b') => {
+    const b = useSasaStore.getState().buried
+    const cross = useContactStore.getState().cross
+    if (!b?.cross || !cross) return
+    const id = side === 'a' ? b.cross.idA : b.cross.idB
+    const label = side === 'a' ? b.cross.labelA : b.cross.labelB
+    const core = side === 'a' ? b.coreA : b.coreB
+    const d = dataRegistry.get(id)
+    if (!d) return
+    setActive(id)
+    const idx = interfaceAtomIndices(d, core)
+    setSelection(id, idx)
+    appendLog('out', `已选择 ${label} 侧跨结构界面核心残基：${core.length} 残基（${idx.length} 原子，ΔSASA > 1 Å²）`)
+  }, [setActive, setSelection, appendLog])
 
   // ---------- 2D 接触图谱 ----------
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -435,6 +457,56 @@ export function AnalysisPanel() {
             <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-600 dark:text-amber-400">
               未发现跨结构接触——确认两结构已 superpose 对齐，或增大距离截断。
             </p>
+          )}
+
+          {/* 跨结构 ΔSASA：沿用 xcontacts 的 A/B 掩码与当前位姿 */}
+          {cross && crossPairs.length > 0 && (
+            <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 px-2.5 py-2">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-300">
+                  <Droplets className="h-3.5 w-3.5" />
+                  跨结构埋藏面积 (xbsa)
+                </span>
+                <button
+                  onClick={runXbsa}
+                  disabled={!!(buried?.cross && buried.computing)}
+                  className="rounded-md bg-violet-500/80 px-2 py-1 text-[10px] font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
+                >
+                  {buried?.cross && buried.computing ? '计算中…' : '联合三路 SASA'}
+                </button>
+              </div>
+              {buried && buried.cross && buried.cross.idA === cross.idA && buried.cross.idB === cross.idB && !buried.computing && (
+                <div className="mt-1.5">
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <Stat label={`${buried.cross.labelA} 埋藏`} value={`${buried.buriedA.toFixed(0)} Å²`} tone="rose" />
+                    <Stat label={`${buried.cross.labelB} 埋藏`} value={`${buried.buriedB.toFixed(0)} Å²`} tone="cyan" />
+                    <Stat label="合计" value={`${(buried.buriedA + buried.buriedB).toFixed(0)} Å²`} />
+                  </div>
+                  <div className="mt-1.5 text-[10px] text-muted-foreground">
+                    核心残基（ΔSASA &gt; 1 Å²）：{buried.cross.labelA} {buried.coreA.length} · {buried.cross.labelB} {buried.coreB.length} · {buried.ms.toFixed(0)} ms
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={() => selectXbsaSide('a')}
+                      className="rounded-md border border-rose-500/40 px-2 py-1.5 text-[10px] font-medium text-rose-600 transition hover:bg-rose-500/15 dark:text-rose-300"
+                    >
+                      选 {buried.cross.labelA} 核心
+                    </button>
+                    <button
+                      onClick={() => selectXbsaSide('b')}
+                      className="rounded-md border border-cyan-500/40 px-2 py-1.5 text-[10px] font-medium text-cyan-600 transition hover:bg-cyan-500/15 dark:text-cyan-300"
+                    >
+                      选 {buried.cross.labelB} 核心
+                    </button>
+                  </div>
+                </div>
+              )}
+              {(!buried || !buried.cross || buried.cross.idA !== cross.idA || buried.cross.idB !== cross.idB) && (
+                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                  把两结构原子拼接为联合坐标集做三路 SASA（A 单独 / B 单独 / A∪B）——游离构象视角的界面埋藏面积，与复合物本体 bsa 对照。
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}

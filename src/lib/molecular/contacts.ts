@@ -310,7 +310,7 @@ export function runBuriedSasa(): RunContactOutcome {
   const store = useMolStore.getState()
   const cs = useContactStore.getState()
   if (!store.activeId) return { ok: false, message: '没有活动结构' }
-  if (cs.cross) return { ok: false, message: '当前为跨结构接触结果——ΔSASA 仅支持单结构内的两组界面（跨结构坐标系独立）' }
+  if (cs.cross) return { ok: false, message: '当前为跨结构接触结果——请用 xbsa 计算跨结构界面埋藏面积（沿用 xcontacts 的 A/B 掩码）' }
   const data = dataRegistry.get(store.activeId)
   if (!data) return { ok: false, message: '结构数据不存在' }
   const A = cs.aExpr.trim(), B = cs.bExpr.trim()
@@ -331,6 +331,29 @@ export function runBuriedSasa(): RunContactOutcome {
     }
   }
   return { ok: true, message: 'ΔSASA 计算中（Web Worker）——完成后将在此输出结果' }
+}
+
+// ---------- 跨结构界面埋藏面积（ΔSASA）运行器 ----------
+
+/**
+ * 跨结构 ΔSASA：对 xcontacts 的 A/B 掩码做联合三路 SASA。
+ * 前提：两结构已 superpose 到同一坐标系（掩码来自跨结构接触上下文）。
+ */
+export function runCrossBuriedSasa(): RunContactOutcome {
+  const cs = useContactStore.getState()
+  const cross = cs.cross
+  if (!cross) return { ok: false, message: '请先运行 xcontacts 建立跨结构接触（xbsa 沿用其 A/B 掩码与当前位姿）' }
+  const eng = engineRef.current
+  if (!eng) return { ok: false, message: '渲染引擎未就绪' }
+  const r = eng.requestCrossBuriedSasa(cross.idA, cross.maskA, cross.idB, cross.maskB)
+  if (r.done && r.result) {
+    const total = r.result.buriedA + r.result.buriedB
+    return {
+      ok: true,
+      message: `跨结构 ΔSASA 界面埋藏面积：合计 ${total.toFixed(0)} Å²（${cross.labelA} ${r.result.buriedA.toFixed(0)} + ${cross.labelB} ${r.result.buriedB.toFixed(0)}）· 核心残基 ${cross.labelA} ${r.result.coreA.length} / ${cross.labelB} ${r.result.coreB.length}（ΔSASA > 1 Å²）· ${r.result.ms.toFixed(0)} ms`,
+    }
+  }
+  return { ok: true, message: `跨结构 ΔSASA 计算中（Web Worker，${cross.labelA} ↔ ${cross.labelB}）——完成后将在此输出结果` }
 }
 
 // ---------- 跨结构接触运行器 ----------

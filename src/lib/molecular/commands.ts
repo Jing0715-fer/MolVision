@@ -5,7 +5,7 @@ import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
 import { useEnsembleStore } from './ensemble-store'
 import { useRecordStore } from './record-store'
-import { runContactAnalysis, runBuriedSasa, runCrossContactAnalysis } from './contacts'
+import { runContactAnalysis, runBuriedSasa, runCrossContactAnalysis, runCrossBuriedSasa } from './contacts'
 import { useContactStore } from './contacts-store'
 import { useSasaStore } from './sasa-store'
 import { subsetStructure } from './parser'
@@ -76,6 +76,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'xcontacts <A>:<expr> | <B>:<expr> [n]', desc: '跨结构接触（复合物界面，建议先 superpose）', example: 'xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0' },
   { cmd: 'sasa [probe] [点数]', desc: '溶剂可及面积计算（Shrake–Rupley）', example: 'sasa 1.4 92' },
   { cmd: 'bsa', desc: '界面埋藏面积 ΔSASA（需 contacts A/B）', example: 'bsa' },
+  { cmd: 'xbsa', desc: '跨结构界面埋藏面积（需 xcontacts，两结构联合三路 SASA）', example: 'xbsa' },
   { cmd: 'untransform [名]', desc: '撤销叠合变换回原始位姿', example: 'untransform 1D3Z' },
   { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
@@ -1002,6 +1003,17 @@ export function runCommand(raw: string): void {
     ok(outcome.message)
     if (useSasaStore.getState().buried?.computing === false && useSasaStore.getState().buried) {
       ok('分析面板提供界面核心残基选择（ΔSASA > 1 Å² 判据）')
+    }
+    return
+  }
+
+  if (cmd === 'xbsa' || cmd === 'xburied' || cmd === 'xbsa-area') {
+    const outcome = runCrossBuriedSasa()
+    if (!outcome.ok) return err(outcome.message)
+    ok(outcome.message)
+    const b = useSasaStore.getState().buried
+    if (b && b.cross && !b.computing) {
+      ok('以两结构当前位姿为准（superpose 变换实时反映）；分析面板提供两侧核心残基选择')
     }
     return
   }

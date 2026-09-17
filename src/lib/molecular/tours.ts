@@ -3,6 +3,7 @@
 // runCommand 让控制台留下教学回显 ③异步步骤（加载/密度图）用 waitFor 等待就绪
 import { useMolStore, dataRegistry } from './store'
 import { useMapStore } from './map-store'
+import { useContactStore } from './contacts-store'
 import { fetchPdbId } from './loader'
 
 export type TourIcon = 'flask' | 'pill' | 'layers' | 'waves' | 'dna' | 'puzzle'
@@ -330,7 +331,7 @@ export const TOURS: TourDef[] = [
       },
       {
         title: '叠合：游离抗原 → 复合物坐标架',
-        body: 'superpose 把 2LYZ 的链 A 刚体叠合到 1BQL 的链 Y（序列比对 + 最优拟合）。\nRMSD < 1 Å 说明抗原结合后几乎不变——诱导契合（induced fit）很小，这是 HyHEL-5 识别溶菌酶的著名结论。叠合后把游离抗原改画为棍状，直观看到它与复合物中的抗原重合。',
+        body: 'superpose 把 2LYZ 的链 A 刚体叠合到 1BQL 的链 Y（序列比对 + 最优拟合）。\nRMSD < 1 Å 说明抗原结合后几乎不变——诱导契合（induced fit）很小，这是 HyHEL-5 识别溶菌酶的著名结论。叠合后把游离抗原改画为细线框（比棍状更轻盈，不喧宾夺主），玫瑰色细线与复合物中的抗原重合度一目了然。',
         cmd: 'superpose 2LYZ onto 1BQL chain A to Y',
         run: async () => {
           const sid = useMolStore.getState().activeId
@@ -339,10 +340,10 @@ export const TOURS: TourDef[] = [
             return
           }
           await exec('superpose 2LYZ onto 1BQL chain A to Y')
-          // 游离抗原改为棍状+玫瑰色，叠合重合度可视化（先清选择防 color 误作用到遗留选区）
+          // 游离抗原改为细线框+玫瑰色：叠合重合度可视化（先清选择防 color 误作用到遗留选区）
           useMolStore.getState().setSelection(null, [])
           await exec('hide cartoon')
-          await exec('show sticks')
+          await exec('show lines')
           await exec('color #fb7185')
           await exec('zoom')
         },
@@ -357,6 +358,20 @@ export const TOURS: TourDef[] = [
             return
           }
           await exec('xcontacts 2LYZ:chain A | 1BQL:chain H or chain L 5.0')
+        },
+      },
+      {
+        title: '跨结构界面埋藏面积',
+        body: 'xbsa 沿用跨结构接触的 A/B 掩码，把两个条目的原子拼成联合坐标集做三路 SASA：游离 2LYZ 单独、抗体 H+L 单独、两者「复合」。\n这给出「游离抗原视角」的界面埋藏面积——与下一步复合物本体的 bsa 对照，两组数字接近就是表位完全保守的定量证据。分析面板可分别选择两侧核心残基。',
+        cmd: 'xbsa',
+        run: async () => {
+          if (!findByName('1BQL') || !findByName('2LYZ')) return
+          // 幂等：无跨结构上下文（跳步进入）时先补一次 xcontacts
+          if (!useContactStore.getState().cross) {
+            await exec('xcontacts 2LYZ:chain A | 1BQL:chain H or chain L 5.0')
+          }
+          await exec('xbsa')
+          await sleep(500)
         },
       },
       {
@@ -377,7 +392,7 @@ export const TOURS: TourDef[] = [
       },
       {
         title: '完成',
-        body: '免疫识别工作流已走通：叠合 → 跨结构表位 → 界面 ΔSASA。\n延伸玩法：\n· untransform 2LYZ 撤销叠合回原位\n· select epitope = byres (chain Y within 5 of (chain H or chain L))\n· V 保存视角书签，record start 录制旋转动画',
+        body: '免疫识别工作流已走通：叠合 → 跨结构表位 → 跨结构 ΔSASA → 复合物本体 bsa。\n延伸玩法：\n· untransform 2LYZ 撤销叠合回原位\n· select epitope = byres (chain Y within 5 of (chain H or chain L))\n· V 保存视角书签，record start 录制旋转动画',
         run: () => { void exec('zoom') },
       },
     ],

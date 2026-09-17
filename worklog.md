@@ -704,3 +704,43 @@ Stage Summary:
 - 关键决策：①图例区重构为共享列容器（MapLegend 交互卡在上 + ColorLegend 被动卡在下，替代各自独立定位）②眼开关用「降透明+禁滑块」而非整卡消失（隐藏后仍可恢复）③幂等检查必须双确认（镜像 AND 引擎 getMapInfo——QA 实证 Fast Refresh 会造成发散）④抗体场景选 1BQL+2LYZ（鹤鹑/鸡溶菌酶跨物种，RMSD 0.63 Å 完美支撑「表位保守」教学点）
 - 未解决问题与风险：①CDP 合成事件无法驱动 Radix Slider（drag/click 均超时或无效），滑块交互仅通过命令行路径验证 wiring；真实用户拖动依赖 MapsPanel 同款组件的既有验证 ②VLM 建议未采纳：σ 卡可拖拽移动（backdrop-blur 已有）、序列条字母对比度加粗 ③2LYZ 棍状全结构较密（VLM 指出叠合层次感可再优化，如只显示 Cα trace）
 - 下一阶段建议（优先级序）：① 跨结构 ΔSASA（xcontacts 后对两组做联合掩码三路 SASA——maskA/maskB 已就绪，bsa 目前仅支持单结构）② 氢键/SASA/contacts/map 统一 Worker 池 ③ 抗体场景第 3 步改为 Cα trace/半透明以增强叠合层次感 ④ σ 卡拖拽移位（VLM 建议）⑤ 图例卡与密度图面板 state 联动高亮
+---
+Task ID: feat-r16
+Agent: main
+Task: 下一阶段开发 + UI 打磨：跨结构 ΔSASA（xbsa 命令）、抗体演示场景第 7 步、视口 σ 控制卡可拖拽移位
+
+Work Log:
+- 读取 worklog（feat-r15 完成第 6 演示场景/σ 控制卡/map 幂等/activate）；git 干净（r15 已提交）；确认会话摘要中的「配体选择 bug」已于 bugfix-r9 修复（chainidx 链组方案），无需重做
+- 【功能 A：跨结构 ΔSASA（xbsa 命令）——本轮主特性】
+  - sasa.ts：新增 computeBuriedSasaArrays（纯数值版三路 SASA，无 StructureData 依赖——调用方把两结构 positions/radii/isHydrogen 拼接为联合数组，maskA 覆盖 [0,nA)、maskB 覆盖 [nA,nA+nB)）
+  - 关键洞察：sasa-worker 的 'buried' kind 本来就是纯数值计算 → 天然支持跨结构，worker 零改动，只需 key 前缀 'xburied|' 区分
+  - engine.ts：requestCrossBuriedSasa（拼接联合数组 + 小结构同步/大结构 Worker + xbsaMeta 飞行元信息快照——掩码不随 worker 结果回传，用快照补齐重原子计数与标签）；applyCrossBuriedResult（delta 拆回两侧结构 + 各自残基聚合 + 核心残基 >1 Å²）；onSasaWorkerResult 增加 xburied 前缀分支
+  - sasa-store：buried 结构增加 cross 字段（{ idA, idB, labelA, labelB } | null）；setBuried 改为 computing 尊重传入值（原强制 false 会覆盖占位结果的 true）
+  - contacts.ts：runCrossBuriedSasa 运行器（读 contacts-store.cross 的掩码快照与当前位姿）；runBuriedSasa 的跨结构报错改为引导 xbsa
+  - commands.ts：xbsa 命令（别名 xburied / xbsa-area）+ COMMAND_HELP 条目
+  - AnalysisPanel：跨结构结果卡片下方新增「跨结构埋藏面积 (xbsa)」卡——联合三路 SASA 按钮 + computing 占位 + Stat 三格（labelA/labelB 埋藏 + 合计）+ 核心残基信息 + 「选 A/B 侧核心」双按钮（激活对应结构 + 选择其核心残基原子）；结果按 cross.idA/idB 双匹配防陈旧
+- 【功能 B：抗体演示场景增强】
+  - 步骤 3 叠合视觉层次：游离 2LYZ 从 show sticks 改为 show lines（细线框比圆柱棍状轻盈，不喧宾夺主——r15 VLM 评审遗留建议）
+  - 新增第 7 步前的「跨结构界面埋藏面积」步骤（现 7 步）：xbsa 教学文案（游离抗原视角 ΔSASA vs 复合物本体 bsa 对照 = 表位保守定量证据）；幂等保护（无 cross 上下文时先补跑 xcontacts）
+  - 完成卡 body 更新工作流链路描述
+- 【功能 C：UI 打磨】
+  - MapLegend σ 控制卡可拖拽移位：顶部 GripHorizontal 把手（pointer capture + try-catch 降级）+ clamp 视口边界 + fixed 定位脱离左下图例列（ColorLegend 自动补位）+ 双击归位 + localStorage 持久化（molvision-maplegend-pos）+ 惰性恢复（SSR 时 info 必 null 无 hydration 冲突）；freeRef 镜像修复极快拖放时闭包过期（useRef(free) 初值参数仅首挂载求值——绕开 react-hooks/refs 渲染期写 ref 禁令）
+  - 颜色点 title 补正/负峰语义说明（VLM 建议）
+  - SequenceBar 残基字母对比度：text-black/80→/90 + 1px 白描边 text-shadow
+- 【文档】README：Highlights 新增 Cross-structure ΔSASA (xbsa) 行；抗体 tour 行补 xbsa；命令示例补 xbsa；差图行补 σ 卡可拖拽说明；画廊 +cross-xbsa.png。HelpDialog：跨结构接触段落扩展 xbsa 工作流
+- 【QA 全量验证（agent-browser 真实交互 + VLM）】
+  - QA 方法论教训：分析面板 ExprInput 与控制台 input 共存时 querySelector('input') 会选错——必须用 placeholder 定位控制台输入框（worklog r14 已记录过该坑，本轮重踩一次）；agent-browser 快照对重 3D 页面会超时，用 eval DOM 断言替代
+  - xbsa 命令全链路：load 1bql + load 2lyz → superpose（129 对 CA，RMSD 0.633 Å 与基准一致）→ xcontacts 104 对（界面残基 33/34 与基准一致）→ xbsa：Worker 563ms 完成「合计 1,939 Å²（2LYZ 956 + 1BQL 983）· 核心残基 30/36」
+  - 科学合理性：游离视角 xbsa 1,939 Å² vs 复合物本体 bsa 1,825 Å²（r15 基准）——差 6%，表位保守叙事定量成立；每侧 956/983 均在抗原-抗体界面典型区间 600-1000 Å²
+  - 分析面板 xbsa 卡片：Stat 三格数值与命令行一致 ✓；「选 2LYZ 核心」→ 激活 2LYZ + 选中 30 残基 151 原子 ✓；「选 1BQL 核心」→ 激活 1BQL + 36 残基 247 原子 ✓
+  - 面板路径重算：面板默认 protein/protein 掩码跑 xbsa（1BQL 全部 vs 2LYZ 全部）→ 6,573 Å²（全结构重叠埋藏，含叠合重合的溶菌酶双重埋藏——合法的「结构重叠度」语义）；tour 最后的 contacts 会清空 cross 上下文 → 重新 xcontacts 后卡片恢复（防陈旧双匹配正确隐藏旧结果）
+  - 抗体 tour 7 步全流程：tour antibody → 步骤 5 新增 xbsa 步执行（1,939 Å²）→ 步骤 6 bsa（1,825 Å²，r15 基准一致）→ 完成卡 → Esc 结束 ✓
+  - MapLegend 拖拽四部曲：拖动（static→fixed，位移精确 +130/-60）→ pointerup localStorage 写入 → 双击归位（fixed→static 回停靠位 + 清存储）→ 刷新重算差图后位置精确恢复 [152,411]；HMR 后复验通过
+  - VLM 评审 hero 截图（叠合 + 差图 + σ 卡）9.0/10；建议采纳：颜色点语义 title（已做）、长标题 tooltip（已有 title 属性，静态截图不可见）
+  - 回归：浏览器 errors 空 ✓；lint 0 错 0 警（修复 2 个新 lint 禁令：effect 内 setState → 惰性初始化；渲染期写 ref → useRef 初值参数）✓；tsc 新代码零错误（预存错误均在旧 worker/superpose/AnalysisPanel605）✓；dev.log 无运行时错误 ✓
+
+Stage Summary:
+- 项目当前状态：feat-r15 基础上补齐「界面分析定量化」最后一块拼图——①xbsa 跨结构 ΔSASA 全链路（纯数值三路 SASA → Worker kind 复用零改动 → 拆分落库 → 面板双按钮侧选）②抗体演示场景 7 步（游离抗原视角 vs 复合物本体双 ΔSASA 对照 = 表位保守定量证据链）③σ 控制卡可拖拽移位（把手 + 双击归位 + 持久化恢复）
+- 关键决策：①worker 'buried' kind 本就纯数值——联合数组拼接即跨结构，避免 worker 协议改动 ②xbsaMeta 飞行快照解决掩码不回传问题 ③useRef(state) 初值参数绕开 react-hooks/refs 渲染期写禁令（ref 由事件处理器维护）④SSR 时图例卡必渲染 null → 惰性恢复无 hydration 风险 ⑤跨结构结果按 idA/idB 双匹配防陈旧
+- 未解决问题与风险：①差图会话恢复需要源结构在场（map fofc 不加载原子结构，刷新后「密度图存档需要结构 3EKJ 已跳过」——既有行为，可考虑 map fofc 自动附带加载结构）②面板默认 protein/protein 掩码跑 xbsa 得到全结构重叠埋藏（数值大但语义合法，引导文案可更明确建议链限定）③xbsa 占位结果的 computing 态在 Worker 失败时可能残留（sasaWorkerFailed 清理路径未覆盖 xbsaMeta）④浏览器会话长时间运行后主线程冻结过一次（重启后正常，未定位根因——疑似多结构 + 差图 + 长时累积）
+- 下一阶段建议（优先级序）：① map fofc/fetch 自动加载对应结构（修复差图会话恢复跳过问题）② 氢键/SASA/contacts/map 统一 Worker 池（feat-r13 起遗留）③ xbsa 失败路径清理（xbsaMeta + computing 残留）④ 面板 xbsa 引导文案细化（链限定建议 + 表达式示例 chip）⑤ 左侧面板宽度可拖拽调整（VLM r16 建议）

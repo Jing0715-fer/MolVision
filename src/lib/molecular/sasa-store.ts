@@ -33,10 +33,12 @@ interface SasaStore {
     atomsB: number
     buriedA: number
     buriedB: number
-    /** 界面核心残基（ΔSASA > 1 Å²） */
+    /** 界面核心残基（ΔSASA > 1 Å²；跨结构时索引各自结构的残基表） */
     coreA: number[]
     coreB: number[]
     ms: number
+    /** 跨结构模式（null = 单结构 contacts；核心残基索引语义见上） */
+    cross: { idA: string; idB: string; labelA: string; labelB: string } | null
   } | null
   setComputing: (v: boolean) => void
   setResult: (r: {
@@ -80,7 +82,7 @@ export const useSasaStore = create<SasaStore>()(set => ({
     nPoints: r.nPoints,
     topResidues: r.topResidues,
   }),
-  setBuried: r => set(s => ({ buried: r ? { ...r, computing: false } : null })),
+  setBuried: r => set(s => ({ buried: r ? { ...r, cross: r.cross ?? null } : null })),
   setBuriedComputing: v => set(s => (s.buried ? { buried: { ...s.buried, computing: v } } : {})),
   clear: () => set({
     computing: false, structureId: null, total: 0, hydrophobic: 0, polar: 0, het: 0,

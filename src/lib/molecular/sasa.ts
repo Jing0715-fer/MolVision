@@ -302,6 +302,50 @@ export function computeBuriedSasa(
   return { delta, perResidue, buriedA, buriedB, coreA, coreB, atomsA, atomsB, heavyA, heavyB, ms: performance.now() - t0 }
 }
 
+/**
+ * 跨结构界面埋藏面积（纯数值版，无 StructureData 依赖）：
+ * 调用方把两个结构的 positions/radii/isHydrogen 拼接为联合数组，
+ * maskA 只覆盖 A 结构区间 [0, nA)，maskB 只覆盖 B 结构区间 [nA, nA+nB)。
+ * 三路 SASA 语义与 computeBuriedSasa 一致（A alone / B alone / A∪B）；
+ * 残基聚合与核心残基判定由调用方按各自结构完成。
+ */
+export function computeBuriedSasaArrays(
+  positions: Float32Array,
+  radii: Float32Array,
+  isHydrogen: Uint8Array,
+  maskA: Uint8Array,
+  maskB: Uint8Array,
+  probe: number,
+  nPoints: number,
+): { delta: Float32Array; buriedA: number; buriedB: number; heavyA: number; heavyB: number } {
+  const count = radii.length
+  const a = new Uint8Array(count), b = new Uint8Array(count), ab = new Uint8Array(count)
+  let heavyA = 0, heavyB = 0
+  for (let i = 0; i < count; i++) {
+    const skip = isHydrogen[i] === 1
+    a[i] = maskA[i] && !skip ? 1 : 0
+    b[i] = maskB[i] && !skip ? 1 : 0
+    ab[i] = a[i] || b[i]
+    if (a[i]) heavyA++
+    if (b[i]) heavyB++
+  }
+  const sasaA = computeSasaMasked(positions, radii, count, a, a, probe, nPoints)
+  const sasaB = computeSasaMasked(positions, radii, count, b, b, probe, nPoints)
+  const sasaAB = computeSasaMasked(positions, radii, count, ab, ab, probe, nPoints)
+  const delta = new Float32Array(count)
+  let buriedA = 0, buriedB = 0
+  for (let i = 0; i < count; i++) {
+    if (a[i]) {
+      const d = sasaA[i] - sasaAB[i]
+      if (d > 0) { delta[i] = d; buriedA += d }
+    } else if (b[i]) {
+      const d = sasaB[i] - sasaAB[i]
+      if (d > 0) { delta[i] = d; buriedB += d }
+    }
+  }
+  return { delta, buriedA, buriedB, heavyA, heavyB }
+}
+
 /** 原子最大理论 SASA（扩展球面积，暴露分数分母） */
 export function maxAtomSasa(el: string, probe: number): number {
   const r = atomVDWRadius(el) + probe
