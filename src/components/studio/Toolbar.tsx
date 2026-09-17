@@ -70,6 +70,30 @@ export function Toolbar() {
     }
   }
 
+  // Ray 级静帧：先提示再渲染（同步阻塞数秒，让 toast 先上屏）
+  const rayCapture = () => {
+    const eng = engineRef.current
+    if (!eng) return
+    if (!eng.hasStructures) {
+      toast.error('场景为空——先加载结构再渲染')
+      return
+    }
+    toast.info('Ray 渲染中…', { description: 'PCF 软阴影 + 1.5× 超采样，大场景可能需要数秒' })
+    setTimeout(() => {
+      try {
+        const r = eng.rayRender({})
+        if (!r.url) throw new Error('empty')
+        const a = document.createElement('a')
+        a.href = r.url
+        a.download = `${structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
+        a.click()
+        toast.success('Ray 渲染已导出', { description: `${r.w}×${r.h} px · 软阴影 + 超采样 · ${r.ms.toFixed(0)} ms` })
+      } catch {
+        toast.error('Ray 渲染失败（试试更小尺寸或命令行 ray <宽>）')
+      }
+    }, 80)
+  }
+
   return (
     <TooltipProvider delayDuration={300}>
       <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border/70 bg-card/60 px-2 backdrop-blur-sm sm:px-3">
@@ -313,6 +337,11 @@ export function Toolbar() {
             <DropdownMenuItem onClick={() => capture(4, false)} className="text-xs">4× 超高清 PNG</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => capture(2, true)} className="text-xs">2× 透明背景 PNG</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={rayCapture} className="gap-1.5 text-xs">
+              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+              Ray 级渲染（软阴影 + 超采样）
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

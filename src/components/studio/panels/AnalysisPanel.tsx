@@ -23,6 +23,13 @@ function heatColor(t: number): [number, number, number] {
   return [Math.round(239 + 6 * c), Math.round(68 + 90 * c), Math.round(68 - 57 * c)]
 }
 
+/** xbsa 表达示例（点击填入 A/B 两结构同用表达式；链限定可避免叠合重合区域虚增埋藏面积） */
+const XBSA_EXPR_EXAMPLES: { label: string; expr: string }[] = [
+  { label: 'chain A', expr: 'chain A' },
+  { label: 'polymer', expr: 'polymer' },
+  { label: 'not het', expr: 'not het' },
+]
+
 export function AnalysisPanel() {
   const activeId = useMolStore(s => s.activeId)
   const structures = useMolStore(s => s.structures)
@@ -502,9 +509,24 @@ export function AnalysisPanel() {
                 </div>
               )}
               {(!buried || !buried.cross || buried.cross.idA !== cross.idA || buried.cross.idB !== cross.idB) && (
-                <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-                  把两结构原子拼接为联合坐标集做三路 SASA（A 单独 / B 单独 / A∪B）——游离构象视角的界面埋藏面积，与复合物本体 bsa 对照。
-                </p>
+                <div className="mt-1 space-y-1.5">
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    三路 SASA（A 单独 / B 单独 / A∪B 联合）——游离构象视角的界面埋藏面积，与复合物本体 <span className="font-mono">bsa</span> 对照可佐证表位保守性。
+                    <span className="text-foreground/70">默认 protein 会纳入两结构全部原子</span>；叠合后若有大范围重合（如游离抗原 vs 复合物同源链），数值会明显偏大——建议改用链限定后重跑检测，xbsa 自动沿用新掩码。
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {XBSA_EXPR_EXAMPLES.map(ex => (
+                      <button
+                        key={ex.label}
+                        onClick={() => { setXExprA(ex.expr); setXExprB(ex.expr) }}
+                        title={`两结构同用：${ex.expr}（设置后需重新检测跨结构接触）`}
+                        className="rounded-full border border-violet-500/30 bg-violet-500/5 px-2 py-0.5 font-mono text-[9.5px] text-violet-600 transition hover:bg-violet-500/15 dark:text-violet-300"
+                      >
+                        {ex.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}

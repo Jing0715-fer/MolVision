@@ -1786,6 +1786,13 @@ export class MolEngine {
         this.sasaWorkerFailed = true
         this.sasaPending.clear()
         useSasaStore.getState().setComputing(false)
+        // ΔSASA（含跨结构 xbsa）computing 占位清理——防「计算中…」永久残留
+        this.xbsaMeta = null
+        const b = useSasaStore.getState().buried
+        if (b?.computing) {
+          useSasaStore.getState().setBuried(null)
+          useMolStore.getState().appendLog('err', 'SASA Worker 异常终止——ΔSASA 计算已取消（可重试；后续计算将回退主线程）')
+        }
       }
       this.sasaWorker = w
       return w
@@ -1816,6 +1823,9 @@ export class MolEngine {
       const dataA = dataRegistry.get(meta?.idA ?? '')
       const dataB = dataRegistry.get(meta?.idB ?? '')
       if (!meta || !dataA || !dataB) {
+        // 飞行元信息丢失（结构被删/覆盖）——清除可能残留的 computing 占位，防卡死
+        const b = useSasaStore.getState().buried
+        if (b?.computing && b.cross) useSasaStore.getState().setBuried(null)
         if (this.sasaPending.size === 0) useSasaStore.getState().setComputing(false)
         return
       }
@@ -2629,6 +2639,151 @@ export class MolEngine {
       this.composer.setSize(w, h)
     }
     return url
+  }
+
+  /**
+   * PyMOL ray 风格高质量静帧渲染：软阴影（PCFSoft 2048²）+ 超采样 + 场景包围盒自适应阴影相机。
+   * 同步渲染（大场景可能阻塞数秒）；完成后恢复全部状态（阴影/光照/画布尺寸），返回 PNG dataURL。
+   */
+  rayRender(opts: { width?: number; supersample?: number; transparent?: boolean } = {}): { url: string; w: number; h: number; ms: number } {
+    const t0 = performance.now()
+    const cw = this.container.clientWidth || 800
+    const ch = this.container.clientHeight || 600
+    // 目标尺寸：默认视口 2×（上限 2560）；高度按视口纵横比推导
+    const targetW = Math.max(320, Math.min(2560, Math.round(opts.width ?? cw * 2)))
+    const targetH = Math.max(240, Math.round((targetW * ch) / cw))
+    const ss = Math.max(1, Math.min(2, opts.supersample ?? 1.5))
+    const w = Math.round(targetW * ss)
+    const h = Math.round(targetH * ss)
+
+    // 场景包围盒（可见结构原子）→ 阴影相机范围
+    const pts = this.collectFitPoints(undefined)
+    let center = new THREE.Vector3()
+    let radius = 40
+    if (pts.length) {
+      const min = [Infinity, Infinity, Infinity] as [number, number, number]
+      const max = [-Infinity, -Infinity, -Infinity] as [number, number, number]
+      for (const p of pts) {
+        for (let d = 0; d < 3; d++) {
+          if (p[d] < min[d]) min[d] = p[d]
+          if (p[d] > max[d]) max[d] = p[d]
+        }
+      }
+      center = new THREE.Vector3((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2)
+      radius = Math.max(8, 0.5 * Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]))
+    }
+
+    // —— 保存现场 ——
+    const prevRatio = this.renderer.getPixelRatio()
+    const prevW = cw, prevH = ch
+    const prevBg = this.scene.background
+    const prevFog = this.scene.fog
+    const prevShadowEnabled = this.renderer.shadowMap.enabled
+    const prevShadowType = this.renderer.shadowMap.type
+    const prevKeyPos = this.keyLight.position.clone()
+    const prevKeyCast = this.keyLight.castShadow
+    const prevAmbIntensity = this.ambientLight.intensity
+    const prevFillIntensity = this.fillLight.intensity
+    const prevTargetInScene = this.keyLight.target.parent === this.scene
+    const prevTargetPos = this.keyLight.target.position.clone()
+
+    // —— 开启阴影 ——
+    // 主光方向保持不变（方向光只看 position→target 方向），把光源推远到包围盒外以容纳阴影相机
+    const keyDir = new THREE.Vector3().subVectors(prevKeyPos, new THREE.Vector3(0, 0, 0))
+    if (keyDir.lengthSq() < 1e-6) keyDir.set(4, 8, 5)
+    keyDir.normalize()
+    this.renderer.shadowMap.enabled = true
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.keyLight.castShadow = true
+    this.keyLight.target.position.copy(center)
+    this.scene.add(this.keyLight.target)
+    this.keyLight.position.copy(center).addScaledVector(keyDir, radius * 3.2)
+    this.keyLight.shadow.mapSize.set(2048, 2048)
+    this.keyLight.shadow.bias = -0.0004
+    this.keyLight.shadow.normalBias = Math.max(0.03, radius * 0.002)
+    const scam = this.keyLight.shadow.camera as THREE.OrthographicCamera
+    const ext = radius * 1.9
+    scam.left = -ext; scam.right = ext; scam.top = ext; scam.bottom = -ext
+    scam.near = 1
+    scam.far = radius * 6.5
+    scam.updateProjectionMatrix()
+    // 阴影期间抬一点环境光抵消投影变暗，压一点填充光突出阴影层次
+    this.ambientLight.intensity = prevAmbIntensity + 0.18
+    this.fillLight.intensity = Math.max(0.1, prevFillIntensity * 0.7)
+    // 地面接触阴影接影板（ShadowMaterial 仅在阴影处看得到；渲染后移除）
+    // —— 分子悬浮在纯色背景中，没有接影面投不出可见阴影；PyMOL ray 输出的底部暗影即由此产生
+    const groundY = center.y - radius * 1.15
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(radius * 4, radius * 4),
+      new THREE.ShadowMaterial({ opacity: 0.32, color: 0x1a2e35 }),
+    )
+    ground.rotation.x = -Math.PI / 2
+    ground.position.set(center.x, groundY, center.z)
+    ground.receiveShadow = true
+    this.scene.add(ground)
+
+    // 全场景 mesh 开投射/接收阴影（线条与 sprite 不参与）；material.needsUpdate 触发含阴影 shader 重编译
+    const touched: THREE.Object3D[] = []
+    const mats = new Set<THREE.Material>()
+    this.scene.traverse(o => {
+      const m = o as THREE.Mesh | THREE.InstancedMesh
+      if ((m as THREE.Mesh).isMesh || (m as THREE.InstancedMesh).isInstancedMesh) {
+        if (!m.visible) return
+        m.castShadow = true
+        m.receiveShadow = true
+        touched.push(m)
+        const mm = m.material
+        if (Array.isArray(mm)) mm.forEach(x => mats.add(x))
+        else if (mm) mats.add(mm)
+      }
+    })
+    for (const m of mats) m.needsUpdate = true
+
+    // —— 超采样渲染 ——
+    this.renderer.setPixelRatio(1)
+    this.renderer.setSize(w, h, false)
+    this.renderer.shadowMap.needsUpdate = true
+    let url = ''
+    try {
+      if (opts.transparent) {
+        this.scene.background = null
+        this.scene.fog = null
+        this.renderer.setClearColor(0x000000, 0)
+        this.renderer.render(this.scene, this.activeCamera)
+      } else if (this.settings?.ssao && this.composer) {
+        this.composer.setPixelRatio(1)
+        this.composer.setSize(w, h)
+        this.composer.render()
+      } else {
+        this.renderer.render(this.scene, this.activeCamera)
+      }
+      // toDataURL 必须在恢复尺寸前读取（setSize 会清空画布）
+      url = this.renderer.domElement.toDataURL('image/png')
+    } finally {
+      // —— 恢复现场（无论渲染成败） ——
+      this.scene.remove(ground)
+      ground.geometry.dispose()
+      ;(ground.material as THREE.Material).dispose()
+      for (const o of touched) { o.castShadow = false; o.receiveShadow = false }
+      for (const m of mats) m.needsUpdate = true
+      this.renderer.shadowMap.enabled = prevShadowEnabled
+      this.renderer.shadowMap.type = prevShadowType
+      this.keyLight.castShadow = prevKeyCast
+      this.keyLight.position.copy(prevKeyPos)
+      this.keyLight.target.position.copy(prevTargetPos)
+      if (!prevTargetInScene) this.scene.remove(this.keyLight.target)
+      this.ambientLight.intensity = prevAmbIntensity
+      this.fillLight.intensity = prevFillIntensity
+      this.scene.background = prevBg
+      this.scene.fog = prevFog
+      this.renderer.setPixelRatio(prevRatio)
+      this.renderer.setSize(prevW, prevH, false)
+      if (this.composer) {
+        this.composer.setPixelRatio(prevRatio)
+        this.composer.setSize(prevW, prevH)
+      }
+    }
+    return { url, w: targetW, h: targetH, ms: performance.now() - t0 }
   }
 
   get hasStructures() {

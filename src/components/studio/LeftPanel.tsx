@@ -1,7 +1,8 @@
 'use client'
 
 // 左侧面板：图标栏 + 分页面板（结构/表示/颜色/选择/测量/分析/密度图/场景/信息）
-import { useState } from 'react'
+// 面板宽度可拖拽调整（右缘把手，持久化 + 双击复位）
+import { useRef, useState, useSyncExternalStore } from 'react'
 import {
   Boxes, Info, Palette, Ruler, Settings2, Shapes, Target, ChevronLeft, FlaskConical, Grid3x3,
 } from 'lucide-react'
@@ -31,13 +32,68 @@ const PANELS = [
   { key: 'info', label: '信息', icon: Info },
 ] as const
 
+// —— 面板宽度拖拽（持久化） ——
+const PANEL_W_KEY = 'molvision-panel-w'
+const PANEL_W_MIN = 232
+const PANEL_W_MAX = 460
+const PANEL_W_DEFAULT = 292
+
+function loadPanelWidth(): number {
+  try {
+    const v = parseFloat(localStorage.getItem(PANEL_W_KEY) ?? '')
+    if (isNaN(v)) return PANEL_W_DEFAULT
+    return Math.min(PANEL_W_MAX, Math.max(PANEL_W_MIN, v))
+  } catch {
+    return PANEL_W_DEFAULT
+  }
+}
+
+function clampPanelWidth(w: number): number {
+  return Math.min(PANEL_W_MAX, Math.max(PANEL_W_MIN, Math.round(w)))
+}
+
+/** 水合安全挂载标志（SSR/hydration 渲染用服务端快照 false，避免 localStorage 读取造成水合不一致） */
+function useMounted(): boolean {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
+}
+
 export function LeftPanel() {
   const ui = useMolStore(s => s.ui)
   const setUi = useMolStore(s => s.setUi)
   const [mobileOpen, setMobileOpen] = useState(false)
+  // 面板宽度：拖拽中用户值优先；否则恢复持久化宽度（水合后；首帧用默认值避免 SSR 不一致）
+  const mounted = useMounted()
+  const [userW, setUserW] = useState<number | null>(null)
+  const panelW = userW ?? (mounted ? loadPanelWidth() : PANEL_W_DEFAULT)
+  const drag = useRef<{ startX: number; startW: number } | null>(null)
+
+  const onHandleDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault() // 防止拖拽中选中文本
+    drag.current = { startX: e.clientX, startW: panelW }
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+  }
+  const onHandleMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return
+    const w = clampPanelWidth(drag.current.startW + (e.clientX - drag.current.startX))
+    setUserW(w)
+    try { localStorage.setItem(PANEL_W_KEY, String(w)) } catch { /* ignore */ }
+  }
+  const onHandleUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return
+    drag.current = null
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+  }
+  const resetWidth = () => {
+    setUserW(null)
+    try { localStorage.removeItem(PANEL_W_KEY) } catch { /* ignore */ }
+  }
 
   const content = (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <span className="text-xs font-semibold tracking-wide text-foreground/90">
           {PANELS.find(p => p.key === ui.panel)?.label}
@@ -90,10 +146,26 @@ export function LeftPanel() {
             </Tooltip>
           ))}
         </nav>
-        {/* 面板内容 */}
+        {/* 面板内容（宽度可拖拽） */}
         {ui.panelOpen && (
-          <div className="w-[292px] shrink-0 border-r border-border/70 bg-background/80 backdrop-blur-sm">
+          <div className="relative shrink-0 border-r border-border/70 bg-background/80 backdrop-blur-sm" style={{ width: panelW }}>
             {content}
+            {/* 拖拽把手：悬停/拖拽时高亮 */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="拖拽调整面板宽度（双击复位）"
+              title="拖拽调整宽度 · 双击复位"
+              onPointerDown={onHandleDown}
+              onPointerMove={onHandleMove}
+              onPointerUp={onHandleUp}
+              onDoubleClick={resetWidth}
+              className={cn(
+                'group absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize select-none',
+                'after:absolute after:right-0 after:top-1/2 after:h-10 after:w-[3px] after:-translate-y-1/2 after:rounded-full after:bg-transparent after:transition-colors',
+                'hover:after:bg-emerald-500/60 active:after:bg-emerald-500',
+              )}
+            />
           </div>
         )}
       </aside>

@@ -7,6 +7,7 @@ import { parseSfCif, computeDensityMap, type ModelAtoms, type MapKind } from './
 import type { MapWorkerRequest, MapWorkerResponse } from './map-worker'
 import { parseCcp4 } from './ccp4'
 import { orthoMatrix, type CrystalCell } from './symmetry'
+import type { StructureData } from './parser'
 
 /** 结构包围盒（Å，含边距）对应的分数范围与体素索引窗口（允许跨胞界——密度周期回绕采样） */
 function cropBounds(
@@ -161,6 +162,48 @@ function computeDensityViaWorker(
   })
 }
 
+/**
+ * 解析相位模型来源结构：① 显式 structureId（会话恢复路径）→ ② 已加载结构按 PDB 编号匹配
+ * （优先活动结构）→ ③ 自动从 RCSB 加载并等待就绪（修复会话恢复缺结构时差图被跳过的问题）。
+ * 返回 null = 无法获得相位模型（自动加载失败/超时）。
+ */
+async function resolvePhaseModel(pdbId: string, structureId?: string): Promise<{ id: string; data: StructureData } | null> {
+  // ① 显式指定（会话恢复路径）
+  if (structureId) {
+    const d = dataRegistry.get(structureId)
+    if (d) return { id: structureId, data: d }
+  }
+  // ② 已加载结构按编号匹配（活动结构优先，其次同名上传文件）
+  const s1 = useMolStore.getState()
+  const byPdb = s1.structures.find(x => x.id === s1.activeId && x.meta.pdbId?.toUpperCase() === pdbId)
+    ?? s1.structures.find(x => x.meta.pdbId?.toUpperCase() === pdbId || x.name.toUpperCase() === pdbId)
+  if (byPdb) {
+    const d = dataRegistry.get(byPdb.id)
+    if (d) return { id: byPdb.id, data: d }
+  }
+  // ③ 自动加载（loader ↔ map-load 有循环依赖，动态 import 解开）
+  useMolStore.getState().appendLog('out', `相位模型来源 ${pdbId} 未加载——自动从 RCSB 获取（密度图工作流）…`)
+  toast.info(`正在自动加载结构 ${pdbId}`, { description: '密度图相位模型需要原子坐标，加载后自动继续计算' })
+  try {
+    const { fetchPdbId } = await import('./loader')
+    void fetchPdbId(pdbId)
+  } catch {
+    return null
+  }
+  const started = Date.now()
+  const TIMEOUT = 45_000
+  while (Date.now() - started < TIMEOUT) {
+    await new Promise(r => setTimeout(r, 150))
+    const st = useMolStore.getState()
+    const hit = st.structures.find(x => x.meta.pdbId?.toUpperCase() === pdbId || x.name.toUpperCase() === pdbId)
+    const d = hit ? dataRegistry.get(hit.id) : undefined
+    if (hit && d) return { id: hit.id, data: d }
+    // 加载已结束（成功/失败）但没有匹配结构 → 提前退出
+    if (Date.now() - started > 1200 && !st.loading) break
+  }
+  return null
+}
+
 /** 从 RCSB 拉取结构因子并计算电子密度图（kind：2Fo−Fc 常规 / Fo−Fc 差图；look：会话恢复时的外观；structureId：相位模型来源，缺省活动结构） */
 export async function fetchAndComputeMap(
   pdbIdRaw: string,
@@ -169,20 +212,21 @@ export async function fetchAndComputeMap(
   structureId?: string,
 ): Promise<void> {
   const pdbId = pdbIdRaw.trim().toUpperCase()
-  const store = useMolStore.getState()
-  const modelId = structureId ?? store.activeId
-  if (!modelId) {
-    toast.error('请先加载结构（密度图相位需要原子模型）')
-    return
-  }
-  const data = dataRegistry.get(modelId)
-  if (!data) return
   if (!/^[0-9][A-Z0-9]{3}$/.test(pdbId)) {
     toast.error(`无效的 PDB 编号: "${pdbId}"`)
     return
   }
   const kindLabel = kind === 'fofc' ? 'Fo−Fc 差图' : '2Fo−Fc'
   useMapStore.getState().setComputing(true, `正在获取 ${pdbId} 结构因子…`)
+  // 相位模型：显式指定 → 按编号匹配 → 自动加载（等待就绪）
+  const phase = await resolvePhaseModel(pdbId, structureId)
+  if (!phase) {
+    useMapStore.getState().setComputing(false)
+    toast.error(`无法获得 ${pdbId} 的原子模型（相位来源）——自动加载失败，请先用 load ${pdbId} 加载后再试`)
+    useMolStore.getState().appendLog('err', `密度图计算中止：无法获得 ${pdbId} 的原子模型（相位来源）`)
+    return
+  }
+  const data = phase.data
   try {
     const res = await fetch(`/api/sf/${pdbId}`)
     if (!res.ok) {

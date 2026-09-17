@@ -744,3 +744,40 @@ Stage Summary:
 - 关键决策：①worker 'buried' kind 本就纯数值——联合数组拼接即跨结构，避免 worker 协议改动 ②xbsaMeta 飞行快照解决掩码不回传问题 ③useRef(state) 初值参数绕开 react-hooks/refs 渲染期写禁令（ref 由事件处理器维护）④SSR 时图例卡必渲染 null → 惰性恢复无 hydration 风险 ⑤跨结构结果按 idA/idB 双匹配防陈旧
 - 未解决问题与风险：①差图会话恢复需要源结构在场（map fofc 不加载原子结构，刷新后「密度图存档需要结构 3EKJ 已跳过」——既有行为，可考虑 map fofc 自动附带加载结构）②面板默认 protein/protein 掩码跑 xbsa 得到全结构重叠埋藏（数值大但语义合法，引导文案可更明确建议链限定）③xbsa 占位结果的 computing 态在 Worker 失败时可能残留（sasaWorkerFailed 清理路径未覆盖 xbsaMeta）④浏览器会话长时间运行后主线程冻结过一次（重启后正常，未定位根因——疑似多结构 + 差图 + 长时累积）
 - 下一阶段建议（优先级序）：① map fofc/fetch 自动加载对应结构（修复差图会话恢复跳过问题）② 氢键/SASA/contacts/map 统一 Worker 池（feat-r13 起遗留）③ xbsa 失败路径清理（xbsaMeta + computing 残留）④ 面板 xbsa 引导文案细化（链限定建议 + 表达式示例 chip）⑤ 左侧面板宽度可拖拽调整（VLM r16 建议）
+---
+Task ID: feat-r17
+Agent: main
+Task: 下一阶段开发 + UI 打磨：map fofc/fetch 自动加载相位模型结构、PyMOL ray 级静帧渲染（软阴影+超采样+接影板）、左侧面板宽度可拖拽、xbsa 失败路径清理与引导文案
+
+Work Log:
+- 读取 worklog（feat-r16 完成 xbsa/σ 卡拖拽/抗体 tour 7 步）；git 干净（r16 已提交）；dev server 200 正常；按 r16 遗留优先级清单开工
+- 【功能 A：map fofc/fetch 自动加载相位模型结构——修复会话恢复跳过问题】
+  - map-load.ts：新增 resolvePhaseModel() 三级解析（① 显式 structureId 会话恢复路径 → ② 已加载结构按 PDB 编号/同名匹配（活动结构优先）→ ③ 自动从 RCSB 拉取并轮询等待注册（150ms 间隔，45s 超时，loading 归零+无匹配提前退出））；fetchAndComputeMap 重构为 resolvePhaseModel 驱动，相位模型缺失时给出可操作错误（提示 load <编号>）
+  - loader ↔ map-load 循环依赖用动态 import('./loader') 解开（loader 静态导入 map-load 的 loadMapBuffer）
+  - session.ts：差图会话恢复不再「已跳过」——host 缺失时传 undefined structureId 走自动加载路径
+  - commands.ts：map fetch/fofc 提示语与错误用法更新（「结构未加载时将自动从 RCSB 获取作为相位模型」）；COMMAND_HELP map 条目同步
+  - QA 双路径实证：① 命令路径——仅加载 4HHB 时 map fofc 3ekj → 控制台出现「相位模型来源 3EKJ 未加载——自动从 RCSB 获取」→ 3EKJ 2,405 原子自动加载 → 差图就绪（22,919 反射 · 17.6s Worker）✓；② 会话恢复路径——旧会话（含 3EKJ 差图存档但结构不含 3EKJ）刷新 → 自动补拉结构并重算差图（不再跳过）✓
+- 【功能 B：Ray 级静帧渲染（PyMOL ray 对齐）——本轮主特性】
+  - engine.ts 新增 rayRender({width, supersample, transparent})：PCFSoftShadowMap 2048² + 主光推远至包围盒外（方向不变，target 移到包围盒中心）+ 阴影相机按可见原子包围盒自适应（ext=1.9r, near=1, far=6.5r）+ 环境光 +0.18/填充光 ×0.7 调对比 + 全场景 Mesh/InstancedMesh castShadow/receiveShadow + material.needsUpdate 双向触发（开关阴影都强制重编译）+ 1.5× 内部超采样（默认视口 2× 目标宽，上限 2560）+ finally 全量恢复（光源位置/target/阴影设置/画布尺寸/逐 mesh 阴影标志）
+  - 【QA 发现并修复 2 个关键缺陷】① toDataURL 原本写在 finally 恢复之后——setSize 会清空画布导致空图，移入 try 内渲染后立即读取；② VLM 首评「无阴影」——分子悬浮纯色背景无接影面，阴影无处可见：新增 ShadowMaterial 接影板（y=center−1.15r，4r×4r，opacity 0.32，仅阴影处可见，渲染后移除+dispose）；normalBias 从 r×0.004 降到 r×0.002（小球 peter-panning 风险）
+  - Toolbar 相机菜单新增「Ray 级渲染（软阴影+超采样）」项（Sparkles 图标，toast 先上屏再 setTimeout 80ms 同步渲染）；commands.ts 新增 ray [宽px] 命令 + COMMAND_HELP 条目
+  - QA：ray 1280 → 「Ray 渲染完成：1280×516 px · 2030 ms」；VLM 二评：接触阴影可见 ✓ 质量 8/10 ✓ PyMOL 对比专业度 9/10 ✓ 无缺陷 ✓；渲染后引擎状态完全恢复（shadowMap.enabled=false / keyLight.castShadow=false / 画布尺寸回位）✓；ray abc 用法错误提示 ✓；png 命令回归 ✓
+  - 既有 __molEngine 调试钩子（window）本轮 QA 深度利用（引擎状态断言）
+- 【功能 C：左侧面板宽度可拖拽（持久化）】
+  - LeftPanel.tsx：固定 w-[292px] → style width 动态（232–460px 钳制）；右缘 1.5px 把手（pointer capture + preventDefault 防选中；after 伪元素 3px 圆条悬停 emerald 高亮）；拖拽中实时写 localStorage（molvision-panel-w）；双击复位 292 并清存储
+  - 水合安全：useSyncExternalStore(() => () => {}, () => true, () => false) 挂载标志——SSR/水合首帧用默认宽度，水合后才读 localStorage（避免 inline style 水合不一致）；userW 本地态优先于存储值
+  - QA：CDP PointerEvent 模拟拖拽 +120px → 422px + 存储写入 ✓（注意 React 异步渲染——同步读 getBoundingClientRect 会拿到旧值，需 sleep 后复测）；双击复位 → 292 + 存储清除 ✓；拖至 380 → reload → 380 精确恢复且无水合报错 ✓；390px 移动端把手不可见（桌面 aside 隐藏）+ 无横向溢出 ✓
+- 【功能 D：xbsa 失败路径清理 + 引导文案细化】
+  - engine.ts：ensureSasaWorker onerror 现在清 xbsaMeta + 清 computing 占位（buried.computing 时 setBuried(null)）+ 错误日志；onSasaWorkerResult xburied 分支 meta 丢失时同样清残留占位
+  - AnalysisPanel：xbsa 引导文案重写（三路 SASA 语义 + 「默认 protein 纳入全部原子，叠合重合会虚增埋藏面积——建议链限定后重跑」+ 与 bsa 对照的表位保守叙事）；新增 3 个示例 chips（chain A / polymer / not het，点击填入 A/B 两结构同用表达式，violet 描边圆角样式）
+  - QA：chips 渲染 + 点击填入双表达式 ✓；完整链路复测——2LYZ:chain A | 1BQL:chain H or chain L 掩码 xbsa = 1,939 Å²（956+983，核心 30/36）与 r16 基准完全一致 ✓；对照组：polymer 全掩码跑 2LYZ↔4HHB（叠合重合）= 7,261 Å²，正好实证新文案描述的虚增场景 ✓
+- 【文档】README：新增 Ray-traced still renders 与 Resizable side panel 两行、差图行补自动获取、命令示例补 ray 1920、画廊 +ray-shadows.png；HelpDialog：渲染与视图新增 Ray 级渲染段、电子密度段补自动获取与「会话缺结构时同样自动补拉」
+- 【QA 全量验证】
+  - QA 方法论沉淀：① ray 渲染的 dataURL 用 HTMLAnchorElement.prototype.click 打桩捕获（download 不落盘也能取图）②「无阴影」不一定是阴影管线坏了——先确认有没有接影面（ShadowMaterial 接影板是 PyMOL ray 底部暗影的等价物）③React 状态更新后同步读 DOM 拿旧值（事件派发→sleep→复测）④已有 __molEngine window 钩子可直接断言引擎内部状态（本轮用于恢复验证）
+  - lint 0 错 0 警 ✓；tsc 新代码零错误（预存错误均在旧 worker/superpose/examples/AnalysisPanel 老行）✓；浏览器 errors 空 ✓；dev.log 仅 API 200 ✓；VLM 终评 hero 8/10「成熟的商业化/开源专业软件水准」✓
+
+Stage Summary:
+- 项目当前状态：feat-r16 基础上补齐「密度图工作流闭环 + 出版级渲染 + 工作区人体工学」——①map 命令与差图会话恢复全自动拉取相位模型结构（三级解析，杜绝「请先加载结构」与「已跳过」两类断点）②ray 命令把静帧质量提升到 PyMOL ray 级（软阴影+接影板+超采样+全量状态恢复，VLM 专业度 9/10）③左面板宽度 232-460px 拖拽调节（水合安全+持久化+双击复位）④xbsa 失败路径无残留 + 链限定引导文案与示例 chips
+- 关键决策：①相位模型三级解析（显式→编号匹配→自动拉取），循环依赖动态 import 解开 ②接影板用 ShadowMaterial（白背景仅在阴影处可见，渲染后移除）——没有它软阴影无处落地 ③toDataURL 必须在尺寸恢复前（setSize 清画布）④面板宽度恢复用 useSyncExternalStore 挂载标志而非 effect setState（水合安全且绕开新 lint 禁令）
+- 未解决问题与风险：①ray 渲染同步阻塞（1BQL+差图场景 ~2s 可接受；超大结构+SSAO 可能 5s+——未做分帧）②软阴影对比度受 IBL 环境光稀释（环境抬光 0.18 是折中）③3EKJ 差图恢复时结构自动拉取走网络（离线会失败并给出可操作错误，by design）④polymer chips 对非蛋白结构（纯 DNA）语义偏宽
+- 下一阶段建议（优先级序）：① ray 渲染异步化（OffscreenCanvas 或分帧 + 进度 toast）② 氢键/SASA/contacts/map 统一 Worker 池（r13 起遗留，防多任务并发过载）③ 接影板参数（opacity/高度偏移）暴露到命令（ray soft 0.2 之类）④ 书签/面板宽度之外的 UI 偏好统一进一个 settings store ⑤ 图例卡与密度图面板 state 联动高亮（r16 遗留）

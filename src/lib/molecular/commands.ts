@@ -66,7 +66,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
   { cmd: 'stereo on|off', desc: '红蓝立体渲染', example: 'stereo on' },
   { cmd: 'symmetry <半径Å>|off', desc: '晶体对称伴侣（CRYST1）', example: 'symmetry 25' },
-  { cmd: 'map fetch <id>|fofc|isolevel pos/neg', desc: '电子密度图（SF→FFT，Worker 零阻塞；差图双 σ）', example: 'map isolevel neg 2.5' },
+  { cmd: 'map fetch <id>|fofc|isolevel pos/neg', desc: '电子密度图（SF→FFT，Worker 零阻塞；结构未加载时自动获取；差图双 σ）', example: 'map fofc 3ekj' },
   { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
   { cmd: 'ssao on|off [r]', desc: '环境光遮蔽开关/半径', example: 'ssao on 3' },
   { cmd: 'superpose <名> [onto <名>] [chain X to Y]', desc: '结构叠合（序列比对+刚体拟合，可选链对）', example: 'superpose 4HHB onto 1A3N chain A to A' },
@@ -82,6 +82,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
+  { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+超采样，导出 PNG）', example: 'ray 1920' },
   { cmd: 'session save|info|clear', desc: '会话存档管理', example: 'session save' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
   { cmd: 'preset <名>', desc: '应用风格预设', example: 'preset surface' },
@@ -702,12 +703,12 @@ export function runCommand(raw: string): void {
       if (idArg && /^[0-9][a-z0-9]{3}$/i.test(idArg)) {
         void fetchAndComputeMap(idArg, isFofc ? 'fofc' : '2fofc')
         return ok(isFofc
-          ? `正在获取 ${idArg.toUpperCase()} 结构因子并合成 Fo−Fc 差图（±σ 正绿/负红）…`
-          : `正在获取 ${idArg.toUpperCase()} 结构因子并合成 2Fo−Fc 密度图（模型相位 + 3D FFT）…`)
+          ? `正在获取 ${idArg.toUpperCase()} 结构因子并合成 Fo−Fc 差图（±σ 正绿/负红；未加载的结构会自动获取作为相位模型）…`
+          : `正在获取 ${idArg.toUpperCase()} 结构因子并合成 2Fo−Fc 密度图（模型相位 + 3D FFT；未加载的结构会自动获取）…`)
       }
       const s = useMolStore.getState()
       const pid = s.structures.find(x => x.id === s.activeId)?.meta.pdbId
-      if (!pid) return err('用法：map fetch <PDB编号> | map fofc <PDB编号>（或先加载有编号的结构，再 map fetch）')
+      if (!pid) return err('用法：map fetch <PDB编号> | map fofc <PDB编号>（结构未加载时将自动从 RCSB 获取作为相位模型）')
       void fetchAndComputeMap(pid, isFofc ? 'fofc' : '2fofc')
       return ok(`正在获取 ${pid} 结构因子并合成 ${isFofc ? 'Fo−Fc 差图' : '2Fo−Fc 密度图'}…`)
     }
@@ -742,7 +743,7 @@ export function runCommand(raw: string): void {
     if (sub === 'show') { setMapLook({ visible: true }); return ok('密度图已显示') }
     const info = engineRef.current?.getMapInfo()
     if (!info) {
-      return err('未加载密度图。用法：map fetch <PDB编号> | map fofc <PDB编号> | isolevel <σ> | mesh | surface | both | hide | show | off（也可拖入 .ccp4/.map/.mrc 文件）')
+      return err('未加载密度图。用法：map fetch <PDB编号> | map fofc <PDB编号> | isolevel <σ> | mesh | surface | both | hide | show | off（未加载的结构会自动获取；也可拖入 .ccp4/.map/.mrc 文件）')
     }
     return ok(`密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString()} 三角形 · ${info.difference
       ? (Math.abs(info.iso - info.isoNeg) < 1e-6 ? `±${info.iso.toFixed(1)}σ 差图` : `+${info.iso.toFixed(1)}/−${info.isoNeg.toFixed(1)}σ 差图`)
@@ -763,6 +764,30 @@ export function runCommand(raw: string): void {
       return ok(`已导出 PNG（${scale}× 分辨率）`)
     } catch {
       return err('截图失败')
+    }
+  }
+
+  if (cmd === 'ray') {
+    // PyMOL ray 风格静帧：软阴影 + 1.5× 超采样，导出高清 PNG（同步渲染，大场景可能数秒）
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    if (!eng.hasStructures) return err('场景为空——先加载结构再渲染（load <PDB编号>）')
+    let width: number | undefined
+    if (parts[1]) {
+      width = clampNum(parseFloat(parts[1]), 320, 4096, NaN)
+      if (isNaN(width)) return err('用法：ray [宽 px]（如 ray 1920；缺省按视口 2× 自适应）')
+    }
+    const s = useMolStore.getState()
+    try {
+      const r = eng.rayRender({ width })
+      if (!r.url) return err('Ray 渲染失败（画布尺寸限制——试试更小的宽度）')
+      const a = document.createElement('a')
+      a.href = r.url
+      a.download = `${s.structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
+      a.click()
+      return ok(`Ray 渲染完成：${r.w}×${r.h} px（PCF 软阴影 + 1.5× 内部超采样）· ${r.ms.toFixed(0)} ms——已导出 PNG`)
+    } catch {
+      return err('Ray 渲染失败（显存或画布尺寸限制——试试更小的宽度）')
     }
   }
 

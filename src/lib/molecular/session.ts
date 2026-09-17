@@ -224,15 +224,11 @@ export function restoreSession(): number {
     const m = data.map
     const host = useMolStore.getState().structures.find(x => x.meta.pdbId === m.pdbId)
       ?? (useMolStore.getState().structures.length === 1 ? useMolStore.getState().structures[0] : undefined)
-    if (host) {
-      useMolStore.getState().appendLog('out', `正在恢复电子密度图（${m.pdbId} ${m.kind === 'fofc' ? 'Fo−Fc' : '2Fo−Fc'}）——结构因子重拉 + Worker 重算，稍候…`)
-      void fetchAndComputeMap(m.pdbId, m.kind, {
-        iso: m.iso, isoNeg: m.isoNeg, mode: m.mode,
-        color: m.color, negColor: m.negColor, opacity: m.opacity, visible: m.visible,
-      }, host.id)
-    } else {
-      useMolStore.getState().appendLog('out', `密度图存档需要结构 ${m.pdbId}（当前会话未包含，已跳过）`)
-    }
+    useMolStore.getState().appendLog('out', `正在恢复电子密度图（${m.pdbId} ${m.kind === 'fofc' ? 'Fo−Fc' : '2Fo−Fc'}）——结构因子重拉 + Worker 重算，稍候…`)
+    void fetchAndComputeMap(m.pdbId, m.kind, {
+      iso: m.iso, isoNeg: m.isoNeg, mode: m.mode,
+      color: m.color, negColor: m.negColor, opacity: m.opacity, visible: m.visible,
+    }, host?.id)
   }
   useMolStore.getState().appendLog('out', `已恢复上次会话：${restored} 个结构`)
   return restored
