@@ -6,10 +6,12 @@ import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
   Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop,
-  Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses,
+  Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
+import { TOURS } from '@/lib/molecular/tours'
+import { useTourStore } from '@/lib/molecular/tour-store'
 import { useRecordStore } from '@/lib/molecular/record-store'
 import type { MeasureMode } from '@/lib/molecular/types'
 import {
@@ -28,6 +30,14 @@ const MEASURE_MODES: { mode: MeasureMode; label: string; icon: typeof Ruler; hin
   { mode: 'angle', label: '角度', icon: Triangle, hint: '角度：点击 3 个原子' },
   { mode: 'dihedral', label: '二面角', icon: Rotate3d, hint: '二面角：点击 4 个原子' },
 ]
+
+const TOUR_DOT: Record<string, string> = {
+  emerald: 'bg-emerald-500', rose: 'bg-rose-500', amber: 'bg-amber-500', teal: 'bg-teal-500', violet: 'bg-violet-500',
+}
+
+function TourDot({ accent }: { accent: string }) {
+  return <span className={cn('mt-0.5 h-2 w-2 shrink-0 rounded-full', TOUR_DOT[accent] ?? 'bg-muted-foreground')} />
+}
 
 export function Toolbar() {
   const { resolvedTheme, setTheme } = useTheme()
@@ -107,6 +117,42 @@ export function Toolbar() {
                   <span className="block text-xs font-medium">{ex.title}</span>
                   <span className="block text-[10px] text-muted-foreground">{ex.desc}</span>
                 </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* 引导演示 */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 text-xs font-medium transition hover:bg-accent">
+              <GraduationCap className="h-3.5 w-3.5 text-violet-500" />
+              <span className="hidden lg:inline">演示</span>
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-72">
+            <DropdownMenuLabel className="text-xs">引导式演示场景（逐步自动操作）</DropdownMenuLabel>
+            {TOURS.map(t => (
+              <DropdownMenuItem
+                key={t.id}
+                onClick={() => {
+                  const cur = useTourStore.getState()
+                  if (cur.tour?.id === t.id && cur.stepIdx > 0) {
+                    // 同一场景重新开始
+                    void cur.start(t.id)
+                  } else {
+                    void useTourStore.getState().start(t.id)
+                  }
+                }}
+                className="gap-2.5"
+              >
+                <TourDot accent={t.accent} />
+                <span className="flex-1">
+                  <span className="block text-xs font-medium">{t.title}</span>
+                  <span className="block text-[10px] text-muted-foreground">{t.tagline}</span>
+                </span>
+                <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">{t.steps.length} 步 · ≈{t.minutes} 分</span>
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

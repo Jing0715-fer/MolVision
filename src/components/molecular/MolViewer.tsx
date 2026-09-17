@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MolEngine, type AtomPick, type HoverInfo } from '@/lib/molecular/engine'
 import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
-import { loadFiles } from '@/lib/molecular/loader'
+import { loadFiles, fetchPdbId } from '@/lib/molecular/loader'
 import { PRESETS } from '@/lib/molecular/store'
 import { hasSession, restoreSession, saveSession } from '@/lib/molecular/session'
 import { useMapStore } from '@/lib/molecular/map-store'
@@ -14,12 +14,15 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
+import { GraduationCap } from 'lucide-react'
 import { EnsembleBar } from '@/components/studio/EnsembleBar'
 import { RecordBadge } from '@/components/studio/RecordBadge'
 import { ColorLegend } from '@/components/studio/ColorLegend'
 import { ViewBar } from '@/components/studio/ViewBar'
+import { TourOverlay } from '@/components/studio/TourOverlay'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 import { useViewsStore } from '@/lib/molecular/views-store'
+import { useTourStore } from '@/lib/molecular/tour-store'
 
 interface HoverState { text: string; x: number; y: number; sub?: string }
 
@@ -175,6 +178,13 @@ export default function MolViewer() {
       const target = e.target as HTMLElement
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
       const store = useMolStore.getState()
+      // 演示引导优先接管方向键 / Esc（输入框聚焦时上面已提前 return）
+      const ts = useTourStore.getState()
+      if (ts.tour) {
+        if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey && !e.altKey) { void ts.next(); e.preventDefault(); return }
+        if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) { ts.prev(); e.preventDefault(); return }
+        if (e.key === 'Escape') { ts.stop(); return }
+      }
       // Shift+数字 → 跳转视角书签（数字键无 Shift 仍是风格预设）
       if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && /^Digit[1-9]$/.test(e.code)) {
         const idx = Number(e.code.slice(5)) - 1
@@ -421,6 +431,9 @@ export default function MolViewer() {
       {/* 快捷预设浮层（右下角） */}
       <QuickPresets />
 
+      {/* 引导演示卡片（顶部居中，演示激活时显示） */}
+      <TourOverlay />
+
       {/* 视角书签浮层（右缘竖排，保存/跳转相机视角） */}
       <ViewBar />
 
@@ -440,10 +453,17 @@ function EmptyHint() {
   const structures = useMolStore(s => s.structures)
   const loading = useMolStore(s => s.loading)
   const setUi = useMolStore(s => s.setUi)
+  const startTour = useTourStore(s => s.start)
   if (structures.length > 0) return null
+  const QUICK: { id: string; label: string; hint: string }[] = [
+    { id: '4HHB', label: '4HHB', hint: '血红蛋白' },
+    { id: '1BNA', label: '1BNA', hint: 'B-DNA' },
+    { id: '6LU7', label: '6LU7', hint: 'Mpro 药靶' },
+    { id: '1D3Z', label: '1D3Z', hint: 'NMR 系综' },
+  ]
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 text-center">
-      <div className="pointer-events-auto max-w-md rounded-2xl border border-border/60 bg-card/70 p-8 shadow-2xl backdrop-blur-md">
+    <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 overflow-y-auto py-6 text-center">
+      <div className="pointer-events-auto my-auto max-w-md rounded-2xl border border-border/60 bg-card/70 p-8 shadow-2xl backdrop-blur-md">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg shadow-emerald-500/20">
           <svg viewBox="0 0 24 24" className="h-8 w-8 text-white" fill="none" stroke="currentColor" strokeWidth="1.7">
             <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
@@ -459,6 +479,22 @@ function EmptyHint() {
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           输入 PDB 编号从 RCSB 加载结构，或拖放本地 .pdb / .cif 文件到此处。
         </p>
+
+        {/* 一键示例 */}
+        <div className="mt-4 flex flex-wrap items-stretch justify-center gap-1.5">
+          {QUICK.map(q => (
+            <button
+              key={q.id}
+              onClick={() => void fetchPdbId(q.id)}
+              className="group flex min-w-[4.6rem] flex-col items-center rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 transition hover:border-emerald-500/50 hover:bg-emerald-500/10"
+              title={`加载 ${q.hint}`}
+            >
+              <span className="font-mono text-[11px] font-semibold tracking-wide group-hover:text-emerald-600 dark:group-hover:text-emerald-400">{q.label}</span>
+              <span className="text-[9px] text-muted-foreground">{q.hint}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <button
             onClick={() => setUi({ loadOpen: true })}
@@ -466,10 +502,18 @@ function EmptyHint() {
           >
             加载结构
           </button>
-          <span className="text-xs text-muted-foreground">试试 4HHB（血红蛋白）</span>
+          <button
+            onClick={() => void startTour('quickstart')}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/10 px-3.5 text-sm font-medium text-violet-600 shadow-sm transition hover:bg-violet-500/20 dark:text-violet-400"
+          >
+            <GraduationCap className="h-4 w-4" />
+            跟随演示上手
+          </button>
         </div>
+        <p className="mt-3 text-[10px] text-muted-foreground/70">
+          演示场景会自动加载结构并逐步讲解操作 —— 也可从工具栏「演示」菜单选择 5 个主题场景
+        </p>
       </div>
-      {loading && null}
     </div>
   )
 }

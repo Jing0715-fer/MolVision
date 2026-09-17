@@ -14,6 +14,8 @@ import { textRegistry } from './text-registry'
 import { evaluateSelection, maskToIndices } from './selection'
 import { fetchAndComputeMap, removeMap, setMapLook } from './map-load'
 import { MAX_BOOKMARKS, useViewsStore } from './views-store'
+import { useTourStore } from './tour-store'
+import { TOURS, findTour } from './tours'
 
 /** 数值裁剪（NaN 时取默认值） */
 function clampNum(v: number, min: number, max: number, dflt: number): number {
@@ -55,6 +57,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'orient [sel]', desc: '主轴对齐视角（PCA）', example: 'orient chain A' },
   { cmd: 'get_view / set_view', desc: '视角导出/恢复（JSON）', example: 'get_view' },
   { cmd: 'view save|go|del|list…', desc: '视角书签（缩略图+平滑跳转，Shift+数字）', example: 'view save 口袋' },
+  { cmd: 'tour [id]|stop', desc: '引导式演示场景（逐步自动操作）', example: 'tour quickstart' },
   { cmd: 'count_atoms [expr]', desc: '统计原子数', example: 'count_atoms chain A' },
   { cmd: 'spin on|off', desc: '自动旋转', example: 'spin on' },
   { cmd: 'rock on|off', desc: '相机摇摆（±26°）', example: 'rock on' },
@@ -379,6 +382,23 @@ export function runCommand(raw: string): void {
     if (!target) return err(`找不到书签「${arg}」——view list 查看现有书签`)
     vs.restoreBookmark(target.id)
     return ok(`已跳转到视角书签「${target.name}」`)
+  }
+
+  if (cmd === 'tour' || cmd === 'demo') {
+    const sub = (parts[1] ?? '').toLowerCase()
+    if (sub === 'stop' || sub === 'exit' || sub === 'quit') {
+      useTourStore.getState().stop()
+      return ok('演示已结束')
+    }
+    if (!sub || sub === 'list' || sub === 'ls') {
+      ok('引导式演示场景（逐步讲解 + 自动执行，←/→ 切换、Esc 结束）：')
+      for (const t of TOURS) ok(`  ${t.id.padEnd(14)} ${t.title}（${t.steps.length} 步 · ≈${t.minutes} 分钟）`)
+      return ok('启动：tour <id>，如 tour quickstart；工具栏「演示」菜单同样可启动')
+    }
+    const t = findTour(sub)
+    if (!t) return err(`未知演示「${sub}」——tour 查看可用场景`)
+    void useTourStore.getState().start(t.id)
+    return ok(`▶ 开始演示「${t.title}」——顶部引导卡片亮起，按 → 键继续`)
   }
 
   if (cmd === 'count_atoms' || cmd === 'count') {

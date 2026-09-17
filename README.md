@@ -32,7 +32,8 @@
 | 👓 **Red-blue stereo** | Anaglyph stereo rendering (three.js AnaglyphEffect) — toolbar 👓 button or `stereo on`; wear red/cyan glasses for true depth |
 | 🧰 **Object workflow** | PyMOL `create` / `split_chains` / `save`: promote any selection to an independent object (`create pocket = within 5 of resn HEM`), split a structure into per-chain-segment objects, export coordinates as PDB files (`save model.pdb chain A`) — created objects auto-register into session persistence |
 | 🎛️ **Lighting & rendering controls** | Ambient / key / fill light intensity sliders, specular (gloss) toggle for matte publication-style rendering, `set ambient 0.5` · `set direct 2` · `set specular off` · `set fov 30` · `set quality high` · `set transparency 0.5` · `set stick_radius 0.2` |
-| 🧭 **View control & bookmarks** | PyMOL `orient` (PCA principal-axis alignment), `get_view` / `set_view` camera JSON export/import, `png 4` high-res export, `count_atoms`, plus **view bookmarks**: save the current camera as a thumbnail card (`V` key or the right-edge bar), jump back with a smooth eased 650 ms transition (`Shift+1–9` / click / `view 2`), rename by double-click — persisted independently in localStorage, surviving reloads and structure clears |
+| 🧭 **View control & bookmarks** | PyMOL `orient` (PCA principal-axis alignment), `get_view` / `set_view` camera JSON export/import, `png 4` high-res export, `count_atoms`, plus **view bookmarks**: save the current camera as a thumbnail card (`V` key or the right-edge bar), jump back with a smooth eased 650 ms transition (`Shift+1–9` / click / `view 2`), rename by double-click — persisted independently in localStorage, surviving reloads and structure clears; **bookmarks travel inside exported `.molvision` session files** |
+| 🎓 **Guided demo tours** | Five scripted, hands-on tutorials that drive the app for you — each step explains the science, executes the real commands (echoed in the console) and shows a copyable command chip: **Quickstart** (hemoglobin: load → cartoon → chain coloring → heme pocket → H-bonds), **Drug target** (SARS-CoV-2 Mpro + N3 inhibitor: pocket → dimer interface → ΔSASA), **Crystallography** (putty tubes → live Fo−Fc difference map → dual-σ), **NMR dynamics** (ensemble playback + camera rock) and **Nucleic acids** (B-DNA: grooves → Watson–Crick H-bonds → nucleic putty). Launch from the toolbar 🎓 menu, the empty-state card or `tour quickstart`; `←/→` steps, `Esc` exits; steps are idempotent so tours are safely re-runnable |
 | 📐 **Adaptive isosurface caps** | Difference-map isosurfaces at low σ can exceed default triangle budgets (e.g. 3EKJ negative face ≈ 356 k tris at 2σ) — marching-cubes retries at a higher cap (mesh ×8, surface ×2) so practical σ ranges render **completely un-truncated**, while extreme noise-level σ (<1.5σ) is honestly flagged instead of silently missing chunks |
 | 🎨 **util.\* coloring** | `util cbc` (by chain) · `util cnc` (grey) · `util ss` (secondary structure) · `util cbaw` / `util cbac` (elements with white/grey carbons — publication look on white background) |
 
@@ -72,7 +73,7 @@ interface A B · interface chain A chain B · contacts chain A | chain B 4.0 · 
 xcontacts 1ubq:chain A | 1d3z:chain A 5.0 · sasa 1.4 256 · color sasa · bsa · untransform 1d3z
 map fetch 3ekj · map fofc 3ekj · map isolevel 1.5 · map isolevel pos 3 / neg 2.5 · map mesh · symmetry 20 · symmetry off
 create pocket = within 5 of resn HEM · split_chains · save model.pdb chain A
-orient chain A · get_view · png 4 · count_atoms chain A
+orient chain A · get_view · png 4 · count_atoms chain A · tour quickstart · tour stop
 set ambient 0.5 · set specular off · set fov 30 · stereo on · util cbaw
 ```
 
@@ -95,7 +96,7 @@ set ambient 0.5 · set specular off · set fov 30 · stereo on · util cbaw
 ### Session persistence & `.molvision` files
 Structures, representations, colors, settings, **superposition transforms**, camera orientation and **electron-density-map state** (SF source, σ levels incl. independent positive/negative, mode, colors — recomputed automatically in the Worker on reload) are auto-saved to localStorage (debounced) and restored on reload — no work lost. Manage with `session save / info / clear`.
 
-Full sessions can also be **exported as `.molvision` files** (complete structure sources + view state) and re-imported on any device — Scene panel → Session → Export/Import.
+Full sessions can also be **exported as `.molvision` files** (complete structure sources + view state + view bookmarks) and re-imported on any device — Scene panel → Session → Export/Import; imported files replace the current bookmarks when the file carries them.
 
 ![NMR ensemble animation](public/screenshots/ensemble.png)
 
@@ -123,10 +124,14 @@ Full sessions can also be **exported as `.molvision` files** (complete structure
 
 ![View bookmarks with thumbnails + Fo−Fc difference map](public/screenshots/viewbookmarks.png)
 
+![Guided tour: crystallography — putty + Fo−Fc difference map + step card](public/screenshots/guided-tour.png)
+
+![One-click empty state: example chips + guided-tour entry](public/screenshots/empty-state.png)
+
 ![GTAO ambient occlusion](public/screenshots/ssao.png)
 
 ## ⌨️ Shortcuts
-`1-8` presets (`8` = putty B-factor tubes, protein + nucleic) · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `V` save view bookmark · `Shift+1-9` jump to bookmark · `` ` `` console · `Esc` exit mode/clear · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
+`1-8` presets (`8` = putty B-factor tubes, protein + nucleic) · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `V` save view bookmark · `Shift+1-9` jump to bookmark · `→/←` tour step (during a demo) · `` ` `` console · `Esc` exit mode/clear/end tour · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
 
 ## 🚀 Quick start
 
@@ -153,7 +158,8 @@ src/lib/molecular/   parser (PDB/mmCIF/CRYST1) · chemistry data · selection en
                      color schemes · representations · renderer engine · store ·
                      commands · DSSP · contacts · superpose · hbonds (worker) ·
                      sasa + ΔSASA (worker) · sffourier (2Fo−Fc FFT) · ccp4 (map reader) ·
-                     marching-cubes · symmetry (65 space groups) · pdbwriter · map-load
+                     marching-cubes · symmetry (65 space groups) · pdbwriter · map-load ·
+                     tours (guided demo scenarios) · views-store (camera bookmarks)
 src/components/
   molecular/         WebGL viewport wrapper (picking, hover, context menu, shortcuts)
   studio/            toolbar · panels (structures/reps/colors/selection/measure/analysis/maps/scene/info) ·

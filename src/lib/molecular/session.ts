@@ -7,6 +7,7 @@ import { textRegistry } from './text-registry'
 import { applyRigidTransform } from './superpose'
 import { useMapStore } from './map-store'
 import { fetchAndComputeMap } from './map-load'
+import { useViewsStore, type ViewBookmark } from './views-store'
 
 const KEY = 'molvision-session-v1'
 /** 文本总预算（localStorage 通常 5MB） */
@@ -35,6 +36,8 @@ interface SessionData {
   namedSelections: { name: string; structureIndex: number; expr: string | null; indices: number[] | null; count: number }[]
   /** SF 计算的密度图设置（恢复时自动重拉结构因子 + Worker 重算；文件来源不入档） */
   map?: SessionMap
+  /** 视角书签（仅 .molvision 文件导出/导入携带；本地存档走独立 localStorage 键） */
+  views?: ViewBookmark[]
 }
 
 interface SessionMap {
@@ -249,7 +252,7 @@ function timestampName(): string {
   return `molvision-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.molvision`
 }
 
-/** 导出当前会话为 .molvision 文件（含结构源文本/表示法/设置/相机/命名选择） */
+/** 导出当前会话为 .molvision 文件（含结构源文本/表示法/设置/相机/命名选择/视角书签） */
 export function exportSessionFile(): boolean {
   saveSession()
   let raw: string | null = null
@@ -258,7 +261,15 @@ export function exportSessionFile(): boolean {
   let data: SessionData
   try { data = JSON.parse(raw) as SessionData } catch { return false }
   if (!data.structures?.length) return false
-  const withFormat = { format: SESSION_FILE_FORMAT, ...data }
+  // 视角书签随文件携带（首次访问时确保已从 localStorage 装载）
+  const vs = useViewsStore.getState()
+  if (!vs.hydrated) vs.hydrate()
+  const views = useViewsStore.getState().bookmarks
+  const withFormat = {
+    format: SESSION_FILE_FORMAT,
+    ...data,
+    ...(views.length ? { views } : {}),
+  }
   const blob = new Blob([JSON.stringify(withFormat)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -288,7 +299,15 @@ export async function importSessionFile(file: File): Promise<number> {
   const store = useMolStore.getState()
   for (const st of [...store.structures]) store.removeStructure(st.id)
   try { localStorage.setItem(KEY, JSON.stringify({ ...data, format: undefined, savedAt: Date.now() })) } catch { /* ignore */ }
-  return restoreSession()
+  const restored = restoreSession()
+  // 视角书签：文件携带则替换，未携带则保留本地现有书签
+  if (Array.isArray(data.views)) {
+    const n = useViewsStore.getState().importBookmarks(data.views)
+    if (n > 0) {
+      useMolStore.getState().appendLog('out', `已导入 ${n} 个视角书签（来自会话文件）`)
+    }
+  }
+  return restored
 }
 
 /** 供命令行/调试 */

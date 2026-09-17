@@ -1,7 +1,7 @@
 'use client'
 
 // 帮助对话框：快捷键、鼠标操作、快速上手
-import { MousePointer2, Keyboard, Lightbulb, FlaskConical, Wand2 } from 'lucide-react'
+import { MousePointer2, Keyboard, Lightbulb, FlaskConical, Wand2, GraduationCap } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -20,8 +20,9 @@ const SHORTCUTS: [string, string][] = [
   ['L', '为当前选择添加原子标注'],
   ['V', '保存当前视角为书签（带缩略图）'],
   ['Shift + 1-9', '平滑跳转到视角书签'],
+  ['→ / ←', '演示引导中：下一步 / 上一步'],
   ['` / ~', '打开/关闭命令行'],
-  ['Esc', '退出测量模式 / 清除选择'],
+  ['Esc', '退出测量模式 / 清除选择 / 结束演示'],
   ['Delete', '清除当前选择'],
 ]
 
@@ -55,12 +56,16 @@ export function HelpDialog() {
               <Lightbulb className="h-3.5 w-3.5 text-amber-500" /> 快速上手
             </h3>
             <ol className="ml-4 list-decimal space-y-1 text-xs leading-relaxed text-muted-foreground">
-              <li>顶部输入 PDB 编号（如 <code className="rounded bg-muted px-1 font-mono">4HHB</code>）加载结构，或拖入本地文件</li>
+              <li>顶部输入 PDB 编号（如 <code className="rounded bg-muted px-1 font-mono">4HHB</code>）加载结构，或拖入本地文件；空状态下也可点击一键示例</li>
               <li>用「风格预设」一键切换 Cartoon / 球棍 / 空间填充 / 表面</li>
               <li>点击 3D 视图中的残基进行选择，在左侧面板调颜色与表示法</li>
               <li>工具栏切换测量模式，点击原子测量距离 / 角度 / 二面角</li>
               <li>按 <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">`</kbd> 打开命令行，像 PyMOL 一样工作</li>
             </ol>
+            <p className="mt-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-2 text-[11px] leading-relaxed text-violet-700 dark:text-violet-300">
+              <GraduationCap className="mr-1 inline h-3.5 w-3.5 -translate-y-px" />
+              初次使用？工具栏「演示」菜单提供 5 个引导式场景（快速上手 / 药物靶点 / 晶体学验证 / NMR 动力学 / 核酸），逐步自动操作并讲解，或命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">tour quickstart</code>。
+            </p>
           </section>
 
           <Separator />
@@ -102,7 +107,7 @@ export function HelpDialog() {
               <FlaskConical className="h-3.5 w-3.5 text-violet-500" /> 结构分析与晶体学
             </h3>
             <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
-              <p><span className="font-semibold text-foreground">视角书签</span>：快捷键 <code className="rounded bg-muted px-1 font-mono text-[10px]">V</code> 或视口右缘「保存视角」把当前相机状态存为书签（带视口缩略图），<code className="rounded bg-muted px-1 font-mono text-[10px]">Shift+数字</code> / 点击缩略图平滑过渡跳转；命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">view save 口袋</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view 2</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view del 2</code>；书签独立持久化（清空结构不清空，刷新后仍在），双击名称可重命名。</p>
+              <p><span className="font-semibold text-foreground">视角书签</span>：快捷键 <code className="rounded bg-muted px-1 font-mono text-[10px]">V</code> 或视口右缘「保存视角」把当前相机状态存为书签（带视口缩略图），<code className="rounded bg-muted px-1 font-mono text-[10px]">Shift+数字</code> / 点击缩略图平滑过渡跳转；命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">view save 口袋</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view 2</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view del 2</code>；书签独立持久化（清空结构不清空，刷新后仍在），双击名称可重命名，导出 .molvision 会话文件时随文件携带（导入自动还原）。</p>
               <p><span className="font-semibold text-foreground">叠合</span>：结构卡片 ⧉ 按钮或「叠合 (matchmaker)」面板，支持手动指定链对（<code className="rounded bg-muted px-1 font-mono text-[10px]">superpose 4HHB onto 1A3N chain A to A</code>）；<code className="rounded bg-muted px-1 font-mono text-[10px]">untransform</code> 撤销。</p>
               <p><span className="font-semibold text-foreground">电子密度</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">map fetch 3ekj</code> 从 RCSB 结构因子实时合成 2Fo−Fc 图（模型相位 + 3D FFT，Web Worker 零阻塞）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map fofc 3ekj</code> 合成 Fo−Fc 差图（正绿/负红双等值面：绿峰=密度有而模型缺、红峰=模型有而密度无）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel 1.5</code> 同时调正负峰，差图可 <code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel pos 3 / neg 2.5</code> 独立调级（面板双滑块同效）；也可拖入 .ccp4/.mrc 文件；密度图面板（左侧 🧮）可视化等值面/网格；σ/模式/颜色随会话保存，刷新自动重算恢复。</p>
               <p><span className="font-semibold text-foreground">B 因子分析</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">preset putty</code> 或快捷键 8——Putty 管径随 B 因子连续变化（粗=柔性/高 B、细=刚性/低 B）配 B 因子彩虹渐变，蛋白（CA）与核酸（磷酸骨架）统一映射；<code className="rounded bg-muted px-1 font-mono text-[10px]">color bfactor</code> 同款色标；视口左下角自动显示颜色标尺图例（B 值→颜色→管径三联映射）。</p>

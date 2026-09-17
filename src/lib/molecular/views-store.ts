@@ -40,6 +40,8 @@ interface ViewsState {
   removeBookmark: (idOrIndex: string | number) => boolean
   renameBookmark: (id: string, name: string) => void
   clearBookmarks: () => void
+  /** 从会话文件导入书签（替换当前全部，校验+截断；返回导入数） */
+  importBookmarks: (list: unknown) => number
 }
 
 /** localStorage → 书签数组（容错：字段校验失败的条目丢弃） */
@@ -51,23 +53,30 @@ function loadBookmarks(): ViewBookmark[] {
     if (!Array.isArray(arr)) return []
     const out: ViewBookmark[] = []
     for (const x of arr) {
-      const b = x as Partial<ViewBookmark> & { camera?: Partial<ViewCamera> }
-      if (typeof b?.id !== 'string' || typeof b?.name !== 'string' || typeof b?.createdAt !== 'number') continue
-      const c = b.camera
-      if (
-        !c || !Array.isArray(c.pos) || c.pos.length !== 3 || !Array.isArray(c.target) || c.target.length !== 3 ||
-        !Array.isArray(c.up) || c.up.length !== 3 || typeof c.fov !== 'number' || typeof c.ortho !== 'boolean'
-      ) continue
-      out.push({
-        id: b.id, name: b.name, createdAt: b.createdAt,
-        thumb: typeof b.thumb === 'string' ? b.thumb : null,
-        camera: { pos: c.pos as [number, number, number], target: c.target as [number, number, number], up: c.up as [number, number, number], fov: c.fov, ortho: c.ortho },
-      })
+      const b = validBookmark(x)
+      if (!b) continue
+      out.push(b)
       if (out.length >= MAX_BOOKMARKS) break
     }
     return out
   } catch {
     return []
+  }
+}
+
+/** 单条书签字段校验（会话导入与 localStorage 装载共用） */
+function validBookmark(x: unknown): ViewBookmark | null {
+  const b = x as Partial<ViewBookmark> & { camera?: Partial<ViewCamera> }
+  if (typeof b?.id !== 'string' || typeof b?.name !== 'string' || typeof b?.createdAt !== 'number') return null
+  const c = b.camera
+  if (
+    !c || !Array.isArray(c.pos) || c.pos.length !== 3 || !Array.isArray(c.target) || c.target.length !== 3 ||
+    !Array.isArray(c.up) || c.up.length !== 3 || typeof c.fov !== 'number' || typeof c.ortho !== 'boolean'
+  ) return null
+  return {
+    id: b.id, name: b.name, createdAt: b.createdAt,
+    thumb: typeof b.thumb === 'string' ? b.thumb : null,
+    camera: { pos: c.pos as [number, number, number], target: c.target as [number, number, number], up: c.up as [number, number, number], fov: c.fov, ortho: c.ortho },
   }
 }
 
@@ -175,5 +184,19 @@ export const useViewsStore = create<ViewsState>((set, get) => ({
   clearBookmarks: () => {
     try { localStorage.removeItem(KEY) } catch { /* ignore */ }
     set({ bookmarks: [] })
+  },
+
+  importBookmarks: list => {
+    if (!Array.isArray(list)) return 0
+    const bookmarks: ViewBookmark[] = []
+    for (const x of list) {
+      const b = validBookmark(x)
+      if (!b) continue
+      bookmarks.push(b)
+      if (bookmarks.length >= MAX_BOOKMARKS) break
+    }
+    persist(bookmarks)
+    set({ bookmarks, hydrated: true })
+    return bookmarks.length
   },
 }))

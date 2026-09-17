@@ -627,3 +627,44 @@ Stage Summary:
 - 关键决策：①书签独立于结构会话存档（清空结构不清空书签，相机状态轻量跨会话保值）②相机动画插值 pos/target/fov 而 up 结尾落位（避免中途翻转）③噪声级低 σ（<1.5σ 需 >60 万三角形）诚实标记截断而非无限追高内存
 - 未解决问题与风险：①书签未纳入 .molvision 会话文件导出/导入（localStorage 独立键，跨设备需手动 get_view JSON）②V 键在 IME 中文输入法下可能被吞（keydwon code 兜底已尽力）③极端低 σ 差图负面仍截断（by design）④putty 核酸链颜色图例未区分 P 原子与 CA 原子来源（共享同一色标）
 - 下一阶段建议（优先级序）：① 抗体-抗原复合物演示场景（superpose→xcontacts→bsa→差图全链路一条龙，feat-r11 遗留）② 书签纳入 .molvision 导出/导入 ③ 跨结构 ΔSASA（maskA/maskB 已就绪）④ 氢键/SASA/contacts/map 统一 Worker 池 ⑤ 图例卡集成 σ 滑块（VLM 评审建议）
+---
+Task ID: feat-r14
+Agent: main
+Task: 下一阶段开发 + UI 打磨：引导式演示场景（Guided Tours）、视角书签纳入 .molvision 会话文件、空状态一键上手
+
+Work Log:
+- 读取 worklog（feat-r13 完成视角书签/核酸 putty/自适应等值面上限）；git 工作区干净（r13 已提交）；QA 冒烟 dev server 200 正常
+- 【功能 A：引导式演示场景系统——本轮主特性】
+  - 新建 src/lib/molecular/tours.ts：5 个演示场景（quickstart 快速上手·4HHB 血红蛋白 / drug-target 药物靶点·6LU7 Mpro+N3 / crystallography 晶体学验证·3EKJ putty+Fo−Fc 差图 / nmr-dynamics NMR 动力学·1D3Z 系综 / nucleic 核酸·1BNA DNA）
+  - 幂等设计：ensureLoaded 查重（已加载结构仅激活不重复加载——QA 实证 quickstart 重启无重复「已加载 4HHB」日志）；show 前先 hide；map 步骤 waitForMap 等待 Worker 完成（60s 超时兜底）
+  - 步骤动作走 runCommand（动态 import 避免 commands ↔ tours 循环依赖）——控制台留下教学回显；TourStep { title, body, cmd?, run? }，cmd 渲染为可复制 chip
+  - 新建 tour-store.ts（zustand）：start/go/next/prev/stop + busy 标志（异步步骤执行中禁用下一步防竞态）；prev 仅回看文案不重跑动作
+  - 新组件 TourOverlay.tsx：视口顶部居中浮层——accent 顶条渐变（5 色 emerald/rose/amber/teal/violet）+ 图标（FlaskConical/Pill/Layers/Waves/Dna）+ 步骤 x/y + 可点击进度段（跳步）+ 命令 chip（点击复制，key=stepIdx 挂载自动重置）+ 上一步/下一步/完成；挂载入场动画用纯 CSS（globals.css tour-in keyframes——React 新 lint 规则禁 effect 内 setState，transition+state 方案被拒绝后重构）
+  - Toolbar 新增「演示」下拉（GraduationCap 图标，accent 圆点 + 标题 + tagline + 步数/时长）；MolViewer 渲染 TourOverlay + 快捷键接管（←/→ 切换、Esc 结束——输入框聚焦时优先 INPUT 早退不误触）
+  - 命令行 tour 命令：tour 列表 / tour <id> 启动 / tour stop 结束；COMMAND_HELP 新条目
+- 【功能 B：视角书签纳入 .molvision 会话导出/导入】
+  - views-store：loadBookmarks 内联校验抽取为 validBookmark（共用于 localStorage 装载与会话导入）；新增 importBookmarks(list)（校验+截断至 12+persist+hydrated 标记）
+  - session.ts：SessionData.views? 字段；exportSessionFile 导出前确保 views-store hydrated 并嵌入当前书签（含 JPEG 缩略图）；importSessionFile 文件携带 views 时替换本地书签并输出「已导入 N 个视角书签」日志，未携带则保留本地
+- 【功能 C：空状态打磨】
+  - EmptyHint：新增 4 个一键示例 chip（4HHB/1BNA/6LU7/1D3Z，id + 中文提示，emerald hover）+「跟随演示上手」按钮（violet 主题，直启 quickstart）+ 引导说明行；容器加 overflow-y-auto + my-auto（小屏滚动不裁切）
+- 【文档】
+  - HelpDialog：快速上手补 violet 提示卡（5 演示场景 + tour 命令）；SHORTCUTS 增 →/←（演示引导中）与 Esc 补「结束演示」；视角书签段落补 .molvision 随文件携带说明
+  - README：Highlights 新增 🎓 Guided demo tours 行（5 场景详解 + 幂等说明）；View control 行补 bookmarks travel；会话段落补书签；命令示例补 tour quickstart · tour stop；Shortcuts 补 →/← 与 Esc；结构树补 tours/views-store；画廊 +2 截图（guided-tour.png / empty-state.png）
+- 【QA 全量验证（agent-browser 真实交互 + VLM）】
+  - QA 方法论：①Radix DropdownMenu 触发必须真实 click（@ref）——合成 el.click() 缺 pointerdown 打不开菜单 ②控制台输注入要用 placeholder 定位（场景面板的隐藏 file input 会抢占 querySelector('input')）③beforeunload 自动存档会让 localStorage.removeItem+reload 失效，清场景要走应用自身 clear 命令
+  - 空状态：clear + session clear 后 EmptyHint 渲染（标题/4 chips/跟随演示按钮）✓
+  - quickstart 全流程：空状态按钮启动 → 引导卡 1/6 → 4HHB 加载（4,779 原子）→ → 键逐步推进（控制台聚焦时 INPUT 早退保护验证 ✓）→ 步骤 4 口袋选择「已选 907 原子」（与既有 QA 基准一致）→ hbonds 徽章 ✓ → 「完成」结束卡片消失 ✓
+  - tour 命令：tour 列表 5 场景 + tour nucleic 启动（1BNA 566 原子）→ 推进至 putty 步骤（图例卡出现 ✓）→ Esc 结束 ✓
+  - crystallography（菜单真实点击路径）：3EKJ 加载 → putty → 步骤 3 差图计算 busy 状态（下一步禁用 +「执行中」）→ Worker ~28s 完成自动解锁 → 步骤 4 σ 调节（状态栏 +3.0/−2.5σ 徽章 ✓）
+  - 幂等性：quickstart 二次启动无重复加载日志 ✓；会话导入替换模式 ✓
+  - .molvision 书签往返：V 保存（localStorage 1 条带缩略图）→ 场景面板导出（download 命令，650KB 文件含 views 数组 ✓）→ 文件内改名「口袋视角-导入测试」+ view del 1 清空本地 → upload 命令导入 → 书签还原（改名生效 + 缩略图在）+「已导入 1 个视角书签」日志 ✓
+  - 移动端 390px：演示菜单 5 项正常 → quickstart 卡片 12→378px 无溢出（动画期间测量偏差已排除）✓
+  - HelpDialog：violet 演示提示卡 + →/← 快捷键行 + 书签导出说明 ✓
+  - VLM 评审 hero 截图（putty+差图+引导卡+图例）9/10（「晶体学专业性极高…完全达到商业或高水平科研软件的演示标准」）
+  - 回归：浏览器 errors 空 ✓；lint 0 错 0 警 ✓；tsc 新文件零错误（20 行预存错误均在旧 worker/superpose/examples）✓；dev.log 无运行时错误（仅 API 200）✓
+
+Stage Summary:
+- 项目当前状态：feat-r13 基础上补齐「可教学性/开箱体验」层——①引导式演示场景系统（5 个脚本化场景 × 幂等步骤 × 顶部引导卡 × 键盘/菜单/命令行三入口）②视角书签随 .molvision 文件跨设备迁移 ③空状态一键上手（4 示例 chips + 演示直启）
+- 关键决策：①步骤幂等（查重加载/hide-then-show/map 就绪等待）保证演示可安全重放 ②命令走 runCommand 教学回显 + 动态 import 规避循环依赖 ③挂载动画用 CSS keyframes 绕开 React 新 lint 规则（effect 内 setState 禁令）④书签只在文件导出/导入时嵌入，localStorage 本地存档仍走独立键（不占会话文本预算）
+- 未解决问题与风险：①tour crystallography 的 map 步骤会重新计算差图（命令语义如此，即使已有同参数图——可优化为先查镜像匹配则跳过）②演示中用户手动操作可能与步骤动作交叠（无锁，by design 自由探索）③VLM 建议未采纳：等值面实体感增强（已有 surface 模式）
+- 下一阶段建议（优先级序）：① 抗体-抗原复合物 demo 场景（superpose→xcontacts→bsa→差图一条龙，feat-r11 起遗留；现有 tour 系统可低成本接入第 6 个场景）② 跨结构 ΔSASA（maskA/maskB 已就绪）③ 氢键/SASA/contacts/map 统一 Worker 池 ④ map 步骤跳过已有计算（镜像参数匹配）⑤ 图例卡集成 σ 滑块
