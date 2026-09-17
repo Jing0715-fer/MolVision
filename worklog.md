@@ -285,3 +285,50 @@ Stage Summary:
 - 本轮目标全部达成：QA 冒烟零错误、DSSP（含 2 轮算法调试：H 放置几何 + 交替桥接判据）、contacts 全链路、变换持久化（含 3 个连环 bug 修复）、README/截图/VLM 验证、lint 全绿、已推送 GitHub
 - 未解决问题与风险：①DSSP 的 flanked 判据在极端扭曲折叠片上可能轻微过度指认（1UBQ residue 66 被误标 H）——对 cartoon 渲染无感知影响；②接触分析仅支持活动结构内两组选择间的检测，跨结构接触（复合物对接界面）未实现（Roadmap 已列）；③DSSP 在超大结构（核糖体级 >2 万残基）上解析时同步计算约百毫秒级（4HHB 118ms 可接受）；④叠合变换无法在 UI 中重置（reparse 才能回原位）；⑤agent-browser errors 空条目伪迹依旧（无实际影响）
 - 下一阶段建议（优先级序）：① 跨结构接触分析（superpose 后的复合物界面检测）；② SASA 溶剂可及面积计算 + 界面 ΔSASA 埋藏面积（科学价值大，可与 contacts 面板整合）；③ 叠合变换重置命令/UI（reset superpose）；④ 多链迭代叠合（matchmaker 完整版）；⑤ 氢键/接触检测合并入统一 Web Worker 池；⑥ 大结构 LOD/实例化预算
+---
+Task ID: cron-r7
+Agent: main
+Task: 周期评审——QA 冒烟 + SASA 溶剂可及面积 + 界面 ΔSASA 埋藏分析 + 叠合重置 + 2 个 bug 修复
+
+Work Log:
+- 读取 worklog（cron-r6 完成 DSSP/contacts/变换持久化）；dev server 全绿；git 工作区干净（f6ec95b 为 worklog 自动同步提交）
+- QA 冒烟：会话恢复 3 结构（1UBQ/1D3Z/4HHB）✓、渲染 7,012 独特色彩 ✓、select name CA → 574 ✓、superpose 1UBQ onto 1D3Z → RMSD 0.521 Å（与 cron-r5 基准一致）✓、dssp → 4HHB 螺旋 462 ✓、零真实错误——稳定，进入新功能开发
+- 新功能 A【SASA 溶剂可及面积（对标 FreeSASA / ChimeraX measure area）】：
+  - 新建 src/lib/molecular/sasa.ts：Shrake–Rupley 算法——Fibonacci 球面采样（module 级缓存）、vdW 半径表（ProtOr/Bondi 混合，含金属离子）、带掩码核心 computeSasaMasked（active/occluder 双掩码语义，支持 ΔSASA 三路复用）、空间网格粗筛（中心距 > rExt+rj 剪枝）、computeSasa 全结构封装、sasaStats 统计（总/疏水/极性/水配体 + 残基聚合）、computeBuriedSasa 三路 ΔSASA（A alone / B alone / AB，核心界面残基 ΔSASA > 1 Å² PDB 标准判据）
+  - 新建 sasa-worker.ts（自包含，与 hbond-worker 同构）：full（per-atom）与 buried（三路 → delta per-atom）两种 kind，transfer 零拷贝回传
+  - 新建 sasa-store.ts（轻量 zustand）：computing/统计/topResidues/buried 结果
+  - engine.ts：sasaWorker 懒建 + pending 去重 + 过期丢弃；requestSasa（<2200 原子同步，≥2200 worker）；requestBuriedSasa（<900 同步，≥900 worker）；applySasaResult（Top-12 暴露残基 + 有 sasa 着色 rep 时 bump rev 重建）；worker 完成路径 appendLog 输出统计；结构移除/dispose 清理
+  - parser.ts StructureData 加可选 sasa?: Float32Array（运行时缓存，分析后填充）
+  - colors.ts：ColorScheme 加 'sasa'（溶剂可及）——原子暴露分数 = sasa/(4π(r+probe)²)，4 段渐变埋藏蓝紫 #2e4a8f → 青 #4fa3c7 → 黄 #f2d74c → 橙红 #e0563d；无数据灰色兜底
+  - AnalysisPanel「溶剂可及面积 (SASA)」区块：probe 滑块（0.8-2.0Å）+ 采样点选择（64/92/128/256）+ 计算/着色按钮 + 4 统计卡 + 疏水/极性/水配体占比条 + Top 暴露残基列表（条形图 + 点击选择，mol-scroll max-h-40）
+  - commands：sasa [probe] [点数]（clamp 0.8-2.0 / 32-512）+ bsa（buried 别名）+ COMMAND_HELP 更新
+  - StatusBar SASA 徽章（青色系，计算中 spinner）
+- 新功能 B【界面埋藏面积 ΔSASA/BSA】：
+  - contacts.ts 加 runBuriedSasa 运行器（对 contacts A/B 表达式求值掩码 → engine.requestBuriedSasa，面板/命令行共用）
+  - AnalysisPanel 接触结果下紫色「界面埋藏面积 (ΔSASA)」卡片：A/B/合计统计 + 核心残基计数 + 一键选择核心界面残基（比距离截断判据更准）
+  - 命令 bsa 输出：合计/A/B/核心残基/耗时
+- 新功能 C【叠合重置 untransform】：
+  - engine.resetTransform：读 entry.transform → 四元数求逆 + 平移逆变换 → applyRigidTransform（ensemble 帧/网格/bbox 同步）→ 清除 transform + bump rev 重建
+  - commands：untransform [名]（前缀匹配/PDB ID 匹配/默认活动结构）；StructuresPanel 有 transform 的卡片显示 ↩（Undo2）按钮 + toast
+- 【QA 期间发现并修复 bug 1】color sasa 静默无操作：store.applyColor 的 scheme 白名单硬编码不含 'sasa' → parseCssColor('sasa')=null → 直接 return 但命令行谎报"已上色"（此前截图的"SASA 渐变像素"实为 spectrum 彩虹色域重叠假象，深蓝像素仅 191）。修复：白名单加 'sasa' + applyColor 内 sasa 无数据时自动补算（小结构同步直接烘焙；大结构 return 由命令行提示）；color 命令 sasa 分支提示"SASA 数据尚未就绪——已后台开始计算"。修复后验证：深蓝像素 191 → 15,418（真 SASA 渐变），colorOverrides 烘焙方式 reload 后颜色保留（361px 深蓝在恢复视角下检出）
+- 【QA 期间发现并修复 bug 2——会话存档空覆盖事故】localStorage 会话存档 structs:[] 空数组（页面内存 3 结构却存了空档，再刷新即全丢）。根因：HMR 模块替换（text-registry.ts 在 session.ts import 链上）后 textRegistry 重建为空 → 自动保存时全部结构 text 拿不到 → continue → structs:[] 正常写入（everHadStructures 保护只挡 structures==0，没挡 registry 脱节）。修复：saveSession 在 structs.length===0 && structures.length>0 时拒绝写入 + console.warn（保留旧档）。验证：手动触发 HMR 脱节场景 → spin on 触发自动保存 → 存档 3 结构完整保留（修复前会被空档覆盖）；session save 手动保存 3 结构完整文本（78K/1MB/474K）✓
+- 验证汇总：
+  - 4HHB（4779 原子）Worker 路径：SASA 总 24,087 Å² · 疏水 3,706 · 极性 14,680 · 285-408ms（球蛋白 ~40Å²/残基 × 574 残基 ≈ 23,000，科学合理）
+  - 1UBQ（660 原子）同步路径：256 点 51ms，总 5,736 Å²（泛素理论 4,800-5,500 吻合，含结晶水贡献 2,329）
+  - color sasa 渐变四段全部渲染（蓝 15,418/青 20,287/黄 27,057/橙 16,420 px，22,939 独特色彩）
+  - interface A B + bsa（4HHB Worker 路径）：α₁β₁ 界面埋藏合计 2,012 Å²（A 978 + B 1,035）· 核心残基 A 35 / B 34 · 501ms（PDB 标准界面典型 1,500-2,500 Å²，科学合理）
+  - 1UBQ 同步 bsa 66ms；A⊆B 掩码数学自洽（B 侧 delta=0）；空选择边界正确报错"选择为空（A: 660，B: 0）"
+  - untransform 1D3Z → "已重置 1D3Z 到原始位姿"，transform 清除（Undo 按钮消失，仅剩 1UBQ 的）
+  - Top 暴露残基：4HHB 的 D:LYS120(185Å²)/D:HIS2(168)/A:LYS90(164)——带电长侧链残基主导，科学合理
+  - VLM 确认：分析面板全部区块正常无重叠截断；SASA 着色"表面清晰蓝→青→黄→橙渐变层次，内部缝隙偏蓝紫，渲染质量优"
+  - 最终回归：会话恢复 3 结构 ✓、select 574 ✓、SASA 颜色持久化 ✓、agent-browser errors 仅 2 条已知空伪迹零真实新增
+  - bun run lint 0 错误 0 警告
+- README 更新：Highlights 加 SASA/ΔSASA/Superpose undo 三行、着色方案加 SASA、命令示例加 sasa/bsa/untransform、Interface analysis 小节加 ΔSASA 与 SASA panel 条目、Tech stack 双 Worker 与 Shrake-Rupley、Structure 加 sasa、Roadmap 移除已完成的 SASA burial analysis、新截图 public/screenshots/sasa.png（真 SASA 渐变版重拍）
+- git commit 6cbde6a → push origin main 成功
+
+Stage Summary:
+- 项目当前状态：在 6 表示法/7→8 着色/氢键/会话/ensemble/GTAO/叠合/DSSP/接触分析基础上，本轮新增 SASA 溶剂可及面积（Shrake-Rupley 算法级实现 + Web Worker + 暴露度着色 + Top 残基）与界面 ΔSASA 埋藏面积分析（三路计算 + PDB 标准核心残基判据 + 面板整合）两大科学分析功能，附带叠合重置；数值经科学合理性交叉验证（4HHB 24,087Å²、泛素 5,736Å²、血红蛋白界面 2,012Å² 均与文献典型值吻合）
+- 本轮修复 2 个 bug：①color sasa 静默无操作（applyColor 白名单遗漏，且此前像素验证被 spectrum 色域重叠误导）②会话存档空覆盖（HMR textRegistry 脱节 → 自动保存写空 structs，现拒绝写入保护旧档）
+- QA 方法论沉淀：①agent-browser eval 中 React 受控输入最可靠的方式是 focus + document.execCommand('selectAll')+('insertText') + dispatchEvent keydown Enter（valueTracker 重置法在本环境 keydown 不触发 React onKeyDown；原生 setter 跨 realm Illegal invocation）②agent-browser fill/focus/press 走 CDP 真实事件最稳 ③像素验证颜色渐变时注意 spectrum 彩虹与目标渐变的色域重叠假象（用特征色 #2e4a8f 深蓝做判别）④长 await 的 eval 会 CDP 超时（30s），多命令分段执行
+- 未解决问题与风险：①SASA 烘焙（colorOverrides）与 rep scheme 两条着色路径并存——color sasa 走烘焙（持久化友好但参数化弱），ColorPanel 下拉若选 sasa scheme 则依赖 data.sasa（reload 后需重算才显示渐变，有灰色兜底）；②大结构第一次 color sasa 需等 worker 完成后重跑一次（有提示但非全自动）③ΔSASA 的 b 侧掩码在 worker 结果回传后用 contacts residuesA 重建（命令行/面板路径一致，但若 contacts 结果先被清除则侧别判定退化到全 B 侧）④HMR 双跳竞态的精确时序未完全复现（修复为兜底保护，非根因消除——生产构建无 HMR 不受影响）⑤agent-browser errors 2 条空伪迹依旧
+- 下一阶段建议（优先级序）：① color sasa 全自动化（worker 完成回调自动烘焙，消除"再跑一次"提示）② 跨结构接触分析（superpose 后复合物界面检测，Roadmap 遗留）③ ColorPanel 的 sasa scheme 选中时自动触发计算 ④ 多链迭代叠合（matchmaker 完整版）⑤ ensemble 大结构矩阵直更性能优化 ⑥ 氢键/SASA/接触统一 Worker 池
