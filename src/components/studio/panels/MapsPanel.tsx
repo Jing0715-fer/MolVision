@@ -26,8 +26,9 @@ const KINDS: { key: MapKind; label: string; hint: string }[] = [
 
 /** σ 滑块节流 hook：等值面重建需重跑 marching cubes（裁剪网格 ~0.5-2s），
  *  拖动中至多每 250ms 重建一次，尾部值延时补发；drag 本地值让拇指即时跟手
- *  （setMapLook 同步更新镜像 store → 触发后立即清 drag 回落到镜像值，无需 effect 对账） */
-function useIsoThrottle(key: 'iso' | 'isoNeg') {
+ *  （setMapLook 同步更新镜像 store → 触发后立即清 drag 回落到镜像值，无需 effect 对账）
+ *  —— 面板与视口图例卡（MapLegend）共用 */
+export function useIsoThrottle(key: 'iso' | 'isoNeg') {
   const last = useRef(0)
   const timer = useRef<number | null>(null)
   const [drag, setDrag] = useState<number | null>(null)

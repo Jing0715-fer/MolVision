@@ -33,6 +33,7 @@ const MEASURE_MODES: { mode: MeasureMode; label: string; icon: typeof Ruler; hin
 
 const TOUR_DOT: Record<string, string> = {
   emerald: 'bg-emerald-500', rose: 'bg-rose-500', amber: 'bg-amber-500', teal: 'bg-teal-500', violet: 'bg-violet-500',
+  fuchsia: 'bg-fuchsia-500',
 }
 
 function TourDot({ accent }: { accent: string }) {

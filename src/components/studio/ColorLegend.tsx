@@ -77,7 +77,7 @@ export function ColorLegend() {
 
   return (
     <div
-      className="pointer-events-none absolute bottom-3 left-3 z-10 w-44 select-none rounded-lg border border-border/60 bg-card/85 p-2 shadow-lg backdrop-blur-sm"
+      className="pointer-events-none w-44 select-none rounded-lg border border-border/60 bg-card/85 p-2 shadow-lg backdrop-blur-sm"
       aria-label="颜色标尺图例"
     >
       <div className="mb-1 flex items-center justify-between">

@@ -13,6 +13,7 @@ import { structureToPdbText } from './pdbwriter'
 import { textRegistry } from './text-registry'
 import { evaluateSelection, maskToIndices } from './selection'
 import { fetchAndComputeMap, removeMap, setMapLook } from './map-load'
+import { useMapStore } from './map-store'
 import { MAX_BOOKMARKS, useViewsStore } from './views-store'
 import { useTourStore } from './tour-store'
 import { TOURS, findTour } from './tours'
@@ -54,6 +55,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'set <项> <值>', desc: '渲染设置（灯光/fov/质量…）', example: 'set ambient 0.5' },
   { cmd: 'bg <颜色>', desc: '设置背景色', example: 'bg black' },
   { cmd: 'zoom [sel]', desc: '缩放到选择/全部', example: 'zoom ligand' },
+  { cmd: 'activate <名|编号>', desc: '切换活动结构（多结构工作流）', example: 'activate 1BQL' },
   { cmd: 'orient [sel]', desc: '主轴对齐视角（PCA）', example: 'orient chain A' },
   { cmd: 'get_view / set_view', desc: '视角导出/恢复（JSON）', example: 'get_view' },
   { cmd: 'view save|go|del|list…', desc: '视角书签（缩略图+平滑跳转，Shift+数字）', example: 'view save 口袋' },
@@ -234,6 +236,23 @@ export function runCommand(raw: string): void {
     }
     engineRef.current?.fitView()
     return ok('缩放到全部结构')
+  }
+
+  if (cmd === 'activate' || cmd === 'use') {
+    const s = useMolStore.getState()
+    const nameArg = parts[1]
+    if (!nameArg) return err(`用法：activate <结构名或PDB编号>（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
+    const q = nameArg.toLowerCase()
+    const found = s.structures.find(x =>
+      x.name.toLowerCase() === q ||
+      x.name.toLowerCase().startsWith(q) ||
+      x.meta.pdbId?.toLowerCase() === q)
+    if (!found) return err(`未找到结构 "${nameArg}"（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
+    if (found.id !== s.activeId) {
+      useMolStore.getState().setActive(found.id)
+      return ok(`活动结构 → ${found.name}（show/hide/color/preset 等命令均作用于它）`)
+    }
+    return ok(`${found.name} 已是活动结构`)
   }
 
   if (cmd === 'spin') {
@@ -670,6 +689,15 @@ export function runCommand(raw: string): void {
     const isFofc = sub === 'fofc' || sub === 'diff' || sub === 'difference'
     if (sub === 'fetch' || sub === 'load' || sub === 'calc' || sub === 'compute' || isFofc) {
       const idArg = isFofc ? parts[2] : parts[2]
+      // 幂等：同编号同类型的图已加载且引擎图层仍在 → 跳过重新计算（演示可安全重放）。
+      // 引擎侧必须同时确认（Fast Refresh/引擎重建会丢图层而镜像残留——此时应走重算恢复）
+      const wantId = (idArg ?? useMolStore.getState().structures.find(x => x.id === useMolStore.getState().activeId)?.meta.pdbId ?? '').toUpperCase()
+      const wantKind = isFofc ? 'fofc' : '2fofc'
+      const cur = useMapStore.getState()
+      if (wantId && !cur.computing && engineRef.current?.getMapInfo() && cur.info?.source === 'sf' && cur.info.pdbId === wantId && cur.info.kind === wantKind) {
+        if (!cur.info.visible) setMapLook({ visible: true })
+        return ok(`密度图 ${wantId} ${isFofc ? 'Fo−Fc 差图' : '2Fo−Fc'} 已在场景中——跳过重复计算（map off 后可重新计算）`)
+      }
       if (idArg && /^[0-9][a-z0-9]{3}$/i.test(idArg)) {
         void fetchAndComputeMap(idArg, isFofc ? 'fofc' : '2fofc')
         return ok(isFofc
@@ -693,7 +721,8 @@ export function runCommand(raw: string): void {
       }
       const info = engineRef.current?.getMapInfo()
       if (isPos || isNeg) {
-        if (!info?.difference) return err('正/负峰独立级别仅适用于 Fo−Fc 差图（map fofc <编号>）')
+        if (!info) return err('未加载密度图（map fetch <编号> / map fofc <编号>）')
+        if (!info.difference) return err('正/负峰独立级别仅适用于 Fo−Fc 差图（map fofc <编号>）')
         setMapLook(isPos ? { iso: v } : { isoNeg: v })
         return ok(isPos
           ? `差图正峰（绿）等值面 → +${v} σ`

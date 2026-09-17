@@ -668,3 +668,39 @@ Stage Summary:
 - 关键决策：①步骤幂等（查重加载/hide-then-show/map 就绪等待）保证演示可安全重放 ②命令走 runCommand 教学回显 + 动态 import 规避循环依赖 ③挂载动画用 CSS keyframes 绕开 React 新 lint 规则（effect 内 setState 禁令）④书签只在文件导出/导入时嵌入，localStorage 本地存档仍走独立键（不占会话文本预算）
 - 未解决问题与风险：①tour crystallography 的 map 步骤会重新计算差图（命令语义如此，即使已有同参数图——可优化为先查镜像匹配则跳过）②演示中用户手动操作可能与步骤动作交叠（无锁，by design 自由探索）③VLM 建议未采纳：等值面实体感增强（已有 surface 模式）
 - 下一阶段建议（优先级序）：① 抗体-抗原复合物 demo 场景（superpose→xcontacts→bsa→差图一条龙，feat-r11 起遗留；现有 tour 系统可低成本接入第 6 个场景）② 跨结构 ΔSASA（maskA/maskB 已就绪）③ 氢键/SASA/contacts/map 统一 Worker 池 ④ map 步骤跳过已有计算（镜像参数匹配）⑤ 图例卡集成 σ 滑块
+---
+Task ID: feat-r15
+Agent: main
+Task: 下一阶段开发 + UI 打磨：第 6 个演示场景（抗体-抗原复合物一条龙）、视口内密度图 σ 控制卡、map 命令幂等跳过、activate 命令
+
+Work Log:
+- 读取 worklog（feat-r14 完成：引导式演示/书签随 .molvision 迁移/空状态一键上手）；git 工作区干净（r14 已提交）；dev server 因早前语法错误中断 → 重启恢复
+- 【功能 A：第 6 个演示场景「抗体-抗原 · 溶菌酶识别」——本轮主特性】
+  - tours.ts：TourIcon 增加 'puzzle'、TourAccent 增加 'fuchsia'；新场景 6 步（load 1BQL 复合物 → load 2LYZ 游离鸡溶菌酶 → superpose 2LYZ onto 1BQL chain A to Y + 游离抗原改棍状玫瑰色 → xcontacts 2LYZ:chain A | 1BQL:chain H or chain L 5.0 跨结构表位 → activate 1BQL + contacts chain Y | chain H or chain L 4.0 + bsa → 完成卡）
+  - 链事实核实（curl API）：1BQL 链 H(1607)/L(1635)/Y(998)，2LYZ 链 A(1001)；1BQL 2.6 Å、2LYZ 2.0 Å
+  - TourOverlay.tsx：Puzzle 图标 + fuchsia 强调色（icon/chip/bar/ring）；Toolbar TOUR_DOT 增加 fuchsia
+  - 步骤防误触：step 3 着色前 setSelection(null, []) 清遗留选区（applyColor 会优先作用于当前选区）
+- 【功能 B：视口内密度图 σ 控制卡（MapLegend.tsx 新组件）——VLM 评审遗留建议】
+  - 左下角图例列（MolViewer 重构：MapLegend + ColorLegend 组成 flex-col 容器，替代各自独立 absolute 定位；控制台打开时双双隐藏）
+  - 卡片内容：等值面颜色点 + 地图名 + Fo−Fc/2Fo−Fc/文件徽章 + 眼开关（隐藏时卡片降透明度 + 滑块禁用而非消失，可一键恢复）；差图正/负峰双滑块（绿/红 thumb 与 range 自定义 data-slot 任意变体着色）+ 常规图单滑块；网格/面/叠加模式片（aria-pressed）+ 三角形计数（截断 + 号）
+  - σ 滑块复用 MapsPanel 的 useIsoThrottle（导出共享：250ms 节流 + 尾部补发 + drag 本地跟手）
+- 【功能 C：map 幂等 + 引擎/镜像一致性加固】
+  - commands.ts map fetch/fofc 分支：镜像(pdbId+kind+source)与引擎图层双确认一致 → 跳过重算（演示可安全重放）；引擎丢图（Fast Refresh 重挂载）时走重算恢复而非死锁
+  - QA 中实际踩到并修复该缺陷：编辑 tours.ts 触发 Fast Refresh → MolViewer 重挂载引擎重建丢 mapLayer，而 zustand 镜像残留 → 旧幂等检查只信镜像导致用户无法重算；isolevel pos/neg 增加独立「未加载密度图」错误分支（原先误报「仅适用于差图」）
+- 【功能 D：activate 命令】
+  - `activate <名|PDB编号>`（别名 use）：按名称前缀/PDB 编号切换活动结构（show/hide/color/preset 作用对象）；COMMAND_HELP + HelpDialog 叠合段落同步
+- 【文档】README：Guided tours 5→6（抗体-抗原场景详解）；差图行补视口 σ 控制卡 + 幂等说明；命令示例补 activate 1bql；画廊 +2 截图（antibody-epitope.png / map-legend.png）；HelpDialog：演示场景数 6、电子密度段落补 σ 控制卡说明
+- 【QA 全量验证（agent-browser 真实交互 + VLM）】
+  - 抗体演示全流程：tour antibody 命令启动 → 6 步逐步推进（→ 键；blur 后生效——控制台聚焦时 INPUT 早退保护仍在）→ 1BQL 4,326 原子/2LYZ 1,102 原子加载 → 叠合 129 对 CA、RMSD 0.633 Å（跨物种表位保守的科学叙事成立）→ xcontacts 104 对跨结构接触（界面残基 2LYZ 33/1BQL 34）→ contacts 53 对（最近 Y:GLN41↔H:SER57 2.70 Å）+ bsa ΔSASA 合计 1,825 Å²（A 816 + B 1009，Worker 584 ms）→ 完成退出 ✓
+  - activate 3ekj：活动结构切换 + 提示语 ✓；map fofc 幂等跳过（引擎+镜像双确认）✓；引擎丢图恢复路径（重算 18,880 ms → 差图就绪）✓
+  - MapLegend：卡片渲染（2 滑块/3 模式片/Fo−Fc 徽章/376,070△/眼开关）✓；map isolevel pos 2 命令 → 卡片 +3.00→+2.00 + 三角形 172,470→376,070（marching cubes 实际重建）✓；模式片点击 面 激活 ✓；眼开关：卡片 dim + 滑块禁用 + 图标翻转 ✓
+  - 演示菜单（真实 CDP click，Radix 需真点击）：6 场景全部列出 ✓
+  - 移动端 390px：图例列 x=12 w=208 不溢出、与 QuickPresets 无重叠 ✓
+  - VLM 评审：最终态 9/10（σ 控制卡 10/10「双滑块对比鲜明、模式片整齐、B 因子色阶条专业」）；抗体场景 9/10（玫瑰棍状重合 + 青色接触虚线清晰）
+  - 回归：浏览器 errors 空 ✓；lint 0 错 0 警 ✓；tsc 新文件零错误（预存错误均在旧文件）✓；dev.log 无运行时错误（仅 API 200）✓
+
+Stage Summary:
+- 项目当前状态：feat-r14 基础上补齐「免疫识别工作流 + 视口内密度图操控」层——①第 6 个演示场景把 superpose/xcontacts/bsa 三个高级功能串成一条科学叙事（游离抗原叠合 → 跨结构表位 → 界面 ΔSASA）②密度图 σ 调级从左侧面板提升到视口左下角控制卡（PyMOL isolevel 滚动条式工作流）③map 命令幂等（双确认防引擎/镜像发散死锁）④activate 命令补齐多结构工作流最后一块拼图
+- 关键决策：①图例区重构为共享列容器（MapLegend 交互卡在上 + ColorLegend 被动卡在下，替代各自独立定位）②眼开关用「降透明+禁滑块」而非整卡消失（隐藏后仍可恢复）③幂等检查必须双确认（镜像 AND 引擎 getMapInfo——QA 实证 Fast Refresh 会造成发散）④抗体场景选 1BQL+2LYZ（鹤鹑/鸡溶菌酶跨物种，RMSD 0.63 Å 完美支撑「表位保守」教学点）
+- 未解决问题与风险：①CDP 合成事件无法驱动 Radix Slider（drag/click 均超时或无效），滑块交互仅通过命令行路径验证 wiring；真实用户拖动依赖 MapsPanel 同款组件的既有验证 ②VLM 建议未采纳：σ 卡可拖拽移动（backdrop-blur 已有）、序列条字母对比度加粗 ③2LYZ 棍状全结构较密（VLM 指出叠合层次感可再优化，如只显示 Cα trace）
+- 下一阶段建议（优先级序）：① 跨结构 ΔSASA（xcontacts 后对两组做联合掩码三路 SASA——maskA/maskB 已就绪，bsa 目前仅支持单结构）② 氢键/SASA/contacts/map 统一 Worker 池 ③ 抗体场景第 3 步改为 Cα trace/半透明以增强叠合层次感 ④ σ 卡拖拽移位（VLM 建议）⑤ 图例卡与密度图面板 state 联动高亮

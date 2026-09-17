@@ -5,8 +5,8 @@ import { useMolStore, dataRegistry } from './store'
 import { useMapStore } from './map-store'
 import { fetchPdbId } from './loader'
 
-export type TourIcon = 'flask' | 'pill' | 'layers' | 'waves' | 'dna'
-export type TourAccent = 'emerald' | 'rose' | 'amber' | 'teal' | 'violet'
+export type TourIcon = 'flask' | 'pill' | 'layers' | 'waves' | 'dna' | 'puzzle'
+export type TourAccent = 'emerald' | 'rose' | 'amber' | 'teal' | 'violet' | 'fuchsia'
 
 export interface TourStep {
   title: string
@@ -300,6 +300,84 @@ export const TOURS: TourDef[] = [
       {
         title: '完成',
         body: 'ensemble pause 暂停后可以：\n· preset surface 查看单一构象表面\n· superpose 把泛素叠合到晶体结构对比（superpose 1UBQ onto 1D3Z）\n· untransform 撤销叠合回到原始位姿',
+        run: () => { void exec('zoom') },
+      },
+    ],
+  },
+  {
+    id: 'antibody',
+    title: '抗体-抗原 · 溶菌酶识别',
+    tagline: '叠合→跨结构接触→界面 ΔSASA 一条龙（免疫识别工作流）',
+    icon: 'puzzle',
+    accent: 'fuchsia',
+    minutes: 4,
+    steps: [
+      {
+        title: '加载抗体-抗原复合物',
+        body: '1BQL 是经典免疫学结构：HyHEL-5 抗体 Fab 片段结合鹤鹑卵清溶菌酶（2.6 Å）。\n链 H = 抗体重链、链 L = 轻链、链 Y = 抗原溶菌酶。util cbc 按链分色后，Y 形抗体把抗原“抱”在中间的拓扑一目了然。',
+        cmd: 'load 1bql',
+        run: async () => {
+          await ensureLoaded('1BQL')
+          await exec('util cbc')
+          await exec('zoom')
+        },
+      },
+      {
+        title: '加载游离抗原（鸡溶菌酶）',
+        body: '2LYZ 是单独解析的鸡卵清溶菌酶（2.0 Å）——未结合状态。\n两个物种的溶菌酶只差十几个残基，但表位（epitope）完全保守：接下来把游离抗原叠合进复合物坐标系，比较“结合前 vs 结合中”的构象。',
+        cmd: 'load 2lyz',
+        run: async () => { await ensureLoaded('2LYZ') },
+      },
+      {
+        title: '叠合：游离抗原 → 复合物坐标架',
+        body: 'superpose 把 2LYZ 的链 A 刚体叠合到 1BQL 的链 Y（序列比对 + 最优拟合）。\nRMSD < 1 Å 说明抗原结合后几乎不变——诱导契合（induced fit）很小，这是 HyHEL-5 识别溶菌酶的著名结论。叠合后把游离抗原改画为棍状，直观看到它与复合物中的抗原重合。',
+        cmd: 'superpose 2LYZ onto 1BQL chain A to Y',
+        run: async () => {
+          const sid = useMolStore.getState().activeId
+          if (!hasChains(sid, 'A')) {
+            useMolStore.getState().appendLog('out', '2LYZ 未包含链 A——跳过叠合演示')
+            return
+          }
+          await exec('superpose 2LYZ onto 1BQL chain A to Y')
+          // 游离抗原改为棍状+玫瑰色，叠合重合度可视化（先清选择防 color 误作用到遗留选区）
+          useMolStore.getState().setSelection(null, [])
+          await exec('hide cartoon')
+          await exec('show sticks')
+          await exec('color #fb7185')
+          await exec('zoom')
+        },
+      },
+      {
+        title: '跨结构接触：表位检测',
+        body: 'xcontacts 在两个不同 PDB 条目之间检测接触（这是它与 interface 的本质区别）。\n把叠合后的游离 2LYZ 与复合物中的抗体链 H+L 做接触分析——直接从“游离结构”坐标上读出表位残基；分析面板可查看跨结构界面列表。',
+        cmd: 'xcontacts 2LYZ:chain A | 1BQL:chain H or chain L 5.0',
+        run: async () => {
+          if (!findByName('1BQL') || !findByName('2LYZ')) {
+            useMolStore.getState().appendLog('out', '两个结构均需在场才能做跨结构接触——已跳过')
+            return
+          }
+          await exec('xcontacts 2LYZ:chain A | 1BQL:chain H or chain L 5.0')
+        },
+      },
+      {
+        title: '真实界面 + 埋藏面积',
+        body: '回到复合物本体：contacts 检测链 Y 与抗体链 H/L 之间的界面接触对，再用 bsa 三路 SASA 计算界面埋藏面积（ΔSASA）。\nΔSASA > 1 Å² 的残基即界面核心残基——抗原-抗体界面每侧通常埋藏 600-1000 Å²，可与分析面板对照。',
+        cmd: 'bsa',
+        run: async () => {
+          const sid = findByName('1BQL')
+          if (!sid || !hasChains(sid, 'H', 'L', 'Y')) {
+            useMolStore.getState().appendLog('out', '1BQL 链 H/L/Y 不完整——跳过界面 ΔSASA')
+            return
+          }
+          useMolStore.getState().setActive(sid)
+          await exec('contacts chain Y | chain H or chain L 4.0')
+          await exec('bsa')
+          await sleep(400)
+        },
+      },
+      {
+        title: '完成',
+        body: '免疫识别工作流已走通：叠合 → 跨结构表位 → 界面 ΔSASA。\n延伸玩法：\n· untransform 2LYZ 撤销叠合回原位\n· select epitope = byres (chain Y within 5 of (chain H or chain L))\n· V 保存视角书签，record start 录制旋转动画',
         run: () => { void exec('zoom') },
       },
     ],

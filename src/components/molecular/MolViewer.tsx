@@ -18,6 +18,7 @@ import { GraduationCap } from 'lucide-react'
 import { EnsembleBar } from '@/components/studio/EnsembleBar'
 import { RecordBadge } from '@/components/studio/RecordBadge'
 import { ColorLegend } from '@/components/studio/ColorLegend'
+import { MapLegend } from '@/components/studio/MapLegend'
 import { ViewBar } from '@/components/studio/ViewBar'
 import { TourOverlay } from '@/components/studio/TourOverlay'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
@@ -437,8 +438,11 @@ export default function MolViewer() {
       {/* 视角书签浮层（右缘竖排，保存/跳转相机视角） */}
       <ViewBar />
 
-      {/* 颜色标尺图例（左下角，putty/B 因子/SASA 着色时显示） */}
-      <ColorLegend />
+      {/* 左下角图例列：密度图 σ 控制（交互）+ 颜色标尺（putty/B 因子/SASA 着色时显示） */}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex flex-col items-start gap-2">
+        <MapLegend />
+        <ColorLegend />
+      </div>
 
       {/* 动画录制指示器（录制中显示） */}
       <RecordBadge />

@@ -3,7 +3,7 @@
 // 演示场景引导卡片：视口顶部居中浮层，逐步讲解并执行动作
 import { useState } from 'react'
 import {
-  ChevronLeft, ChevronRight, Dna, FlaskConical, Layers, Pill, Waves, X, Copy, Check, Loader2,
+  ChevronLeft, ChevronRight, Dna, FlaskConical, Layers, Pill, Waves, X, Copy, Check, Loader2, Puzzle,
 } from 'lucide-react'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import type { TourAccent, TourIcon } from '@/lib/molecular/tours'
@@ -16,6 +16,7 @@ const ICONS: Record<TourIcon, typeof FlaskConical> = {
   layers: Layers,
   waves: Waves,
   dna: Dna,
+  puzzle: Puzzle,
 }
 
 const ACCENT: Record<TourAccent, { icon: string; chip: string; bar: string; ring: string }> = {
@@ -48,6 +49,12 @@ const ACCENT: Record<TourAccent, { icon: string; chip: string; bar: string; ring
     chip: 'text-violet-700 dark:text-violet-300 border-violet-500/40 bg-violet-500/10',
     bar: 'bg-violet-500',
     ring: 'from-violet-400/90 to-purple-500/90',
+  },
+  fuchsia: {
+    icon: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-500/15',
+    chip: 'text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-500/40 bg-fuchsia-500/10',
+    bar: 'bg-fuchsia-500',
+    ring: 'from-fuchsia-400/90 to-pink-500/90',
   },
 }
 
