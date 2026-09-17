@@ -24,6 +24,8 @@ import { TourOverlay } from '@/components/studio/TourOverlay'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 import { useViewsStore } from '@/lib/molecular/views-store'
 import { useTourStore } from '@/lib/molecular/tour-store'
+import { useMovieStore, stopMovie } from '@/lib/molecular/movie'
+import { MovieBadge } from '@/components/studio/MovieBadge'
 
 interface HoverState { text: string; x: number; y: number; sub?: string }
 
@@ -185,6 +187,12 @@ export default function MolViewer() {
         if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey && !e.altKey) { void ts.next(); e.preventDefault(); return }
         if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) { ts.prev(); e.preventDefault(); return }
         if (e.key === 'Escape') { ts.stop(); return }
+      }
+      // movie 序列播放中 Esc 停止
+      if (e.key === 'Escape' && useMovieStore.getState().playing) {
+        stopMovie()
+        store.appendLog('out', 'movie 序列播放已停止（Esc）')
+        return
       }
       // Shift+数字 → 跳转视角书签（数字键无 Shift 仍是风格预设）
       if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && /^Digit[1-9]$/.test(e.code)) {
@@ -434,6 +442,9 @@ export default function MolViewer() {
 
       {/* 引导演示卡片（顶部居中，演示激活时显示） */}
       <TourOverlay />
+
+      {/* movie 序列播放指示器（顶部居中，播放时显示；演示中自动下移） */}
+      <MovieBadge />
 
       {/* 视角书签浮层（右缘竖排，保存/跳转相机视角） */}
       <ViewBar />

@@ -22,7 +22,7 @@ const SHORTCUTS: [string, string][] = [
   ['Shift + 1-9', '平滑跳转到视角书签'],
   ['→ / ←', '演示引导中：下一步 / 上一步'],
   ['` / ~', '打开/关闭命令行'],
-  ['Esc', '退出测量模式 / 清除选择 / 结束演示'],
+  ['Esc', '退出测量模式 / 清除选择 / 结束演示 / 停止 movie'],
   ['Delete', '清除当前选择'],
 ]
 
@@ -131,6 +131,8 @@ export function HelpDialog() {
               <p><span className="font-semibold text-foreground">立体</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">stereo on</code> 红蓝立体（工具栏 👓）。</p>
               <p><span className="font-semibold text-foreground">视角</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">orient</code> 主轴对齐；<code className="rounded bg-muted px-1 font-mono text-[10px]">get_view</code> / <code className="rounded bg-muted px-1 font-mono text-[10px]">set_view</code> 视角导出恢复（JSON）；<code className="rounded bg-muted px-1 font-mono text-[10px]">png 4</code> 导出 4× 截图。</p>
               <p><span className="font-semibold text-foreground">Ray 级渲染</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">ray</code> 或工具栏相机菜单「Ray 级渲染」——PCF 软阴影 + 1.5× 内部超采样 + 场景自适应阴影相机，导出高清 PNG（对标 PyMOL ray；<code className="rounded bg-muted px-1 font-mono text-[10px]">ray 1920</code> 指定宽度）。同步渲染，大场景可能阻塞数秒。</p>
+              <p><span className="font-semibold text-foreground">构象插值 morph</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">morph m1 = 1BQL 2LYZ 40</code>——两个同源结构间生成插值轨迹对象（自动链配对 + 残基对内原子名匹配 + 内存中叠合，不改动原结构），底部出现构象播放条，<code className="rounded bg-muted px-1 font-mono text-[10px]">ensemble play</code> 播放（P 暂停，fps/loop 可调）；同 PDB 不同构象则按恒等匹配直接插值。</p>
+              <p><span className="font-semibold text-foreground">movie 关键帧巡航</span>：用 <code className="rounded bg-muted px-1 font-mono text-[10px]">V</code> 保存 ≥2 个机位后，工具栏 🎬 按钮或 <code className="rounded bg-muted px-1 font-mono text-[10px]">movie play [秒/视角] [轮数]</code> 依序平滑巡航（顶部胶囊显示段进度，拖动/滚轮接管或 Esc 停止）；配合 <code className="rounded bg-muted px-1 font-mono text-[10px]">record start</code> 可把巡航录成 WebM 视频（对标 PyMOL movie + mpng 工作流）。</p>
               <p><span className="font-semibold text-foreground">实用着色</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">util cbc</code> 按链 · <code className="rounded bg-muted px-1 font-mono text-[10px]">util cbaw</code> 元素+白碳（白底论文图） · <code className="rounded bg-muted px-1 font-mono text-[10px]">util ss</code> 二级结构。</p>
             </div>
           </section>

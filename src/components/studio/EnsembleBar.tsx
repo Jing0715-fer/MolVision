@@ -55,6 +55,7 @@ export function EnsembleBar() {
 
   const sid = useEnsembleStore.getState().structureId!
   const entry = structures.find(s => s.id === sid)
+  const isMorph = entry ? dataRegistry.get(entry.id)?.ensembleKind === 'morph' : false
   const shown = dragging ? dragVal : frame
 
   const togglePlay = () => {
@@ -87,8 +88,13 @@ export function EnsembleBar() {
       <div className="hidden items-center gap-1.5 sm:flex">
         <Layers className="h-3.5 w-3.5 text-violet-400" />
         <span className="max-w-28 truncate text-[11px] font-semibold text-popover-foreground">{entry?.name ?? sid}</span>
-        <span className="rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-bold text-violet-500 dark:text-violet-300">
-          NMR · {total} 构象
+        <span className={cn(
+          'rounded-full px-1.5 py-0.5 text-[9px] font-bold',
+          isMorph
+            ? 'bg-teal-500/15 text-teal-600 dark:text-teal-300'
+            : 'bg-violet-500/15 text-violet-500 dark:text-violet-300',
+        )}>
+          {isMorph ? 'morph · ' : 'NMR · '}{total}{isMorph ? ' 帧' : ' 构象'}
         </span>
       </div>
 

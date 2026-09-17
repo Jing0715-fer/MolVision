@@ -17,6 +17,8 @@ import { useMapStore } from './map-store'
 import { MAX_BOOKMARKS, useViewsStore } from './views-store'
 import { useTourStore } from './tour-store'
 import { TOURS, findTour } from './tours'
+import { buildMorph } from './morph'
+import { playMovie, stopMovie, useMovieStore } from './movie'
 
 /** 数值裁剪（NaN 时取默认值） */
 function clampNum(v: number, min: number, max: number, dflt: number): number {
@@ -79,6 +81,8 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'xbsa', desc: '跨结构界面埋藏面积（需 xcontacts，两结构联合三路 SASA）', example: 'xbsa' },
   { cmd: 'untransform [名]', desc: '撤销叠合变换回原始位姿', example: 'untransform 1D3Z' },
   { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
+  { cmd: 'morph <名> = <A> <B> [帧]', desc: '构象插值轨迹（自动叠合+ensemble 帧）', example: 'morph m1 = 1BQL 2LYZ 40' },
+  { cmd: 'movie play|stop [秒 轮]', desc: '视角书签关键帧巡航（可配 record 录制）', example: 'movie play 4 2' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
@@ -1146,6 +1150,70 @@ export function runCommand(raw: string): void {
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 5000)
     return ok(`已导出 ${atomCount.toLocaleString()} 个原子 → ${a.download}${expr ? `（选择：${expr}）` : ''}（世界坐标，含 CRYST1）`)
+  }
+
+  if (cmd === 'morph') {
+    // morph <新名> = <结构A> <结构B> [帧数]：构象插值轨迹（对标 PyMOL morph）
+    const rest = input.slice(parts[0].length).trim()
+    const m = rest.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/)
+    if (!m) return err('用法：morph <新对象名> = <结构A> <结构B> [帧数]，如 morph m1 = 1BQL 2LYZ 40')
+    const name = m[1]
+    const tail = m[2].trim().split(/\s+/)
+    if (tail.length < 2) return err('需要两个结构：morph <名> = <A> <B> [帧数]')
+    const s = useMolStore.getState()
+    const resolve = (q: string) => s.structures.find(x =>
+      x.name.toLowerCase() === q.toLowerCase() ||
+      x.name.toLowerCase().startsWith(q.toLowerCase()) ||
+      x.meta.pdbId?.toLowerCase() === q.toLowerCase())
+    const eA = resolve(tail[0])
+    const eB = resolve(tail[1])
+    if (!eA || !eB) return err(`未找到结构（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
+    if (eA.id === eB.id) return err('两个结构不能相同（morph 需要不同构象）')
+    const steps = tail[2] ? parseInt(tail[2], 10) : 30
+    if (isNaN(steps) || steps < 10 || steps > 120) return err('帧数范围 10–120（默认 30）')
+    const dA = dataRegistry.get(eA.id)
+    const dB = dataRegistry.get(eB.id)
+    if (!dA || !dB) return err('结构数据不存在')
+    try {
+      const t0 = performance.now()
+      const r = buildMorph(dA, dB, name, steps)
+      if (!r.ok || !r.data) return err(r.error ?? 'morph 失败')
+      const ms = performance.now() - t0
+      const id = useMolStore.getState().addStructure(r.data, name, ms)
+      textRegistry.set(id, structureToPdbText(r.data))
+      const chainInfo = r.matchedChains.map(([a, b]) => `${a}↔${b}`).join(' ')
+      ok(`morph 对象 "${name}" 已创建：${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基对 · ${r.frames} 帧${chainInfo ? ` · 链对 ${chainInfo}` : ''}（${ms.toFixed(0)} ms）`)
+      if (r.alignRmsd !== null) ok(`自动叠合 ${eB.name} → ${eA.name}：CA RMSD ${r.alignRmsd.toFixed(2)} Å（内存中完成，不改动原结构）`)
+      if (r.strategy === 'identity') ok('匹配策略：恒等（同源结构按原子序对应）')
+      return ok(`底部出现构象播放条——ensemble play 开始播放，V 键保存当前机位后 movie play 可巡航录制（会话存档保存第 1 帧坐标）`)
+    } catch (e) {
+      return err(`morph 失败：${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  if (cmd === 'movie') {
+    const sub = (parts[1] ?? 'status').toLowerCase()
+    if (sub === 'play' || sub === 'start') {
+      const secs = parseFloat(parts[2] ?? '')
+      const loops = parseInt(parts[3] ?? '', 10)
+      const dur = isNaN(secs) ? 2.6 : secs
+      const n = isNaN(loops) ? 1 : loops
+      const vs = useViewsStore.getState()
+      if (vs.bookmarks.length < 2) return err(`至少需要 2 个视角书签（当前 ${vs.bookmarks.length}）——V 键或 view save 先保存多机位`)
+      void playMovie(dur * 1000, n).then(r => {
+        if (!r.ok) err(r.error)
+        else ok(`movie 开始：${vs.bookmarks.length} 个视角 × ${n} 轮 × ${dur}s——拖动/滚轮可随时接管停止；record start 可同步录制`)
+      })
+      return
+    }
+    if (sub === 'stop' || sub === 'end') {
+      stopMovie()
+      return ok('movie 序列播放已停止')
+    }
+    const ms = useMovieStore.getState()
+    return ms.playing
+      ? ok(`movie 播放中：段 ${ms.seg + 1}/${ms.total}（${ms.currentName ?? ''}），每视角 ${(ms.duration / 1000).toFixed(1)}s × ${ms.loops} 轮`)
+      : ok(`movie 未播放。已存 ${useViewsStore.getState().bookmarks.length} 个视角书签（上限 ${MAX_BOOKMARKS}）——movie play [秒/视角] [轮数] 启动`)
   }
 
   if (cmd === 'ensemble' || cmd === 'ens') {

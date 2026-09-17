@@ -62,6 +62,8 @@ export interface StructureData {
   sasa?: Float32Array
   /** NMR ensemble：多构象坐标帧（frames[0] 即初始坐标副本，长度与 atoms.positions 相同） */
   ensemble?: { frames: Float32Array[] }
+  /** ensemble 来源标记：NMR 多模型（默认）或 morph 插值轨迹（UI 徽章区分显示） */
+  ensembleKind?: 'nmr' | 'morph'
   /** 晶胞与空间群（CRYST1 / _cell）——对称伴侣与电子密度图计算用 */
   crystal?: CrystalInfo
   /** 空间哈希网格（用于 within 选择、近邻查询） */

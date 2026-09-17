@@ -25,6 +25,8 @@
 | 🧱 **Interface ΔSASA (BSA)** | Buried solvent-accessible area between two selections — the rigorous interface criterion: three-pass SASA (A alone / B alone / complex) with core interface residues flagged at ΔSASA > 1 Å² (PDB standard) — run contacts first, then `bsa`; compare with distance-cutoff contacts in the Analysis panel |
 | 🔄 **Superpose undo** | Revert any aligned structure back to its original deposited pose — `untransform 1D3Z` or the ↩ button on structure cards |
 | 🎥 **Animation recording** | Record ensemble playback / rock / spin as 30fps WebM video via MediaRecorder canvas capture — toolbar ⏺ button or `record start` |
+| 🫀 **Conformational morphing** | PyMOL `morph` equivalent: generate an interpolated trajectory object between two homologous structures — greedy chain pairing (NW scores) → per-residue atom-name matching → in-memory superposition (originals untouched) → smoothstep-eased ensemble frames (10–120) that plug straight into the ensemble player (`morph m1 = 1BQL 2LYZ 40` then `ensemble play`); same-entry conformers fall back to exact-index identity matching |
+| 🎬 **Key-frame camera movies** | PyMOL `movie` equivalent built on view bookmarks: chain ≥2 saved camera states into a smooth cruising sequence (`movie play [sec/view] [loops]` or the toolbar 🎬 button) with an in-viewport progress capsule showing the current segment; drag/wheel take-over or `Esc` gracefully stops; combine with `record start` to export the cruise as WebM video |
 | 🗺️ **Electron density (2Fo−Fc)** | **Computed live from RCSB-deposited structure factors**: model phases (symmetry-expanded Gaussian density rasterization) + observed amplitudes → 3D FFT → marching-cubes isosurface/isomesh at adjustable σ levels, cropped around the model with periodic boundary wraparound — `map fetch 3ekj`, `map isolevel 1.5`, `map mesh|surface|both`; CCP4/MRC map files can be dragged in directly (mode 0/1/2, axis permutation, byte-order detection) |
 | ⚖️ **Fo−Fc difference maps** | Classic model-validation difference density with **positive/negative dual isosurfaces** (green = positive peaks / missing atoms, red = negative peaks / misplaced atoms) — `map fofc 3ekj` or the Maps-panel kind toggle (**the structure is auto-fetched from RCSB as the phase model if not loaded** — including session-restore); crystallographic ±3σ convention, dual color pickers, and **independent positive/negative σ levels** (`map isolevel pos 3 / neg 2.5` or the dual sliders — PyMOL two-object isolevel workflow); once a map is loaded, an **in-viewport σ control card** (bottom-left) offers the same dual sliders + mesh/surface/both mode chips + visibility toggle without leaving the scene — the card is **draggable** (grip handle, double-click to snap back to the dock, position persisted); re-running `map fetch/fofc` with the same id skips recomputation (idempotent) |
 | 🧵 **Putty B-factor tubes** | PyMOL `show putty` equivalent: tube radius continuously mapped to per-residue B-factors (sqrt scaling, smooth interpolation — thick = flexible, thin = rigid) covering **both protein (CA) and nucleic-acid (phosphate backbone) chains** with a unified B-range, B-cap slider to suppress outliers, pairs with the B-factor rainbow and an **auto-shown color-scale legend card** (B-value → color → tube-radius triple mapping, bottom-left overlay) — preset key `8` / `preset putty` / `show putty polymer` |
@@ -71,7 +73,7 @@ show cartoon chain A
 zoom site
 bg black · spin on · rock on · slab 20 · label on · preset surface
 ssao on 3 · hbonds on 3.2 · ensemble play · ensemble fps 15
-superpose 4hhb onto 2hhb · superpose 4hhb onto 1a3n chain A to A · activate 1bql · record start
+superpose 4hhb onto 2hhb · superpose 4hhb onto 1a3n chain A to A · activate 1bql · record start · morph m1 = 1bql 2lyz 40 · movie play 4 2
 interface A B · interface chain A chain B · contacts chain A | chain B 4.0 · dssp
 xcontacts 1ubq:chain A | 1d3z:chain A 5.0 · sasa 1.4 256 · color sasa · bsa · xbsa · untransform 1d3z
 map fetch 3ekj · map fofc 3ekj · map isolevel 1.5 · map isolevel pos 3 / neg 2.5 · map mesh · symmetry 20 · symmetry off
@@ -136,12 +138,14 @@ Full sessions can also be **exported as `.molvision` files** (complete structure
 
 ![Ray-traced still render — PCF soft shadows with a ground shadow catcher, supersampled](public/screenshots/ray-shadows.png)
 
+![Conformational morph (1BQL→2LYZ) playing with the movie key-frame cruise badge](public/screenshots/morph-movie.png)
+
 ![One-click empty state: example chips + guided-tour entry](public/screenshots/empty-state.png)
 
 ![GTAO ambient occlusion](public/screenshots/ssao.png)
 
 ## ⌨️ Shortcuts
-`1-8` presets (`8` = putty B-factor tubes, protein + nucleic) · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `V` save view bookmark · `Shift+1-9` jump to bookmark · `→/←` tour step (during a demo) · `` ` `` console · `Esc` exit mode/clear/end tour · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
+`1-8` presets (`8` = putty B-factor tubes, protein + nucleic) · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `V` save view bookmark · `Shift+1-9` jump to bookmark · `→/←` tour step (during a demo) · `` ` `` console · `Esc` exit mode/clear/end tour/stop movie · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
 
 ## 🚀 Quick start
 

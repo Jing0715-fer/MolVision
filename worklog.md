@@ -781,3 +781,38 @@ Stage Summary:
 - 关键决策：①相位模型三级解析（显式→编号匹配→自动拉取），循环依赖动态 import 解开 ②接影板用 ShadowMaterial（白背景仅在阴影处可见，渲染后移除）——没有它软阴影无处落地 ③toDataURL 必须在尺寸恢复前（setSize 清画布）④面板宽度恢复用 useSyncExternalStore 挂载标志而非 effect setState（水合安全且绕开新 lint 禁令）
 - 未解决问题与风险：①ray 渲染同步阻塞（1BQL+差图场景 ~2s 可接受；超大结构+SSAO 可能 5s+——未做分帧）②软阴影对比度受 IBL 环境光稀释（环境抬光 0.18 是折中）③3EKJ 差图恢复时结构自动拉取走网络（离线会失败并给出可操作错误，by design）④polymer chips 对非蛋白结构（纯 DNA）语义偏宽
 - 下一阶段建议（优先级序）：① ray 渲染异步化（OffscreenCanvas 或分帧 + 进度 toast）② 氢键/SASA/contacts/map 统一 Worker 池（r13 起遗留，防多任务并发过载）③ 接影板参数（opacity/高度偏移）暴露到命令（ray soft 0.2 之类）④ 书签/面板宽度之外的 UI 偏好统一进一个 settings store ⑤ 图例卡与密度图面板 state 联动高亮（r16 遗留）
+---
+Task ID: feat-r18
+Agent: main
+Task: 下一阶段开发 + UI 打磨：morph 构象插值命令（PyMOL 对齐主特性）、movie 关键帧相机巡航、EnsembleBar morph 徽章区分
+
+Work Log:
+- 读取 worklog（feat-r17 完成 map 自动拉相位模型/ray 静帧/面板宽度拖拽）；git 干净（r17 已提交）；dev server 200 正常；对照 PyMOL 功能清单确认缺口 = morph（构象插值）与 movie（关键帧动画），orient/slab/superpose/ray 等均已就绪
+- 【功能 A：morph 构象插值（本轮主特性）】
+  - 新建 src/lib/molecular/morph.ts：buildMorph(A, B, name, steps) 双策略原子匹配——①蛋白链序列策略：extractAllSequences 双侧 + NW 比对得分贪心链配对（每链一次、长度差>60% 跳过、得分=原始分+全同残基数）→ 比对位化学等价残基对内按原子名精确匹配（Map 名→索引，首见优先）②恒等兜底：原子数相等且逐位 name/chainId/resSeq/resName 全同 → 按索引配对（覆盖核酸/同源构象）
+  - B 在内存中自动叠合到 A：superposeStructures(B→A) 的 quat+translation 只应用到 B 坐标副本（quatToMatrix 手写矩阵乘，不改动 B 结构本身）；叠合失败（非蛋白）按当前位姿直通（用户可能已手动 superpose）
+  - 帧：subsetStructure(A 匹配原子, name) 抽轨迹起点 + ensemble frames 挂接（10–120 帧钳制）；帧间 smoothstep 缓动（首尾零速度，播放观感接近 PyMOL spline）；frames[0] 严格 = 子结构坐标
+  - parser.ts StructureData 新增 ensembleKind?: 'nmr'|'morph'；morph.ts 置 'morph'
+  - EnsembleBar 徽章区分：morph 对象显示 teal 色「morph · N 帧」，NMR 保持 violet「NMR · N 构象」
+  - commands.ts morph 命令：morph <名> = <A> <B> [帧数]（结构名/PDB 编号解析复用 activate 前缀匹配语义）；addStructure 注册 + textRegistry 会话登记（存第 1 帧）；输出匹配原子/残基对/链对/RMSD/策略说明
+- 【功能 B：movie 关键帧巡航】
+  - 新建 src/lib/molecular/movie.ts：useMovieStore（playing/seg/total/duration/loops/currentName/stop）+ playMovie 异步序列器——逐书签 engine.animateCameraTo(dur) → 轮询等待（90ms 步进）；camAnimCancelCount 用户接管检测优雅停止
+  - engine.ts 新增 camAnimCancelCount（pointerdown/wheel 时 camAnim 存在才递增）+ 公开 cameraCancelCount()——movie 用基线差值判定「用户拖动/滚轮接管」而非误判自然完成
+  - 命令：movie play [秒/视角=2.6] [轮数=1]（0.6–20s 钳制）/ movie stop / movie status；书签 <2 个报可操作错误；spin/rock 开启时拒绝（相机被程序控制）
+  - MovieBadge.tsx 视口指示器：teal 胶囊（胶片图标+当段书签名+段 x/y+轮次+时长+停止按钮）+ 渐变段进度条；演示引导中隐藏（QA 发现短视口 ~366px 下演示卡 329px 与任何让位方案都重叠——干净让路，Esc/工具栏按钮仍可停）
+  - Toolbar 录制按钮旁新增 🎬 Film 按钮（播放中 teal 高亮态）；MolViewer Esc 分支：movie 播放中优先停止（顺序在 tour Esc 之后、测量模式之前）
+- 【文档】COMMAND_HELP +2 条目；HelpDialog 渲染与视图段新增 morph/movie 两段用法说明 + SHORTCUTS Esc 描述补「停止 movie」；README Highlights +2 行（Conformational morphing / Key-frame camera movies）、命令示例 +2、Shortcuts 补 stop movie、画廊 +morph-movie.png
+- 【QA 全量验证（agent-browser 真实交互 + VLM）】
+  - QA 方法论：①控制台输入定位必须用 placeholder（结构面板隐藏 input 会抢占 querySelector）②多 .mol-scroll 元素并存时按 className 含 h-36 筛控制台日志（结构树面板同 class 名）③getBoundingClientRect 比较必须同一坐标系（window 坐标 vs 3D 容器内坐标易混）④window.resizeTo 被 CDP 窗口管理拒绝——用 agent-browser set viewport
+  - morph 序列策略：1BQL+2LYZ → 969 原子 · 125 残基对 · 40 帧 · 链对 Y↔A · RMSD 0.63 Å（与 r15 superpose 基准完全一致）✓；副本对象 morph（RMSD 0.00）✓；恒等策略：1BNA+d1 副本 → 566 原子全配 · 15 帧 ·「匹配策略：恒等」✓
+  - ensemble 播放：morph 对象帧推进 5/40 ✓；徽章「morph · 30 帧」teal 渲染 ✓
+  - movie 全链路：2 书签 × 1.2s 完整播放 +「movie 播放完成」日志 ✓；Esc 中停（「序列播放已停止 (Esc)」）✓；用户接管（canvas pointerdown →「用户接管相机，序列播放提前结束 (0/4 段)」）✓；movie status / 书签不足报错 / morph 参数错误 3 类用法报错 ✓；Toolbar 🎬 按钮启动（段 1/2 徽章出现）✓
+  - 重叠修复回归：演示+movie 同屏徽章隐藏 ✓；演示结束徽章恢复 ✓；390px 移动端徽章 98–293px 无溢出、整页无横向滚动 ✓
+  - VLM 评审 hero（morph 播放+彩虹渐变+movie 徽章+书签条）9.2/10——「具备商业化发布品质…将复杂 4D 数据直观呈现…直接挑战 ChimeraX 统治地位」；morph 渲染质量单项 10/10
+  - 回归：浏览器 errors 空 ✓；lint 0 错 0 警 ✓；tsc 新代码零错误（预存错误均在旧 worker/superpose/AnalysisPanel 老行）✓；dev.log 无运行时错误 ✓；help 命令列出 morph/movie 条目 ✓
+
+Stage Summary:
+- 项目当前状态：feat-r17 基础上补齐 PyMOL 动画双雄——①morph 构象插值全链路（双策略原子匹配 → 内存叠合 → smoothstep ensemble 帧 → 复用 NMR 播放条）②movie 关键帧巡航（书签序列 → 相机动画链 → 用户接管检测 → 视口进度胶囊 → 与 record 组合出 WebM）③EnsembleBar 按来源区分 NMR/morph 徽章
+- 关键决策：①morph 匹配双策略分层（蛋白走序列比对保证化学等价，非蛋白走恒等兜底）②B 只在内存副本上叠合（不动原结构，用户手动 superpose 结果保持）③用户接管用 cancelCount 基线差值检测（camAnim==null 无法区分自然完成与取消）④演示+movie 同屏选择隐藏而非让位（短视口 366px 下演示卡 329px 任何让位方案都重叠）
+- 未解决问题与风险：①morph 为坐标线性插值（无键合校正/去冲突——PyMOL rigimol 级 morph 未做，大构象变化时可能出现原子穿插）②morph 对象会话存档只保存第 1 帧（刷新后轨迹丢失，PDB 单模型格式所限）③配体/水不参与序列策略 morph（恒等策略可覆盖）④movie 徽章在演示中隐藏（无停止按钮，依赖 Esc/工具栏）⑤超大 morph（>5k 原子 × 120 帧）内存 ~7MB 可控但帧重建耗时上升
+- 下一阶段建议（优先级序）：① 氢键/SASA/contacts/map 统一 Worker 池（r13 起遗留，防多任务并发过载）② ray 渲染异步化（OffscreenCanvas 或分帧 + 进度 toast，r17 遗留）③ morph 插值升级为笛卡尔样条（Catmull-Rom 过 3+ 构象，多态 morph）④ movie 时间轴编辑视图（VLM 建议：关键帧节点可视化）⑤ UI 偏好统一 settings store（面板宽度/σ 卡位置/主题等散键归一，r17 遗留）

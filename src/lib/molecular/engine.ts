@@ -256,6 +256,8 @@ export class MolEngine {
     fov0: number; fov1: number
     up1: THREE.Vector3
   } | null = null
+  /** 用户中断相机动画计数（pointerdown/wheel 时递增；movie 序列播放器用它检测接管） */
+  private camAnimCancelCount = 0
   private lastTickT = 0
   private ro: ResizeObserver
   private pickablesCache: { obj: THREE.Object3D; pick: Pickable; structureId: string }[] | null = null
@@ -574,13 +576,22 @@ export class MolEngine {
   private onPointerDown = (e: PointerEvent) => {
     this.downPos = { x: e.clientX, y: e.clientY, t: performance.now(), button: e.button }
     // 用户接管相机：取消书签过渡动画
+    if (this.camAnim) this.camAnimCancelCount++
     this.camAnim = null
     // rock 摇摆中用户拖动：以拖动后视角为新基准
     if (this.rockBase) this.rockBase = null
   }
 
   /** 滚轮缩放同样取消书签过渡（passive：不阻断 OrbitControls） */
-  private onCancelCamAnim = () => { this.camAnim = null }
+  private onCancelCamAnim = () => {
+    if (this.camAnim) this.camAnimCancelCount++
+    this.camAnim = null
+  }
+
+  /** movie 序列播放器用：用户中断相机动画的累计次数 */
+  cameraCancelCount(): number {
+    return this.camAnimCancelCount
+  }
 
   private onPointerUp = (e: PointerEvent) => {
     const dx = e.clientX - this.downPos.x

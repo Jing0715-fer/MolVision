@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop,
+  Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
@@ -13,6 +13,7 @@ import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
 import { TOURS } from '@/lib/molecular/tours'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import { useRecordStore } from '@/lib/molecular/record-store'
+import { playMovie, stopMovie, useMovieStore } from '@/lib/molecular/movie'
 import type { MeasureMode } from '@/lib/molecular/types'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -53,6 +54,7 @@ export function Toolbar() {
   const setUi = useMolStore(s => s.setUi)
   const structures = useMolStore(s => s.structures)
   const recording = useRecordStore(s => s.recording)
+  const moviePlaying = useMovieStore(s => s.playing)
 
   const capture = (scale: number, transparent: boolean) => {
     const eng = engineRef.current
@@ -321,6 +323,29 @@ export function Toolbar() {
             </button>
           </TooltipTrigger>
           <TooltipContent>{recording ? '停止录制（点击 REC 徽章下载）' : '录制动画为 WebM 视频'}</TooltipContent>
+        </Tooltip>
+
+        {/* movie：视角书签关键帧巡航 */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => {
+                const ms = useMovieStore.getState()
+                if (ms.playing) { stopMovie(); return }
+                void playMovie(2600, 1).then(r => {
+                  if (!r.ok) toast.error(r.error)
+                  else toast.success('movie 序列播放中', { description: `${r.views} 个视角书签巡航 · 拖动/滚轮接管或 Esc 停止 · 可配录制导出 WebM` })
+                })
+              }}
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
+                moviePlaying ? 'bg-teal-500/15 text-teal-500' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Film className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{moviePlaying ? '停止 movie 序列播放' : 'movie：视角书签关键帧巡航（需 ≥2 个书签）'}</TooltipContent>
         </Tooltip>
 
         {/* 截图 */}
