@@ -22,6 +22,7 @@ function clampNum(v: number, min: number, max: number, dflt: number): number {
 
 const REP_ALIASES: Record<string, RepType> = {
   cartoon: 'cartoon', ribbon: 'cartoon',
+  putty: 'putty', 'b-factor': 'putty', bfactor: 'putty',
   ballstick: 'ballstick', 'ball&stick': 'ballstick', bs: 'ballstick',
   sticks: 'sticks', stick: 'sticks', lines: 'lines', wire: 'lines', wireframe: 'lines',
   spacefill: 'spacefill', sphere: 'spacefill', spheres: 'spacefill', cpk: 'spacefill',
@@ -43,7 +44,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'create <名> = <选择>', desc: '从选择创建新对象', example: 'create pocket = within 5 of resn HEM' },
   { cmd: 'split_chains', desc: '按链组拆分为多个对象', example: 'split_chains' },
   { cmd: 'select [name=]expr', desc: '选择原子（可命名）', example: 'select site = within 5 of resn HEM' },
-  { cmd: 'show <rep> [sel]', desc: '为当前结构添加表示法', example: 'show cartoon chain A' },
+  { cmd: 'show <rep> [sel]', desc: '添加表示法（cartoon/putty/sticks…）', example: 'show putty polymer' },
   { cmd: 'hide <rep> [sel]', desc: '移除匹配的表示法', example: 'hide lines' },
   { cmd: 'color <方案|颜色> [sel]', desc: '给选择上色', example: 'color red chain A' },
   { cmd: 'util cbc|cnc|ss|cbaw', desc: '实用着色（链/灰/二级结构/元素+白碳）', example: 'util cbc' },
@@ -58,7 +59,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
   { cmd: 'stereo on|off', desc: '红蓝立体渲染', example: 'stereo on' },
   { cmd: 'symmetry <半径Å>|off', desc: '晶体对称伴侣（CRYST1）', example: 'symmetry 25' },
-  { cmd: 'map fetch <id>|iso|mesh…', desc: '电子密度图（SF→FFT 合成）', example: 'map fetch 3ekj' },
+  { cmd: 'map fetch <id>|fofc|iso…', desc: '电子密度图（SF→FFT，Worker 零阻塞）', example: 'map fofc 3ekj' },
   { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
   { cmd: 'ssao on|off [r]', desc: '环境光遮蔽开关/半径', example: 'ssao on 3' },
   { cmd: 'superpose <名> [onto <名>] [chain X to Y]', desc: '结构叠合（序列比对+刚体拟合，可选链对）', example: 'superpose 4HHB onto 1A3N chain A to A' },
@@ -480,7 +481,7 @@ export function runCommand(raw: string): void {
         if (patch.opacity !== undefined && r.type !== 'surface') continue
         if ((patch.ballScale !== undefined) && r.type !== 'spacefill' && r.type !== 'ballstick') continue
         if ((patch.stickRadius !== undefined) && r.type !== 'sticks' && r.type !== 'ballstick') continue
-        if ((patch.cartoonWidth !== undefined) && r.type !== 'cartoon') continue
+        if ((patch.cartoonWidth !== undefined) && r.type !== 'cartoon' && r.type !== 'putty') continue
         st.updateRep(entry.id, r.id, patch)
         n++
       }
@@ -601,23 +602,29 @@ export function runCommand(raw: string): void {
 
   if (cmd === 'map') {
     const sub = (parts[1] ?? '').toLowerCase()
-    if (sub === 'fetch' || sub === 'load' || sub === 'calc' || sub === 'compute') {
-      const idArg = parts[2]
+    const isFofc = sub === 'fofc' || sub === 'diff' || sub === 'difference'
+    if (sub === 'fetch' || sub === 'load' || sub === 'calc' || sub === 'compute' || isFofc) {
+      const idArg = isFofc ? parts[2] : parts[2]
       if (idArg && /^[0-9][a-z0-9]{3}$/i.test(idArg)) {
-        void fetchAndComputeMap(idArg)
-        return ok(`正在获取 ${idArg.toUpperCase()} 结构因子并合成 2Fo−Fc 密度图（模型相位 + 3D FFT）…`)
+        void fetchAndComputeMap(idArg, isFofc ? 'fofc' : '2fofc')
+        return ok(isFofc
+          ? `正在获取 ${idArg.toUpperCase()} 结构因子并合成 Fo−Fc 差图（±σ 正绿/负红）…`
+          : `正在获取 ${idArg.toUpperCase()} 结构因子并合成 2Fo−Fc 密度图（模型相位 + 3D FFT）…`)
       }
       const s = useMolStore.getState()
       const pid = s.structures.find(x => x.id === s.activeId)?.meta.pdbId
-      if (!pid) return err('用法：map fetch <PDB编号>（或先加载有编号的结构，再 map fetch）')
-      void fetchAndComputeMap(pid)
-      return ok(`正在获取 ${pid} 结构因子并合成 2Fo−Fc 密度图…`)
+      if (!pid) return err('用法：map fetch <PDB编号> | map fofc <PDB编号>（或先加载有编号的结构，再 map fetch）')
+      void fetchAndComputeMap(pid, isFofc ? 'fofc' : '2fofc')
+      return ok(`正在获取 ${pid} 结构因子并合成 ${isFofc ? 'Fo−Fc 差图' : '2Fo−Fc 密度图'}…`)
     }
     if (sub === 'isolevel' || sub === 'iso' || sub === 'level') {
       const v = parseFloat(parts[2] ?? '')
       if (isNaN(v) || v < 0.2 || v > 8) return err('用法：map isolevel <σ 0.2-8>，如 map isolevel 1.5')
       setMapLook({ iso: v })
-      return ok(`等值面级别 → ${v} σ（1σ≈噪声基准，1.5-2σ 常规骨架）`)
+      const isDiff = engineRef.current?.getMapInfo()?.difference
+      return isDiff
+        ? ok(`差图等值面级别 → ±${v} σ（±3σ 常规：绿峰该建而未建、红峰放错位置）`)
+        : ok(`等值面级别 → ${v} σ（1σ≈噪声基准，1.5-2σ 常规骨架）`)
     }
     if (sub === 'mesh') { setMapLook({ mode: 'mesh' }); return ok('密度图切换为网格 isomesh') }
     if (sub === 'surface') { setMapLook({ mode: 'surface' }); return ok('密度图切换为实体面 isosurface') }
@@ -627,9 +634,9 @@ export function runCommand(raw: string): void {
     if (sub === 'show') { setMapLook({ visible: true }); return ok('密度图已显示') }
     const info = engineRef.current?.getMapInfo()
     if (!info) {
-      return err('未加载密度图。用法：map fetch <PDB编号> | isolevel <σ> | mesh | surface | both | hide | show | off（也可拖入 .ccp4/.map/.mrc 文件）')
+      return err('未加载密度图。用法：map fetch <PDB编号> | map fofc <PDB编号> | isolevel <σ> | mesh | surface | both | hide | show | off（也可拖入 .ccp4/.map/.mrc 文件）')
     }
-    return ok(`密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString()} 三角形 · ${info.iso} σ · 模式 ${info.mode}${info.truncated ? '（已截断）' : ''} · rms ${info.rms.toFixed(3)}`)
+    return ok(`密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString()} 三角形 · ${info.difference ? `±${info.iso}σ 差图` : `${info.iso} σ`} · 模式 ${info.mode}${info.truncated ? '（已截断）' : ''} · rms ${info.rms.toFixed(3)}`)
   }
 
   if (cmd === 'png') {

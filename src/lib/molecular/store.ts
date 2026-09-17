@@ -180,6 +180,14 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
       { ...defaultRep('sticks', 'backbone', 'residue') },
     ],
   },
+  putty: {
+    label: 'Putty B 因子管',
+    reps: () => [
+      { ...defaultRep('putty', 'polymer', 'bfactor') },
+      { ...defaultRep('ballstick', 'ligand', 'element') },
+      { ...defaultRep('lines', 'water', 'element') },
+    ],
+  },
 }
 
 export const useMolStore = create<MolState>()((set, get) => ({

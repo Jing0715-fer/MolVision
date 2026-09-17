@@ -493,3 +493,57 @@ Stage Summary:
 - 验证方法论沉淀：①密度图对齐性三重验证（数值采样原子 σ vs 随机 σ、像素级质心重叠度、VLM 视觉确认）②|Fcalc|-Fobs 相关性无法区分坐标系约定（刚体旋转不变），帧约定自洽性比"正确约定"更重要 ③THREE clone 的 userData JSON 深拷贝是循环引用雷区 ④CDP 截图超时 = 渲染饱和信号（软件 GL 下 76 万线段可锁死主线程）
 - 未解决问题与风险：①密度图相位为近似模型相位（常数 Z 高斯、无体相溶剂校正）——1.5-2σ 包裹良好但不如精修 Fc 相位锐利；②2Fo−Fc 合成 ~6-14s（256³ 双 FFT），未进 Web Worker（计算期间 UI 有计算中提示但不响应交互）；③Fo−Fc 差图（±3σ 正负峰）未实现（sffourier 架构已预留系数切换点）；④CCP4 上传地图的跨胞界处理未做（依赖地图自身覆盖范围）；⑤map 密度图层不进会话存档（重载需重算，by design）；⑥非正交晶胞下对称伴侣视觉正确性已由 mateTransforms 数学保证但未做多结构实证（仅 3EKJ C2 验证）
 - 下一阶段建议（优先级序）：① Fo−Fc 差图与正负双等值面（红/绿）② 密度合成进 Web Worker + σ 滑块节流 ③ mmCIF 结构的 crystal 解析实证（当前仅 PDB CRYST1 路径验证）④ 抗体-抗原复合物完整演示场景（superpose→xcontacts→bsa→密度图全链路）⑤ 跨结构 ΔSASA ⑥ putty cartoon（B 因子管径）
+
+---
+Task ID: feat-r11
+Agent: main
+Task: 下一阶段开发：Fo−Fc 差图（±σ 正绿/负红双等值面）+ 密度合成进 Web Worker + putty cartoon（B 因子管径）+ UI/文档打磨
+
+Work Log:
+- 读取 worklog（feat-r10 完成浅色主题/密度图/对称/对象工作流）；QA 冒烟：dev server 200、agent-browser 会话存活、浅色主题确认（bodyBg 白）
+- 【Fo−Fc 差图（晶体学模型验证）】
+  - sffourier.ts：computeDensityMap 加 kind: '2fofc'|'fofc' 参数（步骤 5 系数 c=2 常规 / c=1 差图），导出 MapKind 类型
+  - engine.ts：MapLayerState 重构为多等值面容器（meshes/wires 数组 + difference/negColor），rebuildMapMesh 按 isoDefs 循环——差图跑两遍 marching cubes（level+ = mean+iso·rms 绿 #2e9e44 / level− = mean−iso·rms 红 #d64545），双面三角上限减半防内存峰值；setMapAppearance/getMapInfo 支持 negColor；差图默认 ±3σ + mesh 模式（晶体学惯例），常规图保持 2σ + both（回归不变）
+  - map-load.ts：fetchAndComputeMap(pdbId, kind)——名称/日志/Toast 全部差图感知（绿=模型缺失/红=模型多余）
+  - 命令：map fofc <id>（别名 diff/difference）；map isolevel 差图感知消息（±σ + 绿峰该建而未建/红峰放错位置）；map 状态输出显示差图 ±σ
+- 【密度合成进 Web Worker（零阻塞）】
+  - 新建 map-worker.ts：SF 文本解析 + 3D FFT 全程在 Worker（globalThis cast 协议与 hbond/sasa-worker 同构），grid buffer transfer 回传；主线程仅 fetch + 裁剪 + 安装
+  - map-load.ts：单例 Worker + reqId 配对监听（清理 listener）；构造失败/worker 异常 → 主线程同步回退（结果一致）；usedWorker 标记进日志
+  - 修复 /api/sf/[id] 路由 >2MB Next.js data cache 警告（revalidate → 显式 no-store）
+- 【Putty B 因子管（PyMOL show putty 对标）】
+  - representations.ts：buildCartoon 加 extras { putty, puttyRange }——全结构 CA B 范围（跨链统一，puttyRange>0 时钳制上限），截面 w=t=2r、p=2 正圆，r = 0.2+0.85·sqrt(norm(B)) ×widthScale，管径双重平滑，putty 模式跳过 β 箭头锥化；单残基小球半径也随 B
+  - types.ts：RepType 加 'putty' + puttyRange 参数（0=自动）；engine switch 加 case 'putty'；REP_ALIASES 加 putty/bfactor 别名；set cartoon_width 过滤含 putty
+  - UI：RepsPanel REP_TYPES/图标（🐍）/参数弹层（管径倍率 + B 上限滑块 0=自动）；PRESETS 加 putty（配 bfactor 彩虹）；快捷键 8 + MolViewer keys 数组扩展；preset putty 命令自动可用
+- 【UI/文档打磨】
+  - MapsPanel：图类型切换（2Fo−Fc / Fo−Fc 单选条，切换即用当前 ID 重算）；差图图例徽章（绿点正峰·模型缺失 / 红点负峰·模型多余 / ±σ 数值）；σ 滑块差图模式范围 1-8 与刻度提示（±2σ 宽松/±3σ 常规/±5σ+ 强信号）；双颜色选择器（正绿/负红）；信息卡来源显示「结构因子 Fo−Fc」；PanelHint 差图版说明
+  - StatusBar：密度徽章差图感知（差图 ±σ、计算中（Worker））
+  - HelpDialog：快捷键 1-8、电子密度段落（map fofc 双等值面语义 + Worker 零阻塞）、新增「B 因子分析」段落（preset putty/color bfactor）
+  - README：Highlights 3 新行（差图/putty/Worker 晶体学）+ 命令示例 map fofc + 快捷键 1-8 + Tech stack 更新 + 2 新截图（difference-map.png / putty.png）
+- 【QA 全量验证（agent-browser + VLM + 像素分析）】
+  - 3EKJ 加载 ✓（2405 原子）；map fofc 3ekj → 22,919 反射 · 72×256×256 裁剪网格 · ±3σ · Worker 完成 ✓（三次计算 16.1-18.9s）
+  - 双等值面像素级验证：±3σ 绿 1047 / 红 240 像素（纯净背景）；±5σ 红面收缩 240→57（σ 重建生效）✓
+  - Worker 零阻塞实证：计算期间 DOM 点击 0.5ms、主线程 3M 循环基准 5.9ms（若主线程被占则数千 ms）✓
+  - 2Fo−Fc 回归 ✓（22,919 反射 · 2σ 默认 · Worker）；会话恢复重放（reload → 3EKJ + reps 恢复）✓
+  - putty：preset putty → 「已应用预设」；VLM 纯净视图评分 9/10（管径粗细变化清晰、颜色渐变平滑、无渲染缺陷）✓
+  - hero 组合图（putty + Fo−Fc 差图 + orient）VLM 评分 8.5/10（构图 9/差图结合 8/专业度 8.5，「Nature/Science 级别补充图质量」）✓
+  - MapsPanel 差图 UI 分区验证：上半（类型切换/图例/信息卡）+ 下半滚动（±σ 刻度提示/三模式按钮/双颜色选择器/不透明度/可见开关/差图版提示）全部 VLM 确认 ✓；无布局重叠截断
+  - lint 0 错误 0 警告；tsc 无新增错误（仅预存 worker/superpose 文件旧问题）；dev.log 无运行时错误（SF 缓存警告已修）；浏览器错误为空
+
+Stage Summary:
+- 项目当前状态：功能版图在 feat-r10 基础上补齐晶体学验证三件套——Fo−Fc 差图（±σ 正绿/负红双等值面，模型缺失/错位诊断）、密度合成零阻塞（Web Worker 全程 + 主线程回退兜底）、putty B 因子管（PyMOL 经典柔性可视化，预设 8 一键切换）——并完成 MapsPanel 差图 UI、StatusBar/HelpDialog/README 全链路文档更新
+- 验证方法论沉淀：①Worker 零阻塞的量化证明用「计算期间 DOM 点击耗时 + 主线程基准循环」双指标 ②双等值面用纯净背景像素计数（避免 putty 彩虹管污染绿色计数）③σ 重建验证看红面像素收缩比例
+- 未解决问题与风险：①差图峰与精修 Fc 相位相比偏钝（模型相位近似固有限制，2.8Å 结构 ±3σ 峰量合理）②Worker 计算 16-19s（headless 软件 GL 环境偏慢；真机 GPU 环境预期 6-14s）③无进度回调（Worker 内 FFT 不可分段）仅阶段提示 ④putty 未覆盖核酸链（非惯例，走原管状）⑤差图正负面 depthWrite 均关闭，密集区域红绿交叠顺序偶尔闪烁（半透明排序固有限制）
+- 下一阶段建议（优先级序）：① map 差图双 σ 独立滑块（正/负峰分开调级，PyMOL isolevel 两对象方案）② σ 滑块拖动节流（拖动时实时重建 60-300ms 间隔）③ mmCIF 结构 crystal 解析实证（当前仅 PDB CRYST1 路径）④ putty 颜色图例卡（B 值→颜色→管径三联映射条）⑤ 密度图会话存档（重载免重算，存 σ/mode/kind）⑥ 抗体-抗原复合物演示场景（superpose→xcontacts→bsa→差图全链路一条龙）
+---
+Task ID: feat-r11-addendum
+Agent: main
+Task: σ 滑块节流（下一阶段建议 ② 提前完成）
+
+Work Log:
+- MapsPanel σ 滑块节流：拖动中至多每 250ms 触发一次 setMapLook（marching cubes 重建 ~0.5-2s，原始每 tick 重建会堆叠卡顿）；尾部值 250ms 延时补发保证最终值生效
+- isoDrag 本地态让滑块拇指/数值即时跟手（不受节流回跳影响）；fireIso 触发点同步清 isoDrag 回落镜像值（setMapLook 同步更新 zustand 镜像，无需 effect 对账——避开 React 新 lint 规则 react-hooks/set-state-in-effect，首次实现用 effect 对账被 lint 拒绝后重构为触发点清除）
+- 卸载 effect 仅清理尾部定时器（cleanup-only，lint 兼容）；滑块下加「拖动已节流」微提示
+- 验证：lint 0 错误（含新 React hooks 规则）、tsc 无 MapsPanel 错误、页面刷新无浏览器错误、密度图面板差图按钮渲染正常
+
+Stage Summary:
+- 下一阶段建议 ②（σ 滑块节流）已完成；剩余建议：① 差图双 σ 独立滑块 ③ mmCIF crystal 实证 ④ putty 颜色图例卡 ⑤ 密度图会话存档 ⑥ 抗体-抗原演示场景

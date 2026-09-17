@@ -8,8 +8,9 @@
 //      σ² = B/(8π²)（B<2 取 2）；
 //   2) 3D FFT → 全部整数 hkl 的 Fcalc(h)；
 //   3) 全局最小二乘尺度 k = Σ(Fobs·|Fcalc|)/Σ(|Fcalc|²)；
-//   4) 2Fo−Fc 系数 Fmap(h) = (2·Fobs − k·|Fcalc|)·e^{iφcalc}，±h 填共轭对；
-//   5) 3D IFFT → 实数密度图。（Fo−Fc 差图只需把第 4 步换成 (Fobs − k|Fcalc|)。）
+//   4) 2Fo−Fc 系数 Fmap(h) = (c·Fobs − k·|Fcalc|)·e^{iφcalc}，±h 填共轭对；
+//      c=2 常规 2Fo−Fc；c=1 Fo−Fc 差图（模型缺失/错位处出现正/负峰，用 kind 参数切换）；
+//   5) 3D IFFT → 实数密度图。
 //
 // 坐标 / 矩阵约定（与 PDB / CCP4 一致，几何全部复用 './symmetry'，不重复实现）：
 //   · orthoMatrix(cell) → { o, oi }：行主序 3×3（o[i*3+j] 为第 i 行 j 列），
@@ -455,7 +456,10 @@ function buildFullOps(symbol: string, ops: SymOp[] | null): SymOp[] {
  *  栅格 n = 大于 2·max(|h|,|k|,|l|)+2 的最小 2 的幂，clamp [32,256]；
  *  max index > 127（即所需栅格超过 256³）直接报错。反射数 < 10 或
  *  cell/spaceGroup 缺失 → 返回 error。 */
-export function computeDensityMap(reflns: SfRefln[], cell: CrystalCell, spaceGroup: string, atoms: ModelAtoms): DensityMapResult {
+/** 密度合成类型：2Fo−Fc 常规图 / Fo−Fc 差图（模型缺失/错位处出现正/负峰） */
+export type MapKind = '2fofc' | 'fofc'
+
+export function computeDensityMap(reflns: SfRefln[], cell: CrystalCell, spaceGroup: string, atoms: ModelAtoms, kind: MapKind = '2fofc'): DensityMapResult {
   const fail = (msg: string): DensityMapResult => ({
     grid: new Float32Array(0), n: 0, voxel: [0, 0, 0],
     rms: 0, mean: 0, min: 0, max: 0, scale: 0, nRefs: 0, cell, error: msg,
@@ -612,12 +616,13 @@ export function computeDensityMap(reflns: SfRefln[], cell: CrystalCell, spaceGro
   }
   const k = sff > 0 ? sfo / sff : 0
 
-  // —— 步骤 5：2Fo−Fc 系数栅格 Fmap = (2·Fobs − k·|Fcalc|)·e^{iφcalc}，±h 共轭对 ——
-  //（未观测槽位保持 0；自共轭槽位（实践中仅 000）只放实部，保证 IFFT 输出为实）
+  // —— 步骤 5：系数栅格 Fmap = (c·Fobs − k·|Fcalc|)·e^{iφcalc}，±h 共轭对 ——
+  //（c=2 常规 2Fo−Fc；c=1 差图 Fo−Fc；未观测槽位保持 0；自共轭槽位只放实部，保证 IFFT 输出为实）
+  const cKind = kind === 'fofc' ? 1 : 2
   re.fill(0)
   im.fill(0)
   for (let q = 0; q < nRef; q++) {
-    const A = 2 * fva[q] - k * ampArr[q]
+    const A = cKind * fva[q] - k * ampArr[q]
     const cr = A * Math.cos(phArr[q])
     const ci = A * Math.sin(phArr[q])
     let ix = hs[q] % n; if (ix < 0) ix += n

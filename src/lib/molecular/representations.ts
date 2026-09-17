@@ -185,7 +185,16 @@ interface ResidueCA {
   ca: number   // CA 原子索引
   o: number    // O 原子索引（可能 -1）
   c: number    // C 原子索引（可能 -1）
+  b: number    // CA 原子 B 因子（putty 管径用）
   color: [number, number, number]
+}
+
+/** putty 模式额外参数 */
+export interface CartoonExtras {
+  /** putty：B 因子管径映射（截面圆，半径随 B 增大） */
+  putty?: boolean
+  /** putty：B 上限（Å²，0=自动用实际最大值；超出钳制） */
+  puttyRange?: number
 }
 
 export function buildCartoon(
@@ -194,11 +203,37 @@ export function buildCartoon(
   colors: Float32Array,
   widthScale: number,
   opts: BuildOptions,
+  extras: CartoonExtras = {},
 ): RepBuild {
   const group = new THREE.Group()
   const pickables: Pickable[] = []
   const disposables: (THREE.BufferGeometry | THREE.Material)[] = []
   const atoms = structure.atoms
+
+  // putty：全结构 B 范围（跨链一致，半径语义统一；上限可用 puttyRange 钳制）
+  let bRange: { min: number; max: number } | null = null
+  if (extras.putty) {
+    let bmin = Infinity, bmax = -Infinity
+    let seen = 0
+    for (const chain of structure.chains) {
+      if (chain.type !== 'protein') continue
+      for (const ri of chain.residueIdx) {
+        const r = structure.residues[ri]
+        for (let i = r.start; i < r.end; i++) {
+          if (!atomMask[i] || atoms.names[i] !== 'CA') continue
+          const b = atoms.bfactors[i]
+          if (!Number.isFinite(b)) continue
+          if (b < bmin) bmin = b
+          if (b > bmax) bmax = b
+          seen++
+        }
+      }
+    }
+    if (seen >= 2 && bmax > bmin) {
+      const cap = extras.puttyRange && extras.puttyRange > bmin ? extras.puttyRange : bmax
+      bRange = { min: bmin, max: Math.max(cap, bmin + 1e-6) }
+    }
+  }
 
   for (const chain of structure.chains) {
     if (chain.type === 'nucleic') {
@@ -219,8 +254,10 @@ export function buildCartoon(
         else if (nm === 'C' && c < 0) c = i
       }
       if (ca >= 0) {
+        const b = atoms.bfactors[ca]
         list.push({
           resIdx: ri, ca, o, c,
+          b: Number.isFinite(b) ? b : 0,
           color: [colors[ca * 3], colors[ca * 3 + 1], colors[ca * 3 + 2]],
         })
       }
@@ -240,7 +277,7 @@ export function buildCartoon(
       else seg.push(list[i])
     }
     segments.push(seg)
-    for (const s of segments) buildRibbonSegment(structure, s, widthScale, group, pickables, disposables)
+    for (const s of segments) buildRibbonSegment(structure, s, widthScale, group, pickables, disposables, extras.putty === true, bRange)
   }
   return {
     group,
@@ -256,13 +293,21 @@ function buildRibbonSegment(
   group: THREE.Group,
   pickables: Pickable[],
   disposables: (THREE.BufferGeometry | THREE.Material)[],
+  putty: boolean = false,
+  bRange: { min: number; max: number } | null = null,
 ) {
   const atoms = structure.atoms
   const n = list.length
   if (n === 1) {
-    // 单残基：小球标记
+    // 单残基：小球标记（putty 下半径随 B）
     const ca = list[0].ca
-    const geo = new THREE.SphereGeometry(0.6 * widthScale, 16, 12)
+    let r = 0.6 * widthScale
+    if (putty && bRange) {
+      const span = Math.max(1e-6, bRange.max - bRange.min)
+      const t = Math.sqrt(Math.min(1, Math.max(0, (list[0].b - bRange.min) / span)))
+      r = (0.2 + 0.85 * t) * widthScale
+    }
+    const geo = new THREE.SphereGeometry(r, 16, 12)
     const col = list[0].color
     const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(col[0], col[1], col[2]), roughness: 0.5 })
     const mesh = new THREE.Mesh(geo, mat)
@@ -322,31 +367,47 @@ function buildRibbonSegment(
     return avg
   })
 
-  // ---- 截面参数（宽/厚/指数） ----
+  // ---- 截面参数（宽/厚/指数）----
+  // putty：B 因子 → 圆截面半径（sqrt 映射：柔性区粗、刚性区细；无箭头锥化）
   const wArr: number[] = [], tArr: number[] = [], pArr: number[] = []
-  for (let i = 0; i < n; i++) {
-    const ss = structure.residues[list[i].resIdx].ss
-    if (ss === 'H') { wArr.push(2.15 * widthScale); tArr.push(0.42 * widthScale); pArr.push(3.6) }
-    else if (ss === 'E') { wArr.push(2.55 * widthScale); tArr.push(0.34 * widthScale); pArr.push(6) }
-    else { wArr.push(0.68 * widthScale); tArr.push(0.68 * widthScale); pArr.push(2.2) }
+  if (putty && bRange) {
+    const span = Math.max(1e-6, bRange.max - bRange.min)
+    const rMin = 0.2 * widthScale
+    const rMax = 1.05 * widthScale
+    for (let i = 0; i < n; i++) {
+      const t = Math.sqrt(Math.min(1, Math.max(0, (list[i].b - bRange.min) / span)))
+      const r = rMin + (rMax - rMin) * t
+      wArr.push(2 * r); tArr.push(2 * r); pArr.push(2) // p=2 → 正圆截面
+    }
+  } else {
+    for (let i = 0; i < n; i++) {
+      const ss = structure.residues[list[i].resIdx].ss
+      if (ss === 'H') { wArr.push(2.15 * widthScale); tArr.push(0.42 * widthScale); pArr.push(3.6) }
+      else if (ss === 'E') { wArr.push(2.55 * widthScale); tArr.push(0.34 * widthScale); pArr.push(6) }
+      else { wArr.push(0.68 * widthScale); tArr.push(0.68 * widthScale); pArr.push(2.2) }
+    }
   }
-  // 平滑（窗口1）
+  // 平滑（窗口1；putty 管径再过一遍使过渡更顺）
   const smooth = (arr: number[]) => arr.map((_, i) => {
     const a = arr[Math.max(0, i - 1)], b = arr[i], c = arr[Math.min(n - 1, i + 1)]
     return (a + b + c) / 3
   })
-  const wS = smooth(wArr), tS = smooth(tArr), pS = smooth(pArr)
+  const wS = putty ? smooth(smooth(wArr)) : smooth(wArr)
+  const tS = putty ? smooth(smooth(tArr)) : smooth(tArr)
+  const pS = smooth(pArr)
 
-  // ---- β 折叠箭头锥化：每个 sheet 段的最后一个残基 ----
+  // ---- β 折叠箭头锥化：每个 sheet 段的最后一个残基（putty 圆管不需要）----
   const taper = new Float32Array(n).fill(1)
-  for (let i = 0; i < n; i++) {
-    const ss = structure.residues[list[i].resIdx].ss
-    if (ss !== 'E') continue
-    const nextSs = i + 1 < n ? structure.residues[list[i + 1].resIdx].ss : 'L'
-    if (nextSs !== 'E') {
-      // i 是 strand 末端 → 在 i..i+1 区间锥化（覆盖到 loop 起始处）
-      taper[i] = 1
-      if (i + 1 < n) taper[i + 1] = 0.18
+  if (!putty) {
+    for (let i = 0; i < n; i++) {
+      const ss = structure.residues[list[i].resIdx].ss
+      if (ss !== 'E') continue
+      const nextSs = i + 1 < n ? structure.residues[list[i + 1].resIdx].ss : 'L'
+      if (nextSs !== 'E') {
+        // i 是 strand 末端 → 在 i..i+1 区间锥化（覆盖到 loop 起始处）
+        taper[i] = 1
+        if (i + 1 < n) taper[i + 1] = 0.18
+      }
     }
   }
 

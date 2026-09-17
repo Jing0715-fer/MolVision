@@ -88,14 +88,18 @@ interface MapLayerState {
   fracStep: [number, number, number]
   cell: CrystalCell
   mean: number; rms: number; min: number; max: number
-  /** 等值面级别（σ 单位：绝对值 = mean + iso·rms） */
+  /** 等值面级别（σ 单位：绝对值 = mean ± iso·rms） */
   iso: number
   mode: 'surface' | 'mesh' | 'both'
+  /** 差图模式（Fo−Fc）：正峰绿 / 负峰红 双等值面（±iso·σ） */
+  difference: boolean
   color: string
+  /** 差图负峰颜色（仅 difference 时使用） */
+  negColor: string
   opacity: number
   visible: boolean
-  mesh: THREE.Mesh | null
-  wire: THREE.LineSegments | null
+  meshes: THREE.Mesh[]
+  wires: THREE.LineSegments[]
   triangles: number
   truncated: boolean
 }
@@ -1680,7 +1684,9 @@ export class MolEngine {
     mean: number; rms: number; min: number; max: number
     iso?: number
     mode?: 'surface' | 'mesh' | 'both'
+    difference?: boolean
     color?: string
+    negColor?: string
     opacity?: number
   }) {
     this.disposeMapGeometry()
@@ -1688,35 +1694,41 @@ export class MolEngine {
       name: def.name, grid: def.grid, dims: def.dims,
       fracOrigin: def.fracOrigin, fracStep: def.fracStep, cell: def.cell,
       mean: def.mean, rms: def.rms, min: def.min, max: def.max,
-      iso: def.iso ?? 2, mode: def.mode ?? 'both', color: def.color ?? '#3d7ab8',
+      iso: def.iso ?? (def.difference ? 3 : 2), mode: def.mode ?? (def.difference ? 'mesh' : 'both'),
+      difference: def.difference ?? false,
+      color: def.color ?? (def.difference ? '#2e9e44' : '#3d7ab8'),
+      negColor: def.negColor ?? '#d64545',
       opacity: def.opacity ?? 0.38, visible: true,
-      mesh: null, wire: null, triangles: 0, truncated: false,
+      meshes: [], wires: [], triangles: 0, truncated: false,
     }
     this.rebuildMapMesh()
   }
 
   /** 调整密度图外观（σ 级别 / 模式 / 颜色 / 不透明度 / 可见性） */
-  setMapAppearance(patch: { iso?: number; mode?: 'surface' | 'mesh' | 'both'; color?: string; opacity?: number; visible?: boolean }) {
+  setMapAppearance(patch: { iso?: number; mode?: 'surface' | 'mesh' | 'both'; color?: string; negColor?: string; opacity?: number; visible?: boolean }) {
     const l = this.mapLayer
     if (!l) return
     let needRebuild = false
     if (patch.iso !== undefined && patch.iso !== l.iso) { l.iso = patch.iso; needRebuild = true }
     if (patch.mode !== undefined && patch.mode !== l.mode) { l.mode = patch.mode; needRebuild = true }
     if (patch.color !== undefined) l.color = patch.color
+    if (patch.negColor !== undefined) l.negColor = patch.negColor
     if (patch.opacity !== undefined) l.opacity = patch.opacity
     if (patch.visible !== undefined) l.visible = patch.visible
     if (needRebuild) {
       this.rebuildMapMesh()
     } else {
-      if (l.mesh) {
-        l.mesh.visible = l.visible && l.mode !== 'mesh'
-        const m = l.mesh.material as THREE.MeshStandardMaterial
-        m.color.set(l.color)
+      for (let i = 0; i < l.meshes.length; i++) {
+        const mesh = l.meshes[i]
+        mesh.visible = l.visible && l.mode !== 'mesh'
+        const m = mesh.material as THREE.MeshStandardMaterial
+        m.color.set(i === 0 ? l.color : l.negColor)
         m.opacity = l.opacity
       }
-      if (l.wire) {
-        l.wire.visible = l.visible && l.mode !== 'surface'
-        ;(l.wire.material as THREE.LineBasicMaterial).color.set(l.color)
+      for (let i = 0; i < l.wires.length; i++) {
+        const wire = l.wires[i]
+        wire.visible = l.visible && l.mode !== 'surface'
+        ;(wire.material as THREE.LineBasicMaterial).color.set(i === 0 ? l.color : l.negColor)
       }
     }
   }
@@ -1731,7 +1743,8 @@ export class MolEngine {
     const l = this.mapLayer
     if (!l) return null
     return {
-      name: l.name, dims: l.dims, iso: l.iso, mode: l.mode, color: l.color,
+      name: l.name, dims: l.dims, iso: l.iso, mode: l.mode, difference: l.difference,
+      color: l.color, negColor: l.negColor,
       opacity: l.opacity, visible: l.visible, triangles: l.triangles, truncated: l.truncated,
       mean: l.mean, rms: l.rms, min: l.min, max: l.max, cell: l.cell,
       // 体素尺寸 = 晶轴长 × 分数步长（裁剪后步长不变，不能用 cell/dims）
@@ -1742,35 +1755,31 @@ export class MolEngine {
   private disposeMapGeometry() {
     const l = this.mapLayer
     if (!l) return
-    if (l.mesh) {
-      this.mapGroup.remove(l.mesh)
-      l.mesh.geometry.dispose()
-      ;(l.mesh.material as THREE.Material).dispose()
-      l.mesh = null
+    for (const mesh of l.meshes) {
+      this.mapGroup.remove(mesh)
+      mesh.geometry.dispose()
+      ;(mesh.material as THREE.Material).dispose()
     }
-    if (l.wire) {
-      this.mapGroup.remove(l.wire)
-      l.wire.geometry.dispose()
-      ;(l.wire.material as THREE.Material).dispose()
-      l.wire = null
+    l.meshes = []
+    for (const wire of l.wires) {
+      this.mapGroup.remove(wire)
+      wire.geometry.dispose()
+      ;(wire.material as THREE.Material).dispose()
     }
+    l.wires = []
   }
 
-  /** marching cubes 等值面/网格重建（绝对级别 = mean + iso·rms；网格模式三角上限调低控内存） */
+  /** marching cubes 等值面/网格重建：常规 mean+iso·rms；差图 ±iso·rms 正负双面；网格模式三角上限调低控内存 */
   private rebuildMapMesh() {
     const l = this.mapLayer
     if (!l) return
     this.disposeMapGeometry()
-    const level = l.mean + l.iso * l.rms
-    const [nx, ny, nz] = l.dims
-    // 面模式上限 60 万；网格模式上限 15 万（纯线渲染轻）
-    const cap = l.mode === 'mesh' ? 150_000 : 600_000
-    const res = marchingCubes(l.grid, nx, ny, nz, level, cap)
-    l.triangles = Math.floor(res.count / 3)
-    l.truncated = res.truncated
-    if (!res.count) return
-    // 叠加模式在高三角数时省略网格线（>25 万三角的 wire 线段过重，视觉噪声也大）
-    const skipWire = l.mode === 'both' && l.triangles > 250_000
+    const isoDefs: { level: number; color: string }[] = l.difference
+      ? [
+          { level: l.mean + l.iso * l.rms, color: l.color },   // 正峰（模型缺失处）
+          { level: l.mean - l.iso * l.rms, color: l.negColor }, // 负峰（模型多余/错位处）
+        ]
+      : [{ level: l.mean + l.iso * l.rms, color: l.color }]
     // grid 索引 → 世界笛卡尔（PDB 正交化）：cart = O·(fracOrigin + step·grid)
     const o = orthoMatrix(l.cell).o
     const [fx, fy, fz] = l.fracOrigin
@@ -1781,53 +1790,69 @@ export class MolEngine {
       o[6] * sx, o[7] * sy, o[8] * sz, o[6] * fx + o[7] * fy + o[8] * fz,
       0, 0, 0, 1,
     )
-    if (l.mode !== 'mesh') {
-      const geo = new THREE.BufferGeometry()
-      geo.setAttribute('position', new THREE.BufferAttribute(res.positions, 3))
-      geo.setAttribute('normal', new THREE.BufferAttribute(res.normals, 3))
-      geo.applyMatrix4(m)
-      const mat = new THREE.MeshStandardMaterial({
-        color: l.color, transparent: true, opacity: l.opacity, depthWrite: false,
-        side: THREE.DoubleSide, roughness: 0.85, metalness: 0,
-      })
-      mat.clippingPlanes = this.clippingPlanes
-      const mesh = new THREE.Mesh(geo, mat)
-      mesh.renderOrder = 4
-      mesh.visible = l.visible
-      this.mapGroup.add(mesh)
-      l.mesh = mesh
-    }
-    if (l.mode !== 'surface' && !skipWire) {
-      // 三角边 → LineSegments（每三角 3 边 6 顶点；与 isomesh 等价）
-      const tris = Math.floor(res.count / 3)
-      const linePos = new Float32Array(tris * 18)
-      for (let t = 0; t < tris; t++) {
-        const p = t * 9
-        const q = t * 18
-        for (let e = 0; e < 3; e++) {
-          const a = p + e * 3
-          const b = p + ((e + 1) % 3) * 3
-          linePos[q + e * 6] = res.positions[a]
-          linePos[q + e * 6 + 1] = res.positions[a + 1]
-          linePos[q + e * 6 + 2] = res.positions[a + 2]
-          linePos[q + e * 6 + 3] = res.positions[b]
-          linePos[q + e * 6 + 4] = res.positions[b + 1]
-          linePos[q + e * 6 + 5] = res.positions[b + 2]
-        }
+    const [nx, ny, nz] = l.dims
+    let tris = 0
+    let truncated = false
+    let skipWire = false
+    // 面模式上限 60 万；网格模式上限 15 万（纯线渲染轻）；差图双面上限减半防内存峰值
+    const cap = (l.mode === 'mesh' ? 150_000 : 600_000) / isoDefs.length
+    for (const def of isoDefs) {
+      const res = marchingCubes(l.grid, nx, ny, nz, def.level, cap)
+      tris += Math.floor(res.count / 3)
+      truncated = truncated || res.truncated
+      if (!res.count) continue
+      // 叠加模式在高三角数时省略网格线（线段过重视觉噪声也大；差图已双面再减半阈值）
+      if (l.mode === 'both' && res.count / 3 > 250_000 / isoDefs.length) skipWire = true
+      if (l.mode !== 'mesh') {
+        const geo = new THREE.BufferGeometry()
+        geo.setAttribute('position', new THREE.BufferAttribute(res.positions, 3))
+        geo.setAttribute('normal', new THREE.BufferAttribute(res.normals, 3))
+        geo.applyMatrix4(m)
+        const mat = new THREE.MeshStandardMaterial({
+          color: def.color, transparent: true, opacity: l.opacity, depthWrite: false,
+          side: THREE.DoubleSide, roughness: 0.85, metalness: 0,
+        })
+        mat.clippingPlanes = this.clippingPlanes
+        const mesh = new THREE.Mesh(geo, mat)
+        mesh.renderOrder = 4
+        mesh.visible = l.visible
+        this.mapGroup.add(mesh)
+        l.meshes.push(mesh)
       }
-      const geo = new THREE.BufferGeometry()
-      geo.setAttribute('position', new THREE.BufferAttribute(linePos, 3))
-      geo.applyMatrix4(m)
-      const mat = new THREE.LineBasicMaterial({
-        color: l.color, transparent: true, opacity: Math.min(1, l.opacity + 0.5), depthWrite: false,
-      })
-      mat.clippingPlanes = this.clippingPlanes
-      const wire = new THREE.LineSegments(geo, mat)
-      wire.renderOrder = 5
-      wire.visible = l.visible
-      this.mapGroup.add(wire)
-      l.wire = wire
+      if (l.mode !== 'surface' && !skipWire) {
+        // 三角边 → LineSegments（每三角 3 边 6 顶点；与 isomesh 等价）
+        const trisN = Math.floor(res.count / 3)
+        const linePos = new Float32Array(trisN * 18)
+        for (let t = 0; t < trisN; t++) {
+          const p = t * 9
+          const q = t * 18
+          for (let e = 0; e < 3; e++) {
+            const a = p + e * 3
+            const b = p + ((e + 1) % 3) * 3
+            linePos[q + e * 6] = res.positions[a]
+            linePos[q + e * 6 + 1] = res.positions[a + 1]
+            linePos[q + e * 6 + 2] = res.positions[a + 2]
+            linePos[q + e * 6 + 3] = res.positions[b]
+            linePos[q + e * 6 + 4] = res.positions[b + 1]
+            linePos[q + e * 6 + 5] = res.positions[b + 2]
+          }
+        }
+        const geo = new THREE.BufferGeometry()
+        geo.setAttribute('position', new THREE.BufferAttribute(linePos, 3))
+        geo.applyMatrix4(m)
+        const mat = new THREE.LineBasicMaterial({
+          color: def.color, transparent: true, opacity: Math.min(1, l.opacity + 0.5), depthWrite: false,
+        })
+        mat.clippingPlanes = this.clippingPlanes
+        const wire = new THREE.LineSegments(geo, mat)
+        wire.renderOrder = 5
+        wire.visible = l.visible
+        this.mapGroup.add(wire)
+        l.wires.push(wire)
+      }
     }
+    l.triangles = tris
+    l.truncated = truncated
   }
 
   // ---------- 动画录制（WebM） ----------
@@ -1952,6 +1977,9 @@ export class MolEngine {
         break
       case 'cartoon':
         build = buildCartoon(data, mask, colors, rep.cartoonWidth, opts)
+        break
+      case 'putty':
+        build = buildCartoon(data, mask, colors, rep.cartoonWidth, opts, { putty: true, puttyRange: rep.puttyRange })
         break
       case 'surface':
         build = buildSurface(data, atomIdx, colors, rep)

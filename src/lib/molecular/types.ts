@@ -2,10 +2,11 @@
 import type { ColorScheme } from './colors'
 import type { ChainType } from './parser'
 
-export type RepType = 'cartoon' | 'ballstick' | 'sticks' | 'spacefill' | 'lines' | 'surface'
+export type RepType = 'cartoon' | 'putty' | 'ballstick' | 'sticks' | 'spacefill' | 'lines' | 'surface'
 
 export const REP_LABELS: Record<RepType, string> = {
   cartoon: 'Cartoon 带状',
+  putty: 'Putty B 因子管',
   ballstick: '球棍',
   sticks: '棍状',
   spacefill: '空间填充',
@@ -27,6 +28,8 @@ export interface RepConfig {
   cartoonWidth: number   // cartoon 宽度倍率
   probe: number          // surface 探针半径 (Å)
   opacity: number        // surface 不透明度
+  /** putty：管径映射 B 因子上限（Å²，仅 putty 用；0=自动取结构分位） */
+  puttyRange: number
   /** 表达式求值错误 */
   error?: string
 }
@@ -44,6 +47,7 @@ export function defaultRep(type: RepType, selection = 'all', colorScheme: ColorS
     cartoonWidth: 1,
     probe: 1.2,
     opacity: 1,
+    puttyRange: 0,
   }
 }
 

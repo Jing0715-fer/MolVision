@@ -12,7 +12,8 @@ export async function GET(
   }
   const headers = { 'User-Agent': 'MolVision/1.0 (molecular viewer)' }
   try {
-    const res = await fetch(`https://files.rcsb.org/download/${pdbId}-sf.cif`, { headers, next: { revalidate: 604800 } })
+    // SF 文件普遍 >2MB，超出 Next.js data cache 上限会刷警告 —— 显式 no-store（走 OS 级 fetch 缓存语义）
+    const res = await fetch(`https://files.rcsb.org/download/${pdbId}-sf.cif`, { headers, cache: 'no-store' })
     if (res.ok) {
       const text = await res.text()
       if (text.length < 200 || !text.includes('_refln')) {

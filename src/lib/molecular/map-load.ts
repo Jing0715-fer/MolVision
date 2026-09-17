@@ -1,9 +1,10 @@
-// 电子密度图加载：① RCSB 结构因子 → 模型相位 → 3D FFT 合成 2Fo−Fc；② CCP4/MRC 文件直读
-// 引擎持有几何（setDensityMap），本模块负责取数/计算/镜像状态到 map-store
+// 电子密度图加载：① RCSB 结构因子 → 模型相位 → 3D FFT 合成 2Fo−Fc / Fo−Fc 差图（Web Worker）；
+// ② CCP4/MRC 文件直读。引擎持有几何（setDensityMap），本模块负责取数/计算/镜像状态到 map-store。
 import { toast } from 'sonner'
 import { engineRef, useMolStore, dataRegistry } from './store'
 import { useMapStore, type MapInfoMirror } from './map-store'
-import { parseSfCif, computeDensityMap, type ModelAtoms } from './sffourier'
+import { parseSfCif, computeDensityMap, type ModelAtoms, type MapKind } from './sffourier'
+import type { MapWorkerRequest, MapWorkerResponse } from './map-worker'
 import { parseCcp4 } from './ccp4'
 import { orthoMatrix, type CrystalCell } from './symmetry'
 
@@ -89,8 +90,64 @@ function syncMapMirror(source: MapInfoMirror['source'], ms: number) {
   return mirror
 }
 
-/** 从 RCSB 拉取结构因子并用当前活动结构计算 2Fo−Fc 电子密度图 */
-export async function fetchAndComputeMap(pdbIdRaw: string): Promise<void> {
+// ---------- 密度合成 Worker（单例；构造失败回退主线程） ----------
+
+let mapWorker: Worker | null = null
+let workerBroken = false
+let workerReqId = 1
+
+function ensureMapWorker(): Worker | null {
+  if (workerBroken) return null
+  if (mapWorker) return mapWorker
+  try {
+    mapWorker = new Worker(new URL('./map-worker.ts', import.meta.url))
+    return mapWorker
+  } catch {
+    workerBroken = true
+    return null
+  }
+}
+
+/** Worker 内完成 文本解析 → FFT 合成（不阻塞主线程）；worker 不可用时 reject 由调用方回退 */
+function computeDensityViaWorker(
+  cifText: string,
+  kind: MapKind,
+  fallbackCell: CrystalCell | null,
+  fallbackSpaceGroup: string,
+  atoms: ModelAtoms,
+): Promise<MapWorkerResponse> {
+  return new Promise((resolve, reject) => {
+    const w = ensureMapWorker()
+    if (!w) {
+      reject(new Error('worker-unavailable'))
+      return
+    }
+    const reqId = workerReqId++
+    const cleanup = () => {
+      w.removeEventListener('message', onMsg)
+      w.removeEventListener('error', onFail)
+    }
+    const onMsg = (ev: MessageEvent<MapWorkerResponse>) => {
+      if (!ev.data || ev.data.reqId !== reqId) return
+      cleanup()
+      if (ev.data.error || !ev.data.grid) reject(new Error(ev.data.error ?? '空结果'))
+      else resolve(ev.data)
+    }
+    const onFail = () => {
+      cleanup()
+      reject(new Error('worker-error'))
+    }
+    w.addEventListener('message', onMsg)
+    w.addEventListener('error', onFail)
+    const req: MapWorkerRequest = {
+      type: 'compute', reqId, cifText, kind, fallbackCell, fallbackSpaceGroup, atoms,
+    }
+    w.postMessage(req)
+  })
+}
+
+/** 从 RCSB 拉取结构因子并计算电子密度图（kind：2Fo−Fc 常规 / Fo−Fc 差图） */
+export async function fetchAndComputeMap(pdbIdRaw: string, kind: MapKind = '2fofc'): Promise<void> {
   const pdbId = pdbIdRaw.trim().toUpperCase()
   const store = useMolStore.getState()
   if (!store.activeId) {
@@ -103,6 +160,7 @@ export async function fetchAndComputeMap(pdbIdRaw: string): Promise<void> {
     toast.error(`无效的 PDB 编号: "${pdbId}"`)
     return
   }
+  const kindLabel = kind === 'fofc' ? 'Fo−Fc 差图' : '2Fo−Fc'
   useMapStore.getState().setComputing(true, `正在获取 ${pdbId} 结构因子…`)
   try {
     const res = await fetch(`/api/sf/${pdbId}`)
@@ -111,18 +169,7 @@ export async function fetchAndComputeMap(pdbIdRaw: string): Promise<void> {
       throw new Error(body.error || `获取失败 (${res.status})`)
     }
     const text = await res.text()
-    useMapStore.getState().setComputing(true, '解析反射表…')
-    await new Promise(r => setTimeout(r, 30)) // 让 UI 先更新
     const t0 = performance.now()
-    const sf = parseSfCif(text)
-    if (sf.error) throw new Error(sf.error)
-    if (sf.reflns.length < 50) throw new Error(`有效反射过少（${sf.reflns.length} 条）`)
-    // 晶胞：优先 SF 文件，缺失时用结构 CRYST1
-    const cell: CrystalCell | null = sf.cell ?? (data.crystal ? { ...data.crystal } : null)
-    if (!cell) throw new Error('结构因子文件与结构均无晶胞信息')
-    const spaceGroup = sf.spaceGroup || data.crystal?.spaceGroup || 'P 1'
-    useMapStore.getState().setComputing(true, `FFT 合成 2Fo−Fc（${sf.reflns.length.toLocaleString()} 条反射）…`)
-    await new Promise(r => setTimeout(r, 30))
     const model: ModelAtoms = {
       pos: data.atoms.positions,
       elements: data.atoms.elements,
@@ -130,15 +177,46 @@ export async function fetchAndComputeMap(pdbIdRaw: string): Promise<void> {
       occupancies: data.atoms.occupancies,
       count: data.atoms.count,
     }
-    const result = computeDensityMap(sf.reflns, cell, spaceGroup, model)
-    if (result.error) throw new Error(result.error)
+    const fallbackCell: CrystalCell | null = data.crystal ? { ...data.crystal } : null
+    const fallbackSg = data.crystal?.spaceGroup ?? ''
+
+    // —— Worker 路径（不阻塞 UI）；worker 不可用 → 主线程同步回退 ——
+    let result: {
+      grid: Float32Array; n: number; cell: CrystalCell; reflnCount: number
+      mean: number; rms: number; min: number; max: number
+    }
+    let usedWorker = true
+    useMapStore.getState().setComputing(true, `FFT 合成 ${kindLabel}（Web Worker，页面可继续交互）…`)
+    try {
+      const r = await computeDensityViaWorker(text, kind, fallbackCell, fallbackSg, model)
+      if (!r.grid || !r.cell) throw new Error('空结果')
+      result = { grid: r.grid, n: r.n, cell: r.cell, reflnCount: r.reflnCount, mean: r.mean, rms: r.rms, min: r.min, max: r.max }
+    } catch (werr) {
+      if (werr instanceof Error && (werr.message === 'worker-unavailable' || werr.message === 'worker-error')) {
+        usedWorker = false
+        // 主线程回退（罕见环境无 Worker；同步阻塞但结果一致）
+        useMapStore.getState().setComputing(true, `FFT 合成 ${kindLabel}（主线程回退）…`)
+        await new Promise(r => setTimeout(r, 30))
+        const sf = parseSfCif(text)
+        if (sf.error) throw new Error(sf.error)
+        if (sf.reflns.length < 50) throw new Error(`有效反射过少（${sf.reflns.length} 条）`)
+        const cell: CrystalCell | null = sf.cell ?? fallbackCell
+        if (!cell) throw new Error('结构因子文件与结构均无晶胞信息')
+        const spaceGroup = sf.spaceGroup || fallbackSg || 'P 1'
+        const r = computeDensityMap(sf.reflns, cell, spaceGroup, model, kind)
+        if (r.error) throw new Error(r.error)
+        result = { grid: r.grid, n: r.n, cell: r.cell, reflnCount: sf.reflns.length, mean: r.mean, rms: r.rms, min: r.min, max: r.max }
+      } else {
+        throw werr
+      }
+    }
     const eng = engineRef.current
     if (!eng) throw new Error('渲染引擎未就绪')
     // 裁剪到结构包围盒 ±6 Å（全晶胞栅格 MC 三角形过多且噪声主导；小晶胞自动跳过裁剪）
     let grid = result.grid
     let dims: [number, number, number] = [result.n, result.n, result.n]
     let fracOrigin: [number, number, number] = [0, 0, 0]
-    const cropped = cropGrid(result.grid, result.n, cell, data.bbox, 6)
+    const cropped = cropGrid(result.grid, result.n, result.cell, data.bbox, 6)
     if (cropped) {
       grid = cropped.grid
       dims = cropped.dims
@@ -146,22 +224,27 @@ export async function fetchAndComputeMap(pdbIdRaw: string): Promise<void> {
       fracOrigin = [cropped.i0[0] / result.n, cropped.i0[1] / result.n, cropped.i0[2] / result.n]
     }
     eng.setDensityMap({
-      name: `${pdbId} 2Fo−Fc`,
+      name: `${pdbId} ${kindLabel}`,
       grid,
       dims,
       fracOrigin,
       fracStep: [1 / result.n, 1 / result.n, 1 / result.n],
       cell: result.cell,
       mean: result.mean, rms: result.rms, min: result.min, max: result.max,
+      difference: kind === 'fofc',
     })
     const ms = performance.now() - t0
-    const mirror = syncMapMirror('sf', ms)
+    syncMapMirror('sf', ms)
     const log = useMolStore.getState().appendLog
-    log('out', `电子密度图就绪（${pdbId} 2Fo−Fc）：${sf.reflns.length.toLocaleString()} 条反射 · 网格 ${cropped ? `${dims.join('×')}（自 ${result.n}³ 裁剪）` : `${result.n}³`} · ${ms.toFixed(0)} ms · 默认 2σ 等值面`)
-    toast.success(`电子密度图已合成`, {
-      description: `${pdbId} 2Fo−Fc · ${sf.reflns.length.toLocaleString()} 反射 · ${result.n}³ 网格 · ${ms.toFixed(0)} ms`,
+    if (kind === 'fofc') {
+      log('out', `Fo−Fc 差图就绪（${pdbId}）：${result.reflnCount.toLocaleString()} 条反射 · 网格 ${cropped ? `${dims.join('×')}（自 ${result.n}³ 裁剪）` : `${result.n}³`} · ${ms.toFixed(0)} ms · 默认 ±3σ（绿=正峰 模型缺失 / 红=负峰 模型多余）`)
+    } else {
+      log('out', `电子密度图就绪（${pdbId} 2Fo−Fc）：${result.reflnCount.toLocaleString()} 条反射 · 网格 ${cropped ? `${dims.join('×')}（自 ${result.n}³ 裁剪）` : `${result.n}³`} · ${ms.toFixed(0)} ms · 默认 2σ 等值面`)
+    }
+    log('out', `密度合成于 ${usedWorker ? 'Web Worker（主线程零阻塞）' : '主线程回退'} 完成`)
+    toast.success(kind === 'fofc' ? 'Fo−Fc 差图已合成' : '电子密度图已合成', {
+      description: `${pdbId} ${kindLabel} · ${result.reflnCount.toLocaleString()} 反射 · ${result.n}³ 网格 · ${ms.toFixed(0)} ms${usedWorker ? ' · Worker' : ' · 主线程'}`,
     })
-    void mirror
     // 视角不强制改动（用户可能在检查局部）；不 fitView
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -207,8 +290,8 @@ export function removeMap(): void {
   useMapStore.getState().setInfo(null)
 }
 
-/** 密度图外观调整（面板/命令共用） */
-export function setMapLook(patch: { iso?: number; mode?: 'surface' | 'mesh' | 'both'; color?: string; opacity?: number; visible?: boolean }): void {
+/** 密度图外观调整（面板/命令共用；差图模式 color=正峰色 negColor=负峰色） */
+export function setMapLook(patch: { iso?: number; mode?: 'surface' | 'mesh' | 'both'; color?: string; negColor?: string; opacity?: number; visible?: boolean }): void {
   engineRef.current?.setMapAppearance(patch)
   const eng = engineRef.current
   const info = eng?.getMapInfo()

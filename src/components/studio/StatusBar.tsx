@@ -148,7 +148,11 @@ export function StatusBar() {
           {mapComputing
             ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
             : <Grid3x3 className="h-3 w-3" />}
-          {mapComputing ? '密度图计算中…' : `密度 ${mapInfo!.iso.toFixed(1)}σ${mapInfo!.truncated ? '+' : ''}`}
+          {mapComputing
+            ? '密度图计算中（Worker）…'
+            : mapInfo!.difference
+              ? <>差图 {mapInfo!.iso.toFixed(1)}σ<span className="text-emerald-600 dark:text-emerald-400">±</span>{mapInfo!.truncated ? '+' : ''}</>
+              : <>密度 {mapInfo!.iso.toFixed(1)}σ{mapInfo!.truncated ? '+' : ''}</>}
         </span>
       )}
 

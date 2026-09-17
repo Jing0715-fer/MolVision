@@ -6,7 +6,11 @@ export interface MapInfoMirror {
   dims: [number, number, number]
   iso: number
   mode: 'surface' | 'mesh' | 'both'
+  /** 差图模式（Fo−Fc ±σ 正绿/负红双等值面） */
+  difference: boolean
   color: string
+  /** 差图负峰颜色 */
+  negColor: string
   opacity: number
   visible: boolean
   triangles: number

@@ -9,7 +9,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 
 const SHORTCUTS: [string, string][] = [
-  ['1 – 7', '快速切换风格预设'],
+  ['1 – 8', '快速切换风格预设（8 = Putty B 因子管）'],
   ['F', '适配视图（缩放到结构）'],
   ['S', '自动旋转 开/关'],
   ['R', '相机摇摆 开/关（±26°）'],
@@ -101,7 +101,8 @@ export function HelpDialog() {
             </h3>
             <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
               <p><span className="font-semibold text-foreground">叠合</span>：结构卡片 ⧉ 按钮或「叠合 (matchmaker)」面板，支持手动指定链对（<code className="rounded bg-muted px-1 font-mono text-[10px]">superpose 4HHB onto 1A3N chain A to A</code>）；<code className="rounded bg-muted px-1 font-mono text-[10px]">untransform</code> 撤销。</p>
-              <p><span className="font-semibold text-foreground">电子密度</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">map fetch 3ekj</code> 从 RCSB 结构因子实时合成 2Fo−Fc 图（模型相位 + 3D FFT）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel 1.5</code> 调级；也可拖入 .ccp4/.mrc 文件；密度图面板（左侧 🧮）可视化等值面/网格。</p>
+              <p><span className="font-semibold text-foreground">电子密度</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">map fetch 3ekj</code> 从 RCSB 结构因子实时合成 2Fo−Fc 图（模型相位 + 3D FFT，Web Worker 零阻塞）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map fofc 3ekj</code> 合成 Fo−Fc 差图（±σ 正绿/负红双等值面：绿峰=密度有而模型缺、红峰=模型有而密度无）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel 1.5</code> 调级；也可拖入 .ccp4/.mrc 文件；密度图面板（左侧 🧮）可视化等值面/网格。</p>
+              <p><span className="font-semibold text-foreground">B 因子分析</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">preset putty</code> 或快捷键 8——Putty 管径随 B 因子连续变化（粗=柔性/高 B、细=刚性/低 B）配 B 因子彩虹渐变；<code className="rounded bg-muted px-1 font-mono text-[10px]">color bfactor</code> 同款色标。</p>
               <p><span className="font-semibold text-foreground">对称伴侣</span>：结构面板「对称伴侣」区块或 <code className="rounded bg-muted px-1 font-mono text-[10px]">symmetry 20</code>，按 CRYST1 空间群（65 手性群全覆盖）生成晶格邻居。</p>
               <p><span className="font-semibold text-foreground">界面接触</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">contacts chain A | chain B</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">interface A B</code>——残基对连线 + 2D 图谱 + ΔSASA 埋藏面积。</p>
               <p><span className="font-semibold text-foreground">跨结构接触</span>：superpose 后用 <code className="rounded bg-muted px-1 font-mono text-[10px]">xcontacts 1UBQ:chain A | 1D3Z:chain A</code> 检测复合物界面。</p>

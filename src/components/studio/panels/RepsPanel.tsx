@@ -21,11 +21,11 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover'
 
-const REP_TYPES: RepType[] = ['cartoon', 'ballstick', 'sticks', 'spacefill', 'lines', 'surface']
+const REP_TYPES: RepType[] = ['cartoon', 'putty', 'ballstick', 'sticks', 'spacefill', 'lines', 'surface']
 const SCHEMES: ColorScheme[] = ['element', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'uniform']
 
 const TYPE_ICON: Record<RepType, string> = {
-  cartoon: '🧬', ballstick: '⚪', sticks: '➖', spacefill: '⬤', lines: '〰️', surface: '🎈',
+  cartoon: '🧬', putty: '🐍', ballstick: '⚪', sticks: '➖', spacefill: '⬤', lines: '〰️', surface: '🎈',
 }
 
 export function RepsPanel() {
@@ -144,15 +144,27 @@ function RepCard({
                   />
                 </div>
               )}
-              {rep.type === 'cartoon' && (
+              {(rep.type === 'cartoon' || rep.type === 'putty') && (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
-                    <span>带状宽度</span><span className="font-mono">{rep.cartoonWidth.toFixed(2)}×</span>
+                    <span>{rep.type === 'putty' ? '管径整体倍率' : '带状宽度'}</span><span className="font-mono">{rep.cartoonWidth.toFixed(2)}×</span>
                   </div>
                   <Slider
                     value={[rep.cartoonWidth]} min={0.3} max={2.5} step={0.05}
                     onValueChange={v => onUpdate(structureId, rep.id, { cartoonWidth: v[0] })}
                   />
+                </div>
+              )}
+              {rep.type === 'putty' && (
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
+                    <span>B 因子上限</span><span className="font-mono">{rep.puttyRange > 0 ? `${rep.puttyRange.toFixed(0)} Å²` : '自动'}</span>
+                  </div>
+                  <Slider
+                    value={[rep.puttyRange > 0 ? rep.puttyRange : 100]} min={0} max={200} step={5}
+                    onValueChange={v => onUpdate(structureId, rep.id, { puttyRange: v[0] })}
+                  />
+                  <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground/80">0 = 按结构实际 B 范围；调低可抑制高 B 离群值拉伸管径。</p>
                 </div>
               )}
               {rep.type === 'surface' && (
