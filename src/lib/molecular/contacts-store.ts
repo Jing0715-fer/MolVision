@@ -1,6 +1,19 @@
 // 接触分析轻量 store（独立于主 store，避免 visualRev 循环）
 import { create } from 'zustand'
-import type { ContactPair } from './contacts'
+import type { ContactPair, CrossContactPair } from './contacts'
+
+/** 跨结构接触上下文（xcontacts 命令产生；连线渲染需要两侧结构） */
+export interface CrossContext {
+  idA: string
+  idB: string
+  labelA: string
+  labelB: string
+  exprA: string
+  exprB: string
+  cutoff: number
+  maskA: Uint8Array
+  maskB: Uint8Array
+}
 
 interface ContactStore {
   /** A/B 组选择表达式 */
@@ -21,6 +34,10 @@ interface ContactStore {
   errors: { a?: string; b?: string }
   /** 是否已按结构填充默认表达式（切换结构后重新默认） */
   defaulted: boolean
+  /** 跨结构模式上下文（null = 单结构 contacts） */
+  cross: CrossContext | null
+  /** 跨结构残基对（cross 非空时有效，局部索引） */
+  crossPairs: CrossContactPair[]
   setExpr: (side: 'a' | 'b', expr: string) => void
   setCutoff: (cutoff: number) => void
   setVisible: (visible: boolean) => void
@@ -33,6 +50,8 @@ interface ContactStore {
     atomsB: number
     errors?: { a?: string; b?: string }
   }) => void
+  /** 跨结构结果（清空单结构结果，切换渲染路径） */
+  setCrossResult: (ctx: CrossContext, pairs: CrossContactPair[], residuesA: number[], residuesB: number[], atomsA: number, atomsB: number) => void
   clear: () => void
 }
 
@@ -49,6 +68,8 @@ export const useContactStore = create<ContactStore>()(set => ({
   atomsB: 0,
   errors: {},
   defaulted: false,
+  cross: null,
+  crossPairs: [],
   setExpr: (side, expr) => set(s => ({
     [side === 'a' ? 'aExpr' : 'bExpr']: expr,
     defaulted: true,
@@ -64,9 +85,26 @@ export const useContactStore = create<ContactStore>()(set => ({
     atomsA: r.atomsA,
     atomsB: r.atomsB,
     errors: r.errors ?? {},
+    cross: null,
+    crossPairs: [],
+  }),
+  setCrossResult: (ctx, pairs, residuesA, residuesB, atomsA, atomsB) => set({
+    cross: ctx,
+    crossPairs: pairs,
+    // 同步 residues/atoms 供面板显示（局部索引语义 + 两侧结构各自解读）
+    residuesA,
+    residuesB,
+    atomsA,
+    atomsB,
+    structureId: ctx.idA,
+    pairs: [],
+    errors: {},
+    aExpr: ctx.exprA,
+    bExpr: ctx.exprB,
+    cutoff: ctx.cutoff,
   }),
   clear: () => set({
     structureId: null, pairs: [], residuesA: [], residuesB: [],
-    atomsA: 0, atomsB: 0, errors: {},
+    atomsA: 0, atomsB: 0, errors: {}, cross: null, crossPairs: [],
   }),
 }))

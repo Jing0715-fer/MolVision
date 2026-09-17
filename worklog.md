@@ -332,3 +332,24 @@ Stage Summary:
 - QA 方法论沉淀：①agent-browser eval 中 React 受控输入最可靠的方式是 focus + document.execCommand('selectAll')+('insertText') + dispatchEvent keydown Enter（valueTracker 重置法在本环境 keydown 不触发 React onKeyDown；原生 setter 跨 realm Illegal invocation）②agent-browser fill/focus/press 走 CDP 真实事件最稳 ③像素验证颜色渐变时注意 spectrum 彩虹与目标渐变的色域重叠假象（用特征色 #2e4a8f 深蓝做判别）④长 await 的 eval 会 CDP 超时（30s），多命令分段执行
 - 未解决问题与风险：①SASA 烘焙（colorOverrides）与 rep scheme 两条着色路径并存——color sasa 走烘焙（持久化友好但参数化弱），ColorPanel 下拉若选 sasa scheme 则依赖 data.sasa（reload 后需重算才显示渐变，有灰色兜底）；②大结构第一次 color sasa 需等 worker 完成后重跑一次（有提示但非全自动）③ΔSASA 的 b 侧掩码在 worker 结果回传后用 contacts residuesA 重建（命令行/面板路径一致，但若 contacts 结果先被清除则侧别判定退化到全 B 侧）④HMR 双跳竞态的精确时序未完全复现（修复为兜底保护，非根因消除——生产构建无 HMR 不受影响）⑤agent-browser errors 2 条空伪迹依旧
 - 下一阶段建议（优先级序）：① color sasa 全自动化（worker 完成回调自动烘焙，消除"再跑一次"提示）② 跨结构接触分析（superpose 后复合物界面检测，Roadmap 遗留）③ ColorPanel 的 sasa scheme 选中时自动触发计算 ④ 多链迭代叠合（matchmaker 完整版）⑤ ensemble 大结构矩阵直更性能优化 ⑥ 氢键/SASA/接触统一 Worker 池
+
+---
+Task ID: cron-r8 (进行中)
+Agent: main
+Task: 周期评审——QA 冒烟 + interface 命令 bug 修复 + 跨结构接触分析 + color sasa 全自动化
+
+Work Log (阶段性):
+- QA 冒烟通过：会话恢复 3 结构、select 574、superpose RMSD 0.521、dssp 462 螺旋、SASA 24087 Å²、color sasa 像素验证（青 2728/黄 12602）、hbond、untransform、contacts 84 对
+- 【BUG 修复 1】interface chain A chain B 解析错误（盲取 parts[1]/[2] → "chain chain" 空）：重写为表达式风格解析，兼容 interface A B / interface :A :B / interface chain A chain B / 尾部 cutoff 四种写法；已验证 84 对接触与 contacts 管道语法一致
+- 【BUG 修复 2】nav 图标按钮无 aria-label/title（a11y）：LeftPanel 面板按钮 + 移动端抽屉按钮补齐
+- 【新功能 A】跨结构接触分析（xcontacts，对标 ChimeraX contacts 跨模型）：
+  - contacts.ts 新增 CrossContactPair/CrossContactResult/detectContactsCross（B 侧空间网格加速、H/D 排除、残基对字符串 key 聚合）+ resolveStructure（PDB ID/名称前缀解析）+ runCrossContactAnalysis（"STRUCT:expr" 规格，支持省略结构=活动结构）
+  - contacts-store.ts 新增 cross: CrossContext | null + crossPairs + setCrossResult（互斥单结构结果）；clear 同时清跨结构
+  - engine.ts updateContacts 双路径：cross 模式连线端点分别取 posA/posB；buildContactGeometry 抽出共用；结构移除时 cross 涉及任一侧即清除；bsa 在 cross 模式下正确拒绝
+  - commands.ts xcontacts/xcontact/xiface 命令（管道语法 + 尾部 cutoff）
+  - AnalysisPanel 跨结构模式：单结构/跨结构 toggle、结构 A/B 下拉（⤴ 标记已变换）、表达式实时计数（对各自结构求值）、截断滑块、紫色结果卡片（Top-5 接触对 + 两侧统计）、空结果提示
+  - StatusBar 紫色跨接触徽章（labelA↔labelB + 对数 + 截断）
+  - 修复 ExprInput count 改为可选（跨结构首次渲染 crash：count.toLocaleString undefined——VLM 截图 QA 发现）
+- 【新功能 B】color sasa 全自动化：engine.queueSasaBake + pendingSasaBake；store.applyColor 大结构 worker 路径挂起烘焙 → applySasaResult worker 完成后自动 applyColor + 日志；结构移除清理挂起
+- 验证：xcontacts superpose 后 978 对跨接触（0.07 Å 最近——同蛋白不同构象合理）；3D 连线渲染 2809 红像素；界面 UI VLM 确认无重叠截断
+- lint 全绿

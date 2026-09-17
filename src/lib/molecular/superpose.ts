@@ -245,26 +245,40 @@ export function quatToMatrix(q: [number, number, number, number]): number[][] {
 /**
  * 主入口：移动结构 → 参考结构叠合
  * 链对策略：移动结构按最长蛋白链，参考结构遍历所有蛋白链取比对得分最高者
+ * 可选 chain 参数：显式指定移动/参考链（matchmaker 风格链对选择）
  */
-export function superposeStructures(mobile: StructureData, ref: StructureData): SuperposeResult {
+export function superposeStructures(mobile: StructureData, ref: StructureData, mobileChain?: string, refChain?: string): SuperposeResult {
   const mobileSeqs = extractAllSequences(mobile)
   const refSeqs = extractAllSequences(ref)
   if (!mobileSeqs.length) return fail('移动结构没有可识别的蛋白链')
   if (!refSeqs.length) return fail('参考结构没有可识别的蛋白链')
-  // 移动取最长链，参考遍历取最佳
-  const mob = mobileSeqs[0]
-  let best: { seq: ChainSequence; score: number; pairs: [number, number][] } | null = null
-  for (const rs of refSeqs) {
-    // 只与长度相当的链比对（性能保护：序列长度差 > 60% 跳过）
-    if (Math.min(mob.sequence.length, rs.sequence.length) < 0.4 * Math.max(mob.sequence.length, rs.sequence.length)) continue
-    const { pairs, score } = alignSequences(mob.sequence, rs.sequence)
-    if (!best || score > best.score) best = { seq: rs, score, pairs }
+  // 移动链：显式指定 or 最长
+  let mob = mobileSeqs[0]
+  if (mobileChain) {
+    const found = mobileSeqs.find(s => s.chainId.trim().toUpperCase() === mobileChain.trim().toUpperCase())
+    if (!found) return fail(`移动结构没有蛋白链 "${mobileChain}"（可用：${mobileSeqs.map(s => s.chainId.trim()).join(', ')}）`)
+    mob = found
   }
-  if (!best) {
-    // 兜底：直接比对最长的参考链（即使长度悬殊）
-    const rs = refSeqs[0]
+  let best: { seq: ChainSequence; score: number; pairs: [number, number][] } | null = null
+  if (refChain) {
+    // 显式参考链
+    const rs = refSeqs.find(s => s.chainId.trim().toUpperCase() === refChain.trim().toUpperCase())
+    if (!rs) return fail(`参考结构没有蛋白链 "${refChain}"（可用：${refSeqs.map(s => s.chainId.trim()).join(', ')}）`)
     const { pairs, score } = alignSequences(mob.sequence, rs.sequence)
     best = { seq: rs, score, pairs }
+  } else {
+    for (const rs of refSeqs) {
+      // 只与长度相当的链比对（性能保护：序列长度差 > 60% 跳过）
+      if (Math.min(mob.sequence.length, rs.sequence.length) < 0.4 * Math.max(mob.sequence.length, rs.sequence.length)) continue
+      const { pairs, score } = alignSequences(mob.sequence, rs.sequence)
+      if (!best || score > best.score) best = { seq: rs, score, pairs }
+    }
+    if (!best) {
+      // 兜底：直接比对最长的参考链（即使长度悬殊）
+      const rs = refSeqs[0]
+      const { pairs, score } = alignSequences(mob.sequence, rs.sequence)
+      best = { seq: rs, score, pairs }
+    }
   }
   // 收集 CA 坐标对（双方都有 CA 且序列一致的比对位）
   const P: number[][] = []

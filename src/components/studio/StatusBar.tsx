@@ -1,7 +1,7 @@
 'use client'
 
 // 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示
-import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets } from 'lucide-react'
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets, ArrowLeftRight } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { useHBondStore } from '@/lib/molecular/hbond-store'
@@ -96,6 +96,20 @@ export function StatusBar() {
           <Network className="h-3 w-3" />
           {contact.pairs.length.toLocaleString()} 接触
           <span className="text-[9px] text-muted-foreground/70">≤{contact.cutoff.toFixed(1)}Å</span>
+        </span>
+      )}
+
+      {/* 跨结构接触 */}
+      {contact.cross && contact.crossPairs.length > 0 && (
+        <span
+          className={cn(
+            'hidden shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-medium md:flex',
+            contact.visible ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400' : 'text-muted-foreground/60',
+          )}
+        >
+          <ArrowLeftRight className="h-3 w-3" />
+          {contact.cross.labelA}↔{contact.cross.labelB} {contact.crossPairs.length.toLocaleString()} 跨接触
+          <span className="text-[9px] text-muted-foreground/70">≤{contact.cross.cutoff.toFixed(1)}Å</span>
         </span>
       )}
 

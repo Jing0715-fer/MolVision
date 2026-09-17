@@ -16,8 +16,9 @@
 | 🎈 **Molecular surface** | Metaball/gaussian implicit surface via marching cubes, per-atom vertex coloring, probe radius & opacity controls |
 | ⚡ **Hydrogen-bond network** | Distance/angle geometry criteria (D-H…A ≤ 2.5 Å & ≥ 120° with H; D…A ≤ 3.5 Å without), dashed teal lines with endpoint markers, optional water-mediated bonds & selection-scoped display — press `B`. Structures ≥ 2,000 atoms are detected in a **background Web Worker** (UI never blocks, live progress badge) |
 | 🎬 **NMR ensemble animation** | Multi-model PDB/mmCIF ensembles playback with smooth frame interpolation, speed control (2-30 fps), loop mode and frame scrubbing — press `P`, try `load 1d3z` |
-| 🔀 **Structure superposition** | ChimeraX matchmaker-style alignment: Needleman-Wunsch sequence pairing + Horn quaternion rigid-body fit (Kabsch-equivalent) with per-CA RMSD report — `superpose 4HHB onto 2HHB`, one-click ⧉ button in the Structures panel. Aligned poses persist across sessions (rigid transform replay) |
-| 🧪 **Interface contact analysis** | ChimeraX contacts-style: detect residue-residue contacts between two selections (heavy-atom distance ≤ cutoff, bonded pairs excluded), rendered as distance-coded lines (near = red, far = amber) — with a clickable **2D contact map**, interface-residue selection and per-side highlighting — `interface A B`, `contacts chain A | within 8 of resn HEM 4.0` or the Analysis panel |
+| 🔀 **Structure superposition** | ChimeraX matchmaker-style alignment: Needleman-Wunsch sequence pairing + Horn quaternion rigid-body fit (Kabsch-equivalent) with per-CA RMSD report — `superpose 4HHB onto 2HHB`, one-click ⧉ button in the Structures panel, or the **matchmaker panel** with explicit chain-pair selection (`superpose 4HHB onto 1A3N chain A to A`). Aligned poses persist across sessions (rigid transform replay) |
+| 🧪 **Interface contact analysis** | ChimeraX contacts-style: detect residue-residue contacts between two selections (heavy-atom distance ≤ cutoff, bonded pairs excluded), rendered as distance-coded lines (near = red, far = amber) — with a clickable **2D contact map**, interface-residue selection and per-side highlighting — `interface A B` (also `interface chain A chain B` / `interface :A :B`), `contacts chain A | within 8 of resn HEM 4.0` or the Analysis panel |
+| 🌉 **Cross-structure contacts** | Detect interfacial contacts **between two different structures** (complex/docking interfaces): superpose first, then `xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0` — violet result card with Top contact pairs + status-bar badge; A/B structure selectors with live atom counts in the Analysis panel |
 | 🌀 **DSSP secondary structure** | Kabsch–Sander backbone H-bond energies (ideal-geometry H placement, 0.03 Å validated) with helix/turn/bridge assignment — structures lacking HELIX/SHEET records get correct cartoons automatically; force recompute with `dssp` |
 | 💧 **SASA solvent accessibility** | Shrake–Rupley algorithm (FreeSASA-equivalent, ProtOr/Bondi vdW radii, 1.4 Å water probe, 64-256 Fibonacci sphere points per atom): per-atom/per-residue areas, hydrophobic vs polar decomposition, Top exposed residues, and an **exposure color scheme** (buried blue → exposed orange-red) — `sasa 1.4 256` or the Analysis panel; structures ≥ 2,200 atoms compute in a **background Web Worker** |
 | 🧱 **Interface ΔSASA (BSA)** | Buried solvent-accessible area between two selections — the rigorous interface criterion: three-pass SASA (A alone / B alone / complex) with core interface residues flagged at ΔSASA > 1 Å² (PDB standard) — run contacts first, then `bsa`; compare with distance-cutoff contacts in the Analysis panel |
@@ -48,9 +49,9 @@ show cartoon chain A
 zoom site
 bg black · spin on · rock on · slab 20 · label on · preset surface
 ssao on 3 · hbonds on 3.2 · ensemble play · ensemble fps 15
-superpose 4hhb onto 2hhb · record start
-interface A B · contacts chain A | chain B 4.0 · dssp
-sasa 1.4 256 · color sasa · bsa · untransform 1d3z
+superpose 4hhb onto 2hhb · superpose 4hhb onto 1a3n chain A to A · record start
+interface A B · interface chain A chain B · contacts chain A | chain B 4.0 · dssp
+xcontacts 1ubq:chain A | 1d3z:chain A 5.0 · sasa 1.4 256 · color sasa · bsa · untransform 1d3z
 ```
 
 ### Measurement & annotation
@@ -124,7 +125,7 @@ src/app/             single-page studio + /api/pdb proxy
 ```
 
 ## 🗺️ Roadmap
-- Per-chain / multi-chain superposition modes · ensemble GPU-matrix playback for very large systems · cross-structure contact analysis
+- Cross-structure ΔSASA (joint buried area after superpose) · iterative multi-chain matchmaker (auto chain-pair iteration) · ensemble GPU-matrix playback for very large systems · unified Web Worker pool for hbond/SASA/contacts
 
 ## License
 MIT

@@ -71,6 +71,8 @@ export function LeftPanel() {
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setUi({ panel: p.key, panelOpen: ui.panel === p.key ? !ui.panelOpen : true })}
+                  aria-label={p.label}
+                  title={p.label}
                   className={cn(
                     'flex h-9 w-9 items-center justify-center rounded-lg transition',
                     ui.panel === p.key && ui.panelOpen
@@ -94,12 +96,13 @@ export function LeftPanel() {
       </aside>
 
       {/* 移动端抽屉 */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="absolute left-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card/90 shadow-lg backdrop-blur transition md:hidden"
-      >
-        <Boxes className="h-4 w-4" />
-      </button>
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="打开控制面板"
+          className="absolute left-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card/90 shadow-lg backdrop-blur transition md:hidden"
+        >
+          <Boxes className="h-4 w-4" />
+        </button>
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-[300px] p-0">
           <SheetTitle className="sr-only">控制面板</SheetTitle>

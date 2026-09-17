@@ -125,6 +125,112 @@ export function contactColor(t: number): [number, number, number] {
   ]
 }
 
+// ---------- 跨结构接触（复合物界面检测，对标 ChimeraX contacts 跨模型） ----------
+
+export interface CrossContactPair {
+  /** A 侧残基索引（在结构 A 的残基表内） */
+  resA: number
+  /** B 侧残基索引（在结构 B 的残基表内） */
+  resB: number
+  /** 最小重原子距离（Å） */
+  minDist: number
+  /** 最近原子对（各自结构内的局部原子索引） */
+  atomA: number
+  atomB: number
+  /** 接触原子对计数 */
+  count: number
+}
+
+export interface CrossContactResult {
+  pairs: CrossContactPair[]
+  residuesA: number[]
+  residuesB: number[]
+  atomsA: number
+  atomsB: number
+  ms: number
+}
+
+/**
+ * 跨结构接触检测：结构 A 的原子选择 vs 结构 B 的原子选择。
+ * 前提：两结构已在同一坐标系（superpose 变换直接写入 atoms.positions）。
+ * 判据：重原子（非 H/D）间距离 ≤ cutoff；氢原子排除。
+ * B 侧用其空间网格加速查询。
+ */
+export function detectContactsCross(
+  dataA: StructureData,
+  aMask: Uint8Array,
+  dataB: StructureData,
+  bMask: Uint8Array,
+  opts: ContactOptions = {},
+): CrossContactResult {
+  const t0 = performance.now()
+  const { cutoff = 4.5 } = opts
+  const posA = dataA.atoms.positions
+  const posB = dataB.atoms.positions
+  const nA = dataA.atoms.count
+
+  // 重原子索引列表（排除 H/D）
+  const listA: number[] = []
+  for (let i = 0; i < nA; i++) {
+    if (!aMask[i]) continue
+    const e = dataA.atoms.elements[i]
+    if (e === 'H' || e === 'D') continue
+    listA.push(i)
+  }
+  const nB = dataB.atoms.count
+  let countB = 0
+  for (let i = 0; i < nB; i++) if (bMask[i]) countB++
+  if (!listA.length || !countB) {
+    return { pairs: [], residuesA: [], residuesB: [], atomsA: listA.length, atomsB: countB, ms: performance.now() - t0 }
+  }
+
+  // 残基对聚合（key 用字符串避免跨结构索引碰撞）
+  const pairMap = new Map<string, CrossContactPair>()
+  const cut2 = cutoff * cutoff
+  for (const a of listA) {
+    const ax = posA[a * 3], ay = posA[a * 3 + 1], az = posA[a * 3 + 2]
+    const cand = dataB.grid.queryRadius(ax, ay, az, cutoff, posB)
+    const resA = dataA.atomResidue[a]
+    for (const b of cand) {
+      if (!bMask[b]) continue
+      const e = dataB.atoms.elements[b]
+      if (e === 'H' || e === 'D') continue
+      const resB = dataB.atomResidue[b]
+      const dx = posB[b * 3] - ax, dy = posB[b * 3 + 1] - ay, dz = posB[b * 3 + 2] - az
+      const d2 = dx * dx + dy * dy + dz * dz
+      if (d2 > cut2) continue
+      const dist = Math.sqrt(d2)
+      const key = `${resA}:${resB}`
+      const existing = pairMap.get(key)
+      if (existing) {
+        existing.count++
+        if (dist < existing.minDist) {
+          existing.minDist = dist
+          existing.atomA = a
+          existing.atomB = b
+        }
+      } else {
+        pairMap.set(key, { resA, resB, minDist: dist, atomA: a, atomB: b, count: 1 })
+      }
+    }
+  }
+
+  const pairs = [...pairMap.values()].sort((p, q) => p.minDist - q.minDist)
+  const setA = new Set<number>(), setB = new Set<number>()
+  for (const p of pairs) {
+    setA.add(p.resA)
+    setB.add(p.resB)
+  }
+  return {
+    pairs,
+    residuesA: [...setA].sort((x, y) => x - y),
+    residuesB: [...setB].sort((x, y) => x - y),
+    atomsA: listA.length,
+    atomsB: countB,
+    ms: performance.now() - t0,
+  }
+}
+
 // ---------- 分析运行器（面板 / 命令行共用） ----------
 
 export interface RunContactOutcome {
@@ -204,6 +310,7 @@ export function runBuriedSasa(): RunContactOutcome {
   const store = useMolStore.getState()
   const cs = useContactStore.getState()
   if (!store.activeId) return { ok: false, message: '没有活动结构' }
+  if (cs.cross) return { ok: false, message: '当前为跨结构接触结果——ΔSASA 仅支持单结构内的两组界面（跨结构坐标系独立）' }
   const data = dataRegistry.get(store.activeId)
   if (!data) return { ok: false, message: '结构数据不存在' }
   const A = cs.aExpr.trim(), B = cs.bExpr.trim()
@@ -224,4 +331,122 @@ export function runBuriedSasa(): RunContactOutcome {
     }
   }
   return { ok: true, message: 'ΔSASA 计算中（Web Worker）——完成后将在此输出结果' }
+}
+
+// ---------- 跨结构接触运行器 ----------
+
+/** 按 PDB 编号 / 名称前缀解析结构（支持 "1UBQ"、"1ubq"、"ubiq" 等） */
+export function resolveStructure(ref: string): { id: string; data: StructureData; label: string } | null {
+  const s = useMolStore.getState()
+  const q = ref.trim()
+  if (!q) return null
+  const lower = q.toLowerCase()
+  // 精确 PDB 编号匹配
+  const byPdb = s.structures.find(x => x.meta.pdbId?.toLowerCase() === lower)
+  if (byPdb) {
+    const d = dataRegistry.get(byPdb.id)
+    if (d) return { id: byPdb.id, data: d, label: byPdb.meta.pdbId! }
+  }
+  // 名称 / 标题前缀匹配
+  const byName = s.structures.find(x => x.name.toLowerCase().startsWith(lower) || x.meta.pdbId?.toLowerCase().startsWith(lower))
+  if (byName) {
+    const d = dataRegistry.get(byName.id)
+    if (d) return { id: byName.id, data: d, label: byName.meta.pdbId ?? byName.name }
+  }
+  return null
+}
+
+export interface RunCrossOutcome extends RunContactOutcome {
+  /** A/B 侧结构（成功时返回，供渲染） */
+  idA?: string
+  idB?: string
+  dataA?: StructureData
+  dataB?: StructureData
+  residuesA?: number[]
+  residuesB?: number[]
+}
+
+/**
+ * 跨结构接触：xcontacts <结构A>:<exprA> | <结构B>:<exprB> [cutoff]
+ * 例：xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0
+ * 也可两表达式无结构前缀（默认活动结构为 A，另一结构按 B 解析）。
+ */
+export function runCrossContactAnalysis(specA: string, specB: string, cutoff?: number): RunCrossOutcome {
+  const store = useMolStore.getState()
+  const cs = useContactStore.getState()
+  const cut = cutoff ?? cs.cutoff
+
+  // 解析 "STRUCT:expr"（STRUCT 为 PDB 编号或名称前缀；可省略 → 活动结构）
+  const parseSpec = (spec: string): { struct: ReturnType<typeof resolveStructure>; expr: string; error?: string } => {
+    const s = spec.trim()
+    const m = s.match(/^(.+?):(.+)$/)
+    if (m && !s.includes('|')) {
+      const st = resolveStructure(m[1])
+      if (st) return { struct: st, expr: m[2].trim() }
+      // 无匹配结构 → 可能是 "resi 1:10" 之类，整串当表达式
+      return { struct: null, expr: s }
+    }
+    return { struct: null, expr: s }
+  }
+
+  const pa = parseSpec(specA)
+  const pb = parseSpec(specB)
+  const structA = pa.struct ?? (store.activeId ? (() => { const d = dataRegistry.get(store.activeId); return d ? { id: store.activeId, data: d, label: store.structures.find(x => x.id === store.activeId)?.meta.pdbId ?? '活动结构' } : null })() : null)
+  const structB = pb.struct ?? (store.activeId ? (() => { const d = dataRegistry.get(store.activeId); return d ? { id: store.activeId, data: d, label: store.structures.find(x => x.id === store.activeId)?.meta.pdbId ?? '活动结构' } : null })() : null)
+
+  if (!structA || !structB) return { ok: false, message: '结构未找到（用 PDB 编号或名称前缀指定，如 1UBQ:chain A）' }
+  if (structA.id === structB.id) return { ok: false, message: '跨结构检测需要两个不同结构（同结构请用 contacts）' }
+  if (!pa.expr || !pb.expr) return { ok: false, message: '请提供 A/B 两侧选择表达式' }
+
+  const namedA = buildNamedMasks(structA.id, structA.data)
+  const namedB = buildNamedMasks(structB.id, structB.data)
+  const ra = evaluateSelection(pa.expr, { structure: structA.data, named: namedA })
+  const rb = evaluateSelection(pb.expr, { structure: structB.data, named: namedB })
+  if (ra.error || rb.error) return { ok: false, message: `表达式错误：${[ra.error, rb.error].filter(Boolean).join('；')}` }
+  if (ra.count === 0 || rb.count === 0) return { ok: false, message: `选择为空（${structA.label}: ${ra.count}，${structB.label}: ${rb.count}）` }
+
+  const result = detectContactsCross(structA.data, ra.mask, structB.data, rb.mask, { cutoff: cut })
+
+  // 存入 contact store（跨结构模式：两套局部索引）
+  useContactStore.getState().setCrossResult(
+    {
+      idA: structA.id,
+      idB: structB.id,
+      labelA: structA.label,
+      labelB: structB.label,
+      exprA: pa.expr,
+      exprB: pb.expr,
+      cutoff: cut,
+      maskA: ra.mask,
+      maskB: rb.mask,
+    },
+    result.pairs,
+    result.residuesA,
+    result.residuesB,
+    result.atomsA,
+    result.atomsB,
+  )
+  engineRef.current?.updateContacts()
+
+  if (!result.pairs.length) {
+    return {
+      ok: true,
+      message: `未发现跨结构接触（${structA.label} ↔ ${structB.label}，截断 ${cut} Å，${result.ms.toFixed(0)} ms）——建议先 superpose 将两结构对齐到同一坐标系`,
+    }
+  }
+  const nearest = result.pairs[0]
+  const fmtRes = (d: StructureData, ri: number) => {
+    const r = d.residues[ri]
+    return `${r.chainId.trim() || '?'}:${r.resName}${r.resSeq}`
+  }
+  return {
+    ok: true,
+    idA: structA.id,
+    idB: structB.id,
+    dataA: structA.data,
+    dataB: structB.data,
+    residuesA: result.residuesA,
+    residuesB: result.residuesB,
+    message: `${result.pairs.length} 对跨结构残基接触（${structA.label}: ${ra.count} ↔ ${structB.label}: ${rb.count} 原子，截断 ${cut} Å，${result.ms.toFixed(0)} ms）· 界面残基 ${structA.label} ${result.residuesA.length} / ${structB.label} ${result.residuesB.length} · 最近 ${fmtRes(structA.data, nearest.resA)} ↔ ${fmtRes(structB.data, nearest.resB)} ${nearest.minDist.toFixed(2)} Å`,
+  }
 }

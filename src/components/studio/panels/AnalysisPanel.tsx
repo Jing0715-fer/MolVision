@@ -1,10 +1,10 @@
 'use client'
 
-// 分析面板：界面接触检测（表达式组 A/B + 距离截断）+ 2D 接触图谱 + 界面残基选择 + SASA/ΔSASA + DSSP 重算
+// 分析面板：界面接触检测（表达式组 A/B + 距离截断）+ 2D 接触图谱 + 界面残基选择 + SASA/ΔSASA + DSSP 重算 + 跨结构接触
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Play, Trash2, MousePointerClick, Network, RefreshCw, Droplets, Palette, Layers } from 'lucide-react'
+import { Play, Trash2, MousePointerClick, Network, RefreshCw, Droplets, Palette, Layers, ArrowLeftRight } from 'lucide-react'
 import { dataRegistry, engineRef, useMolStore, buildNamedMasks } from '@/lib/molecular/store'
-import { runContactAnalysis, runBuriedSasa, interfaceAtomIndices } from '@/lib/molecular/contacts'
+import { runContactAnalysis, runBuriedSasa, interfaceAtomIndices, runCrossContactAnalysis } from '@/lib/molecular/contacts'
 import { useContactStore } from '@/lib/molecular/contacts-store'
 import { useSasaStore } from '@/lib/molecular/sasa-store'
 import { evaluateSelection } from '@/lib/molecular/selection'
@@ -39,6 +39,8 @@ export function AnalysisPanel() {
   const structureId = useContactStore(s => s.structureId)
   const errors = useContactStore(s => s.errors)
   const defaulted = useContactStore(s => s.defaulted)
+  const cross = useContactStore(s => s.cross)
+  const crossPairs = useContactStore(s => s.crossPairs)
   const setExpr = useContactStore(s => s.setExpr)
   const setCutoff = useContactStore(s => s.setCutoff)
   const setVisible = useContactStore(s => s.setVisible)
@@ -89,6 +91,43 @@ export function AnalysisPanel() {
     const outcome = runContactAnalysis()
     appendLog(outcome.ok ? 'out' : 'err', outcome.message)
   }, [appendLog])
+
+  // ---------- 跨结构接触（UI 状态 + 运行器） ----------
+  const [xMode, setXMode] = useState(false)
+  const [xSpecADirty, setXSpecA] = useState<string | null>(null)   // 用户手选的结构 A（null = 跟随活动结构）
+  const [xSpecBDirty, setXSpecB] = useState<string | null>(null)   // 结构 B
+  const [xExprA, setXExprA] = useState('protein')
+  const [xExprB, setXExprB] = useState('protein')
+  const [xCutoff, setXCutoff] = useState(4.5)
+
+  // 结构列表（渲染期派生，无 effect）
+  const pdbOptions = useMemo(() => structures.map(s => ({ id: s.id, label: s.meta.pdbId ?? s.name, transformed: !!s.transform })), [structures])
+  // 默认：A = 活动结构，B = 第一个其它结构；用户改过则保持（结构被移除时自动回退）
+  const actLabel = entry ? (entry.meta.pdbId ?? entry.name) : ''
+  const otherLabel = pdbOptions.find(o => o.label !== actLabel)?.label ?? actLabel
+  const validA = xSpecADirty && pdbOptions.some(o => o.label === xSpecADirty)
+  const validB = xSpecBDirty && pdbOptions.some(o => o.label === xSpecBDirty)
+  const xSpecA = validA ? xSpecADirty! : actLabel
+  const xSpecB = validB ? xSpecBDirty! : otherLabel
+
+  const runXContacts = useCallback(() => {
+    const outcome = runCrossContactAnalysis(`${xSpecA}:${xExprA}`, `${xSpecB}:${xExprB}`, xCutoff)
+    appendLog(outcome.ok ? 'out' : 'err', outcome.message)
+  }, [xSpecA, xSpecB, xExprA, xExprB, xCutoff, appendLog])
+
+  // 跨结构表达式实时计数（对各自所选结构求值）
+  const xCounts = useMemo(() => {
+    const countFor = (label: string, expr: string): number | undefined => {
+      const opt = pdbOptions.find(o => o.label === label)
+      if (!opt) return undefined
+      const d = dataRegistry.get(opt.id)
+      if (!d) return undefined
+      const named = buildNamedMasks(opt.id, d)
+      const r = expr.trim() ? evaluateSelection(expr, { structure: d, named }) : null
+      return r?.count ?? 0
+    }
+    return { a: countFor(xSpecA, xExprA), b: countFor(xSpecB, xExprB) }
+  }, [xSpecA, xSpecB, xExprA, xExprB, pdbOptions])
 
   // SASA 运行（小结构同步完成即有结果；大结构 worker 异步，完成后 sasa-store 更新）
   const runSasa = useCallback(() => {
@@ -260,7 +299,147 @@ export function AnalysisPanel() {
         <PanelHint>加载结构后，检测两组原子选择间的重原子接触（≤ 距离截断），获得残基级界面与 2D 接触图谱。</PanelHint>
       )}
 
-      {entry && (
+      {entry && structures.length >= 2 && (
+        <div className="mx-2 mb-2 mt-1 flex items-center gap-1 rounded-lg border border-border/60 bg-card/40 p-1">
+          <button
+            onClick={() => setXMode(false)}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition',
+              !xMode ? 'bg-primary/15 text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground hover:bg-accent',
+            )}
+          >
+            <Network className="h-3 w-3" />
+            单结构界面
+          </button>
+          <button
+            onClick={() => setXMode(true)}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition',
+              xMode ? 'bg-violet-500/15 text-violet-700 dark:text-violet-300' : 'text-muted-foreground hover:bg-accent',
+            )}
+          >
+            <ArrowLeftRight className="h-3 w-3" />
+            跨结构接触
+          </button>
+        </div>
+      )}
+
+      {entry && xMode && structures.length >= 2 && (
+        <div className="space-y-2 px-2 pb-1">
+          {/* 结构选择器 */}
+          <div className="grid grid-cols-2 gap-1.5">
+            {(['A', 'B'] as const).map((side, i) => {
+              const val = side === 'A' ? xSpecA : xSpecB
+              const setVal = side === 'A' ? setXSpecA : setXSpecB
+              const tone = side === 'A' ? 'text-rose-600 dark:text-rose-400' : 'text-cyan-600 dark:text-cyan-400'
+              return (
+                <label key={side} className="rounded-lg border border-border/60 px-2 py-1.5">
+                  <span className={cn('text-[10px] font-semibold', tone)}>结构 {side}</span>
+                  <select
+                    value={val}
+                    onChange={e => setVal(e.target.value)}
+                    className="mt-0.5 w-full cursor-pointer rounded border-none bg-transparent p-0 font-mono text-[11px] text-foreground outline-none"
+                  >
+                    {pdbOptions.map(o => (
+                      <option key={o.id} value={o.label}>
+                        {o.label}{o.transformed ? ' ⤴' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )
+            })}
+          </div>
+          <ExprInput
+            label="A 选择" tone="rose"
+            value={xExprA} onChange={setXExprA}
+            count={xCounts.a}
+            placeholder="如 protein / chain A"
+          />
+          <ExprInput
+            label="B 选择" tone="cyan"
+            value={xExprB} onChange={setXExprB}
+            count={xCounts.b}
+            placeholder="如 protein / chain A"
+          />
+          <div className="rounded-lg border border-border/60 px-2.5 py-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground">距离截断</span>
+              <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{xCutoff.toFixed(1)} Å</span>
+            </div>
+            <Slider
+              value={[xCutoff]}
+              min={3} max={8} step={0.5}
+              onValueChange={([v]) => setXCutoff(v)}
+              className="mt-1.5"
+            />
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              onClick={runXContacts}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
+            >
+              <ArrowLeftRight className="h-3.5 w-3.5" />
+              检测跨结构接触
+            </button>
+            {cross && (
+              <button
+                onClick={() => { clear(); engineRef.current?.updateContacts() }}
+                title="清除跨结构结果与连线"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition hover:border-destructive/50 hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
+            检测两结构间的原子接触（复合物界面）。两结构需已 superpose 对齐到同一坐标系——未对齐时距离无意义。
+          </p>
+
+          {/* 跨结构结果卡片 */}
+          {cross && crossPairs.length > 0 && (
+            <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">跨结构界面</span>
+                <span className="font-mono text-[10px] text-muted-foreground">{cross.cutoff.toFixed(1)} Å</span>
+              </div>
+              <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                <Stat label="接触对" value={crossPairs.length.toLocaleString()} />
+                <Stat label={`${cross.labelA} 侧`} value={residuesA.length.toLocaleString()} tone="rose" />
+                <Stat label={`${cross.labelB} 侧`} value={residuesB.length.toLocaleString()} tone="cyan" />
+              </div>
+              <div className="mt-2 space-y-1">
+                {crossPairs.slice(0, 5).map((p, i) => {
+                  const dataA = dataRegistry.get(cross.idA)
+                  const dataB = dataRegistry.get(cross.idB)
+                  if (!dataA || !dataB) return null
+                  const ra = dataA.residues[p.resA], rb = dataB.residues[p.resB]
+                  return (
+                    <div key={i} className="flex items-center justify-between rounded border border-border/40 bg-card/60 px-1.5 py-1 font-mono text-[10px]">
+                      <span className="truncate">
+                        <span className="text-rose-600 dark:text-rose-400">{cross.labelA} {ra.chainId.trim()}:{ra.resName}{ra.resSeq}</span>
+                        <span className="mx-1 text-muted-foreground">↔</span>
+                        <span className="text-cyan-600 dark:text-cyan-400">{cross.labelB} {rb.chainId.trim()}:{rb.resName}{rb.resSeq}</span>
+                      </span>
+                      <span className="ml-1.5 shrink-0 font-bold text-amber-600 dark:text-amber-400">{p.minDist.toFixed(2)} Å</span>
+                    </div>
+                  )
+                })}
+                {crossPairs.length > 5 && (
+                  <p className="text-center text-[10px] text-muted-foreground">… 共 {crossPairs.length} 对（按距离排序）</p>
+                )}
+              </div>
+            </div>
+          )}
+          {cross && crossPairs.length === 0 && (
+            <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+              未发现跨结构接触——确认两结构已 superpose 对齐，或增大距离截断。
+            </p>
+          )}
+        </div>
+      )}
+
+      {entry && !xMode && (
         <>
           <div className="space-y-2 px-2">
             <ExprInput
@@ -575,7 +754,7 @@ function ExprInput({ label, tone, value, onChange, count, error, placeholder }: 
   tone: 'rose' | 'cyan'
   value: string
   onChange: (v: string) => void
-  count: number
+  count?: number
   error?: string
   placeholder?: string
 }) {
@@ -588,7 +767,7 @@ function ExprInput({ label, tone, value, onChange, count, error, placeholder }: 
         <span className={cn('rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider', toneCls)}>
           {label}
         </span>
-        <span className="font-mono text-[10px] text-muted-foreground">{count.toLocaleString()} 原子</span>
+        {count !== undefined && <span className="font-mono text-[10px] text-muted-foreground">{count.toLocaleString()} 原子</span>}
       </div>
       <input
         value={value}

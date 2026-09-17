@@ -1,7 +1,8 @@
 'use client'
 
 // 结构面板：结构列表、链、配体、叠合
-import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2 } from 'lucide-react'
+import { useState } from 'react'
+import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { engineRef, useMolStore } from '@/lib/molecular/store'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,11 @@ export function StructuresPanel() {
   const setStructureVisible = useMolStore(s => s.setStructureVisible)
   const removeStructure = useMolStore(s => s.removeStructure)
   const setUi = useMolStore(s => s.setUi)
+  // 叠合工具状态（≥2 结构显示）
+  const [spOpen, setSpOpen] = useState(false)
+  const [spMobile, setSpMobile] = useState<string | null>(null)   // 结构 id（null=自动第一个非活动）
+  const [spMobChain, setSpMobChain] = useState('')                // ''=自动
+  const [spRefChain, setSpRefChain] = useState('')                // ''=自动
 
   if (!structures.length) {
     return (
@@ -194,6 +200,92 @@ export function StructuresPanel() {
                   ))}
                 </div>
               </>
+            )}
+          </>
+        )
+      })()}
+      {/* 叠合工具（≥2 结构） */}
+      {structures.length >= 2 && (() => {
+        const ref = structures.find(x => x.id === activeId) ?? structures[0]
+        const mobile = structures.find(x => x.id === spMobile && x.id !== ref.id) ?? structures.find(x => x.id !== ref.id)
+        if (!mobile || !ref) return null
+        const mobChains = mobile.chains.filter(c => c.type === 'protein' || c.type === 'nucleic')
+        const refChains = ref.chains.filter(c => c.type === 'protein' || c.type === 'nucleic')
+        return (
+          <>
+            <SectionTitle right={
+              <button onClick={() => setSpOpen(o => !o)} className="text-[10px] text-muted-foreground transition hover:text-foreground">
+                {spOpen ? '收起' : '展开'}
+              </button>
+            }>
+              <span className="flex items-center gap-1">
+                <Combine className="h-3 w-3" /> 叠合 (matchmaker)
+              </span>
+            </SectionTitle>
+            {spOpen && (
+              <div className="space-y-2 px-2">
+                <div className="flex items-center gap-1.5">
+                  <select
+                    value={mobile.id}
+                    onChange={e => setSpMobile(e.target.value)}
+                    className="min-w-0 flex-1 cursor-pointer rounded-md border border-border/60 bg-card/60 px-1.5 py-1 font-mono text-[10px] text-foreground outline-none"
+                    title="移动结构（被变换）"
+                  >
+                    {structures.filter(x => x.id !== ref.id).map(x => (
+                      <option key={x.id} value={x.id}>{x.name.slice(0, 8)}</option>
+                    ))}
+                  </select>
+                  <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span
+                    className="min-w-0 flex-1 truncate rounded-md border border-primary/40 bg-primary/5 px-1.5 py-1 font-mono text-[10px] text-primary"
+                    title={`参考结构（不动）：${ref.name}`}
+                  >
+                    {ref.name.slice(0, 8)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <select
+                    value={spMobChain}
+                    onChange={e => setSpMobChain(e.target.value)}
+                    className="cursor-pointer rounded-md border border-border/60 bg-card/60 px-1.5 py-1 text-[10px] text-foreground outline-none"
+                    title="移动链（空 = 自动选最长蛋白链）"
+                  >
+                    <option value="">移动链：自动</option>
+                    {mobChains.map((c, i) => (
+                      <option key={`${c.id}-${i}`} value={c.id.trim()}>链 {c.id.trim() || '—'}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={spRefChain}
+                    onChange={e => setSpRefChain(e.target.value)}
+                    className="cursor-pointer rounded-md border border-border/60 bg-card/60 px-1.5 py-1 text-[10px] text-foreground outline-none"
+                    title="参考链（空 = 自动最佳比对）"
+                  >
+                    <option value="">参考链：自动</option>
+                    {refChains.map((c, i) => (
+                      <option key={`${c.id}-${i}`} value={c.id.trim()}>链 {c.id.trim() || '—'}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={() => {
+                    const eng = engineRef.current
+                    if (!eng) return
+                    const res = eng.superpose(mobile.id, ref.id, spMobChain || undefined, spRefChain || undefined)
+                    if (!res.ok) {
+                      toast.error('叠合失败', { description: res.error })
+                      return
+                    }
+                    toast.success(`叠合完成：${mobile.name} → ${ref.name}`, {
+                      description: `链 ${res.mobileChain} ↔ 链 ${res.refChain} · 匹配 ${res.matched} 对 CA · RMSD ${res.rmsd.toFixed(2)} Å`,
+                    })
+                  }}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
+                >
+                  <Combine className="h-3.5 w-3.5" />
+                  开始叠合
+                </button>
+              </div>
             )}
           </>
         )

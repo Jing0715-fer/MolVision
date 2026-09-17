@@ -1,7 +1,7 @@
 'use client'
 
 // 帮助对话框：快捷键、鼠标操作、快速上手
-import { MousePointer2, Keyboard, Lightbulb } from 'lucide-react'
+import { MousePointer2, Keyboard, Lightbulb, FlaskConical } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -90,6 +90,20 @@ export function HelpDialog() {
                   <span className="text-muted-foreground">{v}</span>
                 </div>
               ))}
+            </div>
+          </section>
+
+          <Separator />
+
+          <section>
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
+              <FlaskConical className="h-3.5 w-3.5 text-violet-500" /> 结构分析
+            </h3>
+            <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+              <p><span className="font-semibold text-foreground">叠合</span>：结构卡片 ⧉ 按钮或「叠合 (matchmaker)」面板，支持手动指定链对（<code className="rounded bg-muted px-1 font-mono text-[10px]">superpose 4HHB onto 1A3N chain A to A</code>）；<code className="rounded bg-muted px-1 font-mono text-[10px]">untransform</code> 撤销。</p>
+              <p><span className="font-semibold text-foreground">界面接触</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">contacts chain A | chain B</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">interface A B</code>——残基对连线 + 2D 图谱 + ΔSASA 埋藏面积。</p>
+              <p><span className="font-semibold text-foreground">跨结构接触</span>：superpose 后用 <code className="rounded bg-muted px-1 font-mono text-[10px]">xcontacts 1UBQ:chain A | 1D3Z:chain A</code> 检测复合物界面。</p>
+              <p><span className="font-semibold text-foreground">SASA / DSSP</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">sasa</code> 溶剂可及面积（可 <code className="rounded bg-muted px-1 font-mono text-[10px]">color sasa</code> 暴露度着色）；<code className="rounded bg-muted px-1 font-mono text-[10px]">dssp</code> 重算二级结构。</p>
             </div>
           </section>
 

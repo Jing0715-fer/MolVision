@@ -5,7 +5,7 @@ import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
 import { useEnsembleStore } from './ensemble-store'
 import { useRecordStore } from './record-store'
-import { runContactAnalysis, runBuriedSasa } from './contacts'
+import { runContactAnalysis, runBuriedSasa, runCrossContactAnalysis } from './contacts'
 import { useContactStore } from './contacts-store'
 import { useSasaStore } from './sasa-store'
 
@@ -46,10 +46,11 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
   { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
   { cmd: 'ssao on|off [r]', desc: '环境光遮蔽开关/半径', example: 'ssao on 3' },
-  { cmd: 'superpose <名> [onto <名>]', desc: '结构叠合（序列比对+刚体拟合）', example: 'superpose 4HHB onto 1A3N' },
+  { cmd: 'superpose <名> [onto <名>] [chain X to Y]', desc: '结构叠合（序列比对+刚体拟合，可选链对）', example: 'superpose 4HHB onto 1A3N chain A to A' },
   { cmd: 'dssp', desc: 'DSSP 重算二级结构（含无记录结构）', example: 'dssp' },
   { cmd: 'contacts <exprA> | <exprB> [n]', desc: '界面接触检测（残基对+连线）', example: 'contacts chain A | chain B 4.0' },
   { cmd: 'interface <链A> <链B> [n]', desc: '链间界面快捷命令', example: 'interface A B' },
+  { cmd: 'xcontacts <A>:<expr> | <B>:<expr> [n]', desc: '跨结构接触（复合物界面，建议先 superpose）', example: 'xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0' },
   { cmd: 'sasa [probe] [点数]', desc: '溶剂可及面积计算（Shrake–Rupley）', example: 'sasa 1.4 92' },
   { cmd: 'bsa', desc: '界面埋藏面积 ΔSASA（需 contacts A/B）', example: 'bsa' },
   { cmd: 'untransform [名]', desc: '撤销叠合变换回原始位姿', example: 'untransform 1D3Z' },
@@ -173,11 +174,11 @@ export function runCommand(raw: string): void {
     if (scheme === 'sasa') {
       const data = dataRegistry.get(s.activeId)
       if (data && !data.sasa) {
-        // 触发计算（小结构同步完成；大结构 worker）——applyColor 内部同样会尝试
+        // 触发计算（小结构同步完成；大结构 worker，完成后自动烘焙上色）
         const eng = engineRef.current
         const r = eng?.requestSasa(s.activeId)
         if (!r?.done) {
-          return ok('SASA 数据尚未就绪——已在后台开始计算（Web Worker），完成后再执行 color sasa 即可上色')
+          return ok('SASA 后台计算中（Web Worker）——完成后将自动按暴露度着色（埋藏蓝紫 → 暴露橙红）')
         }
       }
     }
@@ -313,8 +314,17 @@ export function runCommand(raw: string): void {
     if (!eng) return err('引擎未就绪')
     const s = useMolStore.getState()
     if (s.structures.length < 2) return err('叠合需要至少 2 个结构（当前 ' + s.structures.length + '）')
-    // 解析参数：<mobile> [onto <ref>]（省略 onto 时参考为当前活动结构）
+    // 解析参数：<mobile> [onto <ref>] [chain <移动链> [to <参考链>]]（省略 onto 时参考为当前活动结构）
     let rest = input.slice(parts[0].length).trim()
+    // 可选链对：chain <A> [to <B>]——从整条命令中先提取（可出现在任何位置）
+    let mobChain: string | undefined
+    let refChain: string | undefined
+    const chainM = rest.match(/\s+chain\s+(\S+)(?:\s+to\s+(\S+))?$/i)
+    if (chainM) {
+      mobChain = chainM[1]
+      refChain = chainM[2]
+      rest = rest.slice(0, chainM.index).trim()
+    }
     let refName: string | null = null
     const ontoM = rest.match(/\s+onto\s+(.+)$/i)
     if (ontoM) {
@@ -322,7 +332,7 @@ export function runCommand(raw: string): void {
       rest = rest.slice(0, ontoM.index).trim()
     }
     const mobileName = rest || (s.activeId ? s.structures.find(x => x.id === s.activeId)?.name : null)
-    if (!mobileName) return err('用法：superpose <移动结构名> onto <参考结构名>（省略 onto 则叠合到当前活动结构）')
+    if (!mobileName) return err('用法：superpose <移动结构名> onto <参考结构名> [chain <移动链> to <参考链>]（省略 onto 则叠合到当前活动结构）')
     if (!refName) {
       if (!s.activeId) return err('没有活动结构作为参考，请用 superpose <名> onto <参考名>')
       const a = s.structures.find(x => x.id === s.activeId)
@@ -342,10 +352,10 @@ export function runCommand(raw: string): void {
     if (!ref) return err(`未找到参考结构 "${refName}"`)
     if (mobile.id === ref.id) return err('移动与参考结构不能相同')
     const t0 = performance.now()
-    const res = eng.superpose(mobile.id, ref.id)
+    const res = eng.superpose(mobile.id, ref.id, mobChain, refChain)
     const ms = Math.round(performance.now() - t0)
     if (!res.ok) return err(`叠合失败：${res.error}`)
-    ok(`叠合完成：${mobile.name} → ${ref.name}（链 ${res.mobileChain} ↔ 链 ${res.refChain}）`)
+    ok(`叠合完成：${mobile.name} → ${ref.name}（链 ${res.mobileChain} ↔ 链 ${res.refChain}${mobChain ? '（手动指定）' : ''}）`)
     ok(`匹配 ${res.matched} 对 CA 原子，对齐后 RMSD = ${res.rmsd.toFixed(3)} Å，耗时 ${ms} ms`)
     if (res.rmsd > 3) ok('提示：RMSD 偏大，可能存在构象差异或序列相似度低')
     return
@@ -411,16 +421,73 @@ export function runCommand(raw: string): void {
 
   if (cmd === 'interface' || cmd === 'iface') {
     // interface <链A> <链B> [cutoff]：链间界面快捷命令
+    // 兼容三种写法：interface A B / interface :A :B / interface chain A chain B（表达式风格）
     const s = useMolStore.getState()
     if (!s.activeId) return err('没有活动结构')
-    const chainA = parts[1], chainB = parts[2]
-    if (!chainA || !chainB) return err('用法：interface <链A> <链B> [cutoff]，如 interface A B 4.0')
+    const rest = input.slice(parts[0].length).trim()
+    // 尾部截断值
+    let expr = rest
     let cutoff: number | undefined
-    const maybeNum = parseFloat(parts[3] ?? '')
-    if (!isNaN(maybeNum) && maybeNum >= 2.5 && maybeNum <= 10) cutoff = maybeNum
-    const outcome = runContactAnalysis(`chain ${chainA}`, `chain ${chainB}`, cutoff)
+    const lastSpace = expr.lastIndexOf(' ')
+    if (lastSpace > 0) {
+      const maybeNum = parseFloat(expr.slice(lastSpace + 1))
+      if (!isNaN(maybeNum) && maybeNum >= 2.5 && maybeNum <= 10) {
+        cutoff = maybeNum
+        expr = expr.slice(0, lastSpace).trim()
+      }
+    }
+    const norm = expr.replace(/[:：]/g, ' ').trim()
+    const tokens = norm.split(/\s+/)
+    const SELECTOR_KEYWORDS = ['chain', 'resn', 'resi', 'name', 'elem', 'protein', 'ligand', 'water', 'within', 'byres', 'not', 'and', 'or', 'backbone', 'sidechain', 'helix', 'sheet', 'coil', 'all', 'polymer', 'hetero', 'metal']
+    const isExprStyle = tokens.some(t => SELECTOR_KEYWORDS.includes(t.toLowerCase()))
+    let aExpr: string, bExpr: string
+    if (isExprStyle && tokens.length >= 4) {
+      // 表达式风格：interface chain A chain B → A 组 = chain A，B 组 = chain B
+      // 启发式：找到第二个选择关键字的位置切分
+      const lower = tokens.map(t => t.toLowerCase())
+      const secondKw = lower.lastIndexOf('chain')
+      if (secondKw > 0 && lower.indexOf('chain') !== secondKw) {
+        aExpr = tokens.slice(0, secondKw).join(' ')
+        bExpr = tokens.slice(secondKw).join(' ')
+      } else {
+        // 其他表达式：无法可靠切分，提示用 contacts 管道语法
+        return err('复杂表达式请使用 contacts <A> | <B> [cutoff]，如 contacts chain A | chain B 4.0')
+      }
+    } else if (tokens.length === 2) {
+      aExpr = `chain ${tokens[0]}`
+      bExpr = `chain ${tokens[1]}`
+    } else {
+      return err('用法：interface <链A> <链B> [cutoff]，如 interface A B 4.0 或 interface chain A chain B')
+    }
+    const outcome = runContactAnalysis(aExpr, bExpr, cutoff)
     if (!outcome.ok) return err(outcome.message)
     ok(outcome.message)
+    return
+  }
+
+  if (cmd === 'xcontacts' || cmd === 'xcontact' || cmd === 'xiface') {
+    // xcontacts <结构A>:<exprA> | <结构B>:<exprB> [cutoff]
+    const rest = input.slice(parts[0].length).trim()
+    const pipeM = rest.match(/^(.+?)\s*\|\s*(.+)$/)
+    if (!pipeM) return err('用法：xcontacts <结构A>:<exprA> | <结构B>:<exprB> [cutoff]，如 xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0')
+    let aSpec = pipeM[1].trim()
+    let bPart = pipeM[2].trim()
+    // 尾部截断值
+    let cutoff: number | undefined
+    const lastSpace = bPart.lastIndexOf(' ')
+    if (lastSpace > 0) {
+      const maybeNum = parseFloat(bPart.slice(lastSpace + 1))
+      if (!isNaN(maybeNum) && maybeNum >= 2.5 && maybeNum <= 10) {
+        cutoff = maybeNum
+        bPart = bPart.slice(0, lastSpace).trim()
+      }
+    }
+    const outcome = runCrossContactAnalysis(aSpec, bPart, cutoff)
+    if (!outcome.ok) return err(outcome.message)
+    ok(outcome.message)
+    if (useContactStore.getState().cross) {
+      ok('跨结构接触以两结构当前位姿为准（superpose 变换会实时反映在坐标中）；分析面板可查看跨结构界面残基列表')
+    }
     return
   }
 

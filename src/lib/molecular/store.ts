@@ -322,10 +322,13 @@ export const useMolStore = create<MolState>()((set, get) => ({
     const isScheme = schemes.includes(target as ColorScheme)
     let colors: Float32Array
     if (isScheme) {
-      // SASA 需先有逐原子数据：小结构同步补算后直接烘焙；大结构触发 worker，本轮返回（命令行提示稍后再执行）
+      // SASA 需先有逐原子数据：小结构同步补算后直接烘焙；大结构触发 worker，完成后自动补烘焙
       if (target === 'sasa' && !data.sasa) {
         const r = engineRef.current?.requestSasa(entry.id)
-        if (!r?.done || !data.sasa) return
+        if (!r?.done || !data.sasa) {
+          engineRef.current?.queueSasaBake(entry.id)
+          return
+        }
       }
       colors = computeAtomColors(data, target as ColorScheme, { uniformColor: '#c9cdd4' })
     } else {

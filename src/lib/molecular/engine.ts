@@ -136,6 +136,13 @@ export class MolEngine {
   private sasaReqId = 0
   /** structureId → 计算中的 key（去重与过期丢弃） */
   private sasaPending = new Map<string, string>()
+  /** 挂起的 color sasa 烘焙请求（worker 完成后自动 applyColor） */
+  private pendingSasaBake: string | null = null
+
+  /** 挂起 color sasa 烘焙：SASA worker 完成后自动按暴露度着色（store.applyColor 调用） */
+  queueSasaBake(structureId: string) {
+    this.pendingSasaBake = structureId
+  }
   private lastPicksKey = ''
   /** ensemble 播放内部状态（插值帧号与时间戳） */
   private ensemblePlay: { frame: number; lastT: number } | null = null
@@ -610,13 +617,14 @@ export class MolEngine {
         this.hbondCache.delete(id)
         this.hbondPending.delete(id)
         this.sasaPending.delete(id)
+        if (this.pendingSasaBake === id) this.pendingSasaBake = null
         // SASA 结果归属结构被移除 → 清空面板数据
         const ss = useSasaStore.getState()
         if (ss.structureId === id || ss.buried?.structureId === id) ss.clear()
         this.pickablesCache = null
         // 接触分析归属结构被移除 → 清空连线与结果
         const cs = useContactStore.getState()
-        if (cs.structureId === id) {
+        if (cs.structureId === id || cs.cross?.idA === id || cs.cross?.idB === id) {
           cs.clear()
           this.updateContacts()
         }
@@ -758,7 +766,7 @@ export class MolEngine {
   /** 接触上限保护（连线渲染用；检测本身不受限） */
   private static readonly CONTACT_CAP = 4000
 
-  /** 渲染/清除接触连线（颜色按距离插值：近红远琥珀） */
+  /** 渲染/清除接触连线（颜色按距离插值：近红远琥珀；支持跨结构两套坐标） */
   updateContacts() {
     // 清空旧渲染
     for (const child of [...this.contactGroup.children]) {
@@ -769,7 +777,51 @@ export class MolEngine {
       if (mat) (Array.isArray(mat) ? mat : [mat]).forEach(m => m.dispose())
     }
     const cs = useContactStore.getState()
-    if (!cs.visible || !cs.structureId || !cs.pairs.length) return
+    if (!cs.visible) return
+
+    // ---------- 跨结构模式：连线端点取自两个结构各自的坐标 ----------
+    if (cs.cross && cs.crossPairs.length) {
+      const dataA = dataRegistry.get(cs.cross.idA)
+      const dataB = dataRegistry.get(cs.cross.idB)
+      if (!dataA || !dataB) return
+      const posA = dataA.atoms.positions
+      const posB = dataB.atoms.positions
+      const draw = cs.crossPairs.length > MolEngine.CONTACT_CAP ? cs.crossPairs.slice(0, MolEngine.CONTACT_CAP) : cs.crossPairs
+      if (cs.crossPairs.length > MolEngine.CONTACT_CAP) {
+        useMolStore.getState().appendLog('out', `接触连线超过 ${MolEngine.CONTACT_CAP}，仅渲染最近的 ${MolEngine.CONTACT_CAP} 条（共 ${cs.crossPairs.length} 对）`)
+      }
+      const verts = new Float32Array(draw.length * 6)
+      const cols = new Float32Array(draw.length * 6)
+      const endPts: { pos: [number, number, number] }[] = []
+      const endCols: number[] = []
+      const range = Math.max(0.5, cs.cross.cutoff - 2.5)
+      for (let k = 0; k < draw.length; k++) {
+        const p = draw[k]
+        verts[k * 6] = posA[p.atomA * 3]
+        verts[k * 6 + 1] = posA[p.atomA * 3 + 1]
+        verts[k * 6 + 2] = posA[p.atomA * 3 + 2]
+        verts[k * 6 + 3] = posB[p.atomB * 3]
+        verts[k * 6 + 4] = posB[p.atomB * 3 + 1]
+        verts[k * 6 + 5] = posB[p.atomB * 3 + 2]
+        const t = (p.minDist - 2.5) / range
+        const [r, g, b] = contactColor(t)
+        for (let v = 0; v < 2; v++) {
+          cols[k * 6 + v * 3] = r
+          cols[k * 6 + v * 3 + 1] = g
+          cols[k * 6 + v * 3 + 2] = b
+        }
+        endPts.push(
+          { pos: [posA[p.atomA * 3], posA[p.atomA * 3 + 1], posA[p.atomA * 3 + 2]] },
+          { pos: [posB[p.atomB * 3], posB[p.atomB * 3 + 1], posB[p.atomB * 3 + 2]] },
+        )
+        endCols.push(r, g, b, r, g, b)
+      }
+      this.buildContactGeometry(verts, cols, endPts, endCols)
+      return
+    }
+
+    // ---------- 单结构模式 ----------
+    if (!cs.structureId || !cs.pairs.length) return
     const data = dataRegistry.get(cs.structureId)
     if (!data) return
     const pos = data.atoms.positions
@@ -801,6 +853,11 @@ export class MolEngine {
       endPts.push(p.atomA, p.atomB)
       endCols.push(r, g, b, r, g, b)
     }
+    this.buildContactGeometry(verts, cols, endPts.map(i => ({ pos: [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]] as [number, number, number] })), endCols)
+  }
+
+  /** 组装接触连线 + 端点标记（两种模式共用） */
+  private buildContactGeometry(verts: Float32Array, cols: Float32Array, endPts: { pos: [number, number, number] }[], endCols: number[]) {
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(verts, 3))
     geo.setAttribute('color', new THREE.BufferAttribute(cols, 3))
@@ -820,8 +877,7 @@ export class MolEngine {
     const m4 = new THREE.Matrix4()
     const colorAttr = new THREE.InstancedBufferAttribute(new Float32Array(endCols), 3)
     for (let k = 0; k < endPts.length; k++) {
-      const i = endPts[k]
-      m4.makeTranslation(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])
+      m4.makeTranslation(endPts[k].pos[0], endPts[k].pos[1], endPts[k].pos[2])
       marker.setMatrixAt(k, m4)
     }
     marker.instanceMatrix.needsUpdate = true
@@ -1057,14 +1113,15 @@ export class MolEngine {
   /**
    * 将 mobile 结构叠合到 ref 结构：序列比对 + Horn 四元数刚体拟合 + 变换应用
    * 返回拟合统计（RMSD / 匹配数 / 链对）；失败返回 error
+   * 可选链参数：显式指定移动/参考蛋白链（matchmaker 风格）
    */
-  superpose(mobileId: string, refId: string): SuperposeResult {
+  superpose(mobileId: string, refId: string, mobileChain?: string, refChain?: string): SuperposeResult {
     const mobile = dataRegistry.get(mobileId)
     const ref = dataRegistry.get(refId)
     if (!mobile || !ref) return { ...NULL_RESULT, error: '结构不存在' }
     if (mobileId === refId) return { ...NULL_RESULT, error: '移动与参考结构相同' }
     const t0 = performance.now()
-    const result = superposeStructures(mobile, ref)
+    const result = superposeStructures(mobile, ref, mobileChain, refChain)
     if (!result.ok) return result
     // 应用变换：positions + ensemble 帧 + 网格/包围盒
     applyRigidTransform(mobile, result.quat, result.translation)
@@ -1260,6 +1317,15 @@ export class MolEngine {
         structures: s.structures.map(x => x.id === structureId ? { ...x, rev: x.rev + 1 } : x),
         visualRev: s.visualRev + 1,
       }))
+    }
+    // 挂起的 color sasa 烘焙请求（大结构 worker 路径）→ 数据就绪后自动补烘焙
+    if (this.pendingSasaBake === structureId) {
+      this.pendingSasaBake = null
+      const store = useMolStore.getState()
+      if (store.activeId === structureId) {
+        store.applyColor('sasa')
+        store.appendLog('out', 'SASA 数据就绪——已自动完成暴露度着色（埋藏蓝紫 → 暴露橙红）')
+      }
     }
   }
 
