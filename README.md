@@ -33,12 +33,19 @@ Element (CPK) · Chain (golden-angle palette) · Spectrum (rainbow per chain) ·
 ### PyMOL-style selection language
 ```
 chain A and resi 40-80
+chainidx 4                        # 5th chain segment (protein/ligand/water segments with the same chain ID stay isolated)
 within 5 of (resn HEM)          # atoms within 5 Å of heme
 byres(within 4 of ligand)       # expand to whole residues
 (protein or nucleic) and not helix
 name CA+CB · elem Fe · bfactor > 40 · backbone · metal
 ```
 Full boolean grammar: `and or not ( )`, named selections, `byres`/`bychain`/`within` operators.
+
+### Ligand-aware workflow
+- **Chain segments** — the Structures panel chain list selects by *segment index* (`chainidx`): a ligand or water segment sharing a chain ID with a polymer never spills into the whole chain; duplicate IDs get `#n` badges, double-click focuses
+- **Ligand chips** — click selects all copies + fit, double-click selects a single copy; a green **「口袋」 (pocket) button** grabs the full 4.5 Å binding site in one click (`byres(within 4.5 of resn HEM)`)
+- **Sequence-bar ligand row** — amber chips (e.g. `HEMA142`) pinned above polymer sequences: each chip is one complete small molecule, click to select / double-click to focus
+- **Right-click environment** — context menu (rebuilt crash-free) with atom/residue/chain-segment/same-residue/5 Å-surroundings selection, distance measurement and labeling
 
 ### Command console (press `` ` ``)
 ```

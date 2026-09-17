@@ -2,7 +2,7 @@
 
 // 序列条：链序列 + 二级结构轨道 + 点击选择/聚焦
 import { memo, useMemo } from 'react'
-import { ChevronDown, ChevronUp, Dna } from 'lucide-react'
+import { ChevronDown, ChevronUp, Dna, FlaskConical } from 'lucide-react'
 import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { residueOneLetter } from '@/lib/molecular/chemistry'
 import { residueCssColor, ssCssColor } from '@/lib/molecular/colors'
@@ -29,9 +29,15 @@ export function SequenceBar() {
   if (!st || !data) return null
 
   // 从结构数据取链（含 residueIdx），颜色沿用摘要链调色板（顺序一致）
-  const polymerChains = (data.chains || [])
-    .map((c, i) => ({ chain: c, color: st.chains[i]?.color ?? '#9aa3ad' }))
-    .filter(({ chain }) => chain.type === 'protein' || chain.type === 'nucleic')
+  // 保留原始索引 origIdx：data.chains 与 st.chains 顺序一致，可直接映射 chainidx 表达式
+  const chainEntries = (data.chains || [])
+    .map((c, i) => ({ chain: c, color: st.chains[i]?.color ?? '#9aa3ad', origIdx: i }))
+  const polymerChains = chainEntries.filter(({ chain }) => chain.type === 'protein' || chain.type === 'nucleic')
+
+  // 配体残基（异源非水非聚合物）：每个残基即一个完整小分子，可单独选择/聚焦
+  const ligandResidues = (data.residues || []).map((r, ri) => ({ r, ri }))
+    .filter(({ r }) => r.hetero && !r.water && !r.polymer)
+    .slice(0, 60)
 
   return (
     <div className="shrink-0 border-t border-border/70 bg-card/40 backdrop-blur-sm">
@@ -49,12 +55,69 @@ export function SequenceBar() {
 
       {ui.sequenceOpen && (
         <div className="mol-scroll max-h-40 overflow-y-auto px-3 pb-2">
-          {polymerChains.map(({ chain, color }, ci) => {
+          {/* 配体行（置顶免滚动）：每个 chip = 一个完整小分子，点击选择、双击聚焦 */}
+          {ligandResidues.length > 0 && (
+            <div className="flex items-center gap-2 pb-2 pt-1">
+              <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-card/40 pr-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                <FlaskConical className="h-3 w-3" /> 配体
+              </span>
+              <div className="mol-scroll-x flex gap-1 overflow-x-auto pb-0.5">
+                {ligandResidues.map(({ r, ri }) => {
+                  const isSel = selectedResidues.has(ri)
+                  const nAtoms = r.end - r.start
+                  return (
+                    <button
+                      key={ri}
+                      onClick={() => {
+                        useMolStore.getState().setActive(activeId!)
+                        const indices: number[] = []
+                        for (let i = r.start; i < r.end; i++) indices.push(i)
+                        useMolStore.getState().setSelection(activeId!, indices)
+                      }}
+                      onDoubleClick={() => {
+                        useMolStore.getState().setActive(activeId!)
+                        const indices: number[] = []
+                        for (let i = r.start; i < r.end; i++) indices.push(i)
+                        useMolStore.getState().setSelection(activeId!, indices)
+                        engineRef.current?.fitView([{ structureId: activeId!, indices }])
+                      }}
+                      className={cn(
+                        'shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold transition',
+                        isSel
+                          ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/50'
+                          : 'border-amber-500/30 bg-amber-500/5 text-amber-700 hover:border-amber-500/60 hover:bg-amber-500/15 dark:text-amber-400',
+                      )}
+                      title={`${r.resName} ${r.resSeq}（链 ${r.chainId.trim() || '?'}）· ${nAtoms} 原子 · 点击选择 · 双击聚焦`}
+                    >
+                      {r.resName}
+                      <span className="ml-0.5 text-[8px] font-normal opacity-60">{r.chainId.trim()}{r.resSeq}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {polymerChains.map(({ chain, color, origIdx }, ci) => {
+            const selectChain = () => {
+              useMolStore.getState().setActive(activeId!)
+              useMolStore.getState().selectFromExpr(`chainidx ${origIdx}`)
+            }
             return (
               <div key={`${chain.id}-${ci}`} className="flex items-center gap-2 pt-1 pb-4">
                 <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1.5 bg-card/40 pr-1">
-                  <span className="h-3 w-1 rounded-full" style={{ background: color }} />
-                  <span className="font-mono text-[11px] font-bold">{chain.id === ' ' ? '—' : chain.id}</span>
+                  <button
+                    onClick={selectChain}
+                    onDoubleClick={() => {
+                      selectChain()
+                      engineRef.current?.fitView([{ structureId: activeId!, indices: useMolStore.getState().selection.indices }])
+                    }}
+                    className="flex shrink-0 items-center gap-1.5 rounded px-0.5 py-0.5 transition hover:bg-accent"
+                    title={`点击选择链 ${chain.id.trim() || '—'}（链组）· 双击聚焦`}
+                  >
+                    <span className="h-3 w-1 rounded-full" style={{ background: color }} />
+                    <span className="font-mono text-[11px] font-bold">{chain.id === ' ' ? '—' : chain.id}</span>
+                  </button>
                 </span>
                 <div className="mol-scroll-x flex overflow-x-auto pb-0.5">
                   {(chain.residueIdx || []).map((ri, k) => {

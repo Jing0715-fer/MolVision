@@ -396,3 +396,33 @@ Stage Summary:
 - QA 方法论：agent-browser errors 的 --clear 在本环境不生效（跨导航累积），判别新旧错误需 about:blank 导航对照或按 chunk 哈希区分（HMR 期间旧 chunk 的瞬态报错不属于当前代码）；VLM 截图检查时把 canvas 区域裁剪放大后单独送检更准确（整页截图中小分子内容易被忽略/误读为 console 文本）
 - 未解决问题与风险：①xcontacts 截图演示效果不佳（同蛋白 superpose 后接触线被结构体遮挡）——理想演示需要两个互补链（如抗体-抗原）分开加载后 superpose；②HMR 瞬态错误（recording is not defined / ExprInput toLocaleString）会在 dev 下偶发出现在 console，生产构建无 HMR 不受影响（源码经核对无缺陷）；③跨结构结果不入会话存档（刷新丢失，与单结构 contacts 一致）；④cross maskA/maskB 保留在 store 中供未来跨结构 ΔSASA 使用，但当前无消费者（内存占用小可忽略）
 - 下一阶段建议（优先级序）：① 跨结构 ΔSASA（superpose 后联合埋藏面积，maskA/maskB 已就绪，需三路 SASA 跨两结构坐标）② 抗体-抗原演示场景（如加载 1A2Y scFv + superpose 展示 xcontacts 完整价值）③ 迭代 matchmaker（多链自动配对迭代）④ 氢键/SASA/contacts 统一 Web Worker 池 ⑤ 大结构 ensemble GPU 矩阵直更
+
+---
+Task ID: bugfix-r9
+Agent: main
+Task: 用户报告 bug 修复轮——「选配体选成整条链」+ 全面 QA + 右键菜单崩溃修复 + 配体工作流增强
+
+Work Log:
+- 读取 worklog（cron-r8 完成 xcontacts/matchmaker）；dev server 全绿；agent-browser 会话恢复 4 结构（4HHB/1UBQ/1D3Z/1CRN）
+- 【BUG 复现】用户报告「选配体还是选的整条链」：4HHB 链按「连续相同 chainId」分组为 12 个链组（4 蛋白 + 4 配体 + 4 水，链 ID 重复），StructuresPanel 链行点击执行 `chain "A"` → 蛋白+HEM+水全选 1,168 原子（点击「A 配体 1 res」期望仅 43）
+- 【修复 1：chainidx 谓词】selection.ts onePredicates 新增 chainidx（按 atomChain 链组索引，支持 + 列表）；命令行帮助同步
+- 【修复 2：链行按链组选择】StructuresPanel 链行 onClick 改 `chainidx ${i}`；重复链 ID 行加 #n 徽章 + title 说明；双击聚焦（fitView）
+- 【验证】点击 A#5 配体 → 43 原子；A#1 蛋白 → 1,069；A#9 水 → 56；B#6 配体 → 44；`select chainidx 5` → 44、`5+6+7+8` → 187、`99` → 0、缺参 → 报错——全部符合预期
+- 【严重 BUG 发现与修复：右键菜单整页崩溃】contextmenu 触发后 DropdownMenuItem（Radix）在 DropdownMenu 根外使用 → DropdownMenuPrimitive.Item 抛异常 → React 整页卸载「Application error」。用原生 button 的 CtxItem 组件重写右键菜单（role=menuitem + focus/hover 样式 + hint 副文本），页面恢复；菜单 9 项全部可用（选择原子 1/残基 8/链组/同类残基/周围环境 79/测距/标注/聚焦/主题切换）
+- 【新功能 1：右键「选择周围环境」】5Å 内原子扩展到完整残基（含自身残基），结合口袋检查入口；appendLog 记录
+- 【新功能 2：配体口袋按钮】StructuresPanel 每个配体 chip 旁绿色「口袋」按钮 → `byres (within 4.5 of resn X)` 一键选中结合位点（HEM → 907 原子）；触屏友好（常显 80% 透明度而非 hover 才显示）
+- 【新功能 3：序列条配体行】SequenceBar 顶部置顶（免滚动）琥珀色 chip 行：每个 chip = 一个完整小分子（HEMA142 等），单击选择该分子（43 原子）、双击聚焦；选中态 ring 高亮
+- 【新功能 4：序列条链标签可点击】链 ID 标签改为按钮：单击 chainidx 选链组（1,069）、双击聚焦
+- 【配体 chip 语义完善】单击选全部拷贝 + fitView（172）；双击仅选单个拷贝（查找含该配体的首个配体链组，43）
+- 【回归】8 面板渲染 ✓、选择表达式 8 项（resn/wITHIN/byres/ligand/chain+and/name+and/not/elem 数值全对）✓、interface A B → 84 对 ✓、hbonds 3,092（+1CRN 后 3,268 跨结构累计）✓、dssp ✓、load 9ZZZ → 404 toast ✓、load XXXX → 用法提示 ✓、会话恢复 4 结构 ✓
+- 【QA 中间事故】SequenceBar 重排序编辑误损坏 JSX（orphaned 代码）→ 整体重写修复；QuickPresets 恢复包裹结构；删除未用 DropdownMenuSeparator 导入
+- VLM 截图验证：口袋按钮可见 ✓、序列条配体行（置顶后免滚动）✓、无 UI 破损重叠 ✓
+- HelpDialog：鼠标操作补双击/右键说明、右键菜单项列表、chainidx 语法示例、配体工作流速查；修复 MOUSE 数组重复项
+- README：selection language 增 chainidx 示例；新增 Ligand-aware workflow 小节（4 条要点）
+- lint 全绿（0 错误 0 警告）；dev.log 无新错误
+
+Stage Summary:
+- 本轮修复 2 个重大 bug：①「选配体选成整条链」（chainidx 链组选择，用户直接报告）②右键菜单一点就整页崩溃（Radix 组件脱离根上下文，此前所有 QA 均未覆盖到右键路径——教训：合成 pointerdown 未覆盖 contextmenu 路径）
+- 新增 4 个对标成熟软件的功能：配体口袋一键选择、序列条配体行（置顶）、序列条链标签可点击、右键周围环境选择
+- 全部验证通过：链组隔离（43/1,069/56/44）、口袋 907、配体 chip 172/43、右键菜单 9 项可用、分析功能基准一致（84 对/3,092 氢键/462 螺旋）
+- 待办遗留：主题切换水合警告（低危，历史遗留）；HMR 瞬态错误生产不受影响；跨结构 ΔSASA 未实现

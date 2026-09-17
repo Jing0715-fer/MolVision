@@ -9,7 +9,7 @@ import { loadFiles } from '@/lib/molecular/loader'
 import { PRESETS } from '@/lib/molecular/store'
 import { hasSession, restoreSession, saveSession } from '@/lib/molecular/session'
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
@@ -250,6 +250,25 @@ export default function MolViewer() {
       useMolStore.getState().setActive(ctxMenu.pick.structureId)
       useMolStore.getState().setSelection(ctxMenu.pick.structureId, idx)
     },
+    // 周围环境：5Å 内原子扩展到整残基（含自身残基，适合结合口袋检查）
+    environment: () => {
+      if (!ctxMenu) return
+      const data = dataRegistry.get(ctxMenu.pick.structureId)
+      if (!data) return
+      const ai = ctxMenu.pick.atomIdx
+      const pos = data.atoms.positions
+      const cand = data.grid.queryRadius(pos[ai * 3], pos[ai * 3 + 1], pos[ai * 3 + 2], 5, pos)
+      const resSet = new Set<number>()
+      for (const j of cand) resSet.add(data.atomResidue[j])
+      const indices: number[] = []
+      for (const ri of resSet) {
+        const r = data.residues[ri]
+        for (let k = r.start; k < r.end; k++) indices.push(k)
+      }
+      useMolStore.getState().setActive(ctxMenu.pick.structureId)
+      useMolStore.getState().setSelection(ctxMenu.pick.structureId, indices)
+      useMolStore.getState().appendLog('out', `已选择周围环境：${resSet.size} 个残基（5Å）`)
+    },
     sameResidue: () => {
       if (!ctxMenu) return
       const data = dataRegistry.get(ctxMenu.pick.structureId)
@@ -318,30 +337,34 @@ export default function MolViewer() {
         </div>
       )}
 
-      {/* 右键菜单 */}
+      {/* 右键菜单：原生按钮实现（Radix DropdownMenuItem 必须在 DropdownMenu 根内使用，
+          否则右键即抛异常导致整页崩溃） */}
       {ctxMenu && (
         <div
           className="absolute z-40 min-w-44 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-xl"
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
           onClick={e => e.stopPropagation()}
+          role="menu"
         >
           {ctxInfo && (
             <div className="border-b border-border/60 px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
               {ctxInfo}
             </div>
           )}
-          <DropdownMenuItem onClick={() => { ctxActions.atom(); setCtxMenu(null) }}>选择此原子</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => { ctxActions.residue(); setCtxMenu(null) }}>选择此残基</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => { ctxActions.chain(); setCtxMenu(null) }}>选择此链</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => { ctxActions.sameResidue(); setCtxMenu(null) }}>选择全部 {ctxInfo?.split('·')[1]?.trim().split(' ')[0] ?? '同类'} 残基</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => { ctxActions.measure(); setCtxMenu(null) }}>测距：从此原子开始…</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => { ctxActions.label(); setCtxMenu(null) }}>标注此原子</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => { ctxActions.focus(); setCtxMenu(null) }}>聚焦此残基</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => { setTheme(theme === 'dark' ? 'light' : 'dark'); setCtxMenu(null) }}>
+          <CtxItem onClick={() => { ctxActions.atom(); setCtxMenu(null) }}>选择此原子</CtxItem>
+          <CtxItem onClick={() => { ctxActions.residue(); setCtxMenu(null) }}>选择此残基</CtxItem>
+          <CtxItem onClick={() => { ctxActions.chain(); setCtxMenu(null) }}>选择此链（链组）</CtxItem>
+          <CtxItem onClick={() => { ctxActions.sameResidue(); setCtxMenu(null) }}>选择全部 {ctxInfo?.split('·')[1]?.trim().split(' ')[0] ?? '同类'} 残基</CtxItem>
+          <CtxItem onClick={() => { ctxActions.environment(); setCtxMenu(null) }}
+            hint="5Å 内完整残基">选择周围环境</CtxItem>
+          <div className="-mx-1 my-1 h-px bg-border" />
+          <CtxItem onClick={() => { ctxActions.measure(); setCtxMenu(null) }}>测距：从此原子开始…</CtxItem>
+          <CtxItem onClick={() => { ctxActions.label(); setCtxMenu(null) }}>标注此原子</CtxItem>
+          <CtxItem onClick={() => { ctxActions.focus(); setCtxMenu(null) }}>聚焦此残基</CtxItem>
+          <div className="-mx-1 my-1 h-px bg-border" />
+          <CtxItem onClick={() => { setTheme(theme === 'dark' ? 'light' : 'dark'); setCtxMenu(null) }}>
             切换浅色/深色界面
-          </DropdownMenuItem>
+          </CtxItem>
         </div>
       )}
 
@@ -436,5 +459,19 @@ function QuickPresets() {
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  )
+}
+
+/** 右键菜单项：原生 button 实现（避免 Radix DropdownMenuItem 脱离 DropdownMenu 根导致的崩溃） */
+function CtxItem({ children, hint, onClick }: { children: React.ReactNode; hint?: string; onClick: () => void }) {
+  return (
+    <button
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs outline-none transition focus:bg-accent focus:outline-none hover:bg-accent"
+    >
+      <span className="flex-1">{children}</span>
+      {hint && <span className="shrink-0 text-[9px] text-muted-foreground/70">{hint}</span>}
+    </button>
   )
 }

@@ -2,9 +2,9 @@
 
 // 结构面板：结构列表、链、配体、叠合
 import { useState } from 'react'
-import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight, Target } from 'lucide-react'
 import { toast } from 'sonner'
-import { engineRef, useMolStore } from '@/lib/molecular/store'
+import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
 import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Badge } from '@/components/ui/badge'
@@ -149,18 +149,33 @@ export function StructuresPanel() {
             <div className="mol-scroll max-h-56 space-y-0.5 overflow-y-auto px-2">
               {st.chains.map((c, i) => {
                 const Icon = CHAIN_TYPE_ICON[c.type] ?? TestTube
+                // 同一链 ID 可能拆成多个链组（蛋白链 A + 配体链 A + 水链 A）。
+                // 用 chainidx 按链组索引选择，避免「点配体链却选中整条链」
+                const dupId = st.chains.filter(x => x.id === c.id).length > 1
+                const label = c.id === ' ' ? '—' : c.id
                 return (
                   <button
                     key={`${c.id}-${i}`}
                     onClick={() => {
                       const store = useMolStore.getState()
-                      const res = store.selectFromExpr(`chain ${JSON.stringify(c.id)}`)
+                      const res = store.selectFromExpr(`chainidx ${i}`)
                       if (res.error) toast.error(res.error)
                     }}
+                    onDoubleClick={() => {
+                      const store = useMolStore.getState()
+                      const res = store.selectFromExpr(`chainidx ${i}`)
+                      if (!res.error && res.count > 0) {
+                        engineRef.current?.fitView([{ structureId: st.id, indices: useMolStore.getState().selection.indices }])
+                      }
+                    }}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent"
+                    title={`选择此链组（${c.residues} 残基 · ${c.atoms} 原子）· 双击聚焦${dupId ? ' · 同链 ID 含多个链组，已按链组精确选择' : ''}`}
                   >
                     <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
-                    <span className="w-6 shrink-0 font-mono text-xs font-bold">{c.id === ' ' ? '—' : c.id}</span>
+                    <span className="w-6 shrink-0 font-mono text-xs font-bold">{label}</span>
+                    {dupId && (
+                      <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
+                    )}
                     <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
                     <span className="shrink-0 text-[10px] text-muted-foreground">{CHAIN_TYPE_LABEL[c.type]}</span>
                     <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">
@@ -180,23 +195,47 @@ export function StructuresPanel() {
                     <FlaskConical className="h-3 w-3" /> 配体
                   </span>
                 </SectionTitle>
-                <div className="flex flex-wrap gap-1 px-2">
+                <div className="space-y-1 px-2">
                   {st.ligands.slice(0, 24).map(lg => (
-                    <button
-                      key={lg.resName}
-                      onClick={() => {
-                        const store = useMolStore.getState()
-                        const res = store.selectFromExpr(`resn ${lg.resName}`)
-                        if (!res.error && res.count > 0) {
-                          engineRef.current?.fitView([{ structureId: st.id, indices: useMolStore.getState().selection.indices }])
-                        }
-                      }}
-                      className="rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 font-mono text-[10px] font-medium transition hover:border-primary/50 hover:bg-primary/5"
-                      title={`选择全部 ${lg.resName}（链 ${lg.chainIds}）`}
-                    >
-                      {lg.resName}
-                      {lg.count > 1 && <span className="ml-0.5 text-muted-foreground">×{lg.count}</span>}
-                    </button>
+                    <div key={lg.resName} className="group/lg flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          const store = useMolStore.getState()
+                          const res = store.selectFromExpr(`resn ${lg.resName}`)
+                          if (!res.error && res.count > 0) {
+                            engineRef.current?.fitView([{ structureId: st.id, indices: useMolStore.getState().selection.indices }])
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          // 双击：仅选中该配体的单个拷贝（含此配体的第一个链组）
+                          const data = dataRegistry.get(st.id)
+                          if (!data) return
+                          const seg = st.chains.findIndex(c =>
+                            c.type === 'ligand' && data.residues.some(r => r.chainId === c.id && r.resName.toUpperCase() === lg.resName.toUpperCase()))
+                          if (seg < 0) return
+                          const res = useMolStore.getState().selectFromExpr(`chainidx ${seg} and resn ${lg.resName}`)
+                          if (res.error) toast.error(res.error)
+                        }}
+                        className="rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 font-mono text-[10px] font-medium transition hover:border-primary/50 hover:bg-primary/5"
+                        title={`选择全部 ${lg.resName}（链 ${lg.chainIds}）· 双击仅选首个拷贝`}
+                      >
+                        {lg.resName}
+                        {lg.count > 1 && <span className="ml-0.5 text-muted-foreground">×{lg.count}</span>}
+                      </button>
+                      {/* 口袋环境：一键选中该配体 4.5Å 内的完整残基（结合位点） */}
+                      <button
+                        onClick={() => {
+                          const store = useMolStore.getState()
+                          const res = store.selectFromExpr(`byres (within 4.5 of resn ${lg.resName})`)
+                          if (res.error) { toast.error(res.error); return }
+                          toast.success(`${lg.resName} 结合口袋`, { description: `${res.count.toLocaleString()} 个原子（含周围残基）· 可直接着色/新建表示法` })
+                        }}
+                        className="flex h-5 items-center gap-0.5 rounded-md border border-emerald-500/40 bg-emerald-500/5 px-1 text-[9px] font-medium text-emerald-600/80 opacity-80 transition hover:bg-emerald-500/15 hover:opacity-100 dark:text-emerald-400/90"
+                        title={`选择 ${lg.resName} 周围 4.5Å 结合口袋（含完整残基）`}
+                      >
+                        <Target className="h-2.5 w-2.5" /> 口袋
+                      </button>
+                    </div>
                   ))}
                 </div>
               </>
@@ -290,7 +329,7 @@ export function StructuresPanel() {
           </>
         )
       })()}
-      <PanelHint>点击链/配体可选择并聚焦；结构卡片点击切换活动结构；{structures.length >= 2 ? '⧉ 按钮将此结构叠合到活动结构（superpose）。' : ''}</PanelHint>
+      <PanelHint>点击链/配体选择，双击聚焦；链列表已按「链组」精确选择（同链 ID 的蛋白/配体/水不会互相波及）；结构卡片点击切换活动结构；{structures.length >= 2 ? '⧉ 按钮将此结构叠合到活动结构（superpose）。' : ''}</PanelHint>
     </div>
   )
 }

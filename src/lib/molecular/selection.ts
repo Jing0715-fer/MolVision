@@ -225,6 +225,16 @@ const zeroPredicates: Record<string, ZeroPred> = {
 
 const onePredicates: Record<string, OnePred> = {
   chain: (ctx, vs) => predAtom(ctx, (i) => vs.map(v => v.toUpperCase()).includes(ctx.structure.atoms.chainIds[i].toUpperCase())),
+  // 按链组索引选择：同一链 ID 可能拆成多个不连续链组（蛋白链 A 与其 HETATM 配体/水各自成组）。
+  // chainidx 4 = 第 5 个链组（与结构面板「链」列表行号一致），能精确选中「链 A 的配体」而不波及整条链。
+  chainidx: (ctx, vs) => {
+    const set = new Set<number>()
+    for (const v of vs) {
+      const n = parseInt(v, 10)
+      if (!isNaN(n)) set.add(n)
+    }
+    return predAtom(ctx, (i) => set.has(ctx.structure.atomChain[i]))
+  },
   resn: (ctx, vs) => {
     const set = new Set(vs.map(v => v.toUpperCase()))
     return predAtom(ctx, (i) => set.has(ctx.structure.atoms.resNames[i].toUpperCase()))

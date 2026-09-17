@@ -31,8 +31,8 @@ const MOUSE: [string, string][] = [
   ['Ctrl + 单击', '选择单个原子'],
   ['Shift + 单击', '追加选择'],
   ['Alt + 单击', '从选择中移除'],
-  ['双击', '聚焦该残基'],
-  ['右键单击', '上下文菜单'],
+  ['双击', '聚焦残基'],
+  ['右键', '上下文菜单（原子/残基/链/同类残基/周围环境 5Å/测距/标注）'],
 ]
 
 export function HelpDialog() {
@@ -104,6 +104,7 @@ export function HelpDialog() {
               <p><span className="font-semibold text-foreground">界面接触</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">contacts chain A | chain B</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">interface A B</code>——残基对连线 + 2D 图谱 + ΔSASA 埋藏面积。</p>
               <p><span className="font-semibold text-foreground">跨结构接触</span>：superpose 后用 <code className="rounded bg-muted px-1 font-mono text-[10px]">xcontacts 1UBQ:chain A | 1D3Z:chain A</code> 检测复合物界面。</p>
               <p><span className="font-semibold text-foreground">SASA / DSSP</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">sasa</code> 溶剂可及面积（可 <code className="rounded bg-muted px-1 font-mono text-[10px]">color sasa</code> 暴露度着色）；<code className="rounded bg-muted px-1 font-mono text-[10px]">dssp</code> 重算二级结构。</p>
+              <p><span className="font-semibold text-foreground">配体工作流</span>：结构面板配体行 →「口袋」一键选中该配体 4.5Å 结合位点（<code className="rounded bg-muted px-1 font-mono text-[10px]">byres (within 4.5 of resn HEM)</code>）；序列条底部配体行可逐个分子选择/聚焦；右键菜单「周围环境」从任意原子出发。</p>
             </div>
           </section>
 
@@ -113,6 +114,7 @@ export function HelpDialog() {
             <h3 className="mb-2 text-xs font-semibold">选择表达式语法</h3>
             <div className="space-y-1 rounded-lg bg-muted/40 p-2.5 font-mono text-[10px] leading-relaxed">
               <div><span className="text-emerald-600 dark:text-emerald-400">chain A</span> and <span className="text-emerald-600 dark:text-emerald-400">resi 40-80</span></div>
+              <div><span className="text-emerald-600 dark:text-emerald-400">chainidx 4</span>  <span className="text-muted-foreground">{'// 第 5 个链组（同链 ID 的蛋白/配体/水互不波及）'}</span></div>
               <div><span className="text-emerald-600 dark:text-emerald-400">within 5 of</span> (resn HEM)  <span className="text-muted-foreground">{'// HEM 周围 5 Å'}</span></div>
               <div><span className="text-emerald-600 dark:text-emerald-400">byres</span>(within 4 of ligand)  <span className="text-muted-foreground">{'// 扩展到整个残基'}</span></div>
               <div>(protein or nucleic) and <span className="text-emerald-600 dark:text-emerald-400">not helix</span></div>

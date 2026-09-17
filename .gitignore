@@ -55,3 +55,6 @@ server.log
 
 # local sqlite database (runtime artifact)
 /dbtool-results/
+
+# agent 工具的持久化输出（会话临时文件）
+/tool-results
