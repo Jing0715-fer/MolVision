@@ -77,15 +77,30 @@ function cropGrid(
   return { grid: out, i0, dims }
 }
 
+/** 密度图外观参数（面板/命令/会话恢复共用；差图正负峰 σ 可独立） */
+export interface MapLook {
+  iso?: number
+  isoNeg?: number
+  mode?: 'surface' | 'mesh' | 'both'
+  color?: string
+  negColor?: string
+  opacity?: number
+  visible?: boolean
+}
+
 /** 同步引擎图层 → map-store 镜像 */
-function syncMapMirror(source: MapInfoMirror['source'], ms: number) {
+function syncMapMirror(
+  source: MapInfoMirror['source'],
+  ms: number,
+  meta?: { pdbId?: string; kind?: MapKind },
+) {
   const eng = engineRef.current
   const info = eng?.getMapInfo()
   if (!info) {
     useMapStore.getState().setInfo(null)
     return null
   }
-  const mirror: MapInfoMirror = { ...info, source, ms }
+  const mirror: MapInfoMirror = { ...info, source, ms, ...meta }
   useMapStore.getState().setInfo(mirror)
   return mirror
 }
@@ -146,15 +161,21 @@ function computeDensityViaWorker(
   })
 }
 
-/** 从 RCSB 拉取结构因子并计算电子密度图（kind：2Fo−Fc 常规 / Fo−Fc 差图） */
-export async function fetchAndComputeMap(pdbIdRaw: string, kind: MapKind = '2fofc'): Promise<void> {
+/** 从 RCSB 拉取结构因子并计算电子密度图（kind：2Fo−Fc 常规 / Fo−Fc 差图；look：会话恢复时的外观；structureId：相位模型来源，缺省活动结构） */
+export async function fetchAndComputeMap(
+  pdbIdRaw: string,
+  kind: MapKind = '2fofc',
+  look?: MapLook,
+  structureId?: string,
+): Promise<void> {
   const pdbId = pdbIdRaw.trim().toUpperCase()
   const store = useMolStore.getState()
-  if (!store.activeId) {
+  const modelId = structureId ?? store.activeId
+  if (!modelId) {
     toast.error('请先加载结构（密度图相位需要原子模型）')
     return
   }
-  const data = dataRegistry.get(store.activeId)
+  const data = dataRegistry.get(modelId)
   if (!data) return
   if (!/^[0-9][A-Z0-9]{3}$/.test(pdbId)) {
     toast.error(`无效的 PDB 编号: "${pdbId}"`)
@@ -232,9 +253,16 @@ export async function fetchAndComputeMap(pdbIdRaw: string, kind: MapKind = '2fof
       cell: result.cell,
       mean: result.mean, rms: result.rms, min: result.min, max: result.max,
       difference: kind === 'fofc',
+      iso: look?.iso,
+      isoNeg: look?.isoNeg,
+      mode: look?.mode,
+      color: look?.color,
+      negColor: look?.negColor,
+      opacity: look?.opacity,
+      visible: look?.visible ?? true,
     })
     const ms = performance.now() - t0
-    syncMapMirror('sf', ms)
+    syncMapMirror('sf', ms, { pdbId, kind })
     const log = useMolStore.getState().appendLog
     if (kind === 'fofc') {
       log('out', `Fo−Fc 差图就绪（${pdbId}）：${result.reflnCount.toLocaleString()} 条反射 · 网格 ${cropped ? `${dims.join('×')}（自 ${result.n}³ 裁剪）` : `${result.n}³`} · ${ms.toFixed(0)} ms · 默认 ±3σ（绿=正峰 模型缺失 / 红=负峰 模型多余）`)
@@ -290,8 +318,8 @@ export function removeMap(): void {
   useMapStore.getState().setInfo(null)
 }
 
-/** 密度图外观调整（面板/命令共用；差图模式 color=正峰色 negColor=负峰色） */
-export function setMapLook(patch: { iso?: number; mode?: 'surface' | 'mesh' | 'both'; color?: string; negColor?: string; opacity?: number; visible?: boolean }): void {
+/** 密度图外观调整（面板/命令共用；差图模式 color=正峰色 negColor=负峰色，isoNeg=负峰独立 σ） */
+export function setMapLook(patch: MapLook): void {
   engineRef.current?.setMapAppearance(patch)
   const eng = engineRef.current
   const info = eng?.getMapInfo()
@@ -301,5 +329,8 @@ export function setMapLook(patch: { iso?: number; mode?: 'surface' | 'mesh' | 'b
     ...info,
     source: cur?.source ?? 'sf',
     ms: cur?.ms ?? 0,
+    // 引擎不持有 SF 来源元信息——从当前镜像带过去（会话存档依赖）
+    pdbId: cur?.pdbId,
+    kind: cur?.kind,
   })
 }

@@ -13,6 +13,8 @@ function Slider({
   max = 100,
   ...props
 }: React.ComponentProps<typeof SliderPrimitive.Root>) {
+  // aria-label 转发给 Thumb（可访问名称应落在 role="slider" 元素上而非容器）
+  const { 'aria-label': ariaLabel, ...rootProps } = props
   const _values = React.useMemo(
     () =>
       Array.isArray(value)
@@ -34,7 +36,7 @@ function Slider({
         "relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
         className
       )}
-      {...props}
+      {...rootProps}
     >
       <SliderPrimitive.Track
         data-slot="slider-track"
@@ -53,6 +55,7 @@ function Slider({
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
+          aria-label={ariaLabel}
           className="border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}

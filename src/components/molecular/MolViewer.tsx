@@ -8,6 +8,7 @@ import { useHoverStore } from '@/lib/molecular/hover-store'
 import { loadFiles } from '@/lib/molecular/loader'
 import { PRESETS } from '@/lib/molecular/store'
 import { hasSession, restoreSession, saveSession } from '@/lib/molecular/session'
+import { useMapStore } from '@/lib/molecular/map-store'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -15,6 +16,7 @@ import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { EnsembleBar } from '@/components/studio/EnsembleBar'
 import { RecordBadge } from '@/components/studio/RecordBadge'
+import { ColorLegend } from '@/components/studio/ColorLegend'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 
 interface HoverState { text: string; x: number; y: number; sub?: string }
@@ -109,21 +111,34 @@ export default function MolViewer() {
         toast.success(`已恢复上次会话`, { description: `${n} 个结构 · 表示法与相机视角已还原` })
       }
     }
-    // 会话自动保存（debounced）：结构/reps/设置/命名选择变化时
+    // 会话自动保存（debounced）：结构/reps/设置/命名选择/密度图设置变化时
     let saveTimer: ReturnType<typeof setTimeout> | null = null
     let lastSig = ''
+    let lastMapSig = ''
+    const scheduleSave = () => {
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => saveSession(), 900)
+    }
     const unsub = useMolStore.subscribe((s, prev) => {
       if (prev.structures === s.structures && prev.settings === s.settings && prev.namedSelections === s.namedSelections) return
       const sig = `${s.structures.length}|${s.structures.map(x => x.rev).join(',')}|${s.structures.map(x => x.transform ? x.transform.quat.join(',') + ':' + x.transform.translation.join(',') : '-').join(';')}|${JSON.stringify(s.settings)}|${s.namedSelections.length}`
       if (sig === lastSig) return
       lastSig = sig
-      if (saveTimer) clearTimeout(saveTimer)
-      saveTimer = setTimeout(() => saveSession(), 900)
+      scheduleSave()
+    })
+    // 密度图设置变化（σ/模式/颜色/移除）也入档
+    const unsubMap = useMapStore.subscribe((s, prev) => {
+      if (prev.info === s.info && prev.computing === s.computing) return
+      const sig = s.info ? `${s.info.pdbId}|${s.info.kind}|${s.info.iso}|${s.info.isoNeg}|${s.info.mode}|${s.info.color}|${s.info.negColor}|${s.info.opacity}|${s.info.visible}` : 'none'
+      if (sig === lastMapSig) return
+      lastMapSig = sig
+      scheduleSave()
     })
     const onBeforeUnload = () => saveSession()
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => {
       unsub()
+      unsubMap()
       window.removeEventListener('beforeunload', onBeforeUnload)
       if (saveTimer) clearTimeout(saveTimer)
       eng.dispose()
@@ -379,6 +394,9 @@ export default function MolViewer() {
 
       {/* 快捷预设浮层（右下角） */}
       <QuickPresets />
+
+      {/* 颜色标尺图例（左下角，putty/B 因子/SASA 着色时显示） */}
+      <ColorLegend />
 
       {/* 动画录制指示器（录制中显示） */}
       <RecordBadge />

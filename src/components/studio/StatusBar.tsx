@@ -29,6 +29,14 @@ export function StatusBar() {
   const st = structures.find(x => x.id === activeId)
   const symCount = structures.reduce((acc, x) => acc + (x.symmetry?.count ?? 0), 0)
   const need = measureMode === 'distance' ? 2 : measureMode === 'angle' ? 3 : measureMode === 'dihedral' ? 4 : 0
+  // 密度图徽章文案（差图正负独立 σ 时着色 +x/−y）
+  const mapLabel = (() => {
+    if (!mapInfo) return null
+    const trunc = mapInfo.truncated ? '+' : ''
+    if (!mapInfo.difference) return <>密度 {mapInfo.iso.toFixed(1)}σ{trunc}</>
+    if (Math.abs(mapInfo.iso - mapInfo.isoNeg) < 1e-6) return <>差图 {mapInfo.iso.toFixed(1)}σ{trunc}</>
+    return <>差图 <span className="text-emerald-600 dark:text-emerald-400">+{mapInfo.iso.toFixed(1)}</span>/<span className="text-red-600 dark:text-red-400">−{mapInfo.isoNeg.toFixed(1)}</span>σ{trunc}</>
+  })()
 
   return (
     <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-border/70 bg-card/60 px-3 text-[10px] text-muted-foreground backdrop-blur-sm">
@@ -150,9 +158,7 @@ export function StatusBar() {
             : <Grid3x3 className="h-3 w-3" />}
           {mapComputing
             ? '密度图计算中（Worker）…'
-            : mapInfo!.difference
-              ? <>差图 {mapInfo!.iso.toFixed(1)}σ<span className="text-emerald-600 dark:text-emerald-400">±</span>{mapInfo!.truncated ? '+' : ''}</>
-              : <>密度 {mapInfo!.iso.toFixed(1)}σ{mapInfo!.truncated ? '+' : ''}</>}
+            : mapLabel}
         </span>
       )}
 

@@ -59,7 +59,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
   { cmd: 'stereo on|off', desc: '红蓝立体渲染', example: 'stereo on' },
   { cmd: 'symmetry <半径Å>|off', desc: '晶体对称伴侣（CRYST1）', example: 'symmetry 25' },
-  { cmd: 'map fetch <id>|fofc|iso…', desc: '电子密度图（SF→FFT，Worker 零阻塞）', example: 'map fofc 3ekj' },
+  { cmd: 'map fetch <id>|fofc|isolevel pos/neg', desc: '电子密度图（SF→FFT，Worker 零阻塞；差图双 σ）', example: 'map isolevel neg 2.5' },
   { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
   { cmd: 'ssao on|off [r]', desc: '环境光遮蔽开关/半径', example: 'ssao on 3' },
   { cmd: 'superpose <名> [onto <名>] [chain X to Y]', desc: '结构叠合（序列比对+刚体拟合，可选链对）', example: 'superpose 4HHB onto 1A3N chain A to A' },
@@ -618,12 +618,25 @@ export function runCommand(raw: string): void {
       return ok(`正在获取 ${pid} 结构因子并合成 ${isFofc ? 'Fo−Fc 差图' : '2Fo−Fc 密度图'}…`)
     }
     if (sub === 'isolevel' || sub === 'iso' || sub === 'level') {
-      const v = parseFloat(parts[2] ?? '')
-      if (isNaN(v) || v < 0.2 || v > 8) return err('用法：map isolevel <σ 0.2-8>，如 map isolevel 1.5')
-      setMapLook({ iso: v })
-      const isDiff = engineRef.current?.getMapInfo()?.difference
-      return isDiff
-        ? ok(`差图等值面级别 → ±${v} σ（±3σ 常规：绿峰该建而未建、红峰放错位置）`)
+      // map isolevel <σ>（差图同时设正负）| map isolevel pos <σ> / neg <σ>（差图独立正负峰）
+      const sideArg = (parts[2] ?? '').toLowerCase()
+      const isPos = sideArg === 'pos' || sideArg === 'positive' || sideArg === '+'
+      const isNeg = sideArg === 'neg' || sideArg === 'negative' || sideArg === '-'
+      const v = parseFloat(isPos || isNeg ? (parts[3] ?? '') : (parts[2] ?? ''))
+      if (isNaN(v) || v < 0.2 || v > 8) {
+        return err('用法：map isolevel <σ 0.2-8>；差图可分开设置：map isolevel pos 3 / map isolevel neg 2.5')
+      }
+      const info = engineRef.current?.getMapInfo()
+      if (isPos || isNeg) {
+        if (!info?.difference) return err('正/负峰独立级别仅适用于 Fo−Fc 差图（map fofc <编号>）')
+        setMapLook(isPos ? { iso: v } : { isoNeg: v })
+        return ok(isPos
+          ? `差图正峰（绿）等值面 → +${v} σ`
+          : `差图负峰（红）等值面 → −${v} σ`)
+      }
+      setMapLook({ iso: v, isoNeg: v })
+      return info?.difference
+        ? ok(`差图等值面级别 → ±${v} σ（可用 map isolevel pos/neg 分开调整正负峰）`)
         : ok(`等值面级别 → ${v} σ（1σ≈噪声基准，1.5-2σ 常规骨架）`)
     }
     if (sub === 'mesh') { setMapLook({ mode: 'mesh' }); return ok('密度图切换为网格 isomesh') }
@@ -636,7 +649,9 @@ export function runCommand(raw: string): void {
     if (!info) {
       return err('未加载密度图。用法：map fetch <PDB编号> | map fofc <PDB编号> | isolevel <σ> | mesh | surface | both | hide | show | off（也可拖入 .ccp4/.map/.mrc 文件）')
     }
-    return ok(`密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString()} 三角形 · ${info.difference ? `±${info.iso}σ 差图` : `${info.iso} σ`} · 模式 ${info.mode}${info.truncated ? '（已截断）' : ''} · rms ${info.rms.toFixed(3)}`)
+    return ok(`密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString()} 三角形 · ${info.difference
+      ? (Math.abs(info.iso - info.isoNeg) < 1e-6 ? `±${info.iso.toFixed(1)}σ 差图` : `+${info.iso.toFixed(1)}/−${info.isoNeg.toFixed(1)}σ 差图`)
+      : `${info.iso.toFixed(1)} σ`} · 模式 ${info.mode}${info.truncated ? '（已截断）' : ''} · rms ${info.rms.toFixed(3)}`)
   }
 
   if (cmd === 'png') {

@@ -90,6 +90,8 @@ interface MapLayerState {
   mean: number; rms: number; min: number; max: number
   /** 等值面级别（σ 单位：绝对值 = mean ± iso·rms） */
   iso: number
+  /** 差图负峰独立 σ 级别（正峰=iso；非差图忽略）——对标 PyMOL 双 isolevel 对象 */
+  isoNeg: number
   mode: 'surface' | 'mesh' | 'both'
   /** 差图模式（Fo−Fc）：正峰绿 / 负峰红 双等值面（±iso·σ） */
   difference: boolean
@@ -1683,33 +1685,40 @@ export class MolEngine {
     cell: CrystalCell
     mean: number; rms: number; min: number; max: number
     iso?: number
+    /** 差图负峰独立 σ（缺省同 iso） */
+    isoNeg?: number
     mode?: 'surface' | 'mesh' | 'both'
     difference?: boolean
     color?: string
     negColor?: string
     opacity?: number
+    visible?: boolean
   }) {
     this.disposeMapGeometry()
+    const iso = def.iso ?? (def.difference ? 3 : 2)
     this.mapLayer = {
       name: def.name, grid: def.grid, dims: def.dims,
       fracOrigin: def.fracOrigin, fracStep: def.fracStep, cell: def.cell,
       mean: def.mean, rms: def.rms, min: def.min, max: def.max,
-      iso: def.iso ?? (def.difference ? 3 : 2), mode: def.mode ?? (def.difference ? 'mesh' : 'both'),
+      iso,
+      isoNeg: def.isoNeg ?? iso,
+      mode: def.mode ?? (def.difference ? 'mesh' : 'both'),
       difference: def.difference ?? false,
       color: def.color ?? (def.difference ? '#2e9e44' : '#3d7ab8'),
       negColor: def.negColor ?? '#d64545',
-      opacity: def.opacity ?? 0.38, visible: true,
+      opacity: def.opacity ?? 0.38, visible: def.visible ?? true,
       meshes: [], wires: [], triangles: 0, truncated: false,
     }
     this.rebuildMapMesh()
   }
 
-  /** 调整密度图外观（σ 级别 / 模式 / 颜色 / 不透明度 / 可见性） */
-  setMapAppearance(patch: { iso?: number; mode?: 'surface' | 'mesh' | 'both'; color?: string; negColor?: string; opacity?: number; visible?: boolean }) {
+  /** 调整密度图外观（σ 级别 / 模式 / 颜色 / 不透明度 / 可见性；差图正负峰 σ 可独立设置） */
+  setMapAppearance(patch: { iso?: number; isoNeg?: number; mode?: 'surface' | 'mesh' | 'both'; color?: string; negColor?: string; opacity?: number; visible?: boolean }) {
     const l = this.mapLayer
     if (!l) return
     let needRebuild = false
     if (patch.iso !== undefined && patch.iso !== l.iso) { l.iso = patch.iso; needRebuild = true }
+    if (patch.isoNeg !== undefined && patch.isoNeg !== l.isoNeg) { l.isoNeg = patch.isoNeg; needRebuild = true }
     if (patch.mode !== undefined && patch.mode !== l.mode) { l.mode = patch.mode; needRebuild = true }
     if (patch.color !== undefined) l.color = patch.color
     if (patch.negColor !== undefined) l.negColor = patch.negColor
@@ -1743,7 +1752,7 @@ export class MolEngine {
     const l = this.mapLayer
     if (!l) return null
     return {
-      name: l.name, dims: l.dims, iso: l.iso, mode: l.mode, difference: l.difference,
+      name: l.name, dims: l.dims, iso: l.iso, isoNeg: l.isoNeg, mode: l.mode, difference: l.difference,
       color: l.color, negColor: l.negColor,
       opacity: l.opacity, visible: l.visible, triangles: l.triangles, truncated: l.truncated,
       mean: l.mean, rms: l.rms, min: l.min, max: l.max, cell: l.cell,
@@ -1776,8 +1785,8 @@ export class MolEngine {
     this.disposeMapGeometry()
     const isoDefs: { level: number; color: string }[] = l.difference
       ? [
-          { level: l.mean + l.iso * l.rms, color: l.color },   // 正峰（模型缺失处）
-          { level: l.mean - l.iso * l.rms, color: l.negColor }, // 负峰（模型多余/错位处）
+          { level: l.mean + l.iso * l.rms, color: l.color },     // 正峰（模型缺失处；σ=iso）
+          { level: l.mean - l.isoNeg * l.rms, color: l.negColor }, // 负峰（模型多余/错位处；σ=isoNeg 独立）
         ]
       : [{ level: l.mean + l.iso * l.rms, color: l.color }]
     // grid 索引 → 世界笛卡尔（PDB 正交化）：cart = O·(fracOrigin + step·grid)

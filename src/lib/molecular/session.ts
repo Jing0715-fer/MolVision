@@ -1,9 +1,12 @@
-// 会话持久化：结构源文本 + reps + 设置 + 相机 → localStorage 保存/恢复
+// 会话持久化：结构源文本 + reps + 设置 + 相机 + 密度图设置 → localStorage 保存/恢复
+// 密度图栅格本身不入档（数十 MB）；存 SF 来源与外观参数，恢复时自动重算（Worker）
 import { dataRegistry, engineRef, useMolStore } from './store'
 import { parseStructure } from './parser'
 import { defaultSettings, type RepConfig, type Settings, type RigidTransform } from './types'
 import { textRegistry } from './text-registry'
 import { applyRigidTransform } from './superpose'
+import { useMapStore } from './map-store'
+import { fetchAndComputeMap } from './map-load'
 
 const KEY = 'molvision-session-v1'
 /** 文本总预算（localStorage 通常 5MB） */
@@ -30,6 +33,20 @@ interface SessionData {
   settings: Settings
   camera: { pos: [number, number, number]; target: [number, number, number] } | null
   namedSelections: { name: string; structureIndex: number; expr: string | null; indices: number[] | null; count: number }[]
+  /** SF 计算的密度图设置（恢复时自动重拉结构因子 + Worker 重算；文件来源不入档） */
+  map?: SessionMap
+}
+
+interface SessionMap {
+  pdbId: string
+  kind: '2fofc' | 'fofc'
+  iso: number
+  isoNeg: number
+  mode: 'surface' | 'mesh' | 'both'
+  color: string
+  negColor: string
+  opacity: number
+  visible: boolean
 }
 
 export function saveSession(): boolean {
@@ -78,6 +95,21 @@ export function saveSession(): boolean {
       }
     : null
   const activeIndex = s.structures.findIndex(x => x.id === s.activeId)
+  // 密度图设置（仅 SF 来源；栅格重载后自动重算）
+  const mapInfo = useMapStore.getState().info
+  const map = (mapInfo && mapInfo.source === 'sf' && mapInfo.pdbId && mapInfo.kind)
+    ? {
+      pdbId: mapInfo.pdbId,
+      kind: mapInfo.kind,
+      iso: mapInfo.iso,
+      isoNeg: mapInfo.isoNeg,
+      mode: mapInfo.mode,
+      color: mapInfo.color,
+      negColor: mapInfo.negColor,
+      opacity: mapInfo.opacity,
+      visible: mapInfo.visible,
+    }
+    : undefined
   const data: SessionData = {
     version: 1,
     savedAt: Date.now(),
@@ -85,6 +117,7 @@ export function saveSession(): boolean {
     structures: structs,
     settings: s.settings,
     camera: cam,
+    map,
     namedSelections: s.namedSelections.map(ns => ({
       name: ns.name,
       structureIndex: s.structures.findIndex(x => x.id === ns.structureId),
@@ -182,6 +215,21 @@ export function restoreSession(): number {
         useMolStore.getState().bumpVisual()
       })
     })
+  }
+  // 恢复密度图：栅格不入档，按保存的 SF 来源与外观自动重算（Worker 后台，不阻塞）
+  if (data.map) {
+    const m = data.map
+    const host = useMolStore.getState().structures.find(x => x.meta.pdbId === m.pdbId)
+      ?? (useMolStore.getState().structures.length === 1 ? useMolStore.getState().structures[0] : undefined)
+    if (host) {
+      useMolStore.getState().appendLog('out', `正在恢复电子密度图（${m.pdbId} ${m.kind === 'fofc' ? 'Fo−Fc' : '2Fo−Fc'}）——结构因子重拉 + Worker 重算，稍候…`)
+      void fetchAndComputeMap(m.pdbId, m.kind, {
+        iso: m.iso, isoNeg: m.isoNeg, mode: m.mode,
+        color: m.color, negColor: m.negColor, opacity: m.opacity, visible: m.visible,
+      }, host.id)
+    } else {
+      useMolStore.getState().appendLog('out', `密度图存档需要结构 ${m.pdbId}（当前会话未包含，已跳过）`)
+    }
   }
   useMolStore.getState().appendLog('out', `已恢复上次会话：${restored} 个结构`)
   return restored

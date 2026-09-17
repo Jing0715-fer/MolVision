@@ -547,3 +547,44 @@ Work Log:
 
 Stage Summary:
 - 下一阶段建议 ②（σ 滑块节流）已完成；剩余建议：① 差图双 σ 独立滑块 ③ mmCIF crystal 实证 ④ putty 颜色图例卡 ⑤ 密度图会话存档 ⑥ 抗体-抗原演示场景
+
+---
+Task ID: feat-r12
+Agent: main
+Task: 下一阶段开发 + 已有功能/UI 打磨：差图双 σ 独立滑块、B 因子颜色标尺图例卡、密度图会话存档、mmCIF crystal 实证、a11y 修复
+
+Work Log:
+- 读取 worklog（feat-r11 完成差图/Worker/putty/σ 节流）；QA 冒烟：dev server 200；核查 SF 缓存警告 → 实为 feat-r11 修复前的旧日志（新请求无警告，无需改动）
+- 【基础设施事故】dev server 被 OOM 杀死（RSS 2GB+，机器 4.1GB；dmesg 确认 oom_kill next-server）且 Bash 工具会回收子进程——用 `(setsid bun run dev &)` 子壳双重派生实现跨命令存活；QA 期间注意内存预算
+- 【功能 A：差图双 σ 独立滑块（PyMOL 双 isolevel 对象工作流）】
+  - engine.ts：MapLayerState 新增 isoNeg（负峰独立 σ）；setDensityMap 支持 isoNeg/visible；setMapAppearance 接受 isoNeg；rebuildMapMesh 差图负面 level = mean − isoNeg·rms；getMapInfo 返回 isoNeg
+  - map-store.ts：MapInfoMirror 新增 isoNeg + pdbId + kind（会话存档用）；map-load.ts 导出 MapLook 接口；fetchAndComputeMap 新增 look/structureId 参数（恢复用）；setMapLook 携带 pdbId/kind
+  - MapsPanel：useIsoThrottle hook 泛化（双滑块各持节流状态）；差图模式渲染正峰（绿色圆点标识）/负峰（红色圆点）双滑块，各自 1-8σ；图例与提示文案更新（正/负双面、可分开调级）
+  - commands.ts：map isolevel <σ> 同设正负（向后兼容）；map isolevel pos <σ> / neg <σ> 独立设置（含 +/− 别名、非差图错误提示）；map 状态输出 +3.0/−2.5σ 格式；帮助条目更新
+  - StatusBar：差图徽章 iso≠isoNeg 时显示着色 +3.0/−2.5σ（emerald/red 分色）
+- 【功能 B：颜色标尺图例卡（视口左下角浮层）】
+  - colors.ts：BFACTOR_STOPS / SASA_STOPS 提升为导出常量 + stopsToGradient() CSS 渐变工具（着色与图例共享同一停靠点，杜绝视觉漂移）
+  - 新组件 ColorLegend.tsx：活动结构含可见 putty/bfactor/sasa 表示法时自动显示；B 因子卡 = 渐变条 + min/mid/max 数值 + putty 管径 SVG（与 representations.ts 同 sqrt 映射逐点生成多边形路径）+ 刚性/柔性标签；puttyRange 钳制时 max 显示 * 上标与 title 提示；SASA 卡 = 暴露度渐变 + 埋藏→暴露标签；控制台打开时自动隐藏（避免被底部覆盖层遮挡成残缺显示）
+  - MolViewer 集成渲染（QuickPresets 对称位置 bottom-3 left-3）
+- 【功能 C：密度图会话存档】
+  - session.ts：SessionData.map 可选字段（pdbId/kind/iso/isoNeg/mode/color/negColor/opacity/visible）；saveSession 从 map-store 镜像采集（仅 SF 来源）；restoreSession 结构恢复后自动 fetchAndComputeMap（按保存外观参数 + 宿主结构 id 供给相位模型，Worker 后台重算）
+  - MolViewer：useMapStore 订阅（σ/模式/颜色/移除变化触发 debounced 自动保存，与 mol-store 订阅共用 saveTimer）
+  - 【QA 发现并修复 bug】setMapLook 重建镜像时丢弃 pdbId/kind（引擎 getInfo 不含这两个元字段）→ 外观任何调整后存档的 map 字段变 undefined；修复为从当前镜像显式携带
+- 【功能 D：mmCIF crystal 解析实证】
+  - 真实 RCSB 文件 ×4（1UBQ=50.84×42.77×28.95 P 21 21 21 已知值吻合 / 7ST9 哑晶胞 1×1×1 P 1 / 8A3H / 8G7H）全部正确解析
+  - 现代 _space_group.name_H-M_alt 键 + 单斜 β=101.33 合成 mmCIF 测试 PASS（4 个 fallback 键路径覆盖）
+- 【a11y 修复】共享 slider.tsx：aria-label 从 Root 转发到 Thumb（role="slider" 元素的可访问名称；此前所有滑块 thumb 均为 null 标签）；密度图不透明度滑块补 aria-label
+- 【文档】HelpDialog 电子密度段落（pos/neg 语法 + 会话保存说明）+ B 因子段落（图例卡说明）；README：差图行补独立 σ、putty 行补图例卡、session 段落补密度图持久化、命令示例补 map isolevel pos/neg；新截图 public/screenshots/putty-fofc-legend.png
+- 【QA 全量验证】
+  - 图例卡：DOM 内容（B 2.0→75.7 + putty 管径标签）✓；像素级有序渐变 5/5 停靠色（蓝→青→绿→黄→红，12 行命中）✓；VLM 视觉验证 4/4 项 + 专业度 9/10（"连续色阶和离散粗细的双重视觉参考…作为交互式查看器已属顶尖水平"）✓
+  - 双 σ：map fofc 3ekj（Worker 16-20s）→ 双滑块渲染 ✓；map isolevel neg 2 → StatusBar "+3.0/−2.0σ" 着色分段 ✓；像素级红面 neg 2→5 收缩 4057→389 px（90%）绿面稳定 ✓；滑块键盘交互（点击 thumb + Home）5→1 生效 + 镜像同步 ✓；neg=1σ 时 97,650+ 三角形截断标记正确显示（mesh 模式 75k/面上限 by design）✓
+  - 会话存档：map isolevel neg 2.5 → localStorage 出现完整 map 字段（pdbId/kind/双 σ/mode/颜色）✓；刷新 → 结构恢复 + 密度图自动重算（"密度图计算中（Worker）"）→ ~20s 后差图带保存的 +3.0/−2.5σ 精确还原 ✓；VLM 会话恢复截图 4/4（putty 管/图例卡/绿红等值面/状态栏 σ）✓
+  - hero 组合图（putty + Fo−Fc + orient + 图例卡）VLM 综合 9.1/10（构图 9 / 科学传达 9.5 / UI 9 / 对比专业软件 8.5，"被精心打磨过的 ChimeraX"）✓
+  - 回归：选择表达式（within 6 of polymer=2405 / byres within 5 of ligand=214 / elem FE=0）✓、count_atoms ✓、map 状态新格式 ✓、9 面板轮换切换无错误 ✓、浏览器 errors 空 ✓、lint 0 错误 0 警告 ✓、dev.log 无运行时错误（SF 缓存警告确认为旧日志）✓
+  - 清理误装测试依赖（canvas/pngjs devDependencies 移除，package.json/bun.lock 零 diff）
+
+Stage Summary:
+- 项目当前状态：在 feat-r11 差图/putty/Worker 基础上，本轮补齐晶体学工作流最后三块体验短板——①差图正/负峰 σ 独立调级（PyMOL 双对象 isolevel 工作流：双滑块 + pos/neg 命令 + 着色状态徽章）②颜色标尺图例卡（B 值→颜色→管径三联映射，着色与图例共享停靠点常量，VLM 评 9/10）③密度图会话存档（σ/mode/颜色持久化，刷新自动 Worker 重算精确还原）——并完成 mmCIF crystal 双键路径实证（真实文件 ×4 + 合成现代键测试）
+- QA 方法论沉淀：①像素级 σ 验证用「红/绿面像素计数 + 单调性」但需注意控制台开合遮挡与 mesh 截断标记（1σ 时 75k 上限截断会导致像素非单调，非 bug）②Bash 工具会回收子进程——`(setsid cmd &)` 子壳双重派生才能跨命令存活 ③Radix Slider 的 aria-label 需显式转发到 Thumb（可访问名称在 role="slider" 元素上）④引擎 getInfo 不含 UI 元字段时，setMapLook 类镜像重建函数必须显式携带，否则静默丢失
+- 未解决问题与风险：①差图相位仍为近似模型相位（固有限制）②Worker 计算本环境 16-20s（软件 GL；真机预期 6-14s）③负峰 1σ 低阈值时 mesh 截断（75k/面）——可考虑差图 mesh 模式上限自适应或负面专用更高上限 ④VLM 建议未采纳项：图例卡集成 σ 滑块、视角书签功能 ⑤pngjs/canvas 已移除（像素 QA 脚本在 /tmp 不入仓库，下次需要时重装）
+- 下一阶段建议（优先级序）：① 视角书签/快照（VLM 评审建议：保存活性位点视角）② 差图 σ 滑块节流 + 负面 mesh 上限自适应 ③ 抗体-抗原复合物演示场景（superpose→xcontacts→bsa→差图全链路）④ 跨结构 ΔSASA（maskA/maskB 已就绪）⑤ putty 覆盖核酸链 ⑥ 氢键/SASA/contacts/map 统一 Worker 池

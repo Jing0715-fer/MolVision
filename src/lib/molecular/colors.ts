@@ -55,22 +55,33 @@ export function naBaseColor(resName: string): THREE.Color | null {
 
 const SS_COLORS = { H: '#ff5e5b', E: '#ffd166', L: '#9aa3ad' } as const
 
+/** B 因子渐变停靠点（蓝→青→绿→黄→红；t∈[0,1] 归一化 B 值）——图例卡与着色共用 */
+export const BFACTOR_STOPS: [number, string][] = [
+  [0.0, '#2c7bb6'], [0.25, '#66c2a5'], [0.5, '#f2c46d'], [0.75, '#e05d5d'], [1.0, '#b61515'],
+]
+
+/** SASA 暴露度渐变停靠点（0 埋藏深蓝 → 1 完全暴露橙红）——图例卡与着色共用 */
+export const SASA_STOPS: [number, string][] = [
+  [0.0, '#2e4a8f'], [0.3, '#4fa3c7'], [0.6, '#f2d74c'], [1.0, '#e0563d'],
+]
+
+/** 渐变停靠点 → CSS linear-gradient 字符串（图例卡用） */
+export function stopsToGradient(stops: [number, string][]): string {
+  return `linear-gradient(to right, ${stops.map(([t, c]) => `${c} ${(t * 100).toFixed(1)}%`).join(', ')})`
+}
+
 /** B 因子渐变：蓝→青→绿→黄→红 */
 function bfactorColor(t: number): THREE.Color {
   const c = new THREE.Color()
-  // 简单 4 段渐变
-  const stops: [number, string][] = [
-    [0.0, '#2c7bb6'], [0.25, '#66c2a5'], [0.5, '#f2c46d'], [0.75, '#e05d5d'], [1.0, '#b61515'],
-  ]
   t = Math.max(0, Math.min(1, t))
-  for (let i = 0; i < stops.length - 1; i++) {
-    const [t0, c0] = stops[i]
-    const [t1, c1] = stops[i + 1]
+  for (let i = 0; i < BFACTOR_STOPS.length - 1; i++) {
+    const [t0, c0] = BFACTOR_STOPS[i]
+    const [t1, c1] = BFACTOR_STOPS[i + 1]
     if (t >= t0 && t <= t1) {
       return c.set(c0).lerp(new THREE.Color(c1), (t - t0) / (t1 - t0))
     }
   }
-  return c.set(stops[stops.length - 1][1])
+  return c.set(BFACTOR_STOPS[BFACTOR_STOPS.length - 1][1])
 }
 
 export interface ColorContext {
@@ -200,9 +211,6 @@ export function computeAtomColors(
 }
 
 /** SASA 暴露分数渐变：0 埋藏（深蓝）→ 1 完全暴露（橙红），4 段过渡 */
-const SASA_STOPS: [number, string][] = [
-  [0.0, '#2e4a8f'], [0.3, '#4fa3c7'], [0.6, '#f2d74c'], [1.0, '#e0563d'],
-]
 const sasaColorCache = new Map<string, THREE.Color>()
 
 export function sasaExposureColor(atomSasa: number, element: string, probe: number): THREE.Color {

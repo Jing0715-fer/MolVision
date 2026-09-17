@@ -25,8 +25,8 @@
 | 🔄 **Superpose undo** | Revert any aligned structure back to its original deposited pose — `untransform 1D3Z` or the ↩ button on structure cards |
 | 🎥 **Animation recording** | Record ensemble playback / rock / spin as 30fps WebM video via MediaRecorder canvas capture — toolbar ⏺ button or `record start` |
 | 🗺️ **Electron density (2Fo−Fc)** | **Computed live from RCSB-deposited structure factors**: model phases (symmetry-expanded Gaussian density rasterization) + observed amplitudes → 3D FFT → marching-cubes isosurface/isomesh at adjustable σ levels, cropped around the model with periodic boundary wraparound — `map fetch 3ekj`, `map isolevel 1.5`, `map mesh|surface|both`; CCP4/MRC map files can be dragged in directly (mode 0/1/2, axis permutation, byte-order detection) |
-| ⚖️ **Fo−Fc difference maps** | Classic model-validation difference density with **±σ dual isosurfaces** (green = positive peaks / missing atoms, red = negative peaks / misplaced atoms) — `map fofc 3ekj` or the Maps-panel kind toggle; crystallographic ±3σ convention, dual color pickers |
-| 🧵 **Putty B-factor tubes** | PyMOL `show putty` equivalent: tube radius continuously mapped to per-residue B-factors (sqrt scaling, smooth interpolation — thick = flexible, thin = rigid), B-cap slider to suppress outliers, pairs with the B-factor rainbow — preset key `8` / `preset putty` / `show putty polymer` |
+| ⚖️ **Fo−Fc difference maps** | Classic model-validation difference density with **positive/negative dual isosurfaces** (green = positive peaks / missing atoms, red = negative peaks / misplaced atoms) — `map fofc 3ekj` or the Maps-panel kind toggle; crystallographic ±3σ convention, dual color pickers, and **independent positive/negative σ levels** (`map isolevel pos 3 / neg 2.5` or the dual sliders — PyMOL two-object isolevel workflow) |
+| 🧵 **Putty B-factor tubes** | PyMOL `show putty` equivalent: tube radius continuously mapped to per-residue B-factors (sqrt scaling, smooth interpolation — thick = flexible, thin = rigid), B-cap slider to suppress outliers, pairs with the B-factor rainbow and an **auto-shown color-scale legend card** (B-value → color → tube-radius triple mapping, bottom-left overlay) — preset key `8` / `preset putty` / `show putty polymer` |
 | ⚙️ **Worker-thread crystallography** | The entire SF-parse + 3D-FFT synthesis (~6–18 s for 256³ grids) runs in a **Web Worker** with zero main-thread blocking — the UI stays fully interactive (rotate, select, command line) while the map computes; automatic main-thread fallback for exotic environments |
 | 🔷 **Crystal symmetry mates** | PyMOL `symmetry` equivalent: parses CRYST1, supports all **65 chiral (Sohncke) space groups** (validated operation tables, lattice centering composed), generates rigid-transformed visual copies of every representation within a radius — `symmetry 20` / panel controls; persists across sessions |
 | 👓 **Red-blue stereo** | Anaglyph stereo rendering (three.js AnaglyphEffect) — toolbar 👓 button or `stereo on`; wear red/cyan glasses for true depth |
@@ -69,7 +69,7 @@ ssao on 3 · hbonds on 3.2 · ensemble play · ensemble fps 15
 superpose 4hhb onto 2hhb · superpose 4hhb onto 1a3n chain A to A · record start
 interface A B · interface chain A chain B · contacts chain A | chain B 4.0 · dssp
 xcontacts 1ubq:chain A | 1d3z:chain A 5.0 · sasa 1.4 256 · color sasa · bsa · untransform 1d3z
-map fetch 3ekj · map fofc 3ekj · map isolevel 1.5 · map mesh · symmetry 20 · symmetry off
+map fetch 3ekj · map fofc 3ekj · map isolevel 1.5 · map isolevel pos 3 / neg 2.5 · map mesh · symmetry 20 · symmetry off
 create pocket = within 5 of resn HEM · split_chains · save model.pdb chain A
 orient chain A · get_view · png 4 · count_atoms chain A
 set ambient 0.5 · set specular off · set fov 30 · stereo on · util cbaw
@@ -92,7 +92,7 @@ set ambient 0.5 · set specular off · set fov 30 · stereo on · util cbaw
 ![Interface contact analysis](public/screenshots/contacts.png)
 
 ### Session persistence & `.molvision` files
-Structures, representations, colors, settings, **superposition transforms** and camera orientation are auto-saved to localStorage (debounced) and restored on reload — no work lost. Manage with `session save / info / clear`.
+Structures, representations, colors, settings, **superposition transforms**, camera orientation and **electron-density-map state** (SF source, σ levels incl. independent positive/negative, mode, colors — recomputed automatically in the Worker on reload) are auto-saved to localStorage (debounced) and restored on reload — no work lost. Manage with `session save / info / clear`.
 
 Full sessions can also be **exported as `.molvision` files** (complete structure sources + view state) and re-imported on any device — Scene panel → Session → Export/Import.
 
