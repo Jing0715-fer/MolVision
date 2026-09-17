@@ -588,3 +588,42 @@ Stage Summary:
 - QA 方法论沉淀：①像素级 σ 验证用「红/绿面像素计数 + 单调性」但需注意控制台开合遮挡与 mesh 截断标记（1σ 时 75k 上限截断会导致像素非单调，非 bug）②Bash 工具会回收子进程——`(setsid cmd &)` 子壳双重派生才能跨命令存活 ③Radix Slider 的 aria-label 需显式转发到 Thumb（可访问名称在 role="slider" 元素上）④引擎 getInfo 不含 UI 元字段时，setMapLook 类镜像重建函数必须显式携带，否则静默丢失
 - 未解决问题与风险：①差图相位仍为近似模型相位（固有限制）②Worker 计算本环境 16-20s（软件 GL；真机预期 6-14s）③负峰 1σ 低阈值时 mesh 截断（75k/面）——可考虑差图 mesh 模式上限自适应或负面专用更高上限 ④VLM 建议未采纳项：图例卡集成 σ 滑块、视角书签功能 ⑤pngjs/canvas 已移除（像素 QA 脚本在 /tmp 不入仓库，下次需要时重装）
 - 下一阶段建议（优先级序）：① 视角书签/快照（VLM 评审建议：保存活性位点视角）② 差图 σ 滑块节流 + 负面 mesh 上限自适应 ③ 抗体-抗原复合物演示场景（superpose→xcontacts→bsa→差图全链路）④ 跨结构 ΔSASA（maskA/maskB 已就绪）⑤ putty 覆盖核酸链 ⑥ 氢键/SASA/contacts/map 统一 Worker 池
+
+---
+Task ID: feat-r13
+Agent: main
+Task: 下一阶段开发 + UI 打磨：视角书签（缩略图/平滑过渡/持久化/命令行）、putty 覆盖核酸链、差图等值面自适应上限、移动端适配
+
+Work Log:
+- 读取 worklog（feat-r12 完成：双 σ 滑块/图例卡/密度图会话存档/mmCIF crystal）；QA 冒烟 dev server 200 正常
+- 【功能 A：视角书签（ViewBookmarks）——本轮主特性】
+  - 新建 views-store.ts：zustand 独立持久化（molvision-views-v1，与结构会话解耦——清空结构不清空书签）；书签 = 相机状态（pos/target/up/fov/ortho）+ 视口缩略图（capture() → Image 解码 → 192px JPEG q0.72 ~10KB，异步回填 bump rev）+ 名称 + 时间；上限 12 张；字段级容错装载（损坏条目丢弃）
+  - engine.ts：animateCameraTo()——easeInOutCubic 插值 pos/target/fov（650ms），up 向量结尾一次性落位（中途改会绕 target 翻转）；tick() 中 controls.update() 之后应用（无用户输入时 OrbitControls 以当前位置重算球坐标，外部修改安全）；pointerdown/wheel 立即取消动画（用户接管）；spin/rock 活跃时直接落位（每帧改相机的模式与动画打架）
+  - ViewBar.tsx 新浮层（视口右缘竖排）：「保存视角」按钮 + 缩略图卡片（96×60，序号徽章 1-9 对应 Shift+数字）+ 悬停删除（红 X）+ 双击名称内联重命名 + 跳转后 emerald ring 高亮 0.9s + 空态引导卡（结合口袋/活性位点文案）；mol-scroll 滚动上限 min(56vh,520px)；折叠态 = Bookmark 徽章 + emerald 计数角标
+  - MolViewer 快捷键：V 保存（排除 Ctrl/Cmd/Alt 组合防误触粘贴）；Shift+Digit1-9 跳转（e.code 判别，无 Shift 数字键仍是 1-8 风格预设）
+  - commands.ts：view save [名称] / view <序号|名称> / view go N / view del <序号|名称>（名称支持含空格，parts.join 修复）/ view list / view clear；view/bookmark 别名；帮助条目更新
+  - QA 发现并修复 2 个 bug：① hydrate() 后 getState() 快照过期（zustand set 替换 state 对象）→ 必须重新获取；② view del "视角 1" 多词名称失败（parts[2] 只取单词）→ slice(2).join(' ')
+- 【功能 B：putty 覆盖核酸链】
+  - representations.ts：B 范围扫描扩展为蛋白 CA + 核酸 P（统一映射语义）；buildNucleicTube 增加 putty/bRange 参数
+  - 新增 buildNucleicPuttySegment：磷酸骨架 CatmullRom 曲线采样（每残基 8 段）+ 平行传输框架（无肽平面参考方向 → 法向逐点投影到切平面防扭转，数值退化换轴兜底）+ 变半径圆管（与蛋白 putty 同款 sqrt 映射 + 双重平滑，rMin=0.2w rMax=1.05w）+ 端帽 + aResIndex pickable
+  - 1BNA 实证：两条 DNA 链各 812 顶点 = (11-1)×8+1)×10+2 精确命中 putty 公式（旧 TubeGeometry 路径为 1067/链）；VLM 确认管径粗细变化清晰、彩虹渐变平滑、8/10
+- 【功能 C：差图等值面自适应上限】
+  - engine.ts rebuildMapMesh：截断时单次重试更高上限（mesh ×8：75k→600k/面；surface/both ×2：300k→600k/面）
+  - 3EKJ 实证：负面 2σ = 356k 三角形 → mesh/surface 模式均 378,650 总数 truncated=false（旧 75k 上限会截掉 79%）；负面 1.5σ/1σ 需 >600k（噪声级等值面）——诚实标记截断而非静默缺角
+- 【UI 打磨】
+  - QuickPresets 快捷键提示 1-7 → 1-8（putty 预设第 8 个早就在但提示漏更）
+  - ViewBar 移动端适配：useIsMobile（<768px）默认折叠成徽章（112px 宽书签条挤压小视口，VLM 评审点名）；tri-state userCollapsed(null=未触碰) 区分默认折叠与用户展开；compact 卡片 w-20；用户点开后尊重选择
+  - HelpDialog：SHORTCUTS + V/Shift+1-9 两条；「结构分析与晶体学」新增视角书签段落；B 因子段落补核酸覆盖
+  - README：putty 行补蛋白+核酸统一映射；新增 View control & bookmarks 行 + Adaptive isosurface caps 行；画廊 +2 截图（putty-nucleic.png / viewbookmarks.png）；快捷键行补 V 与 Shift+1-9
+- 【QA 全量验证（agent-browser + VLM + 引擎状态断言）】
+  - V 保存：localStorage 1 条 + JPEG 缩略图入 DOM ✓；相机动画：移动到 (-50,20,-30) → Shift+1 → 150ms 采样中间值插值中 → 1s 后精确落位 [40,30,60]/[0,0,0] ✓
+  - 命令链：view save 口袋 → view list（2/12 表格）→ view go 2（相机跳转）→ view del 视角 1（多词名称）✓；重命名：双击 → fill → Enter → localStorage 更新「结合口袋」✓
+  - 持久化：reload → 书签「口袋」带缩略图存活 + 右缘提示文案 ✓；密度图会话恢复重放 ✓（map fofc 3ekj 22s Worker）
+  - putty 核酸：顶点数公式断言 + VLM 8/10 ✓；hero 组合图（双结构+差图+书签条）VLM 8.5/10（书签卡含名称时间戳、等值面清晰、无重叠缺陷）
+  - 移动端 390px：折叠徽章生效、无溢出（修复后复验）✓；9 面板轮换零错误 ✓；浏览器 errors 空 ✓；lint 0 错 0 警 ✓；tsc 新文件零错误（16 个预存错误均在旧 worker/superpose/examples 文件）✓；dev.log 无运行时错误 ✓
+
+Stage Summary:
+- 项目当前状态：在 feat-r12 晶体学三件套基础上补齐「工作流效率」层——①视角书签全链路（V 键/右缘缩略图条/Shift+数字平滑过渡/命令行 view save-go-del-list-clear/独立 localStorage 持久化/双击重命名）②putty B 因子管从蛋白扩展到核酸磷酸骨架（平行传输框架变半径管，蛋白核酸统一 B 范围）③差图等值面自适应上限（mesh ×8/surface ×2 重试，2σ 实用区间完全无截断）④移动端书签条自动折叠
+- 关键决策：①书签独立于结构会话存档（清空结构不清空书签，相机状态轻量跨会话保值）②相机动画插值 pos/target/fov 而 up 结尾落位（避免中途翻转）③噪声级低 σ（<1.5σ 需 >60 万三角形）诚实标记截断而非无限追高内存
+- 未解决问题与风险：①书签未纳入 .molvision 会话文件导出/导入（localStorage 独立键，跨设备需手动 get_view JSON）②V 键在 IME 中文输入法下可能被吞（keydwon code 兜底已尽力）③极端低 σ 差图负面仍截断（by design）④putty 核酸链颜色图例未区分 P 原子与 CA 原子来源（共享同一色标）
+- 下一阶段建议（优先级序）：① 抗体-抗原复合物演示场景（superpose→xcontacts→bsa→差图全链路一条龙，feat-r11 遗留）② 书签纳入 .molvision 导出/导入 ③ 跨结构 ΔSASA（maskA/maskB 已就绪）④ 氢键/SASA/contacts/map 统一 Worker 池 ⑤ 图例卡集成 σ 滑块（VLM 评审建议）

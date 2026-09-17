@@ -26,13 +26,14 @@
 | 🎥 **Animation recording** | Record ensemble playback / rock / spin as 30fps WebM video via MediaRecorder canvas capture — toolbar ⏺ button or `record start` |
 | 🗺️ **Electron density (2Fo−Fc)** | **Computed live from RCSB-deposited structure factors**: model phases (symmetry-expanded Gaussian density rasterization) + observed amplitudes → 3D FFT → marching-cubes isosurface/isomesh at adjustable σ levels, cropped around the model with periodic boundary wraparound — `map fetch 3ekj`, `map isolevel 1.5`, `map mesh|surface|both`; CCP4/MRC map files can be dragged in directly (mode 0/1/2, axis permutation, byte-order detection) |
 | ⚖️ **Fo−Fc difference maps** | Classic model-validation difference density with **positive/negative dual isosurfaces** (green = positive peaks / missing atoms, red = negative peaks / misplaced atoms) — `map fofc 3ekj` or the Maps-panel kind toggle; crystallographic ±3σ convention, dual color pickers, and **independent positive/negative σ levels** (`map isolevel pos 3 / neg 2.5` or the dual sliders — PyMOL two-object isolevel workflow) |
-| 🧵 **Putty B-factor tubes** | PyMOL `show putty` equivalent: tube radius continuously mapped to per-residue B-factors (sqrt scaling, smooth interpolation — thick = flexible, thin = rigid), B-cap slider to suppress outliers, pairs with the B-factor rainbow and an **auto-shown color-scale legend card** (B-value → color → tube-radius triple mapping, bottom-left overlay) — preset key `8` / `preset putty` / `show putty polymer` |
+| 🧵 **Putty B-factor tubes** | PyMOL `show putty` equivalent: tube radius continuously mapped to per-residue B-factors (sqrt scaling, smooth interpolation — thick = flexible, thin = rigid) covering **both protein (CA) and nucleic-acid (phosphate backbone) chains** with a unified B-range, B-cap slider to suppress outliers, pairs with the B-factor rainbow and an **auto-shown color-scale legend card** (B-value → color → tube-radius triple mapping, bottom-left overlay) — preset key `8` / `preset putty` / `show putty polymer` |
 | ⚙️ **Worker-thread crystallography** | The entire SF-parse + 3D-FFT synthesis (~6–18 s for 256³ grids) runs in a **Web Worker** with zero main-thread blocking — the UI stays fully interactive (rotate, select, command line) while the map computes; automatic main-thread fallback for exotic environments |
 | 🔷 **Crystal symmetry mates** | PyMOL `symmetry` equivalent: parses CRYST1, supports all **65 chiral (Sohncke) space groups** (validated operation tables, lattice centering composed), generates rigid-transformed visual copies of every representation within a radius — `symmetry 20` / panel controls; persists across sessions |
 | 👓 **Red-blue stereo** | Anaglyph stereo rendering (three.js AnaglyphEffect) — toolbar 👓 button or `stereo on`; wear red/cyan glasses for true depth |
 | 🧰 **Object workflow** | PyMOL `create` / `split_chains` / `save`: promote any selection to an independent object (`create pocket = within 5 of resn HEM`), split a structure into per-chain-segment objects, export coordinates as PDB files (`save model.pdb chain A`) — created objects auto-register into session persistence |
 | 🎛️ **Lighting & rendering controls** | Ambient / key / fill light intensity sliders, specular (gloss) toggle for matte publication-style rendering, `set ambient 0.5` · `set direct 2` · `set specular off` · `set fov 30` · `set quality high` · `set transparency 0.5` · `set stick_radius 0.2` |
-| 🧭 **View control** | PyMOL `orient` (PCA principal-axis alignment), `get_view` / `set_view` camera JSON export/import, `png 4` high-res export, `count_atoms` |
+| 🧭 **View control & bookmarks** | PyMOL `orient` (PCA principal-axis alignment), `get_view` / `set_view` camera JSON export/import, `png 4` high-res export, `count_atoms`, plus **view bookmarks**: save the current camera as a thumbnail card (`V` key or the right-edge bar), jump back with a smooth eased 650 ms transition (`Shift+1–9` / click / `view 2`), rename by double-click — persisted independently in localStorage, surviving reloads and structure clears |
+| 📐 **Adaptive isosurface caps** | Difference-map isosurfaces at low σ can exceed default triangle budgets (e.g. 3EKJ negative face ≈ 356 k tris at 2σ) — marching-cubes retries at a higher cap (mesh ×8, surface ×2) so practical σ ranges render **completely un-truncated**, while extreme noise-level σ (<1.5σ) is honestly flagged instead of silently missing chunks |
 | 🎨 **util.\* coloring** | `util cbc` (by chain) · `util cnc` (grey) · `util ss` (secondary structure) · `util cbaw` / `util cbac` (elements with white/grey carbons — publication look on white background) |
 
 ### Coloring schemes
@@ -118,10 +119,14 @@ Full sessions can also be **exported as `.molvision` files** (complete structure
 
 ![Putty B-factor tubes with rainbow gradient](public/screenshots/putty.png)
 
+![Putty B-factor tubes on DNA (nucleic-acid phosphate backbone)](public/screenshots/putty-nucleic.png)
+
+![View bookmarks with thumbnails + Fo−Fc difference map](public/screenshots/viewbookmarks.png)
+
 ![GTAO ambient occlusion](public/screenshots/ssao.png)
 
 ## ⌨️ Shortcuts
-`1-8` presets (`8` = putty B-factor tubes) · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `` ` `` console · `Esc` exit mode/clear · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
+`1-8` presets (`8` = putty B-factor tubes, protein + nucleic) · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `V` save view bookmark · `Shift+1-9` jump to bookmark · `` ` `` console · `Esc` exit mode/clear · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
 
 ## 🚀 Quick start
 

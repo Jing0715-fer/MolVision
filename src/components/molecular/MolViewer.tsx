@@ -17,7 +17,9 @@ import { toast } from 'sonner'
 import { EnsembleBar } from '@/components/studio/EnsembleBar'
 import { RecordBadge } from '@/components/studio/RecordBadge'
 import { ColorLegend } from '@/components/studio/ColorLegend'
+import { ViewBar } from '@/components/studio/ViewBar'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
+import { useViewsStore } from '@/lib/molecular/views-store'
 
 interface HoverState { text: string; x: number; y: number; sub?: string }
 
@@ -173,6 +175,19 @@ export default function MolViewer() {
       const target = e.target as HTMLElement
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
       const store = useMolStore.getState()
+      // Shift+数字 → 跳转视角书签（数字键无 Shift 仍是风格预设）
+      if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && /^Digit[1-9]$/.test(e.code)) {
+        const idx = Number(e.code.slice(5)) - 1
+        const vs = useViewsStore.getState()
+        const b = vs.bookmarks[idx]
+        if (b) {
+          vs.restoreBookmark(b.id)
+          store.appendLog('out', `已跳转到视角书签「${b.name}」`)
+        } else {
+          toast.error(`视角书签 ${idx + 1} 不存在`, { description: '按 V 保存当前视角后再跳转' })
+        }
+        return
+      }
       switch (e.key) {
         case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': {
           const keys = ['cartoon', 'ballstick', 'spacefill', 'wireframe', 'surface', 'bindingsite', 'hybrid', 'putty']
@@ -211,6 +226,17 @@ export default function MolViewer() {
         case 'l': case 'L':
           store.addLabelsForSelection()
           break
+        case 'v': case 'V': {
+          // 保存视角书签（排除 Ctrl/Cmd+V 粘贴与 Alt 组合）
+          if (e.ctrlKey || e.metaKey || e.altKey) break
+          const bm = useViewsStore.getState().addBookmark()
+          if (bm) {
+            toast.success(`已保存视角书签「${bm.name}」`, { description: 'Shift+数字键快速跳转 · 视口右缘可管理' })
+          } else if (useViewsStore.getState().bookmarks.length >= 12) {
+            toast.error('书签已达上限（12）', { description: '在视口右缘删除不再需要的书签' })
+          }
+          break
+        }
         case '`': case '~':
           store.setUi({ consoleOpen: !store.ui.consoleOpen })
           break
@@ -395,6 +421,9 @@ export default function MolViewer() {
       {/* 快捷预设浮层（右下角） */}
       <QuickPresets />
 
+      {/* 视角书签浮层（右缘竖排，保存/跳转相机视角） */}
+      <ViewBar />
+
       {/* 颜色标尺图例（左下角，putty/B 因子/SASA 着色时显示） */}
       <ColorLegend />
 
@@ -463,7 +492,7 @@ function QuickPresets() {
         <DropdownMenuTrigger asChild>
           <button className="flex h-8 items-center gap-1.5 rounded-full border border-border/60 bg-popover/85 px-3 text-xs font-medium shadow-lg backdrop-blur transition hover:bg-popover">
             快速风格
-            <span className="text-[10px] text-muted-foreground">1-7</span>
+            <span className="text-[10px] text-muted-foreground">1-8</span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" side="top">

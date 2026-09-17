@@ -13,6 +13,7 @@ import { structureToPdbText } from './pdbwriter'
 import { textRegistry } from './text-registry'
 import { evaluateSelection, maskToIndices } from './selection'
 import { fetchAndComputeMap, removeMap, setMapLook } from './map-load'
+import { MAX_BOOKMARKS, useViewsStore } from './views-store'
 
 /** 数值裁剪（NaN 时取默认值） */
 function clampNum(v: number, min: number, max: number, dflt: number): number {
@@ -53,6 +54,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'zoom [sel]', desc: '缩放到选择/全部', example: 'zoom ligand' },
   { cmd: 'orient [sel]', desc: '主轴对齐视角（PCA）', example: 'orient chain A' },
   { cmd: 'get_view / set_view', desc: '视角导出/恢复（JSON）', example: 'get_view' },
+  { cmd: 'view save|go|del|list…', desc: '视角书签（缩略图+平滑跳转，Shift+数字）', example: 'view save 口袋' },
   { cmd: 'count_atoms [expr]', desc: '统计原子数', example: 'count_atoms chain A' },
   { cmd: 'spin on|off', desc: '自动旋转', example: 'spin on' },
   { cmd: 'rock on|off', desc: '相机摇摆（±26°）', example: 'rock on' },
@@ -334,6 +336,49 @@ export function runCommand(raw: string): void {
     } catch {
       return err('JSON 解析失败——请粘贴 get_view 输出的完整 JSON')
     }
+  }
+
+  if (cmd === 'view' || cmd === 'views' || cmd === 'bookmark') {
+    useViewsStore.getState().hydrate()  // 首次（未装载）时从 localStorage 填充
+    const vs = useViewsStore.getState() // hydrate 会替换 state 对象——必须重新获取
+    const sub = (parts[1] ?? '').toLowerCase()
+    if (!sub || sub === 'list' || sub === 'ls') {
+      if (!vs.bookmarks.length) return ok('暂无视角书签——view save [名称] 保存当前视角（或快捷键 V）')
+      ok(`视角书签（${vs.bookmarks.length}/${MAX_BOOKMARKS}）：`)
+      vs.bookmarks.forEach((b, i) => {
+        const t = new Date(b.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        ok(`  ${String(i + 1).padEnd(2)}  ${b.name.padEnd(16)} ${t}${i < 9 ? '  ⇧' + (i + 1) : ''}`)
+      })
+      return ok('跳转：view <序号|名称> / Shift+数字键；删除：view del <序号|名称>；清空：view clear')
+    }
+    if (sub === 'save' || sub === 'add' || sub === 'snap') {
+      const name = parts.slice(2).join(' ').trim() || undefined
+      const bm = vs.addBookmark(name)
+      if (!bm) return err(`书签已达上限（${MAX_BOOKMARKS}）——先 view del 删除不再需要的书签`)
+      const idx = useViewsStore.getState().bookmarks.length
+      return ok(`已保存视角书签「${bm.name}」${idx < 9 ? `（Shift+${idx} 或 view ${idx} 跳转）` : ''}`)
+    }
+    if (sub === 'clear') {
+      vs.clearBookmarks()
+      return ok('已清空所有视角书签')
+    }
+    if (sub === 'del' || sub === 'rm' || sub === 'delete') {
+      const arg = parts.slice(2).join(' ').trim()
+      if (!arg) return err('用法：view del <序号|名称>')
+      const n = Number(arg)
+      const target = Number.isInteger(n) && n >= 1 ? vs.bookmarks[n - 1] : vs.bookmarks.find(b => b.name.toLowerCase() === arg.toLowerCase())
+      if (!target) return err(`找不到书签「${arg}」`)
+      vs.removeBookmark(target.id)
+      return ok(`已删除视角书签「${target.name}」`)
+    }
+    // view <序号|名称> / view go <序号|名称>：跳转（平滑过渡；名称可含空格）
+    const arg = (sub === 'go' || sub === 'goto' || sub === 'jump' ? parts.slice(2).join(' ') : parts.slice(1).join(' ')).trim()
+    if (!arg) return err('用法：view save [名称] | view <序号|名称> | view del <序号|名称> | view clear')
+    const n = Number(arg)
+    const target = Number.isInteger(n) && n >= 1 ? vs.bookmarks[n - 1] : vs.bookmarks.find(b => b.name.toLowerCase() === arg.toLowerCase())
+    if (!target) return err(`找不到书签「${arg}」——view list 查看现有书签`)
+    vs.restoreBookmark(target.id)
+    return ok(`已跳转到视角书签「${target.name}」`)
   }
 
   if (cmd === 'count_atoms' || cmd === 'count') {

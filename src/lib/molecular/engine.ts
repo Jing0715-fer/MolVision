@@ -246,6 +246,14 @@ export class MolEngine {
   /** rock 摇摆：基准偏移与相位 */
   private rockBase: THREE.Vector3 | null = null
   private rockT = 0
+  /** 视角书签平滑过渡（p=相机位置插值；g=controls.target 插值；fov 线性；up 结尾落位） */
+  private camAnim: {
+    t0: number; dur: number
+    p0: THREE.Vector3; p1: THREE.Vector3
+    g0: THREE.Vector3; g1: THREE.Vector3
+    fov0: number; fov1: number
+    up1: THREE.Vector3
+  } | null = null
   private lastTickT = 0
   private ro: ResizeObserver
   private pickablesCache: { obj: THREE.Object3D; pick: Pickable; structureId: string }[] | null = null
@@ -338,6 +346,7 @@ export class MolEngine {
     this.canvas.addEventListener('pointermove', this.onPointerMove)
     this.canvas.addEventListener('pointerdown', this.onPointerDown)
     this.canvas.addEventListener('pointerup', this.onPointerUp)
+    this.canvas.addEventListener('wheel', this.onCancelCamAnim, { passive: true })
     this.canvas.addEventListener('contextmenu', this.onContextMenu)
     this.canvas.addEventListener('dblclick', this.onDoubleClick)
     this.canvas.addEventListener('pointerleave', this.onPointerLeave)
@@ -390,6 +399,27 @@ export class MolEngine {
     this.lastTickT = now
     this.controls.update()
     this.updateEnsemble()
+    // 视角书签平滑过渡：easeInOutCubic 插值 pos/target/fov（放在 controls.update 之后，
+    // 无用户输入时 OrbitControls 每帧以当前位置重算球坐标，外部修改可安全生效）
+    if (this.camAnim) {
+      const a = this.camAnim
+      const k = Math.min(1, (now - a.t0) / a.dur)
+      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2
+      this.camera.position.lerpVectors(a.p0, a.p1, e)
+      this.controls.target.lerpVectors(a.g0, a.g1, e)
+      if (Math.abs(a.fov1 - a.fov0) > 1e-3) {
+        this.camera.fov = a.fov0 + (a.fov1 - a.fov0) * e
+        this.camera.updateProjectionMatrix()
+      }
+      if (this.activeCamera === this.orthoCamera) this.updateOrthoFrustum()
+      if (k >= 1) {
+        // 落位：up 向量（中途改会绕 target 翻转，结尾一次性应用）
+        this.camera.up.copy(a.up1)
+        this.orthoCamera.up.copy(a.up1)
+        this.controls.update()
+        this.camAnim = null
+      }
+    }
     // rock 摇摆：绕 target 上下轴正弦摆动（用户拖动时以新视角为基准）
     if (this.settings?.rock) {
       const cam = this.activeCamera
@@ -541,9 +571,14 @@ export class MolEngine {
 
   private onPointerDown = (e: PointerEvent) => {
     this.downPos = { x: e.clientX, y: e.clientY, t: performance.now(), button: e.button }
+    // 用户接管相机：取消书签过渡动画
+    this.camAnim = null
     // rock 摇摆中用户拖动：以拖动后视角为新基准
     if (this.rockBase) this.rockBase = null
   }
+
+  /** 滚轮缩放同样取消书签过渡（passive：不阻断 OrbitControls） */
+  private onCancelCamAnim = () => { this.camAnim = null }
 
   private onPointerUp = (e: PointerEvent) => {
     const dx = e.clientX - this.downPos.x
@@ -1806,7 +1841,12 @@ export class MolEngine {
     // 面模式上限 60 万；网格模式上限 15 万（纯线渲染轻）；差图双面上限减半防内存峰值
     const cap = (l.mode === 'mesh' ? 150_000 : 600_000) / isoDefs.length
     for (const def of isoDefs) {
-      const res = marchingCubes(l.grid, nx, ny, nz, def.level, cap)
+      let res = marchingCubes(l.grid, nx, ny, nz, def.level, cap)
+      // 自适应上限：差图低 σ（尤其负面）等值面可远超默认上限（如 3EKJ 负面 2σ≈35 万、1.5σ>60 万三角形），
+      // 截断会造成大面积缺角——mesh 模式重试 8×（线缓冲较轻），surface/both 重试 2×（实体面本已高上限）
+      if (res.truncated) {
+        res = marchingCubes(l.grid, nx, ny, nz, def.level, cap * (l.mode === 'mesh' ? 8 : 2))
+      }
       tris += Math.floor(res.count / 3)
       truncated = truncated || res.truncated
       if (!res.count) continue
@@ -2331,6 +2371,35 @@ export class MolEngine {
     }
   }
 
+  /** 视角书签平滑过渡：easeInOutCubic 插值（pos/target/fov），up 在结尾落位；
+   *  spin/rock 开启或参数非法时直接落位（每帧改相机的模式与过渡动画互相打架） */
+  animateCameraTo(s: { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }, dur = 650) {
+    const valid = Array.isArray(s.pos) && s.pos.length === 3 && Array.isArray(s.target) && s.target.length === 3
+    if (!valid || this.settings?.spin || this.settings?.rock) {
+      this.setCameraState(s)
+      return
+    }
+    // 投影模式先行切换（正交/透视过渡期间保持目标模式）
+    if (typeof s.ortho === 'boolean' && this.settings && s.ortho !== this.settings.ortho) {
+      useMolStore.getState().updateSettings({ ortho: s.ortho })
+    }
+    const fov1 = typeof s.fov === 'number' && s.fov > 5 && s.fov < 120 ? s.fov : this.camera.fov
+    const up1 = Array.isArray(s.up) && s.up.length === 3
+      ? new THREE.Vector3().fromArray(s.up).normalize()
+      : this.camera.up.clone()
+    this.camAnim = {
+      t0: performance.now(),
+      dur: Math.max(120, dur),
+      p0: this.camera.position.clone(),
+      p1: new THREE.Vector3().fromArray(s.pos as number[]),
+      g0: this.controls.target.clone(),
+      g1: new THREE.Vector3().fromArray(s.target as number[]),
+      fov0: this.camera.fov,
+      fov1,
+      up1,
+    }
+  }
+
   /** fitView 取点抽出（orient 复用） */
   private collectFitPoints(refs?: { structureId: string; indices?: number[] }[]): number[][] {
     const state = useMolStore.getState()
@@ -2404,6 +2473,7 @@ export class MolEngine {
     this.canvas.removeEventListener('pointermove', this.onPointerMove)
     this.canvas.removeEventListener('pointerdown', this.onPointerDown)
     this.canvas.removeEventListener('pointerup', this.onPointerUp)
+    this.canvas.removeEventListener('wheel', this.onCancelCamAnim)
     this.canvas.removeEventListener('contextmenu', this.onContextMenu)
     this.canvas.removeEventListener('dblclick', this.onDoubleClick)
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave)

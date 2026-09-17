@@ -9,7 +9,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 
 const SHORTCUTS: [string, string][] = [
-  ['1 – 8', '快速切换风格预设（8 = Putty B 因子管）'],
+  ['1 – 8', '快速切换风格预设（8 = Putty B 因子管，蛋白+核酸全覆盖）'],
   ['F', '适配视图（缩放到结构）'],
   ['S', '自动旋转 开/关'],
   ['R', '相机摇摆 开/关（±26°）'],
@@ -18,6 +18,8 @@ const SHORTCUTS: [string, string][] = [
   ['B', '氢键网络 开/关'],
   ['P', 'NMR 构象动画 播放/暂停'],
   ['L', '为当前选择添加原子标注'],
+  ['V', '保存当前视角为书签（带缩略图）'],
+  ['Shift + 1-9', '平滑跳转到视角书签'],
   ['` / ~', '打开/关闭命令行'],
   ['Esc', '退出测量模式 / 清除选择'],
   ['Delete', '清除当前选择'],
@@ -100,9 +102,10 @@ export function HelpDialog() {
               <FlaskConical className="h-3.5 w-3.5 text-violet-500" /> 结构分析与晶体学
             </h3>
             <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+              <p><span className="font-semibold text-foreground">视角书签</span>：快捷键 <code className="rounded bg-muted px-1 font-mono text-[10px]">V</code> 或视口右缘「保存视角」把当前相机状态存为书签（带视口缩略图），<code className="rounded bg-muted px-1 font-mono text-[10px]">Shift+数字</code> / 点击缩略图平滑过渡跳转；命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">view save 口袋</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view 2</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view del 2</code>；书签独立持久化（清空结构不清空，刷新后仍在），双击名称可重命名。</p>
               <p><span className="font-semibold text-foreground">叠合</span>：结构卡片 ⧉ 按钮或「叠合 (matchmaker)」面板，支持手动指定链对（<code className="rounded bg-muted px-1 font-mono text-[10px]">superpose 4HHB onto 1A3N chain A to A</code>）；<code className="rounded bg-muted px-1 font-mono text-[10px]">untransform</code> 撤销。</p>
               <p><span className="font-semibold text-foreground">电子密度</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">map fetch 3ekj</code> 从 RCSB 结构因子实时合成 2Fo−Fc 图（模型相位 + 3D FFT，Web Worker 零阻塞）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map fofc 3ekj</code> 合成 Fo−Fc 差图（正绿/负红双等值面：绿峰=密度有而模型缺、红峰=模型有而密度无）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel 1.5</code> 同时调正负峰，差图可 <code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel pos 3 / neg 2.5</code> 独立调级（面板双滑块同效）；也可拖入 .ccp4/.mrc 文件；密度图面板（左侧 🧮）可视化等值面/网格；σ/模式/颜色随会话保存，刷新自动重算恢复。</p>
-              <p><span className="font-semibold text-foreground">B 因子分析</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">preset putty</code> 或快捷键 8——Putty 管径随 B 因子连续变化（粗=柔性/高 B、细=刚性/低 B）配 B 因子彩虹渐变；<code className="rounded bg-muted px-1 font-mono text-[10px]">color bfactor</code> 同款色标；视口左下角自动显示颜色标尺图例（B 值→颜色→管径三联映射）。</p>
+              <p><span className="font-semibold text-foreground">B 因子分析</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">preset putty</code> 或快捷键 8——Putty 管径随 B 因子连续变化（粗=柔性/高 B、细=刚性/低 B）配 B 因子彩虹渐变，蛋白（CA）与核酸（磷酸骨架）统一映射；<code className="rounded bg-muted px-1 font-mono text-[10px]">color bfactor</code> 同款色标；视口左下角自动显示颜色标尺图例（B 值→颜色→管径三联映射）。</p>
               <p><span className="font-semibold text-foreground">对称伴侣</span>：结构面板「对称伴侣」区块或 <code className="rounded bg-muted px-1 font-mono text-[10px]">symmetry 20</code>，按 CRYST1 空间群（65 手性群全覆盖）生成晶格邻居。</p>
               <p><span className="font-semibold text-foreground">界面接触</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">contacts chain A | chain B</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">interface A B</code>——残基对连线 + 2D 图谱 + ΔSASA 埋藏面积。</p>
               <p><span className="font-semibold text-foreground">跨结构接触</span>：superpose 后用 <code className="rounded bg-muted px-1 font-mono text-[10px]">xcontacts 1UBQ:chain A | 1D3Z:chain A</code> 检测复合物界面。</p>

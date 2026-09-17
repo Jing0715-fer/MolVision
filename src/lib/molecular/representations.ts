@@ -210,17 +210,18 @@ export function buildCartoon(
   const disposables: (THREE.BufferGeometry | THREE.Material)[] = []
   const atoms = structure.atoms
 
-  // putty：全结构 B 范围（跨链一致，半径语义统一；上限可用 puttyRange 钳制）
+  // putty：全结构 B 范围（蛋白 CA + 核酸 P，跨链一致半径语义；上限可用 puttyRange 钳制）
   let bRange: { min: number; max: number } | null = null
   if (extras.putty) {
     let bmin = Infinity, bmax = -Infinity
     let seen = 0
     for (const chain of structure.chains) {
-      if (chain.type !== 'protein') continue
+      if (chain.type !== 'protein' && chain.type !== 'nucleic') continue
+      const guideName = chain.type === 'protein' ? 'CA' : 'P'
       for (const ri of chain.residueIdx) {
         const r = structure.residues[ri]
         for (let i = r.start; i < r.end; i++) {
-          if (!atomMask[i] || atoms.names[i] !== 'CA') continue
+          if (!atomMask[i] || atoms.names[i] !== guideName) continue
           const b = atoms.bfactors[i]
           if (!Number.isFinite(b)) continue
           if (b < bmin) bmin = b
@@ -237,7 +238,7 @@ export function buildCartoon(
 
   for (const chain of structure.chains) {
     if (chain.type === 'nucleic') {
-      buildNucleicTube(structure, chain, atomMask, colors, widthScale, group, pickables, disposables)
+      buildNucleicTube(structure, chain, atomMask, colors, widthScale, group, pickables, disposables, extras.putty === true, bRange)
       continue
     }
     if (chain.type !== 'protein') continue
@@ -505,11 +506,14 @@ function buildNucleicTube(
   group: THREE.Group,
   pickables: Pickable[],
   disposables: (THREE.BufferGeometry | THREE.Material)[],
+  putty: boolean = false,
+  bRange: { min: number; max: number } | null = null,
 ) {
   const atoms = structure.atoms
   const pts: THREE.Vector3[] = []
   const cols: [number, number, number][] = []
   const resIdxs: number[] = []
+  const bs: number[] = []
   for (const ri of chain.residueIdx) {
     const r = structure.residues[ri]
     let p = -1
@@ -520,22 +524,29 @@ function buildNucleicTube(
     pts.push(new THREE.Vector3(atoms.positions[p * 3], atoms.positions[p * 3 + 1], atoms.positions[p * 3 + 2]))
     cols.push([colors[p * 3], colors[p * 3 + 1], colors[p * 3 + 2]])
     resIdxs.push(ri)
+    const b = atoms.bfactors[p]
+    bs.push(Number.isFinite(b) ? b : 0)
   }
   if (pts.length < 2) return
   // 分段（P-P > 8 视为断开）
-  const segments: { pts: THREE.Vector3[]; cols: [number, number, number][]; resIdxs: number[] }[] = []
-  let cur = { pts: [pts[0]], cols: [cols[0]], resIdxs: [resIdxs[0]] }
+  const segments: { pts: THREE.Vector3[]; cols: [number, number, number][]; resIdxs: number[]; bs: number[] }[] = []
+  let cur = { pts: [pts[0]], cols: [cols[0]], resIdxs: [resIdxs[0]], bs: [bs[0]] }
   for (let i = 1; i < pts.length; i++) {
     if (pts[i].distanceTo(pts[i - 1]) > 8) {
       segments.push(cur)
-      cur = { pts: [pts[i]], cols: [cols[i]], resIdxs: [resIdxs[i]] }
+      cur = { pts: [pts[i]], cols: [cols[i]], resIdxs: [resIdxs[i]], bs: [bs[i]] }
     } else {
-      cur.pts.push(pts[i]); cur.cols.push(cols[i]); cur.resIdxs.push(resIdxs[i])
+      cur.pts.push(pts[i]); cur.cols.push(cols[i]); cur.resIdxs.push(resIdxs[i]); cur.bs.push(bs[i])
     }
   }
   segments.push(cur)
   for (const seg of segments) {
     if (seg.pts.length < 2) continue
+    // putty：B 因子 → 变半径圆管（与蛋白 putty 同款 sqrt 映射；平行传输框架防扭转）
+    if (putty && bRange) {
+      buildNucleicPuttySegment(seg, widthScale, bRange, group, pickables, disposables)
+      continue
+    }
     const curve = new THREE.CatmullRomCurve3(seg.pts, false, 'centripetal', 0.5)
     const tubular = Math.max(16, seg.pts.length * 8)
     const geo = new THREE.TubeGeometry(curve, tubular, 0.45 * widthScale, 10, false)
@@ -566,6 +577,127 @@ function buildNucleicTube(
     disposables.push(geo, mat)
     pickables.push({ mesh, kind: 'cartoon', resAttr: 'aResIndex' })
   }
+}
+
+/** 核酸 putty 管段：磷酸骨架曲线上的变半径圆管（B 因子 sqrt 映射，与蛋白 putty 视觉一致） */
+function buildNucleicPuttySegment(
+  seg: { pts: THREE.Vector3[]; cols: [number, number, number][]; resIdxs: number[]; bs: number[] },
+  widthScale: number,
+  bRange: { min: number; max: number },
+  group: THREE.Group,
+  pickables: Pickable[],
+  disposables: (THREE.BufferGeometry | THREE.Material)[],
+) {
+  const n = seg.pts.length
+  // 半径映射 + 双重平滑（窗口 1，与蛋白 putty 相同）
+  const span = Math.max(1e-6, bRange.max - bRange.min)
+  const rMin = 0.2 * widthScale
+  const rMax = 1.05 * widthScale
+  const rArr = seg.bs.map(b => rMin + (rMax - rMin) * Math.sqrt(Math.min(1, Math.max(0, (b - bRange.min) / span))))
+  const smooth = (arr: number[]) => arr.map((_, i) => {
+    const a = arr[Math.max(0, i - 1)], b = arr[i], c = arr[Math.min(n - 1, i + 1)]
+    return (a + b + c) / 3
+  })
+  const rS = smooth(smooth(rArr))
+
+  // 骨架采样曲线
+  const curve = new THREE.CatmullRomCurve3(seg.pts, false, 'centripetal', 0.5)
+  const samplesPer = 8
+  const S = (n - 1) * samplesPer + 1
+  const samplePos: THREE.Vector3[] = []
+  for (let k = 0; k < S; k++) samplePos.push(curve.getPoint(k / (S - 1)))
+
+  // 平行传输框架：法向沿曲线逐点投影到切平面（无肽平面参考方向 → 传输防扭转）
+  const tangents: THREE.Vector3[] = []
+  for (let k = 0; k < S; k++) {
+    const prev = samplePos[Math.max(0, k - 1)]
+    const next = samplePos[Math.min(S - 1, k + 1)]
+    tangents.push(new THREE.Vector3().subVectors(next, prev).normalize())
+  }
+  const normals: THREE.Vector3[] = []
+  let curN = new THREE.Vector3(0, 1, 0)
+  if (Math.abs(tangents[0].y) > 0.9) curN.set(1, 0, 0)
+  curN.sub(tangents[0].clone().multiplyScalar(curN.dot(tangents[0]))).normalize()
+  for (let k = 0; k < S; k++) {
+    const t = tangents[k]
+    curN.sub(t.clone().multiplyScalar(curN.dot(t)))
+    if (curN.lengthSq() < 1e-6) {
+      // 切向与法向平行（数值退化）：换一个最不平行的坐标轴
+      curN.set(Math.abs(t.x) < 0.9 ? 1 : 0, Math.abs(t.y) < 0.9 ? 1 : 0, Math.abs(t.z) < 0.9 ? 1 : 0)
+      curN.sub(t.clone().multiplyScalar(curN.dot(t)))
+    }
+    curN.normalize()
+    normals.push(curN.clone())
+  }
+
+  // 网格（K 环向分段 + 两端帽）
+  const K = 10
+  const vertCount = S * K + 2
+  const positions = new Float32Array(vertCount * 3)
+  const vertColors = new Float32Array(vertCount * 3)
+  const aRes = new Float32Array(vertCount)
+  const indices: number[] = []
+  const binormal = new THREE.Vector3()
+
+  for (let k = 0; k < S; k++) {
+    const f = k / samplesPer
+    const i0 = Math.min(n - 1, Math.floor(f))
+    const i1 = Math.min(n - 1, i0 + 1)
+    const frac = f - i0
+    const r = rS[i0] + (rS[i1] - rS[i0]) * frac
+    binormal.crossVectors(tangents[k], normals[k]).normalize()
+    const c0 = seg.cols[i0], c1 = seg.cols[i1]
+    const resIdx = frac > 0.5 ? seg.resIdxs[i1] : seg.resIdxs[i0]
+    const center = samplePos[k]
+    for (let a = 0; a < K; a++) {
+      const ang = (a / K) * Math.PI * 2
+      const ex = Math.cos(ang) * r
+      const ey = Math.sin(ang) * r
+      const vi = k * K + a
+      positions[vi * 3] = center.x + normals[k].x * ex + binormal.x * ey
+      positions[vi * 3 + 1] = center.y + normals[k].y * ex + binormal.y * ey
+      positions[vi * 3 + 2] = center.z + normals[k].z * ex + binormal.z * ey
+      vertColors[vi * 3] = c0[0] + (c1[0] - c0[0]) * frac
+      vertColors[vi * 3 + 1] = c0[1] + (c1[1] - c0[1]) * frac
+      vertColors[vi * 3 + 2] = c0[2] + (c1[2] - c0[2]) * frac
+      aRes[vi] = resIdx
+    }
+  }
+  for (let k = 0; k < S - 1; k++) {
+    for (let a = 0; a < K; a++) {
+      const a0 = k * K + a
+      const a1 = k * K + (a + 1) % K
+      const b0 = (k + 1) * K + a
+      const b1 = (k + 1) * K + (a + 1) % K
+      indices.push(a0, b0, b1, a0, b1, a1)
+    }
+  }
+  // 端帽
+  const capA = S * K, capB = S * K + 1
+  positions[capA * 3] = samplePos[0].x; positions[capA * 3 + 1] = samplePos[0].y; positions[capA * 3 + 2] = samplePos[0].z
+  positions[capB * 3] = samplePos[S - 1].x; positions[capB * 3 + 1] = samplePos[S - 1].y; positions[capB * 3 + 2] = samplePos[S - 1].z
+  const firstC = seg.cols[0], lastC = seg.cols[n - 1]
+  vertColors[capA * 3] = firstC[0]; vertColors[capA * 3 + 1] = firstC[1]; vertColors[capA * 3 + 2] = firstC[2]
+  vertColors[capB * 3] = lastC[0]; vertColors[capB * 3 + 1] = lastC[1]; vertColors[capB * 3 + 2] = lastC[2]
+  aRes[capA] = seg.resIdxs[0]; aRes[capB] = seg.resIdxs[n - 1]
+  for (let a = 0; a < K; a++) {
+    indices.push(capA, (a + 1) % K, a)
+    indices.push(capB, (S - 1) * K + a, (S - 1) * K + (a + 1) % K)
+  }
+
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geo.setAttribute('color', new THREE.BufferAttribute(vertColors, 3))
+  geo.setAttribute('aResIndex', new THREE.BufferAttribute(aRes, 1))
+  geo.setIndex(indices)
+  geo.computeVertexNormals()
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.5, metalness: 0.02, envMapIntensity: 0.7, side: THREE.DoubleSide,
+  })
+  const mesh = new THREE.Mesh(geo, mat)
+  group.add(mesh)
+  disposables.push(geo, mat)
+  pickables.push({ mesh, kind: 'cartoon', resAttr: 'aResIndex' })
 }
 
 // ---------- 分子表面（metaball 高斯面） ----------
