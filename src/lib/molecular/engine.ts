@@ -30,6 +30,7 @@ import { useHBondStore } from './hbond-store'
 import { useEnsembleStore } from './ensemble-store'
 import { makeTextSprite, disposeSprite } from './textsprite'
 import { useMolStore, buildNamedMasks, dataRegistry } from './store'
+import { SlotLane } from './heavy-queue'
 import type { AtomLabel, Measurement, RepConfig, Settings, StructureEntry } from './types'
 
 export interface AtomPick {
@@ -222,6 +223,9 @@ export class MolEngine {
   // 氢键检测 Web Worker（大结构异步计算）
   private hbondWorker: Worker | null = null
   private hbondWorkerFailed = false
+  // 重计算并发闸：氢键/SASA worker 投递前排队（全局最多 2 个重任务并发）
+  private hbondSlots = new SlotLane()
+  private sasaSlots = new SlotLane()
   private hbondReqId = 0
   /** structureId → 检测中的 detKey（去重与过期丢弃） */
   private hbondPending = new Map<string, string>()
@@ -1090,6 +1094,7 @@ export class MolEngine {
         // worker 异常：标记失败并回退同步路径
         this.hbondWorkerFailed = true
         this.hbondPending.clear()
+        this.hbondSlots.releaseAll()
         useHBondStore.getState().setComputing(false)
       }
       this.hbondWorker = w
@@ -1100,7 +1105,7 @@ export class MolEngine {
     }
   }
 
-  /** 投递异步检测（同 key 在飞行中则去重）；返回是否成功投递 */
+  /** 投递异步检测（同 key 在飞行中则去重）；返回是否成功投递（排队中视为已投递） */
   private requestHBondDetect(structureId: string, detKey: string, data: StructureData, s: Settings): boolean {
     if (this.hbondPending.get(structureId) === detKey) return true // 同一请求在飞行中 → 视为已投递
     const w = this.ensureHBondWorker()
@@ -1119,23 +1124,28 @@ export class MolEngine {
     for (let r = 0; r < data.residues.length; r++) resWater[r] = data.residues[r].water ? 1 : 0
     const reqId = ++this.hbondReqId
     this.hbondPending.set(structureId, detKey)
-    w.postMessage({
-      type: 'detect',
-      reqId,
-      structureId,
-      key: detKey,
-      positions: a.positions,
-      heteroFlag,
-      isHydrogen,
-      atomResidue: data.atomResidue,
-      resWater,
-      bondA: data.bonds.a,
-      bondB: data.bonds.b,
-      hasH: data.hasHydrogens,
-      maxDist: Math.min(2.5, s.hbondMaxDist - 1),
-      maxHeavyDist: s.hbondMaxDist,
-      minAngle: 120,
-      includeWater: s.hbondIncludeWater,
+    // 并发闸：槽位空出后再投递（排队期间设置又变 → 过期丢弃）
+    void this.hbondSlots.acquire('氢键检测').then(release => {
+      if (this.hbondPending.get(structureId) !== detKey) { release(); return }
+      this.hbondSlots.post(release)
+      w.postMessage({
+        type: 'detect',
+        reqId,
+        structureId,
+        key: detKey,
+        positions: a.positions,
+        heteroFlag,
+        isHydrogen,
+        atomResidue: data.atomResidue,
+        resWater,
+        bondA: data.bonds.a,
+        bondB: data.bonds.b,
+        hasH: data.hasHydrogens,
+        maxDist: Math.min(2.5, s.hbondMaxDist - 1),
+        maxHeavyDist: s.hbondMaxDist,
+        minAngle: 120,
+        includeWater: s.hbondIncludeWater,
+      })
     })
     return true
   }
@@ -1151,6 +1161,7 @@ export class MolEngine {
     values: Float32Array
   }) {
     if (!msg || msg.type !== 'result') return
+    this.hbondSlots.releaseOne() // 并发闸：一条结果释放一个槽（过期结果同样占用过槽）
     // 过期结果（设置已变 → 新 key 已投递）：丢弃
     if (this.hbondPending.get(msg.structureId) !== msg.key) return
     this.hbondPending.delete(msg.structureId)
@@ -1511,17 +1522,22 @@ export class MolEngine {
     }
     this.sasaPending.set(structureId, key)
     useSasaStore.getState().setComputing(true)
-    w.postMessage({
-      type: 'compute',
-      reqId: ++this.sasaReqId,
-      structureId,
-      key,
-      kind: 'full',
-      positions: data.atoms.positions,
-      radii: compileRadii(data.atoms.elements),
-      isHydrogen,
-      probe,
-      nPoints,
+    // 并发闸：槽位空出后再投递（排队期间被新请求取代 → 过期丢弃）
+    void this.sasaSlots.acquire('SASA 计算').then(release => {
+      if (this.sasaPending.get(structureId) !== key) { release(); return }
+      this.sasaSlots.post(release)
+      w.postMessage({
+        type: 'compute',
+        reqId: ++this.sasaReqId,
+        structureId,
+        key,
+        kind: 'full',
+        positions: data.atoms.positions,
+        radii: compileRadii(data.atoms.elements),
+        isHydrogen,
+        probe,
+        nPoints,
+      })
     })
     return { done: false }
   }
@@ -1560,19 +1576,23 @@ export class MolEngine {
     }
     this.sasaPending.set(structureId, key)
     useSasaStore.getState().setBuriedComputing(true)
-    w.postMessage({
-      type: 'compute',
-      reqId: ++this.sasaReqId,
-      structureId,
-      key,
-      kind: 'buried',
-      positions: data.atoms.positions,
-      radii: compileRadii(data.atoms.elements),
-      isHydrogen,
-      probe,
-      nPoints,
-      maskA,
-      maskB,
+    void this.sasaSlots.acquire('ΔSASA 计算').then(release => {
+      if (this.sasaPending.get(structureId) !== key) { release(); return }
+      this.sasaSlots.post(release)
+      w.postMessage({
+        type: 'compute',
+        reqId: ++this.sasaReqId,
+        structureId,
+        key,
+        kind: 'buried',
+        positions: data.atoms.positions,
+        radii: compileRadii(data.atoms.elements),
+        isHydrogen,
+        probe,
+        nPoints,
+        maskA,
+        maskB,
+      })
     })
     return { done: false }
   }
@@ -1712,19 +1732,23 @@ export class MolEngine {
       buriedA: 0, buriedB: 0, coreA: [], coreB: [], ms: 0,
       cross: { idA, idB, labelA, labelB },
     })
-    w.postMessage({
-      type: 'compute',
-      reqId: ++this.sasaReqId,
-      structureId: idA,
-      key,
-      kind: 'buried',
-      positions,
-      radii,
-      isHydrogen,
-      probe,
-      nPoints,
-      maskA: aMask,
-      maskB: bMask,
+    void this.sasaSlots.acquire('跨结构 ΔSASA').then(release => {
+      if (this.sasaPending.get(idA) !== key) { release(); return }
+      this.sasaSlots.post(release)
+      w.postMessage({
+        type: 'compute',
+        reqId: ++this.sasaReqId,
+        structureId: idA,
+        key,
+        kind: 'buried',
+        positions,
+        radii,
+        isHydrogen,
+        probe,
+        nPoints,
+        maskA: aMask,
+        maskB: bMask,
+      })
     })
     return { done: false }
   }
@@ -1796,6 +1820,7 @@ export class MolEngine {
       w.onerror = () => {
         this.sasaWorkerFailed = true
         this.sasaPending.clear()
+        this.sasaSlots.releaseAll()
         useSasaStore.getState().setComputing(false)
         // ΔSASA（含跨结构 xbsa）computing 占位清理——防「计算中…」永久残留
         this.xbsaMeta = null
@@ -1825,6 +1850,7 @@ export class MolEngine {
     ms: number
   }) {
     if (!msg || msg.type !== 'result') return
+    this.sasaSlots.releaseOne() // 并发闸：一条结果释放一个槽（过期结果同样占用过槽）
     if (this.sasaPending.get(msg.structureId) !== msg.key) return
     this.sasaPending.delete(msg.structureId)
     // 跨结构 ΔSASA：delta 是两结构拼接后的联合数组，拆回各自结构落库
@@ -2830,6 +2856,9 @@ export class MolEngine {
     this.sasaWorker?.terminate()
     this.sasaWorker = null
     this.hbondWorker = null
+    // 并发闸销毁：释放全部在飞槽（防排队任务死等）
+    this.hbondSlots.dispose()
+    this.sasaSlots.dispose()
     this.hbondPending.clear()
     this.sasaPending.clear()
     this.renderer.dispose()

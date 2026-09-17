@@ -5,6 +5,7 @@ import { engineRef, useMolStore, dataRegistry } from './store'
 import { useMapStore, type MapInfoMirror } from './map-store'
 import { parseSfCif, computeDensityMap, type ModelAtoms, type MapKind } from './sffourier'
 import type { MapWorkerRequest, MapWorkerResponse } from './map-worker'
+import { SlotLane } from './heavy-queue'
 import { parseCcp4 } from './ccp4'
 import { orthoMatrix, type CrystalCell } from './symmetry'
 import type { StructureData } from './parser'
@@ -111,6 +112,8 @@ function syncMapMirror(
 let mapWorker: Worker | null = null
 let workerBroken = false
 let workerReqId = 1
+// 重计算并发闸：与其他 Worker 任务共享最多 2 个并发槽（防多任务满载）
+const mapSlots = new SlotLane()
 
 function ensureMapWorker(): Worker | null {
   if (workerBroken) return null
@@ -138,27 +141,31 @@ function computeDensityViaWorker(
       reject(new Error('worker-unavailable'))
       return
     }
-    const reqId = workerReqId++
-    const cleanup = () => {
-      w.removeEventListener('message', onMsg)
-      w.removeEventListener('error', onFail)
-    }
-    const onMsg = (ev: MessageEvent<MapWorkerResponse>) => {
-      if (!ev.data || ev.data.reqId !== reqId) return
-      cleanup()
-      if (ev.data.error || !ev.data.grid) reject(new Error(ev.data.error ?? '空结果'))
-      else resolve(ev.data)
-    }
-    const onFail = () => {
-      cleanup()
-      reject(new Error('worker-error'))
-    }
-    w.addEventListener('message', onMsg)
-    w.addEventListener('error', onFail)
-    const req: MapWorkerRequest = {
-      type: 'compute', reqId, cifText, kind, fallbackCell, fallbackSpaceGroup, atoms,
-    }
-    w.postMessage(req)
+    // 并发闸：槽位空出后再投递（排队期间用户可继续操作）
+    void mapSlots.acquire('密度图合成').then(release => {
+      const reqId = workerReqId++
+      const cleanup = () => {
+        w.removeEventListener('message', onMsg)
+        w.removeEventListener('error', onFail)
+        release()
+      }
+      const onMsg = (ev: MessageEvent<MapWorkerResponse>) => {
+        if (!ev.data || ev.data.reqId !== reqId) return
+        cleanup()
+        if (ev.data.error || !ev.data.grid) reject(new Error(ev.data.error ?? '空结果'))
+        else resolve(ev.data)
+      }
+      const onFail = () => {
+        cleanup()
+        reject(new Error('worker-error'))
+      }
+      w.addEventListener('message', onMsg)
+      w.addEventListener('error', onFail)
+      const req: MapWorkerRequest = {
+        type: 'compute', reqId, cifText, kind, fallbackCell, fallbackSpaceGroup, atoms,
+      }
+      w.postMessage(req)
+    })
   })
 }
 

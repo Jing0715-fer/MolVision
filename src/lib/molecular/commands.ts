@@ -9,6 +9,7 @@ import { runContactAnalysis, runBuriedSasa, runCrossContactAnalysis, runCrossBur
 import { useContactStore } from './contacts-store'
 import { useSasaStore } from './sasa-store'
 import { subsetStructure } from './parser'
+import type { StructureData } from './parser'
 import { structureToPdbText } from './pdbwriter'
 import { textRegistry } from './text-registry'
 import { evaluateSelection, maskToIndices } from './selection'
@@ -17,7 +18,7 @@ import { useMapStore } from './map-store'
 import { MAX_BOOKMARKS, useViewsStore } from './views-store'
 import { useTourStore } from './tour-store'
 import { TOURS, findTour } from './tours'
-import { buildMorph } from './morph'
+import { buildMorph, buildMultiMorph } from './morph'
 import { playMovie, stopMovie, useMovieStore } from './movie'
 
 /** 数值裁剪（NaN 时取默认值） */
@@ -82,7 +83,8 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'untransform [名]', desc: '撤销叠合变换回原始位姿', example: 'untransform 1D3Z' },
   { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
   { cmd: 'morph <名> = <A> <B> [帧]', desc: '构象插值轨迹（自动叠合+ensemble 帧）', example: 'morph m1 = 1BQL 2LYZ 40' },
-  { cmd: 'movie play|stop [秒 轮]', desc: '视角书签关键帧巡航（可配 record 录制）', example: 'movie play 4 2' },
+  { cmd: 'morph multi <名> = <A> <B> <C>… [帧]', desc: '多态构象样条插值（Catmull-Rom 过 3+ 构象）', example: 'morph multi m = 1BQL 2LYZ 2VB1 60' },
+  { cmd: 'movie play|stop|edit [秒 轮]', desc: '关键帧巡航（无秒数时走时间轴；edit 打开编排）', example: 'movie play · movie edit' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
@@ -1153,37 +1155,62 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'morph') {
-    // morph <新名> = <结构A> <结构B> [帧数]：构象插值轨迹（对标 PyMOL morph）
-    const rest = input.slice(parts[0].length).trim()
+    // morph [multi] <新名> = <结构A> <结构B> [<结构C>…] [帧数]：构象插值轨迹（对标 PyMOL morph）
+    const isMulti = (parts[1] ?? '').toLowerCase() === 'multi'
+    // parts = input 按空白切分；multi 时去掉前两个词，否则去掉命令词（避免手算偏移漏空格）
+    const rest = (isMulti ? parts.slice(2) : parts.slice(1)).join(' ')
     const m = rest.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/)
-    if (!m) return err('用法：morph <新对象名> = <结构A> <结构B> [帧数]，如 morph m1 = 1BQL 2LYZ 40')
+    if (!m) return err(isMulti
+      ? '用法：morph multi <新对象名> = <构象A> <构象B> <构象C> … [帧数]，如 morph multi m = 1BQL 2LYZ 2VB1 60'
+      : '用法：morph <新对象名> = <结构A> <结构B> [帧数]，如 morph m1 = 1BQL 2LYZ 40')
     const name = m[1]
     const tail = m[2].trim().split(/\s+/)
-    if (tail.length < 2) return err('需要两个结构：morph <名> = <A> <B> [帧数]')
+    if (tail.length < 2) return err(`需要至少两个构象：morph ${isMulti ? 'multi ' : ''}<名> = <A> <B>${isMulti ? ' <C> …' : ''} [帧数]`)
     const s = useMolStore.getState()
     const resolve = (q: string) => s.structures.find(x =>
       x.name.toLowerCase() === q.toLowerCase() ||
       x.name.toLowerCase().startsWith(q.toLowerCase()) ||
       x.meta.pdbId?.toLowerCase() === q.toLowerCase())
-    const eA = resolve(tail[0])
-    const eB = resolve(tail[1])
-    if (!eA || !eB) return err(`未找到结构（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
-    if (eA.id === eB.id) return err('两个结构不能相同（morph 需要不同构象）')
-    const steps = tail[2] ? parseInt(tail[2], 10) : 30
-    if (isNaN(steps) || steps < 10 || steps > 120) return err('帧数范围 10–120（默认 30）')
-    const dA = dataRegistry.get(eA.id)
-    const dB = dataRegistry.get(eB.id)
-    if (!dA || !dB) return err('结构数据不存在')
+    const framesTok = tail[tail.length - 1]
+    const framesParsed = /^\d+$/.test(framesTok) ? parseInt(framesTok, 10) : null
+    const structToks = framesParsed !== null ? tail.slice(0, -1) : tail
+    const entries = structToks.map(t => resolve(t))
+    const missing = structToks.filter((t, i) => !entries[i])
+    if (missing.length) return err(`未找到结构：${missing.join('、')}（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
+    const ids = new Set(entries.map(e => e!.id))
+    if (ids.size < 2) return err('构象不能来自同一结构（morph 需要不同构象）')
+    const datas = entries.map(e => dataRegistry.get(e!.id))
+    if (datas.some(d => !d)) return err('结构数据不存在')
     try {
       const t0 = performance.now()
-      const r = buildMorph(dA, dB, name, steps)
+      if (isMulti) {
+        // ---------- 多态样条 morph ----------
+        const steps = framesParsed ?? 48
+        if (steps < 10 || steps > 200) return err('帧数范围 10–200（默认 48）')
+        const r = buildMultiMorph(datas as StructureData[], name, steps)
+        if (!r.ok || !r.data) return err(r.error ?? 'morph 失败')
+        const ms = performance.now() - t0
+        const id = useMolStore.getState().addStructure(r.data, name, ms)
+        textRegistry.set(id, structureToPdbText(r.data))
+        const chainInfo = r.matchedChains.map(([a, b]) => `${a}↔${b}`).join(' ')
+        ok(`多态 morph 对象 "${name}" 已创建：${r.knots} 个构象态 · ${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基 · ${r.frames} 帧（Catmull-Rom 样条，${ms.toFixed(0)} ms）${chainInfo ? ` · 链对 ${chainInfo}` : ''}`)
+        r.rmsds.forEach((rmsd, i) => {
+          if (rmsd !== null) ok(`构象 ${i + 2}（${structToks[i + 1]}）叠合到参考：CA RMSD ${rmsd.toFixed(2)} Å`)
+        })
+        if (r.strategy === 'identity') ok('匹配策略：恒等（同源结构按原子序对应）')
+        return ok('底部播放条可逐帧浏览样条轨迹——ensemble play 播放，帧滑块可停在任意中间构象')
+      }
+      // ---------- 双构象 morph ----------
+      const steps = framesParsed ?? 30
+      if (steps < 10 || steps > 120) return err('帧数范围 10–120（默认 30）')
+      const r = buildMorph(datas[0]!, datas[1]!, name, steps)
       if (!r.ok || !r.data) return err(r.error ?? 'morph 失败')
       const ms = performance.now() - t0
       const id = useMolStore.getState().addStructure(r.data, name, ms)
       textRegistry.set(id, structureToPdbText(r.data))
       const chainInfo = r.matchedChains.map(([a, b]) => `${a}↔${b}`).join(' ')
       ok(`morph 对象 "${name}" 已创建：${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基对 · ${r.frames} 帧${chainInfo ? ` · 链对 ${chainInfo}` : ''}（${ms.toFixed(0)} ms）`)
-      if (r.alignRmsd !== null) ok(`自动叠合 ${eB.name} → ${eA.name}：CA RMSD ${r.alignRmsd.toFixed(2)} Å（内存中完成，不改动原结构）`)
+      if (r.alignRmsd !== null) ok(`自动叠合 ${entries[1]!.name} → ${entries[0]!.name}：CA RMSD ${r.alignRmsd.toFixed(2)} Å（内存中完成，不改动原结构）`)
       if (r.strategy === 'identity') ok('匹配策略：恒等（同源结构按原子序对应）')
       return ok(`底部出现构象播放条——ensemble play 开始播放，V 键保存当前机位后 movie play 可巡航录制（会话存档保存第 1 帧坐标）`)
     } catch (e) {
@@ -1196,13 +1223,26 @@ export function runCommand(raw: string): void {
     if (sub === 'play' || sub === 'start') {
       const secs = parseFloat(parts[2] ?? '')
       const loops = parseInt(parts[3] ?? '', 10)
-      const dur = isNaN(secs) ? 2.6 : secs
-      const n = isNaN(loops) ? 1 : loops
+      const hasSecs = !isNaN(secs)
+      const dur = hasSecs ? secs : 2.6
+      const n = isNaN(loops) ? undefined : loops
       const vs = useViewsStore.getState()
-      if (vs.bookmarks.length < 2) return err(`至少需要 2 个视角书签（当前 ${vs.bookmarks.length}）——V 键或 view save 先保存多机位`)
-      void playMovie(dur * 1000, n).then(r => {
+      const tl = useMovieStore.getState().timeline
+      const byId = new Map(vs.bookmarks.map(b => [b.id, b] as const))
+      const validTl = tl.filter(e => byId.has(e.viewId)).length
+      // 无显式秒数且时间轴有 ≥2 有效关键帧 → 时间轴模式（逐段时长）；否则经典书签统一时长模式
+      const useTl = !hasSecs && validTl >= 2
+      if (!useTl && vs.bookmarks.length < 2) return err(`至少需要 2 个视角书签（当前 ${vs.bookmarks.length}）——V 键或 view save 先保存多机位`)
+      const rounds = n ?? (useTl ? useMovieStore.getState().loopsEdit : 1)
+      // 开始消息立即打印（playMovie 的 promise 在播放结束时才 resolve）
+      if (useTl) {
+        const totalMs = tl.reduce((s, e) => s + e.duration, 0)
+        ok(`movie 开始（时间轴模式）：${validTl} 个关键帧 · 单轮 ${(totalMs / 1000).toFixed(1)}s（逐段时长）× ${rounds} 轮——拖动/滚轮接管停止；record start 可同步录制`)
+      } else {
+        ok(`movie 开始：${vs.bookmarks.length} 个视角 × ${rounds} 轮 × ${dur}s——拖动/滚轮可随时接管停止；record start 可同步录制`)
+      }
+      void playMovie({ duration: dur * 1000, loops: n, useTimeline: useTl }).then(r => {
         if (!r.ok) err(r.error)
-        else ok(`movie 开始：${vs.bookmarks.length} 个视角 × ${n} 轮 × ${dur}s——拖动/滚轮可随时接管停止；record start 可同步录制`)
       })
       return
     }
@@ -1210,10 +1250,18 @@ export function runCommand(raw: string): void {
       stopMovie()
       return ok('movie 序列播放已停止')
     }
+    if (sub === 'edit' || sub === 'timeline') {
+      useMovieStore.getState().setTimelineOpen(true)
+      return ok('movie 时间轴已打开（底部面板：拖拽排序、逐段时长、轮数、播放）——工具栏 🎬 图标可开关')
+    }
     const ms = useMovieStore.getState()
-    return ms.playing
-      ? ok(`movie 播放中：段 ${ms.seg + 1}/${ms.total}（${ms.currentName ?? ''}），每视角 ${(ms.duration / 1000).toFixed(1)}s × ${ms.loops} 轮`)
-      : ok(`movie 未播放。已存 ${useViewsStore.getState().bookmarks.length} 个视角书签（上限 ${MAX_BOOKMARKS}）——movie play [秒/视角] [轮数] 启动`)
+    if (ms.playing) {
+      return ok(`movie 播放中：段 ${ms.seg + 1}/${ms.total}（${ms.currentName ?? ''}），本段 ${(ms.duration / 1000).toFixed(1)}s × ${ms.loops} 轮`)
+    }
+    const tlInfo = ms.timeline.length
+      ? ` · 时间轴 ${ms.timeline.length} 段（movie play 走时间轴模式；movie edit 打开编排面板）`
+      : ' · movie edit 打开时间轴编排面板'
+    return ok(`movie 未播放。已存 ${useViewsStore.getState().bookmarks.length} 个视角书签（上限 ${MAX_BOOKMARKS}）——movie play [秒/视角] [轮数] 启动${tlInfo}`)
   }
 
   if (cmd === 'ensemble' || cmd === 'ens') {

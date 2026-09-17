@@ -13,7 +13,7 @@ import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
 import { TOURS } from '@/lib/molecular/tours'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import { useRecordStore } from '@/lib/molecular/record-store'
-import { playMovie, stopMovie, useMovieStore } from '@/lib/molecular/movie'
+import { stopMovie, useMovieStore } from '@/lib/molecular/movie'
 import type { MeasureMode } from '@/lib/molecular/types'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -55,6 +55,7 @@ export function Toolbar() {
   const structures = useMolStore(s => s.structures)
   const recording = useRecordStore(s => s.recording)
   const moviePlaying = useMovieStore(s => s.playing)
+  const timelineOpen = useMovieStore(s => s.timelineOpen)
 
   const capture = (scale: number, transparent: boolean) => {
     const eng = engineRef.current
@@ -325,27 +326,29 @@ export function Toolbar() {
           <TooltipContent>{recording ? '停止录制（点击 REC 徽章下载）' : '录制动画为 WebM 视频'}</TooltipContent>
         </Tooltip>
 
-        {/* movie：视角书签关键帧巡航 */}
+        {/* movie：时间轴编排与关键帧巡航 */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={() => {
                 const ms = useMovieStore.getState()
                 if (ms.playing) { stopMovie(); return }
-                void playMovie(2600, 1).then(r => {
-                  if (!r.ok) toast.error(r.error)
-                  else toast.success('movie 序列播放中', { description: `${r.views} 个视角书签巡航 · 拖动/滚轮接管或 Esc 停止 · 可配录制导出 WebM` })
-                })
+                ms.setTimelineOpen(!ms.timelineOpen)
+                if (!ms.timelineOpen && ms.timeline.length < 2) {
+                  const n = ms.syncTimeline()
+                  if (n >= 2) toast.info('已从视角书签同步时间轴', { description: `${n} 个关键帧——可拖拽排序、逐段调时长，然后点播放` })
+                  else toast.info('movie 时间轴已打开', { description: '先保存 ≥2 个视角书签（V 键或 view save），再「同步书签」' })
+                }
               }}
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
-                moviePlaying ? 'bg-teal-500/15 text-teal-500' : 'text-muted-foreground hover:text-foreground',
+                moviePlaying ? 'bg-teal-500/15 text-teal-500' : timelineOpen ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <Film className="h-4 w-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>{moviePlaying ? '停止 movie 序列播放' : 'movie：视角书签关键帧巡航（需 ≥2 个书签）'}</TooltipContent>
+          <TooltipContent>{moviePlaying ? '停止 movie 序列播放' : 'movie 时间轴：关键帧编排与巡航播放（拖拽排序、逐段时长）'}</TooltipContent>
         </Tooltip>
 
         {/* 截图 */}

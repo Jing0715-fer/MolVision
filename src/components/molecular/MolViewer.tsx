@@ -15,6 +15,7 @@ import {
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { GraduationCap } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { EnsembleBar } from '@/components/studio/EnsembleBar'
 import { RecordBadge } from '@/components/studio/RecordBadge'
 import { ColorLegend } from '@/components/studio/ColorLegend'
@@ -26,6 +27,7 @@ import { useViewsStore } from '@/lib/molecular/views-store'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import { useMovieStore, stopMovie } from '@/lib/molecular/movie'
 import { MovieBadge } from '@/components/studio/MovieBadge'
+import { MovieTimeline } from '@/components/studio/MovieTimeline'
 
 interface HoverState { text: string; x: number; y: number; sub?: string }
 
@@ -36,6 +38,7 @@ export default function MolViewer() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; pick: AtomPick } | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const visualRev = useMolStore(s => s.visualRev)
+  const timelineOpen = useMovieStore(s => s.timelineOpen)
   const { theme, setTheme, resolvedTheme } = useTheme()
 
   // 原子点击处理（先声明，供引擎回调引用）
@@ -188,10 +191,14 @@ export default function MolViewer() {
         if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) { ts.prev(); e.preventDefault(); return }
         if (e.key === 'Escape') { ts.stop(); return }
       }
-      // movie 序列播放中 Esc 停止
+      // movie 序列播放中 Esc 停止；否则时间轴打开时 Esc 关闭时间轴
       if (e.key === 'Escape' && useMovieStore.getState().playing) {
         stopMovie()
         store.appendLog('out', 'movie 序列播放已停止（Esc）')
+        return
+      }
+      if (e.key === 'Escape' && useMovieStore.getState().timelineOpen) {
+        useMovieStore.getState().setTimelineOpen(false)
         return
       }
       // Shift+数字 → 跳转视角书签（数字键无 Shift 仍是风格预设）
@@ -446,11 +453,17 @@ export default function MolViewer() {
       {/* movie 序列播放指示器（顶部居中，播放时显示；演示中自动下移） */}
       <MovieBadge />
 
+      {/* movie 时间轴编排面板（底部居中，工具栏 🎬 / movie edit 开关） */}
+      <MovieTimeline />
+
       {/* 视角书签浮层（右缘竖排，保存/跳转相机视角） */}
       <ViewBar />
 
-      {/* 左下角图例列：密度图 σ 控制（交互）+ 颜色标尺（putty/B 因子/SASA 着色时显示） */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex flex-col items-start gap-2">
+      {/* 左下角图例列：密度图 σ 控制（交互）+ 颜色标尺（putty/B 因子/SASA 着色时显示）；时间轴打开时上移让位 */}
+      <div className={cn(
+        'pointer-events-none absolute left-3 z-10 flex flex-col items-start gap-2 transition-all duration-300',
+        timelineOpen ? 'bottom-[196px]' : 'bottom-3',
+      )}>
         <MapLegend />
         <ColorLegend />
       </div>
@@ -538,9 +551,11 @@ function QuickPresets() {
   const activeId = useMolStore(s => s.activeId)
   const applyPreset = useMolStore(s => s.applyPreset)
   const loading = useMolStore(s => s.loading)
+  // movie 时间轴打开时上移让位（底部右角与时间轴面板重叠）
+  const timelineOpen = useMovieStore(s => s.timelineOpen)
   if (!structures.length || !activeId) return null
   return (
-    <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1">
+    <div className={cn('absolute right-3 z-10 flex items-center gap-1 transition-all duration-300', timelineOpen ? 'bottom-[196px]' : 'bottom-3')}>
       {loading && (
         <div className="mr-1 flex items-center gap-2 rounded-full border border-border/60 bg-popover/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur">
           <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />

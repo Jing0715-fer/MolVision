@@ -816,3 +816,41 @@ Stage Summary:
 - 关键决策：①morph 匹配双策略分层（蛋白走序列比对保证化学等价，非蛋白走恒等兜底）②B 只在内存副本上叠合（不动原结构，用户手动 superpose 结果保持）③用户接管用 cancelCount 基线差值检测（camAnim==null 无法区分自然完成与取消）④演示+movie 同屏选择隐藏而非让位（短视口 366px 下演示卡 329px 任何让位方案都重叠）
 - 未解决问题与风险：①morph 为坐标线性插值（无键合校正/去冲突——PyMOL rigimol 级 morph 未做，大构象变化时可能出现原子穿插）②morph 对象会话存档只保存第 1 帧（刷新后轨迹丢失，PDB 单模型格式所限）③配体/水不参与序列策略 morph（恒等策略可覆盖）④movie 徽章在演示中隐藏（无停止按钮，依赖 Esc/工具栏）⑤超大 morph（>5k 原子 × 120 帧）内存 ~7MB 可控但帧重建耗时上升
 - 下一阶段建议（优先级序）：① 氢键/SASA/contacts/map 统一 Worker 池（r13 起遗留，防多任务并发过载）② ray 渲染异步化（OffscreenCanvas 或分帧 + 进度 toast，r17 遗留）③ morph 插值升级为笛卡尔样条（Catmull-Rom 过 3+ 构象，多态 morph）④ movie 时间轴编辑视图（VLM 建议：关键帧节点可视化）⑤ UI 偏好统一 settings store（面板宽度/σ 卡位置/主题等散键归一，r17 遗留）
+---
+Task ID: feat-r19
+Agent: main
+Task: 下一阶段开发 + UI 打磨：多态 morph（Catmull-Rom 过 3+ 构象）、movie 时间轴编排面板（拖拽排序/逐段时长/持久化）、全局重计算并发闸
+
+Work Log:
+- 读取 worklog（feat-r18 完成 morph 双构象/movie 关键帧巡航）；git 干净（r18 已提交）；QA 冒烟 dev server 200 正常；按 r18 遗留优先级清单开工
+- 【功能 A：多态 morph morph multi——本轮主特性】
+  - morph.ts 重构：抽出 matchStructureAtoms（双策略：序列比对+恒等兜底）与 superposeOnto（内存叠合）供双态/多态共用；buildMorph 行为保持不变（969 原子/125 残基/RMSD 0.63 回归基准一致）
+  - 新增 buildMultiMorph(sources[2..8], name, steps)：参考构象=第 1 个 → 逐对匹配 → 全部配对的原子交集（perX Map 过滤）→ 逐构象独立叠合到参考位姿 → Catmull-Rom 样条（端点复制，均匀参数 0..m-1）采样 10–200 帧 → ensembleKind='multimorph' + ensembleKnots
+  - 命令 `morph multi <名> = <A> <B> <C>… [帧]`：帧数识别（末尾纯数字）、逐构象 RMSD 报告、链对合并去重展示
+  - QA 中发现并修复 2 个缺陷：① `input.slice(len1+len2)` 漏算词间空格导致 morph multi 解析必失败 → 改 parts.slice(2).join(' ')；②【既有 bug】parser 链类型判定把水残基计入分母——2VB1（129 蛋白残基+183 晶体水同链）aa/total=0.41<0.5 被误判 ligand → superpose/morph 全链路失效 → 水不参与聚合物类型投票（polymerTotal = aa+na+other，纯水链仍判 water）
+  - EnsembleBar 徽章三分：NMR(violet) / morph(teal) / 多态 morph · N 态 · M 帧(teal)
+- 【功能 B：movie 时间轴编排面板——本轮 UI 主特性】
+  - movie.ts 扩展：TimelineEntry{viewId,duration} + timeline/timelineOpen/loopsEdit 编辑态（localStorage molvision-movie-v1 持久化，含字段校验装载）；playMovie 改 opts 签名 {duration,loops,useTimeline}——时间轴模式逐段独立时长+loopsEdit 轮数，经典模式统一时长全书签
+  - 新组件 MovieTimeline.tsx：底部居中面板（teal 描边卡片）——头部（统计+同步书签/清空/关闭）+ 关键帧卡片带（缩略图+名称+时长徽章，横向滚动，ChevronRight 连接）+ 控制行（播放/轮数 stepper/选中卡片编辑：时长±0.2s+👁预览+🗑移除）
+  - 拖拽排序：pointer capture（try-catch 防合成事件 NotFoundError）+ 拖起缓存卡片矩形 + 指针过中点计算插入槽位 + teal 发光插入指示条（原位/相邻隐藏）+ DRAG_THRESHOLD=5px 区分点击选择 vs 拖拽排序（dragMoved ref 抑制拖后 click 回写）
+  - 让位编排：时间轴打开时 EnsembleBar/QuickPresets/左下图例列上移（bottom-[196px]，实测净空 15px——首版 164px 有 16px 垂直重叠，VLM 评审后发现修正）；Esc 关闭时间轴（movie 停止优先级之后）；工具栏 🎬 Film 按钮改开/关时间轴（空时间轴自动同步书签+toast 引导）
+  - 命令：movie play 无秒数参数且时间轴 ≥2 有效关键帧 → 自动时间轴模式（逐段时长）；movie edit 打开编排面板；「movie 开始」消息从播放结束才打印改为立即打印（发现并修复旧版时序缺陷）
+- 【功能 C：全局重计算并发闸】
+  - 新建 heavy-queue.ts：全局 MAX_CONCURRENT=2 信号量（acquireHeavySlot 排队+幂等 release）+ SlotLane 通道类（acquire→post 登记→releaseOne/releaseAll FIFO 与 worker 消息序一致；acquire 后过期任务直接 release 不入通道，防槽位泄漏错配）
+  - engine.ts 集成 5 个投递点：氢键检测/SASA full/ΔSASA/跨结构 ΔSASA（hbondSlots+sasaSlots 两条 lane）——投递前 await 槽位（排队期间被新请求取代 → 过期丢弃）；onHBond/onSasaWorkerResult 顶部 releaseOne（过期结果同样占槽）；worker onerror + dispose releaseAll（无死锁路径）
+  - map-load.ts：computeDensityViaWorker 的 postMessage 包 acquire（cleanup 统一 release，reqId 不匹配消息不误放）
+  - 排队时控制台输出「⏳ xxx 排队等待（重计算并发已满，空出后自动继续）」
+- 【文档】README：+Multi-state morphing 行、movie 行扩展时间轴编辑器、+Heavy-task concurrency gate 行、命令示例 +morph multi/movie edit、Shortcuts 补 close timeline、画廊 +multimorph-timeline.png；HelpDialog：+多态 morph 段、+movie 时间轴编排段、movie 段改录制说明、SHORTCUTS Esc 补关闭时间轴
+- 【QA 全量验证（agent-browser 真实交互 + VLM）】
+  - QA 方法论：①控制台注入必须用原生 value setter + input 事件 + 延时后 keydown Enter（React 受控 input 直接赋值无效）②ensemble 播放中页面繁忙 CDP eval/screenshot 会超时——先 P 暂停再操作③toast 会让「面板存在性」DOM 探测误报——用唯一按钮（同步书签）特征定位④morph 对象会话恢复只存第 1 帧（r18 已知限制），刷新后需重建
+  - 多态 morph：1BQL+2LYZ+2VB1 → 3 构象态 · 969 原子 · 125 残基 · 60 帧 · Catmull-Rom · 82 ms；2LYZ RMSD 0.63 Å（r15-r18 基准一致）、2VB1 0.70 Å；徽章「多态 morph · 3 态 · 60 帧」+ 帧号推进 + ensemble frame 30 跳中间构象 ✓；双构象回归 969/125/0.63 完全一致 ✓；错误路径（缺结构/同结构）✓
+  - 时间轴：movie edit 打开 ✓ 同步 4 书签 → 4 卡片 10.4s/轮 ✓ CDP 合成拖拽 [全景,全景,近景,正面]→[全景,近景,全景,正面] ✓ 时长 +0.2s×2 → 3.0s/总 10.8s ✓ localStorage [2600,3000,2600,2600] + 刷新恢复 ✓ 播放走时间轴（段 2=近景 3.0s 逐段时长生效）+「播放完成：4 段 × 1 轮」✓ Esc 关闭 ✓ Film 按钮开关 ✓ movie play 自动时间轴模式 + 即时开始消息 ✓ 让位 152px 位移精确、修复后 15px 净空 ✓ 390px 移动端无溢出 ✓
+  - 并发闸：map fofc 3ekj（长任务）+ sasa（1BQL 4326 原子）同时占 2 槽 → hbonds on 触发 2 次检测 + 3EKJ 自动加载再触发第 3 次 → 三条「⏳ 氢键检测 排队等待」日志 ✓ SASA 489ms 完成释放 → 队列依次推进 → 差图 43.8s 完成（含排队+网络+FFT）→ 无死锁全链路跑通 ✓
+  - VLM 评审：首评 8.5/10（时间轴面板可用性「优秀」、让位设计「协调且专业」、指出面板间距偏近）；修复 164→196px 后终评 9.2/10「达到商业科研软件发布水准…完全具备商业发布品质」
+  - 回归：浏览器 errors 空 ✓；lint 0 错 0 警 ✓；tsc 新代码零错误（预存错误均在旧 worker/superpose/examples 文件）✓；dev.log 无运行时错误（仅 API 200）✓
+
+Stage Summary:
+- 项目当前状态：feat-r18 基础上补齐「多态构象叙事 + 相机编排可视化 + 计算资源治理」三层——①morph multi 过 Catmull-Rom 样条平滑穿过 3–8 个构象态（逐态叠合+原子交集+任意中间构象可停留）②movie 时间轴编排面板（关键帧卡片拖拽排序+逐段时长+轮数+预览+localStorage 持久化，movie play 自动时间轴模式）③全局 2 槽重计算并发闸（氢键/SASA/ΔSASA/xbsa/密度合成共享，第三任务透明排队）
+- 关键决策：①多态匹配取全对交集而非两两链（保证参考坐标系下原子集合一致）②水残基不参与链聚合物类型投票（修复 2VB1 类高分辨含水结构被误判 ligand 的既有 bug，superpose/morph/序列工具全链路受益）③SlotLane 分离 acquire/post（过期任务直接 release 不入通道，避免结果消息错配释放他人槽位）④让位量实测修正 164→196px（DOM 矩形测量发现 16px 垂直重叠，VLM 复核确认）
+- 未解决问题与风险：①morph multi 的恒等兜底要求全部结构原子序一致（混合场景：A↔X1 序列、A↔X2 恒等可各自成立但交集以序列对为准——已按「任一恒等则全部恒等」收窄，极端混合用例报错而非错配）②时间轴卡片无 FLIP 动画（拖拽松手即时重排，无过渡——后续可加 layout animation）③并发闸排队中的任务不可取消（用户改设置只会让过期投递被跳过，排队等待本身继续）④多态 morph 会话存档仍只存第 1 帧（r18 限制延续，PDB 单模型格式约束）⑤CDP 合成事件下 Radix tooltip 不显示（真实用户无影响）
+- 下一阶段建议（优先级序）：① ray 渲染异步化（OffscreenCanvas/分帧 + 进度 toast，r17 起遗留）② UI 偏好统一 settings store（面板宽度/σ 卡位置/主题等散键归一，r17 起遗留）③ 时间轴 FLIP 动画 + 卡片右键菜单（复制/插入当前机位）④ morph 帧插值升级（键长校正/去碰撞，向 rigimol 靠拢）⑤ 并发闸排队任务可取消（AbortSignal）

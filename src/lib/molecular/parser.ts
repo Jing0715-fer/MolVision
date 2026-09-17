@@ -62,8 +62,10 @@ export interface StructureData {
   sasa?: Float32Array
   /** NMR ensemble：多构象坐标帧（frames[0] 即初始坐标副本，长度与 atoms.positions 相同） */
   ensemble?: { frames: Float32Array[] }
-  /** ensemble 来源标记：NMR 多模型（默认）或 morph 插值轨迹（UI 徽章区分显示） */
-  ensembleKind?: 'nmr' | 'morph'
+  /** ensemble 来源标记：NMR 多模型（默认）/ morph 双构象插值 / multimorph 多态样条插值（UI 徽章区分显示） */
+  ensembleKind?: 'nmr' | 'morph' | 'multimorph'
+  /** multimorph 的构象态（样条结点）数 */
+  ensembleKnots?: number
   /** 晶胞与空间群（CRYST1 / _cell）——对称伴侣与电子密度图计算用 */
   crystal?: CrystalInfo
   /** 空间哈希网格（用于 within 选择、近邻查询） */
@@ -521,7 +523,7 @@ function buildStructure(raw: RawAtoms): StructureData {
     curChain.end = r.end
     curChain.residueIdx.push(ri)
   }
-  // 链类型判定
+  // 链类型判定（水残基不参与聚合物类型投票——同链蛋白+大量晶体水不应被稀释成 ligand）
   for (const ch of chains) {
     let aa = 0, na = 0, water = 0, other = 0
     for (const ri of ch.residueIdx) {
@@ -531,10 +533,10 @@ function buildStructure(raw: RawAtoms): StructureData {
       else if (r.water) water++
       else other++
     }
-    const total = aa + na + water + other
-    if (water > 0 && water === total) ch.type = 'water'
-    else if (aa >= na && aa / Math.max(1, total) > 0.5) ch.type = 'protein'
-    else if (na > aa && na / Math.max(1, total) > 0.3) ch.type = 'nucleic'
+    const polymerTotal = aa + na + other
+    if (water > 0 && polymerTotal === 0) ch.type = 'water'
+    else if (aa >= na && aa / Math.max(1, polymerTotal) > 0.5) ch.type = 'protein'
+    else if (na > aa && na / Math.max(1, polymerTotal) > 0.3) ch.type = 'nucleic'
     else ch.type = 'ligand'
   }
   // 原子 → 链索引（残基按链顺序分布）

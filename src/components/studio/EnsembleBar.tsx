@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Pause, Play, Repeat, RotateCcw, Spline, Layers } from 'lucide-react'
 import { useMolStore, dataRegistry } from '@/lib/molecular/store'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
+import { useMovieStore } from '@/lib/molecular/movie'
 import { engineRef } from '@/lib/molecular/store'
 import { cn } from '@/lib/utils'
 
@@ -19,6 +20,8 @@ export function EnsembleBar() {
   const interp = useEnsembleStore(s => s.interp)
   const loop = useEnsembleStore(s => s.loop)
   const setTarget = useEnsembleStore(s => s.setTarget)
+  // movie 时间轴打开时上移让位（底部中心重叠）
+  const timelineOpen = useMovieStore(s => s.timelineOpen)
 
   // 本地拖动状态（拖动中不受引擎帧号回写干扰）
   const [dragging, setDragging] = useState(false)
@@ -55,7 +58,10 @@ export function EnsembleBar() {
 
   const sid = useEnsembleStore.getState().structureId!
   const entry = structures.find(s => s.id === sid)
-  const isMorph = entry ? dataRegistry.get(entry.id)?.ensembleKind === 'morph' : false
+  const ensData = entry ? dataRegistry.get(entry.id) : undefined
+  const ensKind = ensData?.ensembleKind
+  const isMorph = ensKind === 'morph' || ensKind === 'multimorph'
+  const knots = ensData?.ensembleKnots ?? 0
   const shown = dragging ? dragVal : frame
 
   const togglePlay = () => {
@@ -78,9 +84,9 @@ export function EnsembleBar() {
   return (
     <div
       className={cn(
-        'absolute bottom-3 left-1/2 z-10 -translate-x-1/2',
+        'absolute left-1/2 z-10 -translate-x-1/2 transition-all duration-300',
+        timelineOpen ? 'bottom-[196px]' : 'bottom-3',
         'flex items-center gap-2.5 rounded-2xl border border-border/60 bg-popover/90 px-3 py-2 shadow-xl backdrop-blur-md',
-        'transition-all duration-300',
       )}
       onPointerDown={e => e.stopPropagation()}
     >
@@ -94,7 +100,7 @@ export function EnsembleBar() {
             ? 'bg-teal-500/15 text-teal-600 dark:text-teal-300'
             : 'bg-violet-500/15 text-violet-500 dark:text-violet-300',
         )}>
-          {isMorph ? 'morph · ' : 'NMR · '}{total}{isMorph ? ' 帧' : ' 构象'}
+          {isMorph ? (ensKind === 'multimorph' ? `多态 morph · ${knots} 态 · ` : 'morph · ') : 'NMR · '}{total}{isMorph ? ' 帧' : ' 构象'}
         </span>
       </div>
 
