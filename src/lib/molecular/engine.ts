@@ -6,6 +6,9 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
+import { AnaglyphEffect } from 'three/examples/jsm/effects/AnaglyphEffect.js'
+import { marchingCubes } from './marching-cubes'
+import { mateTransforms, orthoMatrix, symOpsFor, type CrystalCell } from './symmetry'
 import { computeAtomColors } from './colors'
 import { elementInfo } from './chemistry'
 import {
@@ -70,6 +73,31 @@ interface StructureView {
   selectionRev: number
   labelGroup: THREE.Group
   labelsKey: string
+  /** 对称伴侣重建键（rev + reps 可见性 + radius） */
+  symKey: string
+  /** ensemble 播放期间对称克隆重建节流时间戳 */
+  symLastRebuild?: number
+}
+
+/** 电子密度图层状态（引擎持有；UI 经 map-store 镜像） */
+interface MapLayerState {
+  name: string
+  grid: Float32Array
+  dims: [number, number, number]
+  fracOrigin: [number, number, number]
+  fracStep: [number, number, number]
+  cell: CrystalCell
+  mean: number; rms: number; min: number; max: number
+  /** 等值面级别（σ 单位：绝对值 = mean + iso·rms） */
+  iso: number
+  mode: 'surface' | 'mesh' | 'both'
+  color: string
+  opacity: number
+  visible: boolean
+  mesh: THREE.Mesh | null
+  wire: THREE.LineSegments | null
+  triangles: number
+  truncated: boolean
 }
 
 const AMBER = 0xfbbf24
@@ -92,6 +120,69 @@ const HBOND_COLOR_LIGHT = 0x0d9488
 function isLightBackground(css: string): boolean {
   const c = new THREE.Color(css)
   return c.r * 0.299 + c.g * 0.587 + c.b * 0.114 > 0.5
+}
+
+/**
+ * 克隆 rep 组（几何/材质共享）：THREE 的 Object3D.copy 会 JSON 深拷贝 userData，
+ * 而 enginePick 存在循环引用（pick.object → mesh）会抛异常——克隆前暂存清空、克隆后恢复。
+ */
+function cloneGroupShallowUserData(src: THREE.Object3D): THREE.Object3D {
+  const stash: { obj: THREE.Object3D; data: Record<string, unknown> }[] = []
+  src.traverse(o => {
+    if (o.userData && Object.keys(o.userData).length > 0) {
+      stash.push({ obj: o, data: o.userData })
+      o.userData = {}
+    }
+  })
+  let clone: THREE.Object3D
+  try {
+    clone = src.clone(true)
+  } finally {
+    for (const { obj, data } of stash) obj.userData = data
+  }
+  return clone
+}
+
+/** 对称 3x3 特征分解（Jacobi 旋转迭代）；返回按特征值降序 { vals, vecs（vecs[j] 为第 j 个特征向量分量数组） } */
+function eigenSymmetric3(a: number[]): { vals: number[]; vecs: number[][] } {
+  const m = [...a]
+  const vecs: number[][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  for (let sweep = 0; sweep < 24; sweep++) {
+    // 最大非对角元
+    let p = 0, q = 1, max = Math.abs(m[1])
+    if (Math.abs(m[2]) > max) { p = 0; q = 2; max = Math.abs(m[2]) }
+    if (Math.abs(m[5]) > max) { p = 1; q = 2; max = Math.abs(m[5]) }
+    if (max < 1e-12) break
+    const app = m[p * 3 + p], aqq = m[q * 3 + q], apq = m[p * 3 + q]
+    const theta = (aqq - app) / (2 * apq)
+    const sign = theta >= 0 ? 1 : -1
+    const t = sign / (Math.abs(theta) + Math.sqrt(theta * theta + 1))
+    const c = 1 / Math.sqrt(t * t + 1)
+    const s = t * c
+    // 行/列旋转（A' = JᵀAJ）
+    for (let k = 0; k < 3; k++) {
+      const mkp = m[k * 3 + p], mkq = m[k * 3 + q]
+      m[k * 3 + p] = c * mkp - s * mkq
+      m[k * 3 + q] = s * mkp + c * mkq
+    }
+    for (let k = 0; k < 3; k++) {
+      const mpk = m[p * 3 + k], mqk = m[q * 3 + k]
+      m[p * 3 + k] = c * mpk - s * mqk
+      m[q * 3 + k] = s * mpk + c * mqk
+    }
+    // 累积特征向量（V = V·J，列更新）
+    const vp = [...vecs[p]], vq = [...vecs[q]]
+    for (let k = 0; k < 3; k++) {
+      vecs[p][k] = c * vp[k] - s * vq[k]
+      vecs[q][k] = s * vp[k] + c * vq[k]
+    }
+  }
+  const vals = [m[0], m[4], m[8]]
+  const order = [0, 1, 2].sort((i, j) => vals[j] - vals[i])
+  return {
+    vals: order.map(i => vals[i]),
+    vecs: order.map(i => vecs[i].map(v => +v.toFixed(12))),
+  }
 }
 
 export class MolEngine {
@@ -153,6 +244,17 @@ export class MolEngine {
   private ro: ResizeObserver
   private pickablesCache: { obj: THREE.Object3D; pick: Pickable; structureId: string }[] | null = null
   private hasContent = false
+  // 灯光引用（applySettings 调节强度）
+  private keyLight!: THREE.DirectionalLight
+  private fillLight!: THREE.DirectionalLight
+  private ambientLight!: THREE.AmbientLight
+  // 红蓝立体（AnaglyphEffect 懒建；关闭即释放）
+  private stereoEffect: AnaglyphEffect | null = null
+  // 电子密度图层（单个；isomesh + isosurface）
+  private mapGroup = new THREE.Group()
+  private mapLayer: MapLayerState | null = null
+  // 对称伴侣克隆组（structureId → 克隆容器；几何/材质与原 rep 共享）
+  private symmetryGroups = new Map<string, THREE.Group>()
   // GTAO 后处理管线（ssao 开启时懒建；gtaoFailed 构建失败后永久回退）
   private composer: EffectComposer | null = null
   private gtaoPass: GTAOPass | null = null
@@ -185,11 +287,12 @@ export class MolEngine {
     container.appendChild(this.canvas)
 
     this.scene = new THREE.Scene()
-    this.scene.background = new THREE.Color('#101215')
+    this.scene.background = new THREE.Color('#ffffff')
     this.scene.add(this.measureGroup)
     this.scene.add(this.pickMarkerGroup)
     this.scene.add(this.hbondGroup)
     this.scene.add(this.contactGroup)
+    this.scene.add(this.mapGroup)
 
     // 环境光照
     const pmrem = new THREE.PMREMGenerator(this.renderer)
@@ -203,7 +306,11 @@ export class MolEngine {
     const fill = new THREE.DirectionalLight(0xffffff, 0.45)
     fill.position.set(-5, -3, -4)
     this.scene.add(fill)
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.12))
+    const ambient = new THREE.AmbientLight(0xffffff, 0.12)
+    this.scene.add(ambient)
+    this.keyLight = key
+    this.fillLight = fill
+    this.ambientLight = ambient
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.5, 8000)
     this.camera.position.set(40, 30, 60)
@@ -249,6 +356,7 @@ export class MolEngine {
       this.composer.setPixelRatio(this.renderer.getPixelRatio())
       this.composer.setSize(w, h)
     }
+    this.stereoEffect?.setSize(w, h)
     this.pickablesCache = null
   }
 
@@ -309,25 +417,38 @@ export class MolEngine {
       this.clippingPlanes[1].normal.copy(dir).negate()
       this.clippingPlanes[1].constant = dir.dot(cam.position) + half
     }
-    // GTAO 环境光遮蔽：经 EffectComposer 渲染；否则直接渲染
-    if (this.settings?.ssao && !this.gtaoFailed) {
-      this.ensureComposer()
-      if (this.composer && this.gtaoPass) {
-        // 刷新投影矩阵 uniform（FOV / 正交 zoom / 相机切换后仍正确）
-        const w = this.container.clientWidth || 1
-        const h = this.container.clientHeight || 1
-        this.composer.setPixelRatio(this.renderer.getPixelRatio())
-        this.composer.setSize(w, h)
-        this.gtaoPass.blendIntensity = this.settings.ssaoIntensity
-        // 半径为纯 uniform 更新（无 shader 重编译），每帧同步保证滑块即时生效
-        this.gtaoPass.updateGtaoMaterial({ radius: this.settings.ssaoRadius })
-        this.composer.render()
+    // 渲染：stereo 红蓝立体优先（直渲），其次 GTAO composer，最后直接渲染
+    if (this.settings?.stereo) {
+      if (!this.stereoEffect) {
+        this.stereoEffect = new AnaglyphEffect(this.renderer)
+        this.stereoEffect.setSize(this.container.clientWidth || 1, this.container.clientHeight || 1)
+      }
+      this.stereoEffect.render(this.scene, cam)
+    } else {
+      if (this.stereoEffect) {
+        this.stereoEffect.dispose()
+        this.stereoEffect = null
+      }
+      // GTAO 环境光遮蔽：经 EffectComposer 渲染；否则直接渲染
+      if (this.settings?.ssao && !this.gtaoFailed) {
+        this.ensureComposer()
+        if (this.composer && this.gtaoPass) {
+          // 刷新投影矩阵 uniform（FOV / 正交 zoom / 相机切换后仍正确）
+          const w = this.container.clientWidth || 1
+          const h = this.container.clientHeight || 1
+          this.composer.setPixelRatio(this.renderer.getPixelRatio())
+          this.composer.setSize(w, h)
+          this.gtaoPass.blendIntensity = this.settings.ssaoIntensity
+          // 半径为纯 uniform 更新（无 shader 重编译），每帧同步保证滑块即时生效
+          this.gtaoPass.updateGtaoMaterial({ radius: this.settings.ssaoRadius })
+          this.composer.render()
+        } else {
+          this.renderer.render(this.scene, cam)
+        }
       } else {
+        if (this.composer) this.disposeComposer()
         this.renderer.render(this.scene, cam)
       }
-    } else {
-      if (this.composer) this.disposeComposer()
-      this.renderer.render(this.scene, cam)
     }
   }
 
@@ -564,6 +685,7 @@ export class MolEngine {
           selectionRev: -1,
           labelGroup: new THREE.Group(),
           labelsKey: '',
+          symKey: '',
         }
         view.group.add(view.repContainer)
         view.group.add(view.labelGroup)
@@ -599,6 +721,19 @@ export class MolEngine {
       } else if (state.selection.structureId !== entry.id && view.highlight) {
         view.highlight.visible = false
       }
+      // 对称伴侣（symmetry 命令/面板）：rep 构建完成后再检查（恢复会话时 reps 晚于 updateSymmetry 就绪）
+      const symRadius = entry.symmetry?.radius ?? 0
+      const symGroup = this.symmetryGroups.get(entry.id)
+      if (symRadius > 0) {
+        const wantKey = `${entry.rev}|${entry.reps.map(r => r.id + (r.visible ? '1' : '0')).join(',')}|${symRadius}|${filtersKey}`
+        if (!symGroup || symGroup.userData.symKey !== wantKey) {
+          this.rebuildSymmetry(entry, data, view, wantKey, symRadius)
+        }
+      } else if (symGroup) {
+        view.group.remove(symGroup)
+        this.symmetryGroups.delete(entry.id)
+        this.pickablesCache = null
+      }
     }
     // 移除消失的结构
     for (const [id, view] of this.views) {
@@ -614,6 +749,7 @@ export class MolEngine {
         for (const rv of view.reps.values()) rv.build.dispose()
         if (view.highlight) { view.highlight.geometry.dispose(); (view.highlight.material as THREE.Material).dispose() }
         this.views.delete(id)
+        this.symmetryGroups.delete(id)
         this.hbondCache.delete(id)
         this.hbondPending.delete(id)
         this.sasaPending.delete(id)
@@ -1106,6 +1242,104 @@ export class MolEngine {
     this.updateHBonds(store)
     // 接触连线坐标已变化 → 重渲染
     this.updateContacts()
+    // 对称伴侣跟随重建（ensemble 播放期间节流，避免每帧全量克隆）
+    const entrySym = store.structures.find(s => s.id === data.id)?.symmetry
+    if (entrySym && entrySym.radius > 0) {
+      const now = performance.now()
+      if (now - (view.symLastRebuild ?? 0) > 140) {
+        view.symLastRebuild = now
+        const symKey = `${entry.rev}|${entry.reps.map(r => r.id + (r.visible ? '1' : '0')).join(',')}|${entrySym.radius}|${filtersKey}`
+        this.rebuildSymmetry(entry, data, view, symKey, entrySym.radius)
+      }
+    }
+  }
+
+  // ---------- 晶体对称伴侣（PyMOL symmetry / ChimeraX symmates） ----------
+
+  /** 设置/更新对称伴侣；radius ≤ 0 清除。返回 { ok, count, message } */
+  updateSymmetry(structureId: string, radius: number): { ok: boolean; count: number; message: string } {
+    const data = dataRegistry.get(structureId)
+    const store = useMolStore.getState()
+    const entry = store.structures.find(s => s.id === structureId)
+    if (!data || !entry) return { ok: false, count: 0, message: '结构不存在' }
+    if (radius <= 0) {
+      useMolStore.setState(s => ({
+        structures: s.structures.map(x => x.id === structureId ? { ...x, symmetry: undefined } : x),
+        visualRev: s.visualRev + 1,
+      }))
+      const g = this.symmetryGroups.get(structureId)
+      const view = this.views.get(structureId)
+      if (g && view) view.group.remove(g)
+      this.symmetryGroups.delete(structureId)
+      this.pickablesCache = null
+      return { ok: true, count: 0, message: `已关闭 ${entry.name} 的对称伴侣` }
+    }
+    if (!data.crystal) {
+      return { ok: false, count: 0, message: `${entry.name} 无晶胞信息（CRYST1 缺失）——无法生成对称伴侣` }
+    }
+    const ops = symOpsFor(data.crystal.spaceGroup)
+    if (!ops) {
+      return { ok: false, count: 0, message: `空间群 "${data.crystal.spaceGroup.trim()}" 不在支持列表（65 个手性群）内` }
+    }
+    const mates = mateTransforms(data.crystal, data.crystal.spaceGroup, data.bbox.center, radius, data.bbox.radius)
+    useMolStore.setState(s => ({
+      structures: s.structures.map(x => x.id === structureId ? { ...x, symmetry: { radius, count: mates.length } } : x),
+      visualRev: s.visualRev + 1,
+    }))
+    // 视觉重建（symKey 变化由 sync 触发；这里主动调一次确保即时反馈）
+    const view = this.views.get(structureId)
+    if (view) {
+      const symKey = `${entry.rev}|${entry.reps.map(r => r.id + (r.visible ? '1' : '0')).join(',')}|${radius}|${store.settings.hideHydrogens}|${store.settings.hideWater}|${store.settings.quality}`
+      this.rebuildSymmetry(entry, data, view, symKey, radius)
+    }
+    return {
+      ok: true, count: mates.length,
+      message: `${entry.name}：已生成 ${mates.length} 个对称伴侣（空间群 ${data.crystal.spaceGroup.trim()} · 半径 ${radius} Å · ${ops.length} 个对称操作）`,
+    }
+  }
+
+  /** 重建对称克隆组：克隆各 rep 的 group（共享几何/材质），挂刚体矩阵（不参与拾取）。radius 显式传入（避免旧 entry 引用读取到未更新的 symmetry） */
+  private rebuildSymmetry(entry: StructureEntry, data: StructureData, view: StructureView, symKey: string, radius: number) {
+    let symGroup = this.symmetryGroups.get(entry.id)
+    if (!symGroup) {
+      symGroup = new THREE.Group()
+      symGroup.name = 'symmetry'
+      this.symmetryGroups.set(entry.id, symGroup)
+      view.group.add(symGroup)
+    }
+    for (const child of [...symGroup.children]) symGroup.remove(child)
+    view.symLastRebuild = performance.now()
+    const crystal = data.crystal
+    // reps 未就绪（会话恢复早期）→ 不缓存 symKey，sync 构建 reps 后会重试
+    if (!crystal || radius <= 0 || view.reps.size === 0) return
+    const mates = mateTransforms(crystal, crystal.spaceGroup, data.bbox.center, radius, data.bbox.radius)
+    const m4 = new THREE.Matrix4()
+    for (const mt of mates) {
+      m4.set(
+        mt.rot[0], mt.rot[1], mt.rot[2], mt.trans[0],
+        mt.rot[3], mt.rot[4], mt.rot[5], mt.trans[1],
+        mt.rot[6], mt.rot[7], mt.rot[8], mt.trans[2],
+        0, 0, 0, 1,
+      )
+      for (const rv of view.reps.values()) {
+        if (!rv.build.group.visible) continue
+        const clone = cloneGroupShallowUserData(rv.build.group)
+        clone.matrix.copy(m4)
+        clone.matrixAutoUpdate = false
+        clone.matrixWorldNeedsUpdate = true
+        symGroup.add(clone)
+      }
+    }
+    // 成功重建后才缓存 key（失败/清空时 sync 可重试）
+    symGroup.userData.symKey = symKey
+    // 数量回写（面板显示；读取 store 最新 entry，不触发 sync 循环）
+    const cur = useMolStore.getState().structures.find(x => x.id === entry.id)
+    if (cur?.symmetry && cur.symmetry.count !== mates.length) {
+      useMolStore.setState(s => ({
+        structures: s.structures.map(x => x.id === entry.id && x.symmetry
+          ? { ...x, symmetry: { ...x.symmetry, count: mates.length } } : x),
+      }))
+    }
   }
 
   // ---------- 结构叠合（对标 ChimeraX matchmaker） ----------
@@ -1433,6 +1667,169 @@ export class MolEngine {
     }
   }
 
+  // ---------- 电子密度图（isomesh / isosurface，对标 PyMOL map+isomesh/isosurface） ----------
+
+  /** 安装/替换密度图层（grid + 晶胞分数几何 → 世界位置由 PDB 正交化矩阵确定） */
+  setDensityMap(def: {
+    name: string
+    grid: Float32Array
+    dims: [number, number, number]
+    fracOrigin: [number, number, number]
+    fracStep: [number, number, number]
+    cell: CrystalCell
+    mean: number; rms: number; min: number; max: number
+    iso?: number
+    mode?: 'surface' | 'mesh' | 'both'
+    color?: string
+    opacity?: number
+  }) {
+    this.disposeMapGeometry()
+    this.mapLayer = {
+      name: def.name, grid: def.grid, dims: def.dims,
+      fracOrigin: def.fracOrigin, fracStep: def.fracStep, cell: def.cell,
+      mean: def.mean, rms: def.rms, min: def.min, max: def.max,
+      iso: def.iso ?? 2, mode: def.mode ?? 'both', color: def.color ?? '#3d7ab8',
+      opacity: def.opacity ?? 0.38, visible: true,
+      mesh: null, wire: null, triangles: 0, truncated: false,
+    }
+    this.rebuildMapMesh()
+  }
+
+  /** 调整密度图外观（σ 级别 / 模式 / 颜色 / 不透明度 / 可见性） */
+  setMapAppearance(patch: { iso?: number; mode?: 'surface' | 'mesh' | 'both'; color?: string; opacity?: number; visible?: boolean }) {
+    const l = this.mapLayer
+    if (!l) return
+    let needRebuild = false
+    if (patch.iso !== undefined && patch.iso !== l.iso) { l.iso = patch.iso; needRebuild = true }
+    if (patch.mode !== undefined && patch.mode !== l.mode) { l.mode = patch.mode; needRebuild = true }
+    if (patch.color !== undefined) l.color = patch.color
+    if (patch.opacity !== undefined) l.opacity = patch.opacity
+    if (patch.visible !== undefined) l.visible = patch.visible
+    if (needRebuild) {
+      this.rebuildMapMesh()
+    } else {
+      if (l.mesh) {
+        l.mesh.visible = l.visible && l.mode !== 'mesh'
+        const m = l.mesh.material as THREE.MeshStandardMaterial
+        m.color.set(l.color)
+        m.opacity = l.opacity
+      }
+      if (l.wire) {
+        l.wire.visible = l.visible && l.mode !== 'surface'
+        ;(l.wire.material as THREE.LineBasicMaterial).color.set(l.color)
+      }
+    }
+  }
+
+  /** 移除密度图层 */
+  removeDensityMap() {
+    this.disposeMapGeometry()
+  }
+
+  /** 密度图信息（UI 镜像用） */
+  getMapInfo() {
+    const l = this.mapLayer
+    if (!l) return null
+    return {
+      name: l.name, dims: l.dims, iso: l.iso, mode: l.mode, color: l.color,
+      opacity: l.opacity, visible: l.visible, triangles: l.triangles, truncated: l.truncated,
+      mean: l.mean, rms: l.rms, min: l.min, max: l.max, cell: l.cell,
+      // 体素尺寸 = 晶轴长 × 分数步长（裁剪后步长不变，不能用 cell/dims）
+      voxel: [l.cell.a * l.fracStep[0], l.cell.b * l.fracStep[1], l.cell.c * l.fracStep[2]] as [number, number, number],
+    }
+  }
+
+  private disposeMapGeometry() {
+    const l = this.mapLayer
+    if (!l) return
+    if (l.mesh) {
+      this.mapGroup.remove(l.mesh)
+      l.mesh.geometry.dispose()
+      ;(l.mesh.material as THREE.Material).dispose()
+      l.mesh = null
+    }
+    if (l.wire) {
+      this.mapGroup.remove(l.wire)
+      l.wire.geometry.dispose()
+      ;(l.wire.material as THREE.Material).dispose()
+      l.wire = null
+    }
+  }
+
+  /** marching cubes 等值面/网格重建（绝对级别 = mean + iso·rms；网格模式三角上限调低控内存） */
+  private rebuildMapMesh() {
+    const l = this.mapLayer
+    if (!l) return
+    this.disposeMapGeometry()
+    const level = l.mean + l.iso * l.rms
+    const [nx, ny, nz] = l.dims
+    // 面模式上限 60 万；网格模式上限 15 万（纯线渲染轻）
+    const cap = l.mode === 'mesh' ? 150_000 : 600_000
+    const res = marchingCubes(l.grid, nx, ny, nz, level, cap)
+    l.triangles = Math.floor(res.count / 3)
+    l.truncated = res.truncated
+    if (!res.count) return
+    // 叠加模式在高三角数时省略网格线（>25 万三角的 wire 线段过重，视觉噪声也大）
+    const skipWire = l.mode === 'both' && l.triangles > 250_000
+    // grid 索引 → 世界笛卡尔（PDB 正交化）：cart = O·(fracOrigin + step·grid)
+    const o = orthoMatrix(l.cell).o
+    const [fx, fy, fz] = l.fracOrigin
+    const [sx, sy, sz] = l.fracStep
+    const m = new THREE.Matrix4().set(
+      o[0] * sx, o[1] * sy, o[2] * sz, o[0] * fx + o[1] * fy + o[2] * fz,
+      o[3] * sx, o[4] * sy, o[5] * sz, o[3] * fx + o[4] * fy + o[5] * fz,
+      o[6] * sx, o[7] * sy, o[8] * sz, o[6] * fx + o[7] * fy + o[8] * fz,
+      0, 0, 0, 1,
+    )
+    if (l.mode !== 'mesh') {
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(res.positions, 3))
+      geo.setAttribute('normal', new THREE.BufferAttribute(res.normals, 3))
+      geo.applyMatrix4(m)
+      const mat = new THREE.MeshStandardMaterial({
+        color: l.color, transparent: true, opacity: l.opacity, depthWrite: false,
+        side: THREE.DoubleSide, roughness: 0.85, metalness: 0,
+      })
+      mat.clippingPlanes = this.clippingPlanes
+      const mesh = new THREE.Mesh(geo, mat)
+      mesh.renderOrder = 4
+      mesh.visible = l.visible
+      this.mapGroup.add(mesh)
+      l.mesh = mesh
+    }
+    if (l.mode !== 'surface' && !skipWire) {
+      // 三角边 → LineSegments（每三角 3 边 6 顶点；与 isomesh 等价）
+      const tris = Math.floor(res.count / 3)
+      const linePos = new Float32Array(tris * 18)
+      for (let t = 0; t < tris; t++) {
+        const p = t * 9
+        const q = t * 18
+        for (let e = 0; e < 3; e++) {
+          const a = p + e * 3
+          const b = p + ((e + 1) % 3) * 3
+          linePos[q + e * 6] = res.positions[a]
+          linePos[q + e * 6 + 1] = res.positions[a + 1]
+          linePos[q + e * 6 + 2] = res.positions[a + 2]
+          linePos[q + e * 6 + 3] = res.positions[b]
+          linePos[q + e * 6 + 4] = res.positions[b + 1]
+          linePos[q + e * 6 + 5] = res.positions[b + 2]
+        }
+      }
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(linePos, 3))
+      geo.applyMatrix4(m)
+      const mat = new THREE.LineBasicMaterial({
+        color: l.color, transparent: true, opacity: Math.min(1, l.opacity + 0.5), depthWrite: false,
+      })
+      mat.clippingPlanes = this.clippingPlanes
+      const wire = new THREE.LineSegments(geo, mat)
+      wire.renderOrder = 5
+      wire.visible = l.visible
+      this.mapGroup.add(wire)
+      l.wire = wire
+    }
+  }
+
   // ---------- 动画录制（WebM） ----------
 
   get isRecording(): boolean {
@@ -1569,12 +1966,20 @@ export class MolEngine {
     view.repContainer.add(build.group)
     view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, filtersKey]), build })
     this.pickablesCache = null
-    // 材质统一挂裁剪平面
+    // 材质统一挂裁剪平面；同时应用当前高光设置（新建材质也遵循 specular 开关）
     build.group.traverse(o => {
       const mesh = o as THREE.Mesh
       if (mesh.material) {
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-        for (const m of mats) (m as THREE.Material).clippingPlanes = this.clippingPlanes
+        for (const m of mats) {
+          ;(m as THREE.Material).clippingPlanes = this.clippingPlanes
+          const std = m as THREE.MeshStandardMaterial
+          if ('roughness' in std && this.settings) {
+            if (std.userData.rough0 === undefined) std.userData.rough0 = std.roughness
+            std.roughness = this.settings.specular ? std.userData.rough0 : 1
+            std.envMapIntensity = this.settings.specular ? 1 : 0
+          }
+        }
       }
     })
   }
@@ -1698,11 +2103,19 @@ export class MolEngine {
   // ---------- 设置 ----------
 
   private applySettings(settings: Settings) {
-    const changed = JSON.stringify(settings) !== JSON.stringify(this.settings)
+    const prev = this.settings
+    const changed = JSON.stringify(settings) !== JSON.stringify(prev)
     this.settings = settings
     if (!changed) return
     // 背景
     this.scene.background = new THREE.Color(settings.background)
+    // 灯光（倍率）
+    this.ambientLight.intensity = 0.12 * settings.lightAmbient
+    this.keyLight.intensity = 1.5 * settings.lightKey
+    this.fillLight.intensity = 0.45 * settings.lightFill
+    this.scene.environmentIntensity = settings.lightAmbient
+    // 高光开关切换 → 遍历已有材质调整（新 rep 构建时也会应用）
+    if (prev && prev.specular !== settings.specular) this.applySpecularAll(settings.specular)
     // 雾
     if (settings.fog) {
       if (!this.scene.fog) this.scene.fog = new THREE.Fog(new THREE.Color(settings.background), 50, 200)
@@ -1735,6 +2148,22 @@ export class MolEngine {
     const cap = settings.quality === 'high' ? 2 : settings.quality === 'medium' ? 1.5 : 1
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, cap))
     this.pickablesCache = null
+  }
+
+  /** 高光开关：遍历场景材质（粗糙度→1 且环境贴图贡献→0 消除镜面高光） */
+  private applySpecularAll(specular: boolean) {
+    this.scene.traverse(o => {
+      const mesh = o as THREE.Mesh
+      if (!mesh.material) return
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      for (const m of mats) {
+        const std = m as THREE.MeshStandardMaterial
+        if (!('roughness' in std)) continue
+        if (std.userData.rough0 === undefined) std.userData.rough0 = std.roughness
+        std.roughness = specular ? std.userData.rough0 : 1
+        std.envMapIntensity = specular ? 1 : 0
+      }
+    })
   }
 
   private setClippingInfinite() {
@@ -1801,6 +2230,95 @@ export class MolEngine {
     this.fitView()
   }
 
+  /** 对标 PyMOL orient：按 PCA 主轴对齐视角（最长轴→屏幕水平，次轴→垂直）再适配 */
+  orient(refs?: { structureId: string; indices?: number[] }[]): boolean {
+    const pts = this.collectFitPoints(refs)
+    if (pts.length < 3) return false
+    // 质心 + 协方差（3x3 对称）
+    const c = [0, 0, 0]
+    for (const p of pts) { c[0] += p[0]; c[1] += p[1]; c[2] += p[2] }
+    c[0] /= pts.length; c[1] /= pts.length; c[2] /= pts.length
+    const cov = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    for (const p of pts) {
+      const dx = p[0] - c[0], dy = p[1] - c[1], dz = p[2] - c[2]
+      cov[0] += dx * dx; cov[1] += dx * dy; cov[2] += dx * dz
+      cov[4] += dy * dy; cov[5] += dy * dz
+      cov[8] += dz * dz
+    }
+    cov[3] = cov[1]; cov[6] = cov[2]; cov[7] = cov[5]
+    const { vals, vecs } = eigenSymmetric3(cov)
+    if (!(vals[0] > 1e-9)) { this.fitView(refs); return true }
+    // 正交右手系：v1（最大方差）→屏幕 X，v2→Y(up)，v3 = v1×v2 →相机方向
+    const v1 = new THREE.Vector3(vecs[0][0], vecs[0][1], vecs[0][2]).normalize()
+    const v2 = new THREE.Vector3(vecs[1][0], vecs[1][1], vecs[1][2]).normalize()
+    const v3 = new THREE.Vector3().crossVectors(v1, v2).normalize()
+    const center = new THREE.Vector3(c[0], c[1], c[2])
+    const dist = Math.max(2, this.activeCamera.position.distanceTo(this.controls.target))
+    this.controls.target.copy(center)
+    this.activeCamera.up.copy(v2)
+    this.orthoCamera.up.copy(v2)
+    this.activeCamera.position.copy(center).addScaledVector(v3, dist)
+    if (this.activeCamera === this.orthoCamera) this.updateOrthoFrustum()
+    this.controls.update()
+    this.fitView(refs)
+    return true
+  }
+
+  /** 相机状态导出（get_view） */
+  getCameraState(): { pos: number[]; target: number[]; up: number[]; fov: number; ortho: boolean } {
+    const cam = this.activeCamera
+    return {
+      pos: cam.position.toArray().map(v => +v.toFixed(4)),
+      target: this.controls.target.toArray().map(v => +v.toFixed(4)),
+      up: cam.up.toArray().map(v => +v.toFixed(4)),
+      fov: this.camera.fov,
+      ortho: this.settings?.ortho ?? false,
+    }
+  }
+
+  /** 相机状态导入（set_view；JSON 文本解析后调用） */
+  setCameraState(s: { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }) {
+    if (Array.isArray(s.pos) && s.pos.length === 3) this.activeCamera.position.fromArray(s.pos)
+    if (Array.isArray(s.target) && s.target.length === 3) this.controls.target.fromArray(s.target)
+    if (Array.isArray(s.up) && s.up.length === 3) {
+      this.activeCamera.up.fromArray(s.up).normalize()
+      this.orthoCamera.up.copy(this.activeCamera.up)
+    }
+    if (typeof s.fov === 'number' && s.fov > 5 && s.fov < 120) {
+      this.camera.fov = s.fov
+      this.camera.updateProjectionMatrix()
+    }
+    this.controls.update()
+    if (typeof s.ortho === 'boolean' && this.settings && s.ortho !== this.settings.ortho) {
+      useMolStore.getState().updateSettings({ ortho: s.ortho })
+    }
+  }
+
+  /** fitView 取点抽出（orient 复用） */
+  private collectFitPoints(refs?: { structureId: string; indices?: number[] }[]): number[][] {
+    const state = useMolStore.getState()
+    const pts: number[][] = []
+    if (refs && refs.length) {
+      for (const ref of refs) {
+        const data = dataRegistry.get(ref.structureId)
+        if (!data) continue
+        if (ref.indices && ref.indices.length) {
+          for (const i of ref.indices) pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+        } else {
+          for (let i = 0; i < data.atoms.count; i++) pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+        }
+      }
+    } else {
+      for (const entry of state.structures) {
+        if (!entry.visible) continue
+        const data = dataRegistry.get(entry.id)
+        if (!data) continue
+        for (let i = 0; i < data.atoms.count; i++) pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+      }
+    }
+    return pts
+  }
+
   // ---------- 截图 ----------
 
   capture(opts: { scale?: number; transparent?: boolean } = {}): string {
@@ -1857,6 +2375,10 @@ export class MolEngine {
       for (const rv of view.reps.values()) rv.build.dispose()
     }
     this.views.clear()
+    this.symmetryGroups.clear()
+    this.disposeMapGeometry()
+    this.stereoEffect?.dispose()
+    this.stereoEffect = null
     this.disposeComposer()
     if (this.recorder && this.recorder.state === 'recording') {
       try { this.recorder.stop() } catch { /* ignore */ }

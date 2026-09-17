@@ -182,13 +182,34 @@ class Evaluator {
     const values: string[] = []
     const first = this.next()
     if (!first) return { error: '缺少参数值' }
-    values.push(String((first as { v: string | number }).v))
-    // 支持 a+b+c 与 resi 1-100（'-' 由谓词内部处理）
-    while (this.peek()?.t === 'punct' && ['+', '-'].includes((this.peek() as { v: string }).v)) {
-      const p = this.next() as { v: string }
+    // 负数首值：'-5'（'-' 是独立 punct）
+    if (first.t === 'punct' && first.v === '-') {
       const v = this.next()
-      if (!v) return { error: '列表不完整' }
-      values.push(p.v === '-' ? `-${v.v}` : String(v.v))
+      if (!v) return { error: '缺少参数值' }
+      values.push(`-${(v as { v: number | string }).v}`)
+    } else {
+      values.push(String((first as { v: string | number }).v))
+    }
+    // 支持 a+b+c 列表与 a-b 范围：'-' 与前一个数值组合成范围串（'60-120'），
+    // 非数值前项则视为负数列表项（'-5'）
+    for (;;) {
+      const p = this.peek()
+      if (!p || p.t !== 'punct' || (p.v !== '+' && p.v !== '-')) break
+      this.next()
+      const v = this.next()
+      if (!v) return { error: '列表/范围不完整' }
+      const val = String((v as { v: string | number }).v)
+      if (p.v === '+') {
+        values.push(val)
+      } else {
+        const last = values[values.length - 1]
+        if (/^-?\d+$/.test(last)) {
+          // 范围：60-120（允许负端点 -5--1）
+          values[values.length - 1] = `${last}-${val}`
+        } else {
+          values.push(`-${val}`)
+        }
+      }
     }
     return values
   }

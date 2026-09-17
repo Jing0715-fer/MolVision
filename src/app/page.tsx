@@ -13,10 +13,10 @@ import { HelpDialog } from '@/components/studio/HelpDialog'
 const MolViewer = dynamic(() => import('@/components/molecular/MolViewer'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-[#101215]">
+    <div className="flex h-full w-full items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3">
         <span className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-        <span className="text-xs text-zinc-500">正在初始化渲染引擎…</span>
+        <span className="text-xs text-muted-foreground">正在初始化渲染引擎…</span>
       </div>
     </div>
   ),

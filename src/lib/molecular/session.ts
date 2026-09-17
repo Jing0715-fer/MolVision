@@ -18,6 +18,8 @@ interface SessionStructure {
   visible: boolean
   /** 叠合累计刚体变换（恢复时重放） */
   transform?: RigidTransform
+  /** 晶体对称伴侣（恢复时重放生成） */
+  symmetry?: { radius: number; count: number }
 }
 
 interface SessionData {
@@ -59,6 +61,7 @@ export function saveSession(): boolean {
       colorOverrides: st.colorOverrides,
       visible: st.visible,
       transform: st.transform,
+      symmetry: st.symmetry,
     })
   }
   // 防脱节保护：内存有结构但全部拿不到源文本（HMR 模块替换后 textRegistry 重建、
@@ -145,6 +148,10 @@ export function restoreSession(): number {
           ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible, transform: ss.transform }
           : x),
       }))
+      // 重放对称伴侣（引擎视图就绪后由 sync 构建；此处仅写入设置）
+      if (ss.symmetry?.radius && ss.symmetry.radius > 0) {
+        engineRef.current?.updateSymmetry(id, ss.symmetry.radius)
+      }
       restored++
     } catch { /* 单结构失败不阻断 */ }
   })

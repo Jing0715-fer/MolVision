@@ -1,7 +1,7 @@
 'use client'
 
 // 帮助对话框：快捷键、鼠标操作、快速上手
-import { MousePointer2, Keyboard, Lightbulb, FlaskConical } from 'lucide-react'
+import { MousePointer2, Keyboard, Lightbulb, FlaskConical, Wand2 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -97,14 +97,31 @@ export function HelpDialog() {
 
           <section>
             <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
-              <FlaskConical className="h-3.5 w-3.5 text-violet-500" /> 结构分析
+              <FlaskConical className="h-3.5 w-3.5 text-violet-500" /> 结构分析与晶体学
             </h3>
             <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
               <p><span className="font-semibold text-foreground">叠合</span>：结构卡片 ⧉ 按钮或「叠合 (matchmaker)」面板，支持手动指定链对（<code className="rounded bg-muted px-1 font-mono text-[10px]">superpose 4HHB onto 1A3N chain A to A</code>）；<code className="rounded bg-muted px-1 font-mono text-[10px]">untransform</code> 撤销。</p>
+              <p><span className="font-semibold text-foreground">电子密度</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">map fetch 3ekj</code> 从 RCSB 结构因子实时合成 2Fo−Fc 图（模型相位 + 3D FFT）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel 1.5</code> 调级；也可拖入 .ccp4/.mrc 文件；密度图面板（左侧 🧮）可视化等值面/网格。</p>
+              <p><span className="font-semibold text-foreground">对称伴侣</span>：结构面板「对称伴侣」区块或 <code className="rounded bg-muted px-1 font-mono text-[10px]">symmetry 20</code>，按 CRYST1 空间群（65 手性群全覆盖）生成晶格邻居。</p>
               <p><span className="font-semibold text-foreground">界面接触</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">contacts chain A | chain B</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">interface A B</code>——残基对连线 + 2D 图谱 + ΔSASA 埋藏面积。</p>
               <p><span className="font-semibold text-foreground">跨结构接触</span>：superpose 后用 <code className="rounded bg-muted px-1 font-mono text-[10px]">xcontacts 1UBQ:chain A | 1D3Z:chain A</code> 检测复合物界面。</p>
               <p><span className="font-semibold text-foreground">SASA / DSSP</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">sasa</code> 溶剂可及面积（可 <code className="rounded bg-muted px-1 font-mono text-[10px]">color sasa</code> 暴露度着色）；<code className="rounded bg-muted px-1 font-mono text-[10px]">dssp</code> 重算二级结构。</p>
+              <p><span className="font-semibold text-foreground">对象工作流</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">create pocket = within 5 of resn HEM</code> 把选择提升为独立对象；<code className="rounded bg-muted px-1 font-mono text-[10px]">split_chains</code> 按链拆分；<code className="rounded bg-muted px-1 font-mono text-[10px]">save out.pdb chain A</code> 导出坐标。</p>
               <p><span className="font-semibold text-foreground">配体工作流</span>：结构面板配体行 →「口袋」一键选中该配体 4.5Å 结合位点（<code className="rounded bg-muted px-1 font-mono text-[10px]">byres (within 4.5 of resn HEM)</code>）；序列条底部配体行可逐个分子选择/聚焦；右键菜单「周围环境」从任意原子出发。</p>
+            </div>
+          </section>
+
+          <Separator />
+
+          <section>
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
+              <Wand2 className="h-3.5 w-3.5 text-sky-500" /> 渲染与视图
+            </h3>
+            <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+              <p><span className="font-semibold text-foreground">灯光</span>：场景面板「灯光与渲染」或 <code className="rounded bg-muted px-1 font-mono text-[10px]">set ambient 0.5 / set direct 2 / set specular off</code>（哑光论文图风格）。</p>
+              <p><span className="font-semibold text-foreground">立体</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">stereo on</code> 红蓝立体（工具栏 👓）。</p>
+              <p><span className="font-semibold text-foreground">视角</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">orient</code> 主轴对齐；<code className="rounded bg-muted px-1 font-mono text-[10px]">get_view</code> / <code className="rounded bg-muted px-1 font-mono text-[10px]">set_view</code> 视角导出恢复（JSON）；<code className="rounded bg-muted px-1 font-mono text-[10px]">png 4</code> 导出 4× 截图。</p>
+              <p><span className="font-semibold text-foreground">实用着色</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">util cbc</code> 按链 · <code className="rounded bg-muted px-1 font-mono text-[10px]">util cbaw</code> 元素+白碳（白底论文图） · <code className="rounded bg-muted px-1 font-mono text-[10px]">util ss</code> 二级结构。</p>
             </div>
           </section>
 

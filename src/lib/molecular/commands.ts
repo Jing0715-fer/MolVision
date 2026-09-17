@@ -1,5 +1,5 @@
-// PyMOL 风格命令行：select / show / hide / color / bg / zoom / spin / slab / label ...
-import { PRESETS, useMolStore, engineRef, dataRegistry } from './store'
+// PyMOL 风格命令行：select / show / hide / color / bg / zoom / spin / slab / label / create / map / symmetry / stereo ...
+import { PRESETS, useMolStore, engineRef, dataRegistry, buildNamedMasks } from './store'
 import { saveSession, clearSession, sessionInfo } from './session'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
@@ -8,6 +8,11 @@ import { useRecordStore } from './record-store'
 import { runContactAnalysis, runBuriedSasa, runCrossContactAnalysis } from './contacts'
 import { useContactStore } from './contacts-store'
 import { useSasaStore } from './sasa-store'
+import { subsetStructure } from './parser'
+import { structureToPdbText } from './pdbwriter'
+import { textRegistry } from './text-registry'
+import { evaluateSelection, maskToIndices } from './selection'
+import { fetchAndComputeMap, removeMap, setMapLook } from './map-load'
 
 /** 数值裁剪（NaN 时取默认值） */
 function clampNum(v: number, min: number, max: number, dflt: number): number {
@@ -35,15 +40,25 @@ const SCHEME_ALIASES: Record<string, ColorScheme> = {
 
 export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'load <id>', desc: '从 RCSB 加载 PDB 结构', example: 'load 4hhb' },
+  { cmd: 'create <名> = <选择>', desc: '从选择创建新对象', example: 'create pocket = within 5 of resn HEM' },
+  { cmd: 'split_chains', desc: '按链组拆分为多个对象', example: 'split_chains' },
   { cmd: 'select [name=]expr', desc: '选择原子（可命名）', example: 'select site = within 5 of resn HEM' },
   { cmd: 'show <rep> [sel]', desc: '为当前结构添加表示法', example: 'show cartoon chain A' },
   { cmd: 'hide <rep> [sel]', desc: '移除匹配的表示法', example: 'hide lines' },
   { cmd: 'color <方案|颜色> [sel]', desc: '给选择上色', example: 'color red chain A' },
+  { cmd: 'util cbc|cnc|ss|cbaw', desc: '实用着色（链/灰/二级结构/元素+白碳）', example: 'util cbc' },
+  { cmd: 'set <项> <值>', desc: '渲染设置（灯光/fov/质量…）', example: 'set ambient 0.5' },
   { cmd: 'bg <颜色>', desc: '设置背景色', example: 'bg black' },
   { cmd: 'zoom [sel]', desc: '缩放到选择/全部', example: 'zoom ligand' },
+  { cmd: 'orient [sel]', desc: '主轴对齐视角（PCA）', example: 'orient chain A' },
+  { cmd: 'get_view / set_view', desc: '视角导出/恢复（JSON）', example: 'get_view' },
+  { cmd: 'count_atoms [expr]', desc: '统计原子数', example: 'count_atoms chain A' },
   { cmd: 'spin on|off', desc: '自动旋转', example: 'spin on' },
   { cmd: 'rock on|off', desc: '相机摇摆（±26°）', example: 'rock on' },
   { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
+  { cmd: 'stereo on|off', desc: '红蓝立体渲染', example: 'stereo on' },
+  { cmd: 'symmetry <半径Å>|off', desc: '晶体对称伴侣（CRYST1）', example: 'symmetry 25' },
+  { cmd: 'map fetch <id>|iso|mesh…', desc: '电子密度图（SF→FFT 合成）', example: 'map fetch 3ekj' },
   { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
   { cmd: 'ssao on|off [r]', desc: '环境光遮蔽开关/半径', example: 'ssao on 3' },
   { cmd: 'superpose <名> [onto <名>] [chain X to Y]', desc: '结构叠合（序列比对+刚体拟合，可选链对）', example: 'superpose 4HHB onto 1A3N chain A to A' },
@@ -56,6 +71,8 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'untransform [名]', desc: '撤销叠合变换回原始位姿', example: 'untransform 1D3Z' },
   { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
+  { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
+  { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
   { cmd: 'session save|info|clear', desc: '会话存档管理', example: 'session save' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
   { cmd: 'preset <名>', desc: '应用风格预设', example: 'preset surface' },
@@ -275,8 +292,361 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'orient') {
-    engineRef.current?.fitView()
-    return ok('视角已重置')
+    // 主轴对齐（PyMOL orient：PCA）；可带选择表达式
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    const rest = input.slice(parts[0].length).trim()
+    if (rest) {
+      const s = useMolStore.getState()
+      if (!s.activeId) return err('没有活动结构')
+      const data = dataRegistry.get(s.activeId)
+      if (!data) return err('结构数据不存在')
+      const named = buildNamedMasks(s.activeId, data)
+      const r = evaluateSelection(rest, { structure: data, named })
+      if (r.error) return err(`选择错误: ${r.error}`)
+      const indices = maskToIndices(r.mask)
+      if (!indices.length) return err('选择为空')
+      eng.orient([{ structureId: s.activeId, indices }])
+      return ok(`已按主轴对齐视角（${indices.length.toLocaleString()} 个原子，PCA）`)
+    }
+    eng.orient()
+    return ok('已按主轴对齐视角（全部可见结构）')
+  }
+
+  if (cmd === 'get_view') {
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    const st = eng.getCameraState()
+    ok(JSON.stringify(st))
+    return ok('↑ 复制此 JSON，用 set_view <JSON> 可恢复该视角（支持跨会话）')
+  }
+
+  if (cmd === 'set_view') {
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    const rest = input.slice(parts[0].length).trim()
+    if (!rest) return err('用法：set_view {"pos":[..],"target":[..],"up":[..]}（JSON 来自 get_view）')
+    try {
+      const parsed = JSON.parse(rest) as { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }
+      eng.setCameraState(parsed)
+      return ok('视角已恢复')
+    } catch {
+      return err('JSON 解析失败——请粘贴 get_view 输出的完整 JSON')
+    }
+  }
+
+  if (cmd === 'count_atoms' || cmd === 'count') {
+    const rest = input.slice(parts[0].length).trim()
+    const s = useMolStore.getState()
+    if (!rest) {
+      let n = 0
+      for (const x of s.structures) {
+        if (!x.visible) continue
+        n += dataRegistry.get(x.id)?.atoms.count ?? 0
+      }
+      return ok(`可见结构共 ${n.toLocaleString()} 个原子（${s.structures.filter(x => x.visible).length} 个对象）`)
+    }
+    if (!s.activeId) return err('没有活动结构')
+    const data = dataRegistry.get(s.activeId)
+    if (!data) return err('结构数据不存在')
+    const named = buildNamedMasks(s.activeId, data)
+    const r = evaluateSelection(rest, { structure: data, named })
+    if (r.error) return err(`选择错误: ${r.error}`)
+    return ok(`选择包含 ${r.count.toLocaleString()} 个原子（不改变当前选择）`)
+  }
+
+  if (cmd === 'create') {
+    // create <名> = <选择>：从选择创建新对象（PyMOL 核心工作流）
+    const rest = input.slice(parts[0].length).trim()
+    const m = rest.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/)
+    if (!m) return err('用法：create <新对象名> = <选择表达式>，如 create pocket = within 5 of resn HEM')
+    const name = m[1]
+    const expr = m[2].trim()
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有活动结构')
+    const data = dataRegistry.get(s.activeId)
+    const entry = s.structures.find(x => x.id === s.activeId)
+    if (!data || !entry) return err('结构数据不存在')
+    const named = buildNamedMasks(s.activeId, data)
+    const r = evaluateSelection(expr, { structure: data, named })
+    if (r.error) return err(`选择错误: ${r.error}`)
+    if (r.count === 0) return err('选择为空（0 个原子）')
+    const indices = maskToIndices(r.mask)
+    try {
+      const t0 = performance.now()
+      const sub = subsetStructure(data, indices, name)
+      const ms = performance.now() - t0
+      const id = useMolStore.getState().addStructure(sub, name, ms)
+      // 生成 PDB 文本登记（会话持久化用；坐标为当前世界坐标）
+      textRegistry.set(id, structureToPdbText(sub))
+      useMolStore.getState().appendLog('out', `已创建对象 ${name}：${sub.atoms.count.toLocaleString()} 原子 · ${sub.residues.length} 残基 · ${ms.toFixed(0)} ms（源：${entry.name}）`)
+      return ok(`对象 "${name}" 已创建（${r.count.toLocaleString()} 原子）——可用 show/color 独立控制，已自动登记进会话存档`)
+    } catch (e) {
+      return err(`创建失败：${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  if (cmd === 'split_chains' || cmd === 'splitchains') {
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有活动结构')
+    const data = dataRegistry.get(s.activeId)
+    const entry = s.structures.find(x => x.id === s.activeId)
+    if (!data || !entry) return err('结构数据不存在')
+    const groups = data.chains.filter(c => c.type !== 'water')
+    if (!groups.length) return err('没有非水链组可拆分')
+    if (groups.length > 24) return err(`链组过多（${groups.length}）——请先用 create 缩小结构再拆分`)
+    // 重名链 ID 加序号（4HHB 同 ID 多组场景）
+    const seen = new Map<string, number>()
+    let created = 0
+    const skippedWater = data.chains.length - groups.length
+    for (const c of groups) {
+      const base = (c.id || 'X').trim() || 'X'
+      const n = (seen.get(base) ?? 0) + 1
+      seen.set(base, n)
+      const name = `${entry.name}_${base}${n > 1 ? `#${n}` : ''}`
+      const idx: number[] = []
+      for (let i = c.start; i < c.end; i++) idx.push(i)
+      try {
+        const sub = subsetStructure(data, idx, name)
+        const id = useMolStore.getState().addStructure(sub, name, 0)
+        textRegistry.set(id, structureToPdbText(sub))
+        created++
+      } catch {
+        // 单链失败不阻断
+      }
+    }
+    return ok(`已拆分为 ${created} 个对象（跳过 ${skippedWater} 个水链组；重名链 ID 已加 # 序号）——对象在结构面板中独立可控`)
+  }
+
+  if (cmd === 'util') {
+    const sub = (parts[1] ?? '').toLowerCase()
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有活动结构')
+    const entry = s.structures.find(x => x.id === s.activeId)
+    const data = entry ? dataRegistry.get(s.activeId) : null
+    if (!entry || !data) return err('结构数据不存在')
+    if (sub === 'cbc' || sub === 'chain') {
+      s.applyColor('chain')
+      return ok('已按链着色（util.cbc）')
+    }
+    if (sub === 'cnc') {
+      s.applyColor('#b7bcc3')
+      return ok('已整体灰化（util.cnc）')
+    }
+    if (sub === 'ss') {
+      s.applyColor('ss')
+      return ok('已按二级结构着色（util.ss：螺旋红 · 折叠黄 · 环灰）')
+    }
+    if (sub === 'cbaw' || sub === 'cbac') {
+      // 元素着色 + 碳改白/灰（PyMOL 论文图风格：白底黑碳）
+      s.applyColor('element')
+      const st = useMolStore.getState()
+      const e2 = st.structures.find(x => x.id === st.activeId)
+      if (!e2) return err('结构数据不存在')
+      const scope = st.selection.structureId === e2.id && st.selection.indices.length ? new Set(st.selection.indices) : null
+      const overrides = { ...e2.colorOverrides }
+      const hex = sub === 'cbaw' ? '#f7f8fa' : '#a9aeb5'
+      let n = 0
+      for (let i = 0; i < data.atoms.count; i++) {
+        if (data.atoms.elements[i] !== 'C') continue
+        if (scope && !scope.has(i)) continue
+        overrides[i] = hex
+        n++
+      }
+      useMolStore.setState(s2 => ({
+        structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
+        visualRev: s2.visualRev + 1,
+      }))
+      return ok(`已按元素着色 + 碳${sub === 'cbaw' ? '白' : '灰'}（util.${sub}，${n.toLocaleString()} 个碳原子）——适合白底论文图`)
+    }
+    return err('用法：util cbc | cnc | ss | cbaw | cbac（按链 / 灰化 / 二级结构 / 元素+白碳 / 元素+灰碳）')
+  }
+
+  if (cmd === 'set') {
+    const key = (parts[1] ?? '').toLowerCase()
+    const rawVal = parts.slice(2).join(' ').trim()
+    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / transparency / sphere_scale / stick_radius / cartoon_width')
+    const s = useMolStore.getState()
+    const num = parseFloat(rawVal)
+    const on = ['on', '1', 'true', 'open'].includes(rawVal.toLowerCase())
+    const off = ['off', '0', 'false', 'close'].includes(rawVal.toLowerCase())
+    if (num === 0 && !on && !off && rawVal !== '0') { /* 非数值非开关，稍后报错 */ }
+    const repPatch = (patch: Partial<import('./types').RepConfig>) => {
+      const st = useMolStore.getState()
+      const entry = st.structures.find(x => x.id === st.activeId)
+      if (!entry) return 0
+      let n = 0
+      for (const r of entry.reps) {
+        if (patch.opacity !== undefined && r.type !== 'surface') continue
+        if ((patch.ballScale !== undefined) && r.type !== 'spacefill' && r.type !== 'ballstick') continue
+        if ((patch.stickRadius !== undefined) && r.type !== 'sticks' && r.type !== 'ballstick') continue
+        if ((patch.cartoonWidth !== undefined) && r.type !== 'cartoon') continue
+        st.updateRep(entry.id, r.id, patch)
+        n++
+      }
+      return n
+    }
+    switch (key) {
+      case 'ambient': {
+        if (isNaN(num)) return err('用法：set ambient <0-2>，默认 1')
+        s.updateSettings({ lightAmbient: clampNum(num, 0, 2, 1) })
+        return ok(`环境光 → ${clampNum(num, 0, 2, 1)}（含环境贴图贡献）`)
+      }
+      case 'direct': case 'key': {
+        if (isNaN(num)) return err('用法：set direct <0-3>，默认 1')
+        s.updateSettings({ lightKey: clampNum(num, 0, 3, 1) })
+        return ok(`主光强度 → ${clampNum(num, 0, 3, 1)}`)
+      }
+      case 'fill': {
+        if (isNaN(num)) return err('用法：set fill <0-2>，默认 1')
+        s.updateSettings({ lightFill: clampNum(num, 0, 2, 1) })
+        return ok(`补光强度 → ${clampNum(num, 0, 2, 1)}`)
+      }
+      case 'specular': {
+        if (!on && !off) return err('用法：set specular on|off（关闭后无镜面高光，哑光质感）')
+        s.updateSettings({ specular: on })
+        return ok(`高光 ${on ? '开启' : '关闭'}（set specular off 得到哑光/论文风格渲染）`)
+      }
+      case 'fog': {
+        if (!on && !off) return err('用法：set fog on|off')
+        s.updateSettings({ fog: on })
+        return ok(`雾效 ${on ? '开启（远端淡化）' : '关闭'}`)
+      }
+      case 'fog_strength': case 'fog_density': {
+        if (isNaN(num)) return err('用法：set fog_strength <0-1>')
+        s.updateSettings({ fog: true, fogStrength: clampNum(num, 0, 1, 0.5) })
+        return ok(`雾强度 → ${clampNum(num, 0, 1, 0.5)}（雾效已开启）`)
+      }
+      case 'fov': case 'field_of_view': {
+        if (isNaN(num)) return err('用法：set fov <10-100>，默认 45')
+        s.updateSettings({ fov: clampNum(num, 10, 100, 45) })
+        return ok(`视场角 → ${clampNum(num, 10, 100, 45)}°（小值≈长焦）`)
+      }
+      case 'spin_speed': {
+        if (isNaN(num)) return err('用法：set spin_speed <0.5-20>')
+        s.updateSettings({ spinSpeed: clampNum(num, 0.5, 20, 2) })
+        return ok(`旋转速度 → ${clampNum(num, 0.5, 20, 2)}`)
+      }
+      case 'quality': {
+        const q = rawVal.toLowerCase()
+        if (!['low', 'medium', 'high'].includes(q)) return err('用法：set quality low|medium|high')
+        s.updateSettings({ quality: q as 'low' | 'medium' | 'high' })
+        return ok(`画质 → ${q}（像素比与几何细分）`)
+      }
+      case 'stereo': {
+        if (!on && !off) return err('用法：set stereo on|off 或 stereo on|off')
+        s.updateSettings({ stereo: on })
+        return ok(on ? '红蓝立体开启（佩戴红蓝 3D 眼镜；GTAO 暂停）' : '立体渲染关闭')
+      }
+      case 'transparency': case 'surface_opacity': {
+        if (isNaN(num)) return err('用法：set transparency <0-1>（0=不透明，作用于表面表示）')
+        const opacity = clampNum(1 - num, 0.05, 1, 0.6)
+        const n = repPatch({ opacity })
+        return n ? ok(`表面不透明度 → ${opacity.toFixed(2)}（${n} 个表面表示）`) : err('当前结构没有表面表示（先 show surface）')
+      }
+      case 'sphere_scale': case 'ball_scale': {
+        if (isNaN(num)) return err('用法：set sphere_scale <0.2-3>')
+        const n = repPatch({ ballScale: clampNum(num, 0.2, 3, 1) })
+        return n ? ok(`球体倍率 → ${clampNum(num, 0.2, 3, 1)}（${n} 个表示）`) : err('没有球体类表示（spacefill / ballstick）')
+      }
+      case 'stick_radius': {
+        if (isNaN(num)) return err('用法：set stick_radius <0.05-0.5 Å>')
+        const n = repPatch({ stickRadius: clampNum(num, 0.05, 0.5, 0.16) })
+        return n ? ok(`棍半径 → ${clampNum(num, 0.05, 0.5, 0.16)} Å（${n} 个表示）`) : err('没有棍类表示（sticks / ballstick）')
+      }
+      case 'cartoon_width': {
+        if (isNaN(num)) return err('用法：set cartoon_width <0.3-4>')
+        const n = repPatch({ cartoonWidth: clampNum(num, 0.3, 4, 1) })
+        return n ? ok(`cartoon 宽度 → ${clampNum(num, 0.3, 4, 1)}（${n} 个表示）`) : err('没有 cartoon 表示')
+      }
+      default:
+        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, transparency, sphere_scale, stick_radius, cartoon_width`)
+    }
+  }
+
+  if (cmd === 'stereo') {
+    const arg = (parts[1] ?? 'on').toLowerCase()
+    const on = arg === 'on' || arg === '1' || arg === 'true'
+    useMolStore.getState().updateSettings({ stereo: on })
+    return ok(on ? '红蓝立体开启（佩戴红蓝 3D 眼镜观看；GTAO 在立体模式下暂停）' : '立体渲染关闭')
+  }
+
+  if (cmd === 'symmetry' || cmd === 'symmates') {
+    const s = useMolStore.getState()
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    let argStr = input.slice(parts[0].length).trim()
+    let targetId = s.activeId
+    // 首 token 若为结构名（非数字非 off）→ 指定结构
+    const first = (argStr.split(/\s+/)[0] ?? '').toLowerCase()
+    const isNumOrOff = first === 'off' || first === '' || !isNaN(parseFloat(first))
+    if (!isNumOrOff && first) {
+      const found = s.structures.find(x => x.name.toLowerCase().startsWith(first) || x.meta.pdbId?.toLowerCase() === first)
+      if (!found) return err(`未找到结构 "${first}"（可用：${s.structures.map(x => x.name).join('、')}）`)
+      targetId = found.id
+      argStr = argStr.slice(first.length).trim()
+    }
+    if (!targetId) return err('没有活动结构')
+    if (argStr === 'off' || argStr === '0') {
+      const r = eng.updateSymmetry(targetId, 0)
+      return r.ok ? ok(r.message) : err(r.message)
+    }
+    const radius = clampNum(parseFloat(argStr), 5, 80, 20)
+    const r = eng.updateSymmetry(targetId, radius)
+    if (!r.ok) return err(r.message)
+    ok(r.message)
+    ok('对称伴侣为视觉副本（不参与拾取/选择）；结构面板可调半径或关闭')
+    return
+  }
+
+  if (cmd === 'map') {
+    const sub = (parts[1] ?? '').toLowerCase()
+    if (sub === 'fetch' || sub === 'load' || sub === 'calc' || sub === 'compute') {
+      const idArg = parts[2]
+      if (idArg && /^[0-9][a-z0-9]{3}$/i.test(idArg)) {
+        void fetchAndComputeMap(idArg)
+        return ok(`正在获取 ${idArg.toUpperCase()} 结构因子并合成 2Fo−Fc 密度图（模型相位 + 3D FFT）…`)
+      }
+      const s = useMolStore.getState()
+      const pid = s.structures.find(x => x.id === s.activeId)?.meta.pdbId
+      if (!pid) return err('用法：map fetch <PDB编号>（或先加载有编号的结构，再 map fetch）')
+      void fetchAndComputeMap(pid)
+      return ok(`正在获取 ${pid} 结构因子并合成 2Fo−Fc 密度图…`)
+    }
+    if (sub === 'isolevel' || sub === 'iso' || sub === 'level') {
+      const v = parseFloat(parts[2] ?? '')
+      if (isNaN(v) || v < 0.2 || v > 8) return err('用法：map isolevel <σ 0.2-8>，如 map isolevel 1.5')
+      setMapLook({ iso: v })
+      return ok(`等值面级别 → ${v} σ（1σ≈噪声基准，1.5-2σ 常规骨架）`)
+    }
+    if (sub === 'mesh') { setMapLook({ mode: 'mesh' }); return ok('密度图切换为网格 isomesh') }
+    if (sub === 'surface') { setMapLook({ mode: 'surface' }); return ok('密度图切换为实体面 isosurface') }
+    if (sub === 'both') { setMapLook({ mode: 'both' }); return ok('密度图切换为网格+面叠加') }
+    if (sub === 'off' || sub === 'close' || sub === 'remove') { removeMap(); return ok('密度图已移除') }
+    if (sub === 'hide') { setMapLook({ visible: false }); return ok('密度图已隐藏（map show 恢复）') }
+    if (sub === 'show') { setMapLook({ visible: true }); return ok('密度图已显示') }
+    const info = engineRef.current?.getMapInfo()
+    if (!info) {
+      return err('未加载密度图。用法：map fetch <PDB编号> | isolevel <σ> | mesh | surface | both | hide | show | off（也可拖入 .ccp4/.map/.mrc 文件）')
+    }
+    return ok(`密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString()} 三角形 · ${info.iso} σ · 模式 ${info.mode}${info.truncated ? '（已截断）' : ''} · rms ${info.rms.toFixed(3)}`)
+  }
+
+  if (cmd === 'png') {
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    const scale = clampNum(parseFloat(parts[1]), 1, 4, 2)
+    const s = useMolStore.getState()
+    try {
+      const url = eng.capture({ scale })
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${s.structures[0]?.name ?? 'molvision'}${scale > 1 ? `@${scale}x` : ''}.png`
+      a.click()
+      return ok(`已导出 PNG（${scale}× 分辨率）`)
+    } catch {
+      return err('截图失败')
+    }
   }
 
   if (cmd === 'hbonds' || cmd === 'hbond' || cmd === 'hbon') {
@@ -574,7 +944,7 @@ export function runCommand(raw: string): void {
     return err('用法：record start | record stop')
   }
 
-  if (cmd === 'session' || cmd === 'save') {
+  if (cmd === 'session' || (cmd === 'save' && !(parts[1] ?? '').toLowerCase().endsWith('.pdb') && !(parts[1] ?? '').toLowerCase().endsWith('.ent'))) {
     const sub = (parts[1] ?? (cmd === 'save' ? 'save' : 'info')).toLowerCase()
     if (cmd === 'save' || sub === 'save') {
       const okSaved = saveSession()
@@ -586,6 +956,43 @@ export function runCommand(raw: string): void {
       return ok('会话存档已清除（下次刷新不再恢复）')
     }
     return ok(sessionInfo())
+  }
+
+  if (cmd === 'save') {
+    // save <名>.pdb [选择]：坐标导出（PyMOL save）
+    const fileName = parts[1] ?? ''
+    if (!fileName.toLowerCase().endsWith('.pdb') && !fileName.toLowerCase().endsWith('.ent')) {
+      return err('用法：save <文件名>.pdb [选择表达式]（导出坐标）；会话存档用 session save')
+    }
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有活动结构')
+    const data = dataRegistry.get(s.activeId)
+    const entry = s.structures.find(x => x.id === s.activeId)
+    if (!data || !entry) return err('结构数据不存在')
+    const expr = parts.slice(2).join(' ').trim()
+    let outData = data
+    let atomCount = data.atoms.count
+    if (expr) {
+      const named = buildNamedMasks(s.activeId, data)
+      const r = evaluateSelection(expr, { structure: data, named })
+      if (r.error) return err(`选择错误: ${r.error}`)
+      if (r.count === 0) return err('选择为空')
+      try {
+        outData = subsetStructure(data, maskToIndices(r.mask), entry.name)
+        atomCount = outData.atoms.count
+      } catch (e) {
+        return err(`导出失败：${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    const text = structureToPdbText(outData)
+    const blob = new Blob([text], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName.toLowerCase().endsWith('.ent') ? fileName : fileName.replace(/\.[^.]*$/, '') + '.pdb'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 5000)
+    return ok(`已导出 ${atomCount.toLocaleString()} 个原子 → ${a.download}${expr ? `（选择：${expr}）` : ''}（世界坐标，含 CRYST1）`)
   }
 
   if (cmd === 'ensemble' || cmd === 'ens') {

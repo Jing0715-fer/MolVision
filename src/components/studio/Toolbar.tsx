@@ -6,7 +6,7 @@ import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
   Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop,
-  Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d,
+  Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
@@ -195,6 +195,32 @@ export function Toolbar() {
             </button>
           </TooltipTrigger>
           <TooltipContent>自动旋转 (S)</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => engineRef.current?.orient()}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            >
+              <Compass className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>主轴对齐视角 (PyMOL orient)</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => updateSettings({ stereo: !settings.stereo })}
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
+                settings.stereo ? 'bg-rose-500/15 text-rose-500' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Glasses className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>红蓝立体（stereo）</TooltipContent>
         </Tooltip>
 
         {/* 录制动画（WebM） */}

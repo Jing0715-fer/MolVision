@@ -4,6 +4,7 @@ import { detectFormat, parseStructure } from './parser'
 import { useMolStore, engineRef } from './store'
 import { textRegistry } from './text-registry'
 import { saveSession } from './session'
+import { loadMapBuffer } from './map-load'
 
 export const EXAMPLE_STRUCTURES: { id: string; title: string; desc: string }[] = [
   { id: '1CRN', title: 'Crambin', desc: '小蛋白 · 327 原子 · 高分辨率' },
@@ -75,6 +76,15 @@ export function loadStructureText(text: string, name: string, format?: 'pdb' | '
 
 export function loadFiles(files: FileList | File[]) {
   for (const file of Array.from(files)) {
+    const lower = file.name.toLowerCase()
+    // CCP4 / MRC 密度图文件 → 密度图层（二进制）
+    if (/\.(ccp4|map|mrc|dsn6|omap)$/i.test(lower)) {
+      const reader = new FileReader()
+      reader.onload = () => loadMapBuffer(reader.result as ArrayBuffer, file.name.replace(/\.[^.]+$/, ''))
+      reader.onerror = () => toast.error(`读取地图文件失败: ${file.name}`)
+      reader.readAsArrayBuffer(file)
+      continue
+    }
     const reader = new FileReader()
     reader.onload = () => {
       const text = String(reader.result ?? '')

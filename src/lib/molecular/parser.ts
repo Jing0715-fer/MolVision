@@ -1,8 +1,9 @@
-// PDB / mmCIF 解析器 → StructureData（原子、残基、链、键、二级结构）
+// PDB / mmCIF 解析器 → StructureData（原子、残基、链、键、二级结构、晶胞）
 import {
   AMINO_ACIDS, NUCLEIC_ACIDS, WATERS, SUGAR_LIKE, elementFromAtomName, elementInfo,
 } from './chemistry'
 import { computeDSSP } from './dssp'
+import { parseCryst1, type CrystalInfo } from './symmetry'
 
 export type SSType = 'H' | 'E' | 'L' // helix / sheet / loop
 
@@ -61,6 +62,8 @@ export interface StructureData {
   sasa?: Float32Array
   /** NMR ensemble：多构象坐标帧（frames[0] 即初始坐标副本，长度与 atoms.positions 相同） */
   ensemble?: { frames: Float32Array[] }
+  /** 晶胞与空间群（CRYST1 / _cell）——对称伴侣与电子密度图计算用 */
+  crystal?: CrystalInfo
   /** 空间哈希网格（用于 within 选择、近邻查询） */
   grid: SpatialGrid
   bbox: { min: [number, number, number]; max: [number, number, number]; center: [number, number, number]; radius: number }
@@ -162,6 +165,8 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
   let pdbId: string | null = id || null
   let inFirstModel = true
   let seenModel = false
+  // 晶胞（CRYST1）
+  let crystal: CrystalInfo | null = null
   // NMR ensemble：非首 MODEL 的坐标缓冲
   let modelNo = 0
   let frameCoords: number[] | null = null
@@ -247,6 +252,8 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
         ic1: (line[26] || ' ').trim(),
         ic2: (line[37] || ' ').trim(),
       })
+    } else if (rec === 'CRYST1') {
+      crystal = parseCryst1(line)
     } else if (rec === 'CONECT') {
       const from = parseInt(line.slice(6, 11), 10)
       if (!from) continue
@@ -261,7 +268,7 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
     name, format: 'pdb', pdbId, title: title || name, method, resolution,
     x, y, z, serial, names, elements, resNames, resSeqs, iCodes, chainIds,
     bfactors, occupancies, heteroFlags, conects, helixRanges, sheetRanges,
-    extraFrames,
+    extraFrames, crystal: crystal ?? undefined,
   })
 }
 
@@ -317,6 +324,27 @@ function parseCIF(text: string, name: string, id = ''): StructureData {
     const em = parseFloat(simple.get('_em_3d_reconstruction.resolution') || '')
     if (!isNaN(em) && em > 0) resolution = em
   }
+  // 晶胞与空间群（_cell / _symmetry 或 _space_group）
+  const cellA = parseFloat(simple.get('_cell.length_a') || '')
+  const cellB = parseFloat(simple.get('_cell.length_b') || '')
+  const cellC = parseFloat(simple.get('_cell.length_c') || '')
+  const cellAlpha = parseFloat(simple.get('_cell.angle_alpha') || '')
+  const cellBeta = parseFloat(simple.get('_cell.angle_beta') || '')
+  const cellGamma = parseFloat(simple.get('_cell.angle_gamma') || '')
+  const spaceGroup = simple.get('_symmetry.space_group_name_H-M')
+    || simple.get('_space_group.name_H-M_alt')
+    || simple.get('_symmetry.space_group_name_H-M_alt')
+    || ''
+  const crystal: CrystalInfo | undefined = (!isNaN(cellA) && !isNaN(cellB) && !isNaN(cellC)
+    && cellA > 0 && cellB > 0 && cellC > 0)
+    ? {
+      a: cellA, b: cellB, c: cellC,
+      alpha: isNaN(cellAlpha) ? 90 : cellAlpha,
+      beta: isNaN(cellBeta) ? 90 : cellBeta,
+      gamma: isNaN(cellGamma) ? 90 : cellGamma,
+      spaceGroup: spaceGroup.trim(),
+    }
+    : undefined
 
   // 找 _atom_site loop
   const x: number[] = [], y: number[] = [], z: number[] = []
@@ -407,7 +435,7 @@ function parseCIF(text: string, name: string, id = ''): StructureData {
     name, format: 'cif', pdbId: id || null, title: title || name, method, resolution,
     x, y, z, serial, names, elements, resNames, resSeqs, iCodes, chainIds,
     bfactors, occupancies, heteroFlags, conects: [], helixRanges: [], sheetRanges: [],
-    extraFrames,
+    extraFrames, crystal,
   })
 }
 
@@ -424,6 +452,8 @@ interface RawAtoms {
   sheetRanges: { chain: string; start: number; end: number; ic1: string; ic2: string }[]
   /** NMR ensemble：非首 model 的额外坐标帧（每帧长度 = count*3） */
   extraFrames?: Float32Array[]
+  /** 晶胞与空间群（CRYST1 / _cell） */
+  crystal?: CrystalInfo
 }
 
 function buildStructure(raw: RawAtoms): StructureData {
@@ -606,9 +636,58 @@ function buildStructure(raw: RawAtoms): StructureData {
     ssFromRecords,
     hasHydrogens,
     ensemble,
+    crystal: raw.crystal,
     grid,
     bbox: { min, max, center, radius },
   }
+}
+
+// ---------- 子集构建（create / split_chains / save 命令共用） ----------
+
+/**
+ * 从已有结构抽取原子子集，构建一个新的独立 StructureData。
+ * 残基/链/键重新推导（键按距离重算），二级结构按 (chain,resSeq,iCode,resName) 匹配从源复制，
+ * 晶胞信息原样传递；ensemble/SASA 不保留。
+ */
+export function subsetStructure(src: StructureData, indices: readonly number[], name: string): StructureData {
+  const uniq = [...new Set(indices)].sort((a, b) => a - b)
+  if (!uniq.length) throw new Error('选择为空，无法创建子结构')
+  if (uniq.some(i => i < 0 || i >= src.atoms.count)) throw new Error('原子索引越界')
+  const a = src.atoms
+  const x: number[] = [], y: number[] = [], z: number[] = []
+  const serial: number[] = [], names: string[] = [], elements: string[] = [], resNames: string[] = []
+  const resSeqs: number[] = [], iCodes: string[] = [], chainIds: string[] = []
+  const bfactors: number[] = [], occupancies: number[] = [], heteroFlags: number[] = []
+  for (const i of uniq) {
+    x.push(a.positions[i * 3]); y.push(a.positions[i * 3 + 1]); z.push(a.positions[i * 3 + 2])
+    serial.push(a.serial[i]); names.push(a.names[i]); elements.push(a.elements[i])
+    resNames.push(a.resNames[i]); resSeqs.push(a.resSeqs[i]); iCodes.push(a.iCodes[i])
+    chainIds.push(a.chainIds[i]); bfactors.push(a.bfactors[i]); occupancies.push(a.occupancies[i])
+    heteroFlags.push(a.hetero[i])
+  }
+  const out = buildStructure({
+    name, format: src.format, pdbId: src.meta.pdbId,
+    title: `${src.meta.title} — 子集 ${uniq.length}`, method: '', resolution: null,
+    x, y, z, serial, names, elements, resNames, resSeqs, iCodes, chainIds,
+    bfactors, occupancies, heteroFlags,
+    conects: [], helixRanges: [], sheetRanges: [],
+    extraFrames: [], crystal: src.crystal,
+  })
+  // 二级结构从源复制（按残基标识匹配；subset 无 SS 记录 → 兜底 DSSP 已跑过但可能噪声）
+  const resKey = (chainId: string, resSeq: number, iCode: string, resName: string) =>
+    `${chainId}|${resSeq}|${iCode}|${resName.toUpperCase()}`
+  const srcSS = new Map<string, SSType>()
+  for (const r of src.residues) {
+    const k = resKey(r.chainId, r.resSeq, r.iCode, r.resName)
+    if (!srcSS.has(k)) srcSS.set(k, r.ss)
+  }
+  let copied = 0
+  for (const r of out.residues) {
+    const ss = srcSS.get(resKey(r.chainId, r.resSeq, r.iCode, r.resName))
+    if (ss) { r.ss = ss; copied++ }
+  }
+  if (copied > 0) out.ssFromRecords = true
+  return out
 }
 
 function computeBonds(

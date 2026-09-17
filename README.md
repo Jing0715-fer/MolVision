@@ -1,6 +1,6 @@
 # MolVision 🧬
 
-**Professional 3D molecular visualization studio in the browser** — built with Three.js, Next.js 16 and WebGL2. Load any PDB/mmCIF structure and explore it with publication-quality cartoon ribbons, ball-and-stick models, gaussian molecular surfaces, a PyMOL-style selection language and command console.
+**Professional 3D molecular visualization studio in the browser** — built with Three.js, Next.js 16 and WebGL2. Load any PDB/mmCIF structure and explore it with publication-quality cartoon ribbons, ball-and-stick models, gaussian molecular surfaces, **electron-density maps computed live from deposited structure factors**, crystal **symmetry mates**, a PyMOL-style selection language and command console.
 
 ![MolVision overview](public/screenshots/cartoon.png)
 
@@ -24,6 +24,13 @@
 | 🧱 **Interface ΔSASA (BSA)** | Buried solvent-accessible area between two selections — the rigorous interface criterion: three-pass SASA (A alone / B alone / complex) with core interface residues flagged at ΔSASA > 1 Å² (PDB standard) — run contacts first, then `bsa`; compare with distance-cutoff contacts in the Analysis panel |
 | 🔄 **Superpose undo** | Revert any aligned structure back to its original deposited pose — `untransform 1D3Z` or the ↩ button on structure cards |
 | 🎥 **Animation recording** | Record ensemble playback / rock / spin as 30fps WebM video via MediaRecorder canvas capture — toolbar ⏺ button or `record start` |
+| 🗺️ **Electron density (2Fo−Fc)** | **Computed live from RCSB-deposited structure factors**: model phases (symmetry-expanded Gaussian density rasterization) + observed amplitudes → 3D FFT → marching-cubes isosurface/isomesh at adjustable σ levels, cropped around the model with periodic boundary wraparound — `map fetch 3ekj`, `map isolevel 1.5`, `map mesh|surface|both`; CCP4/MRC map files can be dragged in directly (mode 0/1/2, axis permutation, byte-order detection) |
+| 🔷 **Crystal symmetry mates** | PyMOL `symmetry` equivalent: parses CRYST1, supports all **65 chiral (Sohncke) space groups** (validated operation tables, lattice centering composed), generates rigid-transformed visual copies of every representation within a radius — `symmetry 20` / panel controls; persists across sessions |
+| 👓 **Red-blue stereo** | Anaglyph stereo rendering (three.js AnaglyphEffect) — toolbar 👓 button or `stereo on`; wear red/cyan glasses for true depth |
+| 🧰 **Object workflow** | PyMOL `create` / `split_chains` / `save`: promote any selection to an independent object (`create pocket = within 5 of resn HEM`), split a structure into per-chain-segment objects, export coordinates as PDB files (`save model.pdb chain A`) — created objects auto-register into session persistence |
+| 🎛️ **Lighting & rendering controls** | Ambient / key / fill light intensity sliders, specular (gloss) toggle for matte publication-style rendering, `set ambient 0.5` · `set direct 2` · `set specular off` · `set fov 30` · `set quality high` · `set transparency 0.5` · `set stick_radius 0.2` |
+| 🧭 **View control** | PyMOL `orient` (PCA principal-axis alignment), `get_view` / `set_view` camera JSON export/import, `png 4` high-res export, `count_atoms` |
+| 🎨 **util.\* coloring** | `util cbc` (by chain) · `util cnc` (grey) · `util ss` (secondary structure) · `util cbaw` / `util cbac` (elements with white/grey carbons — publication look on white background) |
 
 ### Coloring schemes
 Element (CPK) · Chain (golden-angle palette) · Spectrum (rainbow per chain) · Residue class (10 biochemical categories) · Secondary structure · B-factor (blue→red) · **SASA exposure (buried blue → exposed orange)** · Uniform — plus **per-atom color overrides** on any selection.
@@ -59,6 +66,10 @@ ssao on 3 · hbonds on 3.2 · ensemble play · ensemble fps 15
 superpose 4hhb onto 2hhb · superpose 4hhb onto 1a3n chain A to A · record start
 interface A B · interface chain A chain B · contacts chain A | chain B 4.0 · dssp
 xcontacts 1ubq:chain A | 1d3z:chain A 5.0 · sasa 1.4 256 · color sasa · bsa · untransform 1d3z
+map fetch 3ekj · map isolevel 1.5 · map mesh · symmetry 20 · symmetry off
+create pocket = within 5 of resn HEM · split_chains · save model.pdb chain A
+orient chain A · get_view · png 4 · count_atoms chain A
+set ambient 0.5 · set specular off · set fov 30 · stereo on · util cbaw
 ```
 
 ### Measurement & annotation
@@ -85,15 +96,20 @@ Full sessions can also be **exported as `.molvision` files** (complete structure
 ![NMR ensemble animation](public/screenshots/ensemble.png)
 
 ### Scene & camera
+- **Light theme by default** (dark theme one click away) — viewport background follows the theme automatically
 - **GTAO ambient occlusion** — ground-truth AO post-processing darkens crevices, pockets and contact regions for dramatically improved depth perception; adjustable intensity & sampling radius (Å-scale, `ssao on 3`)
+- **Adjustable three-point lighting** — ambient (env-map) / key / fill sliders + specular on/off for matte publication rendering
+- **Red-blue stereo anaglyph** — true 3D depth with red/cyan glasses (`stereo on`)
 - **Structure superposition** — align any two structures by sequence + rigid-body fit; try `load 1ubq` then `load 1d3z` then `superpose 1ubq onto 1d3z` (ubiquitin X-ray ↔ NMR, ≈ 0.5-1.5 Å RMSD); aligned poses survive reload
 - **Animation recording** — capture molecular motion as WebM video (toolbar ⏺ / `record start`)
-- Perspective/orthographic toggle, FOV control
-- **Depth-cue fog**, **slab clipping** (near/far planes along the view axis)
+- Perspective/orthographic toggle, FOV control, **PyMOL `orient`** principal-axis view alignment
+- **Depth-cue fog**, **slab clipping** (near/far planes along the view axis — also clips the density map)
 - Auto-rotate (spin `S`), **camera rock** (`R`, ±26° oscillation for inspecting pockets & grooves), background presets, 2×/4×/transparent PNG export
 - Hide/show hydrogens & water globally
 
 ![Structure superposition](public/screenshots/superpose.png)
+
+![Electron density + symmetry mates (light theme)](public/screenshots/density-light.png)
 
 ![GTAO ambient occlusion](public/screenshots/ssao.png)
 
@@ -111,28 +127,30 @@ Paste a **PDB ID** (e.g. `4HHB`) or drag & drop a local `.pdb` / `.cif` file ont
 
 ## 🏗️ Tech stack
 - **Next.js 16** (App Router) + React 19 + TypeScript
-- **Three.js** — InstancedMesh geometry, PMREM environment lighting, ACES tone mapping, clipping planes, MarchingCubes surfaces, GTAO post-processing (EffectComposer)
+- **Three.js** — InstancedMesh geometry, PMREM environment lighting, ACES tone mapping, clipping planes, MarchingCubes surfaces & density isosurfaces, GTAO post-processing (EffectComposer), AnaglyphEffect stereo
+- **Crystallography engines** — SF mmCIF reflection parser, model-phase 2Fo−Fc synthesis via in-house radix-2 3D FFT, CCP4/MRC map reader (axis permutation + endianness), 65 Sohncke space-group operation tables, PDB-convention orthogonalization
 - **Web Workers** for hydrogen-bond detection and SASA/ΔSASA computation on large structures
 - **DSSP** secondary-structure engine (Kabsch–Sander electrostatic H-bond energies)
 - **Shrake–Rupley SASA** engine (FreeSASA-equivalent) with three-pass ΔSASA interface analysis
 - **Zustand** state · **shadcn/ui** + Tailwind CSS 4 · **sonner** toasts
-- Zero-backend parsing: PDB & mmCIF parsed in-browser; RCSB fetched through a tiny API proxy (`/api/pdb/[id]`)
+- Zero-backend parsing: PDB & mmCIF parsed in-browser; RCSB fetched through tiny API proxies (`/api/pdb/[id]`, `/api/sf/[id]`)
 
 ## 📁 Structure
 ```
-src/lib/molecular/   parser (PDB/mmCIF) · chemistry data · selection engine ·
+src/lib/molecular/   parser (PDB/mmCIF/CRYST1) · chemistry data · selection engine ·
                      color schemes · representations · renderer engine · store ·
                      commands · DSSP · contacts · superpose · hbonds (worker) ·
-                     sasa + ΔSASA (worker)
+                     sasa + ΔSASA (worker) · sffourier (2Fo−Fc FFT) · ccp4 (map reader) ·
+                     marching-cubes · symmetry (65 space groups) · pdbwriter · map-load
 src/components/
   molecular/         WebGL viewport wrapper (picking, hover, context menu, shortcuts)
-  studio/            toolbar · panels (structures/reps/colors/selection/measure/analysis/scene/info) ·
+  studio/            toolbar · panels (structures/reps/colors/selection/measure/analysis/maps/scene/info) ·
                      sequence bar · command console · status bar · dialogs
-src/app/             single-page studio + /api/pdb proxy
+src/app/             single-page studio + /api/pdb + /api/sf proxies
 ```
 
 ## 🗺️ Roadmap
-- Cross-structure ΔSASA (joint buried area after superpose) · iterative multi-chain matchmaker (auto chain-pair iteration) · ensemble GPU-matrix playback for very large systems · unified Web Worker pool for hbond/SASA/contacts
+- Fo−Fc difference maps (negative/positive peaks) · cross-structure ΔSASA (joint buried area after superpose) · iterative multi-chain matchmaker (auto chain-pair iteration) · map-box cartoon clipping (PyMOL `cartoon_rect` density style) · ensemble GPU-matrix playback for very large systems · unified Web Worker pool for hbond/SASA/contacts/maps
 
 ## License
 MIT

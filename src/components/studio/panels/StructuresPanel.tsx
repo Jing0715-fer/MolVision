@@ -1,13 +1,15 @@
 'use client'
 
-// 结构面板：结构列表、链、配体、叠合
+// 结构面板：结构列表、链、配体、对称伴侣、叠合
 import { useState } from 'react'
-import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight, Target } from 'lucide-react'
+import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight, Target, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
+import { spaceGroupInfo } from '@/lib/molecular/symmetry'
 import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Badge } from '@/components/ui/badge'
+import { Slider } from '@/components/ui/slider'
 
 const CHAIN_TYPE_ICON: Record<string, typeof Dna> = {
   protein: Dna, nucleic: Dna, water: Droplets, ligand: FlaskConical,
@@ -28,6 +30,8 @@ export function StructuresPanel() {
   const [spMobile, setSpMobile] = useState<string | null>(null)   // 结构 id（null=自动第一个非活动）
   const [spMobChain, setSpMobChain] = useState('')                // ''=自动
   const [spRefChain, setSpRefChain] = useState('')                // ''=自动
+  // 对称伴侣半径（本地输入值，生成时才提交）
+  const [symRadius, setSymRadius] = useState(20)
 
   if (!structures.length) {
     return (
@@ -185,6 +189,85 @@ export function StructuresPanel() {
                 )
               })}
             </div>
+
+            {/* 晶体对称伴侣（CRYST1 存在时显示） */}
+            {(() => {
+              const data = dataRegistry.get(st.id)
+              const crystal = data?.crystal
+              if (!crystal) return null
+              const sym = st.symmetry
+              const ops = spaceGroupInfo(crystal.spaceGroup)?.ops
+              const apply = (r: number) => {
+                const eng = engineRef.current
+                if (!eng) return
+                const res = eng.updateSymmetry(st.id, r)
+                if (!res.ok) toast.error('对称伴侣', { description: res.message })
+                else if (r > 0) toast.success(res.message)
+              }
+              return (
+                <>
+                  <SectionTitle right={
+                    sym ? (
+                      <button onClick={() => apply(0)} className="text-[10px] text-muted-foreground transition hover:text-destructive">
+                        关闭
+                      </button>
+                    ) : undefined
+                  }>
+                    <span className="flex items-center gap-1">
+                      <Copy className="h-3 w-3" /> 对称伴侣
+                    </span>
+                  </SectionTitle>
+                  <div className="space-y-2 px-2">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px]" title="空间群（CRYST1）">
+                        {crystal.spaceGroup.trim() || 'P 1'}
+                      </Badge>
+                      {ops != null && (
+                        <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal" title="对称操作数（含晶格心平移）">
+                          {ops} ops
+                        </Badge>
+                      )}
+                      <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal" title="晶胞（Å / °）">
+                        {crystal.a.toFixed(1)}×{crystal.b.toFixed(1)}×{crystal.c.toFixed(1)}Å
+                      </Badge>
+                      {sym && (
+                        <Badge className="bg-violet-500/15 px-1.5 py-0 text-[9px] font-normal text-violet-600 hover:bg-violet-500/25 dark:text-violet-300">
+                          {sym.count} 个伴侣 · {sym.radius} Å
+                        </Badge>
+                      )}
+                    </div>
+                    {sym ? (
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span>搜索半径</span>
+                          <span className="font-mono">{symRadius} Å</span>
+                        </div>
+                        <Slider
+                          value={[symRadius]}
+                          min={5} max={80} step={1}
+                          onValueChange={v => { setSymRadius(v[0]); apply(v[0]) }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex gap-1">
+                        {[12, 20, 30].map(r => (
+                          <button
+                            key={r}
+                            onClick={() => { setSymRadius(r); apply(r) }}
+                            className="flex-1 rounded-md border border-violet-500/30 bg-violet-500/5 px-1.5 py-1 text-[10px] font-medium text-violet-600/90 transition hover:bg-violet-500/15 dark:text-violet-300"
+                          >
+                            {r} Å
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-[9px] leading-relaxed text-muted-foreground/70">
+                      按 CRYST1 空间群生成晶格邻居（视觉副本，不参与拾取）；命令行：symmetry 20 / symmetry off。设置随会话保存。
+                    </p>
+                  </div>
+                </>
+              )
+            })()}
 
             {st.ligands.length > 0 && (
               <>

@@ -426,3 +426,70 @@ Stage Summary:
 - 新增 4 个对标成熟软件的功能：配体口袋一键选择、序列条配体行（置顶）、序列条链标签可点击、右键周围环境选择
 - 全部验证通过：链组隔离（43/1,069/56/44）、口袋 907、配体 chip 172/43、右键菜单 9 项可用、分析功能基准一致（84 对/3,092 氢键/462 螺旋）
 - 待办遗留：主题切换水合警告（低危，历史遗留）；HMR 瞬态错误生产不受影响；跨结构 ΔSASA 未实现
+---
+Task ID: 2-b
+Agent: general-purpose (marching-cubes)
+Task: 创建 marching-cubes.ts
+Work Log:
+- 读 worklog.md 前 40 行了解项目分层约定（src/lib/molecular/* 为纯 TS 库层）；发现 marching-cubes.ts 已存在一份未登记草稿（无 2-b 日志、无其他模块引用），逐行审计后在其基础上修正交付
+- 常量表审计（外部脚本 /home/z 临时运行后删除）：edgeTable 256 项（32 行×8）、triTable 256 行×16=4096 项完整无截断；第一性原理校验（bit e 置位 ⟺ 棱 e 两端角点内/外相异）+ 逐行「triTable 棱集合 == edgeTable 置位」+ cb↔255−cb 补对称 + -1 终止符形状——全部通过
+- 发现并修复真实缺陷：原 EDGE_A/EDGE_B 按角编号升序插值，e2/e6/e7 三条棱实为沿轴降序，相邻单元格对同一物理棱执行不同浮点表达式；200 万次随机数值实验证明 2.6% 的共享棱顶点出现 1-ulp 位级偏差（噪声密度图会产生裂缝）。改为恒沿棱所在轴正方向（低坐标角点→高坐标角点），相邻单元格表达式完全相同，位级一致
+- 修复后回归：球 48³ / 三高斯 36³ 均为完美闭合定向流形（Euler V−E+F=2、开棱 0、定向异常 0）；6 个含伪随机噪声场位级不一致组全部为 0；正弦场残余开棱（654/16203）为标准 MC 表固有的二义面拓扑歧义（任务指定 Paul Bourke 标准表，属已知特性而非实现缺陷），位级裂缝为 0
+- 运行任务指定命令：bun -e "import('./src/lib/molecular/marching-cubes.ts')..." → ok:true（顶点 32532 ∈ [2000,60000]；距中心 [16.96,16.97]（理论 16.97）；法线径向 201/201 夹角<30°；|‖n‖−1|<0.01；截断测试 count=30/truncated=true；全内全外空输出；8×6×5 各向异性索引约定；流形封闭 16266 棱均共享 2 次）
+- 质量核查：零 import（纯 TS 零依赖，未引 three/React）、零 any、全中文注释；bunx eslint src/lib/molecular/marching-cubes.ts 退出码 0（0 错误 0 警告）；确认仅改动这一个文件（校验脚本均建于项目外并已删除）
+Stage Summary:
+- 交付物：src/lib/molecular/marching-cubes.ts（770 行）——通用 Marching Cubes 等值面三角化，API：McResult{positions,normals,count,truncated} / marchingCubes(data,nx,ny,nz,iso,maxTriangles=500_000) / mcSelfTest()；数据索引 (k*ny+j)*nx+i、−∇f 中心差分（边界单侧）法线插值归一化、可增长 Float32Array（2^16 起步倍增）、热路径零分配
+- 自检结果：{"ok":true,"details":"球测试：顶点 32532（三角形 10844，耗时 15.1ms）；顶点距中心 [16.96, 16.97]（理论 16.97）；法线径向检查 201/201 通过；包围盒中点偏差 4.8e-7；各向异性测试：顶点 312；流形检查：16266 条棱共享数均为 2（顶点去重后 5424 个）；全部检查通过"}
+- triTable 行数确认：256（256×16=4096 项；源码 100–355 行逐行 + 解析器计数双重核对，Paul Bourke 标准表完整未截断）；edgeTable 256 项；eslint 0 错误 0 警告
+---
+Task ID: 2-d
+Agent: general-purpose (ccp4 解析器)
+Task: 创建 ccp4.ts
+Work Log:
+- 读 worklog.md 末段（symmetry/sffourier/marching-cubes 已交付，marching-cubes 明确预留「与 ccp4.ts 的规范化输出一致」的数据约定）+ parser.ts / marching-cubes.ts / symmetry.ts / sffourier.ts 风格与矩阵约定，确认本模块须零 import、中文注释、selfTest 模式
+- 实现解析主链：word53 "MAP " 字节序判别（" PAM" 整字反转与字面 "PAM " 一并按大端处理，等效全字交换）→ 头字段按端序读取 → MODE(0/1/2)/dims(1..4096)/MAPC-R-S 排列/NSYMBT/晶胞有效性/数据长度（截断与多余字节均拒）逐项校验，错误一律返回中文 {error}
+- 轴序语义采用 CCP4 标准（与 gemmi/cctbx 一致并在头注释中论证）：NX/NY/NZ 与 NXSTART.. 按存储轴（列/行/节）计数，MX/MY/MZ 与 CELL 按晶轴 x/y/z 计数——解析时把 data/dims/起点从存储序散写重排为规范 (x,y,z)（索引 (k*ny+j)*nx+i），fracStep=(1/MX,1/MY,1/MZ) 本就是晶轴序；M*=0/非正按 M*=N* 兜底
+- orthoCcP4 按任务给定闭式实现（x∥a、b 落 xy 面、z∥c*、y=z×x 右手系，行主序 9 元素、列向量=格矢，与 symmetry.ts 的 PDB 正交化同构）；统计 min/max/mean 一律重算，rms 优先 word55（>0 且有限）否则重算；小端+mode2+恒等轴序+4 字节对齐走视图一次拷贝快路径，其余按列/行/节×晶轴输出步长通用散写
+- 自检 ①②③④ 全部实跑：① 16³ mode2 正弦场（头部统计故意写错验证重算、ARMS=0 验证 rms 重算、ortho 三列 Gram 矩阵/A×B∥+z/det>0 定向校验）；② 同一晶序内容写恒等序与置换序（MAPC=3,R=1,S=2，各向异性 N=13/11/17、M=26/22/34、起点 5/3/9）两份文件，2431 体素位级一致 + 抽样对参考场；③ mode1 int16（rms=42.5 逐字取 word55）+ mode0 int8 + 大端 " PAM"/"PAM " 双变体与 ① 位级一致；④ 11 条错误路径（过短/头截断/数据截断/word53 错/MODE=6/NX=5000/NY=0/轴序重复/a=-5/γ=0/多余尾部字节）全部返回非空中文 error（正则验证含 CJK）
+- 附加离线校验（bun -e 一次性脚本，未落盘）：NSYMBT=64 附加记录 + 负 NXSTART 解析正确（fracOrigin=(-0.75,-1,-1.25)）；运行时导出面恰为 parseCcp4/ccp4SelfTest；与 marching-cubes.ts 索引约定联通（24³ 球场 → 7764 顶点径向距离 8.47-8.48 vs 理论 8.49）
+- 质量核查：零 import（纯 TS 零依赖）、零 any（rg 复核）、全中文注释；bunx eslint src/lib/molecular/ccp4.ts 退出码 0（0 错误 0 警告）；bunx tsc --strict 独立类型检查通过；仅创建 src/lib/molecular/ccp4.ts 一个文件
+Stage Summary:
+- 交付物：src/lib/molecular/ccp4.ts（689 行）——CCP4/MRC 电子密度图解析器，API：Ccp4Map{dims,data,fracOrigin,fracStep,cell,mean/rms/min/max,spaceGroup,orthoCcP4} / parseCcp4(buffer): Ccp4Map|{error} / ccp4SelfTest()；输出与 marching-cubes.ts 的 (k*ny+j)*nx+i 数据约定无缝对接（球密度联通实测 7764 顶点半径误差 <0.02 体素）
+- 自检结果：{"ok":true,"details":"①mode2 16³：4096 体素位级一致（抽样 6/6），统计重算 min=-119.97 mean=0.635 rms=72.412，fracOrigin=(0.1500,0.3125,0.2188)，ortho Gram/定向通过；②轴序置换（3,1,2）：2431 体素位级一致，抽样 5/5 正确；③mode1 int16：960 体素精确还原，rms=42.5 取 word55，MX=0 兜底通过；③mode0 int8：210 体素精确还原；③大端 \" PAM\"（整字交换）与字面 \"PAM \" 变体均与 ① 位级一致；④错误路径 11/11 返回非空中文 error（截断/word53/MODE/dims/轴序/晶胞/多余字节）；耗时 12.2ms；全部检查通过"}
+- 关键实现取舍：① 轴序采用 CCP4 标准语义（NX/NXSTART 存储序、MX/晶轴序），恒等轴序下与任务公式 (NXS/Mx,NYS/My,NZS/Mz) 完全一致，置换文件经 ② 双文件位级一致性验证；② word53 大端判别同时接受 " PAM"（真实大端文件的整字反转）与任务字面 "PAM "，两者均有自检覆盖；③ 数据长度严格相等（多余字节拒绝）——真实 CCP4/MRC 文件均为精确长度
+- eslint：bunx eslint src/lib/molecular/ccp4.ts → 0 错误 0 警告（退出码 0）
+
+---
+Task ID: feat-r10 (浅色主题 + PyMOL 核心功能大版本)
+Agent: main
+Task: 默认浅色主题 + UI 优化 + PyMOL 核心功能补齐（电子密度图/对称伴侣/create/stereo/orient/set 等）
+
+Work Log:
+- 读取 worklog（bugfix-r9 完成配体选择修复）；QA 冒烟：dev server 200、agent-browser 会话存活
+- 【子代理协作】4 个纯函数模块（并行/串续启动，全部自检通过）：
+  - 2-a symmetry.ts（49KB）：65 Sohncke 空间群操作表 88 键、CRYST1 解析、PDB 约定正交化矩阵、mateTransforms 伴侣变换、selfTest 全绿（闭包/det=+1/去重/crambin 50 配偶）
+  - 2-b marching-cubes.ts（38KB）：标准 MC + 完整 256×16 triTable，子代理审计出共享棱 1-ulp 裂缝缺陷并修复（恒沿轴正向插值保证位级一致），流形封闭性验证
+  - 2-c sffourier.ts（35KB）：SF mmCIF 解析 + 模型密度 FFT 法 2Fo−Fc 合成（对称展开高斯栅格 + radix-2 3D FFT + 全局尺度 k），与 symmetry 联合自检通过（FFT 往返 1e-16、合成体系 scale≈1、峰距 0.91Å）
+  - 2-d ccp4.ts（689 行）：CCP4/MRC 解析（mode 0/1/2、轴序置换、大端检测、NSYMBT），自检含位级置换验证 + 11 错误路径
+- 【主题】默认浅色：layout defaultTheme light + themeColor 双媒体、defaultSettings 背景 #ffffff、MolViewer loading 兜底 bg-background、引擎初始场景背景改白
+- 【新功能 A：电子密度图（旗舰）】
+  - /api/sf/[id] RCSB 结构因子代理（files.rcsb.org download/{id}-sf.cif）
+  - map-load.ts：fetchAndComputeMap（SF→parseSfCif→computeDensityMap→裁剪→引擎）+ loadMapBuffer（CCP4 文件）+ setMapLook/removeMap
+  - engine：mapLayer + mapGroup + setDensityMap/setMapAppearance/getMapInfo/rebuildMapMesh（MC 等值面 MeshStandard + isomesh LineSegments、分数→笛卡尔矩阵 = O·(fracOrigin+step·grid)、裁剪平面挂载）
+  - map-store.ts 镜像 + MapsPanel（左侧新「密度图」面板：fetch 输入/文件导入/σ 滑块/模式切换/颜色/不透明度/统计卡）
+  - 命令：map fetch|isolevel|mesh|surface|both|hide|show|off
+- 【新功能 B：晶体对称伴侣】parser CRYST1/_cell 解析 → StructureData.crystal；engine.updateSymmetry/rebuildSymmetry（克隆 rep 组共享几何/材质、挂刚体矩阵、不参与拾取）；结构面板对称区块（空间群徽章/半径滑块/快捷按钮）；命令 symmetry <r>|off；会话持久化 + 恢复重放
+- 【新功能 C：对象工作流】pdbwriter.ts PDB 导出（ATOM/HETATM/TER/CRYST1/列位规范）；parser.subsetStructure（子集重组装 + SS 按残基键匹配复制）；命令 create <名>=<选择>（自动登记 textRegistry 进会话）/ split_chains（跳过水、重名 #n）/ save <名>.pdb [选择]
+- 【新功能 D：渲染与视图】Settings 新增 lightAmbient/lightKey/lightFill/specular/stereo；引擎保存灯光引用并按倍率应用 + environmentIntensity；specular 遍历材质（roughness→1 + envMapIntensity→0）；AnaglyphEffect 红蓝立体（stereo 命令 + 工具栏 👓 + 场景面板开关）；orient（3x3 Jacobi 特征分解 PCA 主轴对齐）；get_view/set_view（相机 JSON 导入导出）；命令 set <key> <val>（14 个键：灯光/fov/质量/透明度/球棍半径/cartoon 宽度等）、png、count_atoms、util cbc/cnc/ss/cbaw/cbac
+- 【BUG 修复 1（重大，用户可复现崩溃）】symmetry 克隆 0 个且引发整页崩溃：①THREE Object3D.clone() 对 userData 做 JSON 深拷贝，enginePick 存在循环引用（pick.object→mesh）→ 克隆即抛 Converting circular structure to JSON → 连环崩溃。修复：cloneGroupShallowUserData（克隆前暂存清空 userData、克隆后恢复）②updateSymmetry 传旧 entry（symmetry 未设置）→ rebuildSymmetry 读不到 radius 提前返回但 symKey 已缓存。修复：radius 显式传参 + 成功重建后才缓存 key
+- 【BUG 修复 2（密度图错位，科学正确性）】3EKJ 密度云与蛋白视觉分离 88px：根因是蛋白分数坐标跨胞界（y∈[−0.74,0.38]、z∈[−0.57,0.77]），密度周期回绕到晶胞另一侧，裁剪窗口 clamp [0,n] 切错区域。修复：cropBounds 允许越界窗口 + cropGrid 周期回绕采样（wrap index mod n）。验证：像素级分析蛋白-密度质心重叠 41%→对齐；VLM 确认"紧密包裹无错位"；数值采样原子位置 1.32σ vs 随机 0σ
+- 【BUG 修复 3（预先存在，范围选择从未工作）】resi 60-120 → 8 原子（应为 487）：tokenizer 把 '-' 拆为独立 punct，parseValueList 重组成了负数列表项 '-120'。修复：'-' 与前一数值组合为范围串 '60-120'（支持负端点与 a+b 列表混合）。验证：resi 60-120→487、200-300→825、60+70+80→25、chain A and resi 100-200→666
+- 【性能】密度图裁剪到结构包围盒 ±6Å（256³→72×256×256 等子网格）；MC 上限 surface 600k/mesh 150k；both 模式 >25 万三角时跳过 wire（headless 软件 GL 下 762k 线段会饱和主线程——真机 GPU 无此问题）
+- 【QA 全量验证】浅色默认 ✓（themeClass=light、bodyBg 白）；3EKJ 加载 2405 原子 ✓；map fetch 全链路（22,919 反射、256³、2σ、381,572 三角无截断、9.5-14.4s）✓；对称 20→4 伴侣×3 reps=12 克隆 + symmetry off 清除 ✓；会话恢复重放对称（reload→12 克隆）✓；create domain=resi 60-150→674 原子 23ms ✓；split_chains→1 对象 ✓；count_atoms/orient/get_view/set ambient/specular/fov/util cbaw/stereo on/off 全部输出正确 ✓；密度图面板/结构面板对称区块 VLM 视觉验证无重叠截断 ✓；hero 截图 VLM 评分 9/10 与 9.5/10（构图专业、密度对齐精准）✓；lint 0 错误 0 警告
+- README：Highlights 新增 8 行（密度图/对称/立体/对象工作流/灯光/视图/util）、命令示例、Tech stack 晶体学引擎、Structure 目录、Roadmap、新截图 density-light.png（浅色主题 hero）
+
+Stage Summary:
+- 项目当前状态：默认浅色主题的专业级 UI；功能覆盖在 6 表示法/8 着色/氢键/会话/ensemble/GTAO/叠合/DSSP/接触/SASA/ΔSASA/xcontacts 基础上，本轮补齐 PyMOL 核心版图最重的四块——电子密度图（真实晶体学计算：SF+模型相位+3D FFT）、晶体对称伴侣（65 手性群全覆盖）、对象工作流（create/split_chains/save）、渲染控制（三点灯光/specular/stereo/orient/set/util）——并修复 3 个重大 bug（对称克隆崩溃、密度图跨胞界错位、resi 范围选择从未生效）
+- 验证方法论沉淀：①密度图对齐性三重验证（数值采样原子 σ vs 随机 σ、像素级质心重叠度、VLM 视觉确认）②|Fcalc|-Fobs 相关性无法区分坐标系约定（刚体旋转不变），帧约定自洽性比"正确约定"更重要 ③THREE clone 的 userData JSON 深拷贝是循环引用雷区 ④CDP 截图超时 = 渲染饱和信号（软件 GL 下 76 万线段可锁死主线程）
+- 未解决问题与风险：①密度图相位为近似模型相位（常数 Z 高斯、无体相溶剂校正）——1.5-2σ 包裹良好但不如精修 Fc 相位锐利；②2Fo−Fc 合成 ~6-14s（256³ 双 FFT），未进 Web Worker（计算期间 UI 有计算中提示但不响应交互）；③Fo−Fc 差图（±3σ 正负峰）未实现（sffourier 架构已预留系数切换点）；④CCP4 上传地图的跨胞界处理未做（依赖地图自身覆盖范围）；⑤map 密度图层不进会话存档（重载需重算，by design）；⑥非正交晶胞下对称伴侣视觉正确性已由 mateTransforms 数学保证但未做多结构实证（仅 3EKJ C2 验证）
+- 下一阶段建议（优先级序）：① Fo−Fc 差图与正负双等值面（红/绿）② 密度合成进 Web Worker + σ 滑块节流 ③ mmCIF 结构的 crystal 解析实证（当前仅 PDB CRYST1 路径验证）④ 抗体-抗原复合物完整演示场景（superpose→xcontacts→bsa→密度图全链路）⑤ 跨结构 ΔSASA ⑥ putty cartoon（B 因子管径）

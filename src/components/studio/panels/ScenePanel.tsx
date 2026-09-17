@@ -2,7 +2,7 @@
 
 // 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤/会话管理
 import { useRef, useState } from 'react'
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium } from 'lucide-react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
@@ -134,6 +134,60 @@ export function ScenePanel() {
             摇摆模式：相机绕目标 ±26° 往复摆动，适合观察凹槽与结合口袋的深度。拖动视角后以新视角为基准。
           </p>
         )}
+      </div>
+
+      <SectionTitle>灯光与渲染</SectionTitle>
+      <div className="space-y-3 px-3">
+        <div>
+          <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1"><Sun className="h-3 w-3" /> 环境光</span>
+            <span className="font-mono">{settings.lightAmbient.toFixed(2)}</span>
+          </div>
+          <Slider
+            value={[settings.lightAmbient]} min={0} max={2} step={0.05}
+            onValueChange={v => updateSettings({ lightAmbient: v[0] })}
+          />
+        </div>
+        <div>
+          <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1"><SunMedium className="h-3 w-3" /> 主光</span>
+            <span className="font-mono">{settings.lightKey.toFixed(2)}</span>
+          </div>
+          <Slider
+            value={[settings.lightKey]} min={0} max={3} step={0.05}
+            onValueChange={v => updateSettings({ lightKey: v[0] })}
+          />
+        </div>
+        <div>
+          <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1"><Sparkle className="h-3 w-3" /> 补光</span>
+            <span className="font-mono">{settings.lightFill.toFixed(2)}</span>
+          </div>
+          <Slider
+            value={[settings.lightFill]} min={0} max={2} step={0.05}
+            onValueChange={v => updateSettings({ lightFill: v[0] })}
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Gem className="h-3.5 w-3.5" /> 高光（镜面反射）
+          </span>
+          <Switch checked={settings.specular} onCheckedChange={v => updateSettings({ specular: v })} />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Glasses className="h-3.5 w-3.5 text-rose-500" /> 红蓝立体（3D 眼镜）
+          </span>
+          <Switch checked={settings.stereo} onCheckedChange={v => updateSettings({ stereo: v })} />
+        </div>
+        {settings.stereo && (
+          <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+            佩戴红（左眼）蓝（右眼）立体眼镜观看；立体模式下 GTAO 遮蔽暂停以保证双目渲染性能。
+          </p>
+        )}
+        <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+          关闭高光可得到哑光/论文图风格；命令行等价：set ambient 0.5 / set specular off / stereo on。
+        </p>
       </div>
 
       <SectionTitle>切层（slab 裁剪）</SectionTitle>

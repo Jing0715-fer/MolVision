@@ -79,6 +79,8 @@ export interface StructureEntry {
   colorOverrides: Record<number, string>
   /** 累计刚体变换（superpose 应用后记录，会话恢复时重放） */
   transform?: RigidTransform
+  /** 晶体对称伴侣（symmetry 命令/面板触发；radius=0 表示关闭） */
+  symmetry?: { radius: number; count: number }
   summary: {
     atoms: number; residues: number; chains: number; bonds: number
     hydrogens: number; waters: number; ligandResidues: number
@@ -145,11 +147,21 @@ export interface Settings {
   ssao: boolean
   ssaoIntensity: number
   ssaoRadius: number
+  /** 灯光：环境光倍率（含环境贴图贡献） */
+  lightAmbient: number
+  /** 灯光：主光（平行光）倍率 */
+  lightKey: number
+  /** 灯光：补光倍率 */
+  lightFill: number
+  /** 高光（镜面反射/环境反射）开关 */
+  specular: boolean
+  /** 红蓝立体（Anaglyph）渲染 */
+  stereo: boolean
 }
 
 export function defaultSettings(): Settings {
   return {
-    background: '#101215',
+    background: '#ffffff',
     fog: false,
     fogStrength: 0.5,
     fov: 45,
@@ -169,5 +181,10 @@ export function defaultSettings(): Settings {
     ssao: false,
     ssaoIntensity: 1,
     ssaoRadius: 3,
+    lightAmbient: 1,
+    lightKey: 1,
+    lightFill: 1,
+    specular: true,
+    stereo: false,
   }
 }

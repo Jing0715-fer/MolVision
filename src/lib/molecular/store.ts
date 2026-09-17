@@ -35,7 +35,7 @@ export interface MolState {
   loading: boolean
   loadingMsg: string
   ui: {
-    panel: 'structures' | 'reps' | 'colors' | 'selection' | 'measure' | 'analysis' | 'scene' | 'info'
+    panel: 'structures' | 'reps' | 'colors' | 'selection' | 'measure' | 'analysis' | 'maps' | 'scene' | 'info'
     panelOpen: boolean
     sequenceOpen: boolean
     consoleOpen: boolean

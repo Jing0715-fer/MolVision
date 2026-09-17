@@ -1,13 +1,14 @@
 'use client'
 
 // 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示
-import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets, ArrowLeftRight } from 'lucide-react'
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets, ArrowLeftRight, Copy, Grid3x3, Glasses } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { useHBondStore } from '@/lib/molecular/hbond-store'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 import { useContactStore } from '@/lib/molecular/contacts-store'
 import { useSasaStore } from '@/lib/molecular/sasa-store'
+import { useMapStore } from '@/lib/molecular/map-store'
 import { cn } from '@/lib/utils'
 
 export function StatusBar() {
@@ -22,8 +23,11 @@ export function StatusBar() {
   const ens = useEnsembleStore(s => s)
   const contact = useContactStore(s => s)
   const sasa = useSasaStore(s => s)
+  const mapInfo = useMapStore(s => s.info)
+  const mapComputing = useMapStore(s => s.computing)
 
   const st = structures.find(x => x.id === activeId)
+  const symCount = structures.reduce((acc, x) => acc + (x.symmetry?.count ?? 0), 0)
   const need = measureMode === 'distance' ? 2 : measureMode === 'angle' ? 3 : measureMode === 'dihedral' ? 4 : 0
 
   return (
@@ -120,6 +124,31 @@ export function StatusBar() {
             ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
             : <Droplets className="h-3 w-3" />}
           {sasa.computing ? 'SASA 计算中…' : `SASA ${sasa.total.toLocaleString(undefined, { maximumFractionDigits: 0 })} Å²`}
+        </span>
+      )}
+
+      {/* 红蓝立体 */}
+      {settings.stereo && (
+        <span className="hidden shrink-0 items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 font-medium text-rose-600 dark:text-rose-400 sm:flex">
+          <Glasses className="h-3 w-3" /> 立体
+        </span>
+      )}
+
+      {/* 对称伴侣 */}
+      {symCount > 0 && (
+        <span className="hidden shrink-0 items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 font-medium text-violet-600 dark:text-violet-400 sm:flex">
+          <Copy className="h-3 w-3" />
+          {symCount} 对称伴侣
+        </span>
+      )}
+
+      {/* 电子密度图 */}
+      {(mapInfo || mapComputing) && (
+        <span className="hidden shrink-0 items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 font-medium text-sky-600 dark:text-sky-400 sm:flex">
+          {mapComputing
+            ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            : <Grid3x3 className="h-3 w-3" />}
+          {mapComputing ? '密度图计算中…' : `密度 ${mapInfo!.iso.toFixed(1)}σ${mapInfo!.truncated ? '+' : ''}`}
         </span>
       )}
 
