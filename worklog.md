@@ -353,3 +353,46 @@ Work Log (阶段性):
 - 【新功能 B】color sasa 全自动化：engine.queueSasaBake + pendingSasaBake；store.applyColor 大结构 worker 路径挂起烘焙 → applySasaResult worker 完成后自动 applyColor + 日志；结构移除清理挂起
 - 验证：xcontacts superpose 后 978 对跨接触（0.07 Å 最近——同蛋白不同构象合理）；3D 连线渲染 2809 红像素；界面 UI VLM 确认无重叠截断
 - lint 全绿
+
+---
+Task ID: cron-r8 (完成)
+Agent: main
+Task: 周期评审——QA 冒烟 + interface 命令 bug 修复 + 跨结构接触分析 (xcontacts) + matchmaker 链对叠合 + color sasa 全自动化
+
+Work Log:
+- 读取 worklog（cron-r7 完成 SASA/ΔSASA/叠合重置）；dev server 全绿；git 干净于 a610017
+- QA 冒烟（全部通过，与 cron-r7 基准一致）：会话恢复 3 结构 ✓、select name CA → 574 ✓、superpose 1UBQ onto 1D3Z → RMSD 0.521 Å ✓、dssp → 462 螺旋 ✓、sasa → 24,087 Å² ✓、color sasa 像素验证（青 2,728 / 黄 12,602 px）✓、hbond/untransform ✓、contacts chain A | chain B → 84 对 ✓、VLM 面板检查无重叠截断 ✓
+- 【BUG 修复 1】interface chain A chain B 解析错误：原实现盲取 parts[1]/parts[2] → "chain chain" 空选择。重写为智能解析：冒号语法归一（:A → A）、SELECTOR_KEYWORDS 检测表达式风格、lastIndexOf('chain') 启发式切分、其余 2 token 视为链对。验证：interface chain A chain B → 84 对（与 contacts 管道一致）；interface :A :B 4.0 → 58 对（截断更紧正确）；错误用法给出用法提示
+- 【BUG 修复 2】nav 8 个图标按钮 + 移动端抽屉按钮无 aria-label/title（a11y）→ 补齐（后续 QA 用 aria-label 定位按钮成功）
+- 【新功能 A：跨结构接触 xcontacts（对标 ChimeraX contacts 跨模型）】
+  - contacts.ts：CrossContactPair/CrossContactResult 类型 + detectContactsCross（B 侧空间网格查询、H/D 重原子排除、字符串 key 残基对聚合、resA/resB 为各自结构局部索引）+ resolveStructure（PDB 编号精确 / 名称前缀匹配）+ runCrossContactAnalysis（"STRUCT:expr" 规格解析、省略结构默认活动结构、同结构拒绝、空选择/表达式错误分路报错、setCrossResult 落库 + updateContacts 渲染）
+  - contacts-store.ts：CrossContext（idA/idB/labelA/labelB/exprA/exprB/cutoff/maskA/maskB）+ crossPairs + setCrossResult（与单结构结果互斥，同步 aExpr/bExpr/cutoff 供面板显示）；clear 同步清跨结构
+  - engine.ts updateContacts 双路径：cross 模式连线端点分别取 posA[posA 原子]/posB[posB 原子]，buildContactGeometry 抽出共用组装（LineSegments + InstancedMesh 端点标记）；CONTACT_CAP 4000 上限两路共用
+  - engine.ts sync 清理：结构移除时 cross.idA/idB 任一命中 → clear + updateContacts
+  - bsa 守卫：cross 模式下 runBuriedSasa 返回明确错误（跨结构坐标系独立，ΔSASA 仅支持单结构内界面）
+  - commands.ts：xcontacts/xcontact/xiface 命令（管道语法 + 尾部截断值解析）
+  - AnalysisPanel：≥2 结构时显示「单结构界面 / 跨结构接触」模式 toggle（紫色主题）；结构 A/B 下拉（PDB 编号 + ⤴ 变换标记）；A/B 表达式输入（实时原子计数——对各自所选结构求值，非活动结构）；截断滑块；结果卡片（紫色：接触对数 / 两侧界面残基统计 / Top-5 接触对列表带距离 / 超出折叠提示）；空结果引导（建议 superpose / 增大截断）
+  - StatusBar：紫色跨接触徽章（labelA↔labelB + 对数 + ≤截断）
+  - 修复 ExprInput count 未传导致的首次渲染 crash（VLM 截图 QA 发现 count.toLocaleString undefined）→ count 改可选
+- 【新功能 B：matchmaker 链对叠合】
+  - superpose.ts superposeStructures 增加可选 mobileChain/refChain 参数（显式指定链 → 精确匹配链 ID；未指定 → 原自动策略：移动最长链 + 参考最佳比对）；错误信息列出可用链
+  - engine.superpose 透传链参数
+  - commands.ts：superpose <mobile> onto <ref> [chain X [to Y]]（链语法从整条命令先提取再解析 onto）；无效链错误列出可用链
+  - StructuresPanel：「叠合 (matchmaker)」折叠区块（≥2 结构显示）：移动结构下拉（箭头 →）参考结构框（活动结构只读）+ 移动链/参考链下拉（空=自动）+ 开始叠合按钮（toast 报告链对/匹配数/RMSD）
+  - 验证：superpose 1UBQ onto 1D3Z chain A to A → 76 对 CA · RMSD 0.521 Å（手动指定标记）✓；chain Z → 错误"可用：A" ✓；UI 面板叠合 1UBQ→4HHB → 76 对 · RMSD 14.53 Å（跨蛋白比对合理）✓
+- 【新功能 C：color sasa 全自动化】
+  - engine：pendingSasaBake 字段 + queueSasaBake(id) 公开方法；applySasaResult 在 worker 完成落库后检查挂起 → applyColor('sasa') 自动烘焙 + appendLog "已自动完成暴露度着色"；结构移除时清理挂起
+  - store.applyColor：sasa 无数据且 worker 未同步完成 → queueSasaBake 后 return（worker 完成回调自动上色）
+  - 命令行消息更新："SASA 后台计算中——完成后将自动按暴露度着色"
+- HelpDialog 新增「结构分析」区块（叠合/界面接触/跨结构接触/SASA·DSSP 用法速查）
+- README：Highlights 新增 🌉 Cross-structure contacts 行；superpose 行补 matchmaker panel + 链对语法；interface 行补多语法；命令示例补 xcontacts/chain 语法；Roadmap 更新（跨结构 ΔSASA / 迭代 matchmaker / 统一 Worker 池）
+- 新截图 public/screenshots/xcontacts.png（1UBQ↔1D3Z superpose 后 sticks + 接触标记；注：同蛋白叠合的接触线多被结构遮挡，演示价值有限——更佳演示需两个不同复合物组分）
+- 验证汇总：xcontacts superpose 后 978 对（5.0Å）/ 346 对（3.0Å）· 最近 0.07 Å（同蛋白不同构象合理）；3D 连线像素验证 2,809 红像素；跨结构 UI VLM 确认 toggle/下拉/计数/卡片正常无截断；matchmaker UI VLM 确认；回归 interface 84 对 + bsa 2012 Å² 与基准一致；会话恢复含 transform 重放 ✓
+- lint 0 错误 0 警告；git commit 05491bb → push origin main 成功
+
+Stage Summary:
+- 项目当前状态：在 6 表示法/8 着色/氢键/会话/ensemble/GTAO/叠合/DSSP/接触/SASA/ΔSASA 基础上，本轮补齐复合物分析链路最后一环——跨结构接触检测（xcontacts，superpose → xcontacts → 界面残基的完整复合物工作流），叠合升级为完整 matchmaker（链对选择），并修复一个影响可用性的 interface 语法 bug；color sasa 大结构路径全自动化
+- 本轮目标全部达成：QA 基准全绿（574/0.521/462/24087/84/2012）、3 个新功能上线并验证、2 个 bug 修复（interface 解析 + a11y）、1 个 crash 修复（ExprInput count）、README/帮助/截图更新、lint 全绿、已推送 GitHub
+- QA 方法论：agent-browser errors 的 --clear 在本环境不生效（跨导航累积），判别新旧错误需 about:blank 导航对照或按 chunk 哈希区分（HMR 期间旧 chunk 的瞬态报错不属于当前代码）；VLM 截图检查时把 canvas 区域裁剪放大后单独送检更准确（整页截图中小分子内容易被忽略/误读为 console 文本）
+- 未解决问题与风险：①xcontacts 截图演示效果不佳（同蛋白 superpose 后接触线被结构体遮挡）——理想演示需要两个互补链（如抗体-抗原）分开加载后 superpose；②HMR 瞬态错误（recording is not defined / ExprInput toLocaleString）会在 dev 下偶发出现在 console，生产构建无 HMR 不受影响（源码经核对无缺陷）；③跨结构结果不入会话存档（刷新丢失，与单结构 contacts 一致）；④cross maskA/maskB 保留在 store 中供未来跨结构 ΔSASA 使用，但当前无消费者（内存占用小可忽略）
+- 下一阶段建议（优先级序）：① 跨结构 ΔSASA（superpose 后联合埋藏面积，maskA/maskB 已就绪，需三路 SASA 跨两结构坐标）② 抗体-抗原演示场景（如加载 1A2Y scFv + superpose 展示 xcontacts 完整价值）③ 迭代 matchmaker（多链自动配对迭代）④ 氢键/SASA/contacts 统一 Web Worker 池 ⑤ 大结构 ensemble GPU 矩阵直更
