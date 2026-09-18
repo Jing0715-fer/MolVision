@@ -22,6 +22,7 @@ const SHORTCUTS: [string, string][] = [
   ['Shift + 1-9', '平滑跳转到视角书签'],
   ['→ / ←', '演示引导中：下一步 / 上一步'],
   ['` / ~', '打开/关闭命令行'],
+  ['Ctrl + R', '命令行内反向搜索历史（再按循环下一条，Esc 取出编辑）'],
   ['Esc', '退出测量 / 清除选择 / 结束演示 / 停止 movie / 关闭时间轴'],
   ['Delete', '清除当前选择'],
 ]
@@ -139,7 +140,10 @@ export function HelpDialog() {
               <p><span className="font-semibold text-foreground">实用着色</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">util cbc</code> 按链 · <code className="rounded bg-muted px-1 font-mono text-[10px]">util cbaw</code> 元素+白碳（白底论文图） · <code className="rounded bg-muted px-1 font-mono text-[10px]">util ss</code> 二级结构。</p>
               <p><span className="font-semibold text-foreground">轮廓线（描边）</span>：场景面板「轮廓线」区块或 <code className="rounded bg-muted px-1 font-mono text-[10px]">outline on 2 2.5</code>（强度 0.2–3 / 粗细 1–4px）——Sobel 深度+亮度双信号检测边缘，为剪影与层叠结构描出出版级细线（线色随背景亮度自适应）；<code className="rounded bg-muted px-1 font-mono text-[10px]">ray</code> 静帧同样生效；与 GTAO 可叠加。</p>
               <p><span className="font-semibold text-foreground">性能指示器</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">fps on</code> 或场景面板开关——状态栏实时显示帧率/绘制调用/三角形数（500ms 刷新，≥55 绿 · ≥30 琥珀 · &lt;30 红，悬停看帧耗时与 GPU 资源数）；多结构大场景排查卡顿利器。</p>
+              <p><span className="font-semibold text-foreground">切层（slab）</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">slab 20</code> 开启视向切层（仅显示沿视线厚度内的分子区域，中心默认在环绕目标处）；<code className="rounded bg-muted px-1 font-mono text-[10px]">slab move -5</code> 沿视线推进切层穿过分子内部（正 = 远离相机）、<code className="rounded bg-muted px-1 font-mono text-[10px]">slab center</code> 回中、<code className="rounded bg-muted px-1 font-mono text-[10px]">slab off</code> 关闭；场景面板「切层」区块同效（厚度/位置双滑块 + 回中按钮）。观察内部口袋、埋藏氢键与配体结合面的利器。</p>
+              <p><span className="font-semibold text-foreground">自动性能模式</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">perf on</code>（默认开）——帧率持续偏低（&lt;15 fps 约 3 秒）时自动关闭后处理并降低分辨率（像素比 ×0.6），帧率恢复后自动还原；降级时状态栏亮起琥珀色「性能」徽章；<code className="rounded bg-muted px-1 font-mono text-[10px]">perf status</code> 查看状态，<code className="rounded bg-muted px-1 font-mono text-[10px]">perf off / perf restore</code> 手动干预；降级期间手动开启后处理会自动交还控制权。</p>
               <p><span className="font-semibold text-foreground">命令行补全</span>：输入时实时弹出候选（命令/子命令/结构名/表示法/颜色方案/选择关键字，带分类图标与说明），<code className="rounded bg-muted px-1 font-mono text-[10px]">Tab</code> 接受选中项、<code className="rounded bg-muted px-1 font-mono text-[10px]">↑↓</code> 切换（弹层开启时优先于历史）、<code className="rounded bg-muted px-1 font-mono text-[10px]">Esc</code> 关闭；识别到命令时上方显示用法提示（描述+示例）；<code className="rounded bg-muted px-1 font-mono text-[10px]">↑↓</code> 在无候选时浏览历史（最近 50 条跨会话保存）。</p>
+              <p><span className="font-semibold text-foreground">命令行历史搜索</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">Ctrl+R</code> 进入反向搜索（输入即过滤，提示条预览当前匹配并高亮命中片段），再按 <code className="rounded bg-muted px-1 font-mono text-[10px]">Ctrl+R</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">↑↓</code> 循环下一条、<code className="rounded bg-muted px-1 font-mono text-[10px]">↵</code> 直接执行、<code className="rounded bg-muted px-1 font-mono text-[10px]">Esc</code> 取出到输入行编辑——快速重跑长命令（如 morph / superpose）不用重打。</p>
             </div>
           </section>
 

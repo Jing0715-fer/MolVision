@@ -1,7 +1,7 @@
 'use client'
 
 // 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示 / 性能指示
-import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets, ArrowLeftRight, Copy, Grid3x3, Glasses, Gauge } from 'lucide-react'
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets, ArrowLeftRight, Copy, Grid3x3, Glasses, Gauge, Cpu } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { useHBondStore } from '@/lib/molecular/hbond-store'
@@ -182,6 +182,16 @@ export function StatusBar() {
       {outlineOn && !showFps && (
         <span className="hidden shrink-0 items-center gap-1 rounded-full bg-fuchsia-500/15 px-2 py-0.5 font-medium text-fuchsia-600 dark:text-fuchsia-400 md:flex">
           <Gauge className="h-3 w-3" /> 描边
+        </span>
+      )}
+
+      {/* 自动性能模式降级徽章（琥珀呼吸提示：后处理已临时关闭、像素比 ×0.6） */}
+      {perf.degraded && (
+        <span
+          className="hidden shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-600 animate-pulse dark:text-amber-400 md:flex"
+          title="自动性能模式：帧率持续偏低，后处理已临时关闭、分辨率已降低；帧率恢复或 perf off 时自动还原（perf status 查看）"
+        >
+          <Cpu className="h-3 w-3" /> 性能
         </span>
       )}
 

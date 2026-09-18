@@ -141,6 +141,8 @@ export interface Settings {
   rock: boolean
   slab: boolean
   slabThickness: number
+  /** 切层中心沿视线的偏移（Å；0 = 环绕目标处，正 = 远离相机） */
+  slabOffset: number
   hideHydrogens: boolean
   hideWater: boolean
   quality: 'low' | 'medium' | 'high'
@@ -167,6 +169,8 @@ export interface Settings {
   showAxes: boolean
   /** 状态栏 FPS/性能指示器（引擎每 500ms 上报） */
   showFps: boolean
+  /** 自动性能模式：帧率持续偏低时自动降级（关后处理/降像素比），恢复后自动还原 */
+  autoPerf: boolean
   /** 出版级轮廓线（Sobel 深度+亮度边缘检测后处理） */
   outline: boolean
   /** 轮廓线强度（0-3：线条不透明度倍率） */
@@ -191,6 +195,7 @@ export function defaultSettings(): Settings {
     rock: false,
     slab: false,
     slabThickness: 18,
+    slabOffset: 0,
     hideHydrogens: false,
     hideWater: false,
     quality: 'high',
@@ -208,6 +213,7 @@ export function defaultSettings(): Settings {
     stereo: false,
     showAxes: true,
     showFps: false,
+    autoPerf: true,
     outline: false,
     outlineStrength: 1,
     outlineThickness: 1.5,

@@ -138,6 +138,7 @@ const REGISTRY: CmdDef[] = [
       { insert: 'outline_strength', kind: 'value', detail: '轮廓强度 0-3' },
       { insert: 'outline_thickness', kind: 'value', detail: '轮廓粗细 1-4 px' },
       { insert: 'fps', kind: 'value', detail: 'FPS 指示 on/off' },
+      { insert: 'auto_perf', kind: 'value', detail: '自动性能 on/off' },
       { insert: 'transparency', kind: 'value', detail: '表面不透明度' },
       { insert: 'sphere_scale', kind: 'value', detail: '球半径倍率' },
       { insert: 'stick_radius', kind: 'value', detail: '棍半径' },
@@ -174,7 +175,28 @@ const REGISTRY: CmdDef[] = [
   { names: ['count_atoms'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
   { names: ['spin'], args: pos => (pos === 1 ? onOff() : null) },
   { names: ['rock'], args: pos => (pos === 1 ? onOff() : null) },
-  { names: ['slab'], args: pos => (pos === 1 ? [{ insert: 'off', kind: 'value', detail: '关闭' }] : null) },
+  {
+    names: ['slab'],
+    args: pos => (pos === 1 ? [
+      { insert: 'move', kind: 'sub', detail: '沿视线移动 ±Å' },
+      { insert: 'center', kind: 'sub', detail: '回中' },
+      { insert: 'off', kind: 'value', detail: '关闭' },
+    ] : pos === 2 ? [
+      { insert: '-5', kind: 'value', detail: '向相机 5 Å' },
+      { insert: '5', kind: 'value', detail: '离相机 5 Å' },
+      { insert: '-10', kind: 'value', detail: '向相机 10 Å' },
+      { insert: '10', kind: 'value', detail: '离相机 10 Å' },
+    ] : null),
+  },
+  {
+    names: ['perf'],
+    args: pos => (pos === 1 ? [
+      { insert: 'status', kind: 'sub', detail: '当前状态' },
+      { insert: 'on', kind: 'value', detail: '开启' },
+      { insert: 'off', kind: 'value', detail: '关闭并还原' },
+      { insert: 'restore', kind: 'sub', detail: '手动恢复' },
+    ] : null),
+  },
   { names: ['stereo'], args: pos => (pos === 1 ? onOff() : null) },
   { names: ['symmetry'], args: pos => (pos === 1 ? [{ insert: 'off', kind: 'value', detail: '关闭' }] : null) },
   {

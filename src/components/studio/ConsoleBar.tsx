@@ -1,7 +1,7 @@
 'use client'
 
-// 命令行控制台（PyMOL 风格；日志区高度三档可调；Tab 智能补全 + 参数提示）
-import { useEffect, useRef, useState } from 'react'
+// 命令行控制台（PyMOL 风格；日志区高度三档可调；Tab 智能补全 + 参数提示 + Ctrl+R 历史搜索）
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronRight, ChevronsUpDown, CornerDownRight, Terminal, X, Boxes, Filter, Palette, Shapes, Sparkles, TerminalSquare, Wand2 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { runCommand } from '@/lib/molecular/commands'
@@ -71,9 +71,19 @@ export function ConsoleBar() {
   const [histIdx, setHistIdx] = useState(-1)
   const [completions, setCompletions] = useState<CompletionResult | null>(null)
   const [selIdx, setSelIdx] = useState(0)
+  // Ctrl+R 反向历史搜索（输入即查询；匹配预览在提示条，Enter 执行选中项）
+  const [rSearch, setRSearch] = useState<{ active: boolean; query: string; idx: number }>({ active: false, query: '', idx: 0 })
   const logRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+
+  /** 搜索模式当前匹配列表（新→旧） */
+  const rMatches = useMemo(() => {
+    if (!rSearch.active) return []
+    const q = rSearch.query.trim().toLowerCase()
+    return history.slice().reverse().filter(h => h.toLowerCase().includes(q))
+  }, [rSearch.active, rSearch.query, history])
+  const rCur = rMatches.length ? rMatches[Math.min(rSearch.idx, rMatches.length - 1)] : null
 
   useEffect(() => {
     if (logRef.current) {
@@ -109,6 +119,13 @@ export function ConsoleBar() {
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value
+    if (rSearch.active) {
+      // 搜索模式：输入即查询；输入行展示查询、提示条预览匹配
+      setRSearch({ active: true, query: v, idx: 0 })
+      setInput(v)
+      setCompletions(null)
+      return
+    }
     setInput(v)
     recompute(v)
   }
@@ -125,22 +142,57 @@ export function ConsoleBar() {
     inputRef.current?.focus()
   }
 
-  const submit = () => {
-    const cmd = input.trim()
-    if (!cmd) return
-    runCommand(cmd)
-    const next = [...history.filter(h => h !== cmd), cmd].slice(-50)
+  const submitCmd = (cmd: string) => {
+    const c = cmd.trim()
+    if (!c) return
+    runCommand(c)
+    const next = [...history.filter(h => h !== c), c].slice(-50)
     setHistory(next)
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch { /* ignore */ }
     setHistIdx(-1)
+  }
+
+  const submit = () => {
+    submitCmd(input)
     setInput('')
     setCompletions(null)
+    setRSearch({ active: false, query: '', idx: 0 })
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Ctrl+R 反向历史搜索：进入 / 循环下一个更早的匹配
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
+      e.preventDefault()
+      if (!history.length) return
+      if (!rSearch.active) {
+        const q = input.trim()
+        const ms = history.slice().reverse().filter(h => h.toLowerCase().includes(q.toLowerCase()))
+        setRSearch({ active: true, query: q, idx: 0 })
+        setInput(q)
+        setCompletions(null)
+        return
+      }
+      if (rMatches.length) {
+        setRSearch(s => ({ ...s, idx: (s.idx + 1) % rMatches.length }))
+      }
+      return
+    }
     if (e.key === 'Enter') {
+      if (rSearch.active) {
+        // 搜索模式：Enter 执行当前匹配（无匹配时回退执行查询原文）
+        submitCmd(rCur ?? input)
+        setInput('')
+        setCompletions(null)
+        setRSearch({ active: false, query: '', idx: 0 })
+        return
+      }
       submit()
     } else if (e.key === 'ArrowUp') {
+      if (rSearch.active) {
+        e.preventDefault()
+        if (rMatches.length) setRSearch(s => ({ ...s, idx: (s.idx <= 0 ? rMatches.length - 1 : s.idx - 1) }))
+        return
+      }
       // 补全弹层开启时优先导航候选
       if (completions && completions.items.length > 1) {
         e.preventDefault()
@@ -154,6 +206,11 @@ export function ConsoleBar() {
       setInput(history[idx] ?? '')
       recompute(history[idx] ?? '')
     } else if (e.key === 'ArrowDown') {
+      if (rSearch.active) {
+        e.preventDefault()
+        if (rMatches.length) setRSearch(s => ({ ...s, idx: (s.idx >= rMatches.length - 1 ? 0 : s.idx + 1) }))
+        return
+      }
       if (completions && completions.items.length > 1) {
         e.preventDefault()
         setSelIdx(i => (i >= completions.items.length - 1 ? 0 : i + 1))
@@ -166,11 +223,23 @@ export function ConsoleBar() {
       else { setHistIdx(idx); setInput(history[idx]); recompute(history[idx]) }
     } else if (e.key === 'Tab') {
       e.preventDefault()
+      if (rSearch.active) {
+        // 退出搜索模式保留当前行内容，转入常规补全
+        setRSearch({ active: false, query: '', idx: 0 })
+        if (rCur) setInput(rCur)
+        recompute(rCur ?? input)
+        return
+      }
       if (completions?.items.length) {
         acceptItem(completions.items[selIdx] ?? completions.items[0], completions)
       }
     } else if (e.key === 'Escape') {
-      // 先关补全弹层，再关控制台
+      // 先退搜索模式，再关补全弹层，最后关控制台
+      if (rSearch.active) {
+        setRSearch({ active: false, query: '', idx: 0 })
+        if (rCur) setInput(rCur)
+        return
+      }
       if (completions) { setCompletions(null); return }
       setUi({ consoleOpen: false })
     }
@@ -191,7 +260,7 @@ export function ConsoleBar() {
       <div className="flex h-8 items-center gap-2 border-b border-border/50 px-3">
         <Terminal className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
         <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">命令行</span>
-        <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">Tab 补全 · ↑↓ 历史/候选 · help 查看命令</span>
+        <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">Tab 补全 · ↑↓ 历史 · Ctrl+R 搜索 · help 查看命令</span>
         <button
           onClick={cycleHeight}
           className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
@@ -263,19 +332,45 @@ export function ConsoleBar() {
         </div>
       )}
 
-      <div className="mx-2 mb-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 transition-colors duration-200 focus-within:border-emerald-500/60 focus-within:bg-emerald-500/[0.05] focus-within:shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25)]">
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+      {/* 反向历史搜索提示条（Ctrl+R；输入即查询，预览当前匹配） */}
+      {rSearch.active && (
+        <div className="mx-2 mb-0.5 flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/[0.07] px-2.5 py-1 text-[10px]">
+          <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 font-mono font-bold text-amber-600 dark:text-amber-400">reverse-i-search</span>
+          <span className="min-w-0 max-w-[30%] shrink truncate font-mono font-semibold text-foreground/80">{rSearch.query || '·'}</span>
+          <span className="shrink-0 text-muted-foreground/50">→</span>
+          <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
+            {rCur ? <MatchedText text={rCur} frag={rSearch.query.trim()} /> : <span className="italic text-muted-foreground/60">无匹配历史</span>}
+          </span>
+          <span className="shrink-0 tabular-nums text-muted-foreground/70">{rMatches.length ? `${Math.min(rSearch.idx + 1, rMatches.length)}/${rMatches.length}` : '0'}</span>
+          <span className="hidden shrink-0 items-center gap-1 text-muted-foreground/60 lg:flex">
+            <kbd className="rounded border border-border/60 bg-background px-1 font-mono">Ctrl+R</kbd>下一条
+            <kbd className="rounded border border-border/60 bg-background px-1 font-mono">↵</kbd>执行
+            <kbd className="rounded border border-border/60 bg-background px-1 font-mono">Esc</kbd>编辑
+          </span>
+        </div>
+      )}
+
+      <div className={cn(
+        'mx-2 mb-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 transition-colors duration-200 focus-within:shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25)]',
+        rSearch.active
+          ? 'border-amber-500/60 bg-amber-500/[0.05] focus-within:bg-amber-500/[0.07] focus-within:shadow-[inset_0_0_0_1px_rgba(245,158,11,0.3)]'
+          : 'focus-within:border-emerald-500/60 focus-within:bg-emerald-500/[0.05]',
+      )}>
+        <ChevronRight className={cn('h-3.5 w-3.5 shrink-0', rSearch.active ? 'text-amber-500' : 'text-emerald-500')} />
         <input
           ref={inputRef}
           value={input}
           onChange={onChange}
           onKeyDown={onKeyDown}
-          placeholder="load 4hhb · select site = within 5 of resn HEM · color red site · show cartoon …"
-          className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none caret-emerald-600 placeholder:text-muted-foreground/40 dark:caret-emerald-400"
+          placeholder={rSearch.active ? '输入关键词过滤历史…' : 'load 4hhb · select site = within 5 of resn HEM · color red site · show cartoon …'}
+          className={cn(
+            'min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted-foreground/40',
+            rSearch.active ? 'caret-amber-600 dark:caret-amber-400' : 'caret-emerald-600 dark:caret-emerald-400',
+          )}
           spellCheck={false}
           autoComplete="off"
         />
-        <kbd className="hidden shrink-0 rounded border border-border/60 bg-muted/60 px-1 font-mono text-[9px] text-muted-foreground/70 sm:inline">↵</kbd>
+        <kbd className="hidden shrink-0 rounded border border-border/60 bg-muted/60 px-1 font-mono text-[9px] text-muted-foreground/70 sm:inline">{rSearch.active ? 'Ctrl+R' : '↵'}</kbd>
       </div>
     </div>
   )

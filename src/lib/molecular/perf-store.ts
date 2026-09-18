@@ -12,7 +12,10 @@ export interface PerfSnapshot {
 }
 
 interface PerfState extends PerfSnapshot {
+  /** 自动性能模式当前处于降级状态（后处理已临时关闭、像素比已降低） */
+  degraded: boolean
   set: (snap: PerfSnapshot) => void
+  setDegraded: (v: boolean) => void
 }
 
 export const usePerfStore = create<PerfState>()(set => ({
@@ -22,7 +25,9 @@ export const usePerfStore = create<PerfState>()(set => ({
   triangles: 0,
   geometries: 0,
   textures: 0,
+  degraded: false,
   set: snap => set(snap),
+  setDegraded: v => set({ degraded: v }),
 }))
 
 /** FPS 分级颜色（≥55 绿 / ≥30 琥珀 / <30 红） */

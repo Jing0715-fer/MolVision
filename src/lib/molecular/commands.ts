@@ -67,7 +67,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'count_atoms [expr]', desc: '统计原子数', example: 'count_atoms chain A' },
   { cmd: 'spin on|off', desc: '自动旋转', example: 'spin on' },
   { cmd: 'rock on|off', desc: '相机摇摆（±26°）', example: 'rock on' },
-  { cmd: 'slab <n>|off', desc: '裁剪厚度(Å)', example: 'slab 20' },
+  { cmd: 'slab <n>|move <±Å>|center|off', desc: '视向切层（厚度与位置）', example: 'slab 20 · slab move -5 · slab center' },
   { cmd: 'stereo on|off', desc: '红蓝立体渲染', example: 'stereo on' },
   { cmd: 'symmetry <半径Å>|off', desc: '晶体对称伴侣（CRYST1）', example: 'symmetry 25' },
   { cmd: 'map fetch <id>|fofc|isolevel pos/neg', desc: '电子密度图（SF→FFT，Worker 零阻塞；结构未加载时自动获取；差图双 σ）', example: 'map fofc 3ekj' },
@@ -92,6 +92,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+超采样，异步+进度提示）', example: 'ray 1920' },
   { cmd: 'axes on|off', desc: '视口坐标轴指示器（点击轴端对齐视角）', example: 'axes off' },
   { cmd: 'fps on|off', desc: '状态栏性能指示器（FPS/绘制调用/三角形）', example: 'fps on' },
+  { cmd: 'perf on|off|status|restore', desc: '自动性能模式（低帧率降级/恢复）', example: 'perf status · perf off' },
   { cmd: 'outline on|off [强度 粗细]', desc: '出版级轮廓线（Sobel 深度+亮度描边；ray 同样生效）', example: 'outline on · outline on 2 2.5' },
   { cmd: 'session save|export|new|info|clear', desc: '会话存档 / 文件导出 / 新建', example: 'session export · session new' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
@@ -288,10 +289,45 @@ export function runCommand(raw: string): void {
       useMolStore.getState().updateSettings({ slab: false })
       return ok('裁剪关闭')
     }
+    if (arg === 'center' || arg === 'reset') {
+      useMolStore.getState().updateSettings({ slab: true, slabOffset: 0 })
+      return ok('切层已回到环绕目标中心（偏移 0 Å）')
+    }
+    if (arg === 'move') {
+      const d = parseFloat(parts[2] ?? '')
+      if (isNaN(d) || d === 0) return err('用法：slab move <±Å>（沿视线移动切层中心；正 = 远离相机）')
+      const cur = useMolStore.getState().settings
+      const off = Math.max(-80, Math.min(80, (cur.slabOffset ?? 0) + d))
+      useMolStore.getState().updateSettings({ slab: true, slabOffset: off })
+      return ok(`切层位置 → ${off > 0 ? '+' : ''}${off.toFixed(1)} Å（slab move ${d > 0 ? '+' : ''}${d}）`)
+    }
     const n = parseFloat(arg)
-    if (isNaN(n) || n <= 0) return err('用法: slab <厚度Å> 或 slab off')
+    if (isNaN(n) || n <= 0) return err('用法：slab <厚度Å> | slab off | slab move <±Å> | slab center')
     useMolStore.getState().updateSettings({ slab: true, slabThickness: n })
-    return ok(`裁剪厚度 → ${n} Å`)
+    return ok(`裁剪厚度 → ${n} Å（切层中心在环绕目标处；slab move ± 调整位置）`)
+  }
+
+  if (cmd === 'perf') {
+    const arg = (parts[1] ?? 'status').toLowerCase()
+    const s = useMolStore.getState()
+    if (arg === 'on') {
+      s.updateSettings({ autoPerf: true })
+      return ok('自动性能模式已开启：帧率持续偏低（<15 fps 约 3 秒）时自动关闭后处理并降低分辨率，恢复后自动还原')
+    }
+    if (arg === 'off') {
+      s.updateSettings({ autoPerf: false })
+      return ok('自动性能模式已关闭（若处于降级状态将立即还原画质设置）')
+    }
+    if (arg === 'restore') {
+      const restored = engineRef.current?.perfManualRestore()
+      return restored ? ok('已恢复降级前的画质设置（后处理 / 像素比）') : ok('当前无降级基线，画质保持现状')
+    }
+    if (arg === 'status') {
+      const st = engineRef.current?.perfStatus()
+      if (!st) return err('引擎未初始化')
+      return ok(`自动性能模式：${st.autoPerf ? '开' : '关'} · 当前帧率 ${st.fps ? st.fps.toFixed(1) : '—'} fps · ${st.degraded ? '降级中（后处理已关、像素比 ×0.6）' : '正常'}${st.autoPerf ? '（perf off / perf restore 可随时手动干预）' : ''}`)
+    }
+    return err('用法：perf on|off|status|restore')
   }
 
   if (cmd === 'label') {
@@ -588,7 +624,7 @@ export function runCommand(raw: string): void {
   if (cmd === 'set') {
     const key = (parts[1] ?? '').toLowerCase()
     const rawVal = parts.slice(2).join(' ').trim()
-    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / transparency / sphere_scale / stick_radius / cartoon_width')
+    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / transparency / sphere_scale / stick_radius / cartoon_width')
     const s = useMolStore.getState()
     const num = parseFloat(rawVal)
     const on = ['on', '1', 'true', 'open'].includes(rawVal.toLowerCase())
@@ -671,6 +707,11 @@ export function runCommand(raw: string): void {
         s.updateSettings({ showFps: on })
         return ok(`性能指示器 ${on ? '开启（状态栏显示 FPS / 绘制调用 / 三角形数）' : '关闭'}`)
       }
+      case 'auto_perf': case 'autoperf': {
+        if (!on && !off) return err('用法：set auto_perf on|off（低帧率自动降级，恢复后自动还原）')
+        s.updateSettings({ autoPerf: on })
+        return ok(on ? '自动性能模式开启（帧率持续偏低时自动关闭后处理并降分辨率）' : '自动性能模式关闭（画质设置已还原）')
+      }
       case 'outline': {
         if (!on && !off) return err('用法：set outline on|off（出版级轮廓线；或 outline on 1.5 2）')
         s.updateSettings({ outline: on })
@@ -708,7 +749,7 @@ export function runCommand(raw: string): void {
         return n ? ok(`cartoon 宽度 → ${clampNum(num, 0.3, 4, 1)}（${n} 个表示）`) : err('没有 cartoon 表示')
       }
       default:
-        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, axes, transparency, sphere_scale, stick_radius, cartoon_width`)
+        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, transparency, sphere_scale, stick_radius, cartoon_width`)
     }
   }
 

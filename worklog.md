@@ -1096,3 +1096,28 @@ Stage Summary:
 - 关键决策：①补全引擎独立模块（不 import commands.ts 重量级依赖链，避免循环）②EdgePass 放 OutputPass 之后末位上屏（颜色已 sRGB——线色/背景色以原始 sRGB 分量传递；背景像素用深度 mask 还原设定色绕过 ACES）③OutputPass 四边形禁用深度测试/写入（否则破坏 rt1.depthTexture 且因场景更近被拒绝）④每帧 resetComposerBuffers 固定 RenderPass→rt1（swap 奇偶与启用 pass 数解耦）⑤内部遮挡阈值 0.08（表面坡度 ~0.01 与层叠遮挡 ≥0.05 之间）⑥FPS ≥2 帧才结算（节流环境避免 0.x 误导）
 - 未解决问题与风险：①无头环境 1-2fps 无法验证高帧率下 FPS 数值精度（逻辑已按窗口数学验证）②轮廓线在极密堆叠区（如血红蛋白四聚体中心）线密度高——已用 70% 内部遮挡弱化，可再调 outlineThickness 1px ③ray 的透明背景模式不走 composer（描边不生效——透明无背景深度语义，by design）④VLM 建议未落地：低帧率自动降级（性能模式）、导出 SVG/PDF 矢量、链颜色对比度微调、序列条位置指示器
 - 下一阶段建议（优先级序）：① 低帧率自动性能模式（FPS<15 时提示降像素比/关描边——VLM 建议）② 导出增强：SVG/PDF 矢量或 300dpi 指南 ③ 命令历史搜索（Ctrl+R 增量搜索）④ 序列条当前视口聚焦区域指示 ⑤ 深色主题下链颜色对比度提升 ⑥ UI 偏好继续归一（面板宽度等散键收编 Settings）
+
+---
+Task ID: r26
+Agent: main
+Task: 继续开发新功能并打磨旧功能（slab 切层位置控制 + 修复退化平面 bug + 低帧率自动性能模式 + Ctrl+R 历史搜索）
+
+Work Log:
+- 【旧功能修复·关键】slab 裁剪平面数学原为退化状态：两平面交为零厚度薄面（plane0.constant=-(dir·cam+half) 与 plane1.constant=+(dir·cam+half) 联立 → dir·p 恰等于单值）→ 开启 slab 后分子理论上完全不可见。修复为 PyMOL clip 风格：切层中心 = 环绕目标（base = dir·cam + |target-cam| + slabOffset），near/far 平面各保 base∓half，可见域 [base-half, base+half]
+- 新增 Settings.slabOffset（Å，±60 滑块范围，默认 0）与 Settings.autoPerf（默认 true），随会话 round-trip 持久化（slab=true/thick=20/off=-12/autoPerf 刷新恢复全部验证通过）
+- 命令扩展：slab move <±Å>（沿视线相对平移切层中心，±80 夹紧）、slab center|reset（回中）、slab <n> 描述更新；新命令 perf on|off|status|restore；set 新键 auto_perf|autoperf；COMMAND_HELP 同步（slab/perf 两条目 + set 可用列表三处更新）
+- 新增引擎自动性能 watchdog：500ms 统计窗口（与 showFps 指示器独立）——低帧率（<15fps）连续 6 窗口（~3s）且有可降级项（ssao/outline/像素比>1）→ 记录基线、像素比 ×0.6（perfPrFactor）、updateSettings 关闭后处理、perf-store.degraded=true、控制台日志；降级后 ≥30fps 连续 20 窗口（~10s）→ restorePerfBaseline 自动还原；applySettings 检测「降级期间用户手动开启后处理」→ 交还控制权并自动退出自动模式（updateSettings({autoPerf:false})，避免 perfLowStreak 饱和残留导致下一窗口立刻再降级覆盖用户选择——该竞态在 E2E 中实际抓到并修复）；perf off / 开关关闭 → applySettings 立即还原基线（不等下一窗口）
+- 像素比统一入口 applyPixelRatio()：quality 上限 × perfPrFactor（applySettings 与 watchdog 共用，修复 watchdog 直接 setPixelRatio 后被 applySettings 覆盖的路径分叉）；perfStatus() 报告 lastWindowFps（引擎内记录最近窗口帧率，不依赖 showFps 的 store 写入）；perfManualRestore() 手动恢复入口
+- perf-store 增加 degraded 布尔；StatusBar 新增琥珀色呼吸「性能」徽章（Cpu 图标，title 说明降级内容与恢复途径，perf off/恢复后消失）；ScenePanel 视口区新增「自动性能模式」开关（Gauge 图标 + 条件说明文案）；切层区新增「位置（沿视线）」滑块（-60..60 Å）+「回中」按钮（offset=0 时禁用）
+- ConsoleBar 新增 Ctrl+R 反向历史搜索：搜索模式输入即查询（新→旧子串过滤）、提示条（reverse-i-search 标签 + 查询 + 当前匹配 MatchedText 高亮 + i/n 计数 + Ctrl+R/↵/Esc 键提示）、再按 Ctrl+R 或 ↑↓ 循环匹配（回绕）、Enter 直接执行匹配、Esc 取出到输入行编辑、Tab 退出搜索转常规补全；搜索时输入框琥珀色主题（边框/光标/占位符/右下 kbd 标签变化）、补全弹层抑制；submitCmd 重构（submit 与搜索执行共用）；控制台头部提示更新「Tab 补全 · ↑↓ 历史 · Ctrl+R 搜索」
+- complete.ts：slab 注册表升级（move/center/off 子命令 + 第二参数 ±5/±10 数值候选）、perf 命令（status/on/off/restore）、set 键 auto_perf
+- HelpDialog：快捷键表新增 Ctrl+R 条目；渲染与视图区新增「切层（slab）」「自动性能模式」「命令行历史搜索」三段文档
+- 引擎新增 window.__molEngine 调试钩子（QA/诊断用，本轮 E2E 大量依赖）
+- E2E（agent-browser，含 QA 方法论重要教训）：slab 20 中心薄截面 ✓（VLM 确认）→ slab 60 大半分子 ✓ → slab move -15 截面变化（VLM 确认）✓ → move 15 + center 回中 ✓ → move -12 累积 ✓ → 刷新持久化（slab/thick/off/autoPerf）✓ → ScenePanel 位置滑块值 -24 与命令累积一致 ✓ → 回中按钮点击（offset→0、按钮禁用）✓ → 自动性能：perf on + outline/ssao → 18s 降级（outline=false/ssao=false/prFactor=0.6 + 日志 + status「降级中」+ 状态栏「性能」徽章）→ perf off 立即还原（outline/ssao 恢复 true、prFactor=1）→ 手动接手：降级中 outline on → 保持 true + autoPerf 自动退出 + prFactor=1 + 日志「已交还控制权」→ perf status 显示真实帧率（1.8 fps 无头诚实数值）→ 徽章随降级出现/消失 ✓ → Ctrl+R：进入（placeholder 切换）→ 输入 slab → 提示条 1/9 匹配「slab move -12」高亮 → Ctrl+R 循环 2/9「slab center」→ ↑↓ 回绕 → Enter 执行（切层位置 -24 累积正确）→ Esc 取出「perf status」到输入行 ✓ → 补全：pe→perf/superpose、slab →→center/move/off、perf →→off/on/restore/status、set auto_pe→auto_perf ✓ → 自动性能开关双向 + 条件文案 ✓ → 移动端 390px 无横向溢出 ✓ → 浏览器 errors 0 ✓ → lint 0 错 0 警 ✓ → 应用代码 tsc 0 错 ✓ → VLM 终审 8.5/10（截面 9/10「 exceptionally clean」「highly useful」）
+- 【QA 方法论重大教训】①无头浏览器 rAF 极度节流（实测 ~0.2-1fps）——命令改变视觉后 2 秒内截图往往是旧帧，必须等 10 秒以上或验证帧已重渲；本轮一度因此误判「slab 实时切换不生效」，深挖 three.js WebGLClipping 源码（setState/useCache/projectPlanes/refreshMaterial 上传链路）后用「关控制台 + 长 wait」对照实验洗清——结论：slab 功能本身正常，纯时序假象 ②bash 双引号内反引号会被命令替换吞掉导致 agent-browser eval 挂起——用 String.fromCharCode(96) 规避 ③agent-browser press Backquote 对本应用无效（快捷键监听 key '`'）——统一用 window.dispatchEvent(KeyboardEvent) ④像素覆盖率指标会被 UI 骨架（序列条/书签缩略图/控制台）污染，判断「分子是否可见」须用 VLM 目视或纯视口裁剪区域 ⑤HMR 后引擎实例仍是旧编译代码——验证引擎改动必须整页刷新 ⑥快照 ref（e617）可精准点击左侧面板图标
+
+Stage Summary:
+- 项目当前状态：r25 基础上完成「slab 切层体系修复与补全 + 自动性能模式 + 命令行历史搜索」三大功能——①切层数学从退化平面修复为环绕目标中心 ±（厚度/2）+ 偏移控制（slabOffset/move/center/滑块/回中），PyMOL clip 对齐 ②低帧率 watchdog（6 窗口降级/20 窗口恢复/手动接手退出/perf off 即还原），像素比统一入口消除路径分叉，状态栏降级徽章 ③Ctrl+R 反向搜索（增量过滤+循环+取出编辑），长命令重跑效率大幅提升
+- 关键决策：①切层中心取「环绕目标 + 视线偏移」而非相机前固定距离（旋转/缩放时切层稳定跟随关注点）②自动降级的三杠杆=关 ssao/outline + 像素比 ×0.6（比降 quality 更轻，不动几何细分）③手动接手=直接退出自动模式（用户优先，避免 watchdog 与用户抢方向盘；perf on 可重新开启）④恢复走 updateSettings 常规路径（visualRev bump → sync → applySettings 全量应用，避免直接改材质造成状态分叉）⑤__molEngine 调试钩子常驻（后续 QA 受益）
+- 未解决问题与风险：①无头环境无法验证「高帧率恢复」路径（≥30fps 连续 20 窗口）——逻辑经窗口数学推演，真实浏览器待验 ②切层后拾取不感知裁剪（点击被裁剪区域仍可选中原被裁原子，与 PyMOL 行为一致，by design）③切层截面为开放式（材质单面渲染见空心内部），未做 cap 填充面——后续可加 ④VLM 建议未落地：序列条视口聚焦指示、深色主题链色对比度、面板宽度收编 Settings
+- 下一阶段建议（优先级序）：① 切层 cap 封闭截面（stencil 或双面材质方案，出版级截面图）② 序列条当前视口聚焦区域指示（VLM 建议）③ 命令历史搜索升级为全历史持久搜索 + 最近命令快捷徽章 ④ 面板宽度/更多散键 UI 偏好收编 Settings（会话持久化）⑤ 深色主题下链颜色对比度自适应微调

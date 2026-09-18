@@ -294,6 +294,15 @@ export class MolEngine {
   private perfFrames = 0
   private perfLastT = 0
   private perfStatInit = false
+  /** 最近一个统计窗口的帧率（perf status 显示用，与指示器无关） */
+  private lastWindowFps = 0
+  // 自动性能模式（watchdog）：低帧率连续窗口计数 → 降级；高帧率连续窗口 → 恢复
+  private perfLowStreak = 0
+  private perfHighStreak = 0
+  /** 降级前用户设置基线（恢复时还原；手动接手则直接退出自动模式） */
+  private perfBaseline: { ssao: boolean; outline: boolean } | null = null
+  /** 降级时的像素比乘数（恢复时回 1；applySettings 统一乘入 quality 上限） */
+  private perfPrFactor = 1
   // 动画录制（WebM）
   private recorder: MediaRecorder | null = null
   private recordChunks: Blob[] = []
@@ -383,6 +392,9 @@ export class MolEngine {
 
     // 裁剪平面常开（slab 关闭时设置为无穷远 → 不裁剪）
     this.setClippingInfinite()
+
+    // 调试钩子（QA / 诊断用：window.__molEngine 检查引擎内部状态）
+    if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__molEngine = this
 
     // 事件
     this.canvas.addEventListener('pointermove', this.onPointerMove)
@@ -493,14 +505,17 @@ export class MolEngine {
         fog.far = dist * (k + 2.2 - this.settings.fogStrength * 1.2)
       }
     }
-    // 裁剪（slab）
+    // 裁剪（slab）：中心 = 环绕目标沿视线偏移 slabOffset（PyMOL clip 风格切层）
     if (this.settings?.slab) {
       const dir = new THREE.Vector3().subVectors(this.controls.target, cam.position).normalize()
       const half = this.settings.slabThickness / 2
+      // 基准点 = 相机沿视线前进 |target-cam|（即环绕目标），再叠加偏移
+      const base = dir.dot(cam.position) + dist + (this.settings.slabOffset ?? 0)
+      // 可见条件 n·p + c ≥ 0：near 平面保留 base-half 之前方，far 平面保留 base+half 之后方
       this.clippingPlanes[0].normal.copy(dir)
-      this.clippingPlanes[0].constant = -(dir.dot(cam.position) + half)
+      this.clippingPlanes[0].constant = -(base - half)
       this.clippingPlanes[1].normal.copy(dir).negate()
-      this.clippingPlanes[1].constant = dir.dot(cam.position) + half
+      this.clippingPlanes[1].constant = base + half
     }
     // 渲染：stereo 红蓝立体优先（直渲，后处理停用避免串色），其次 GTAO/轮廓线 composer，最后直接渲染
     if (this.settings?.stereo) {
@@ -557,10 +572,12 @@ export class MolEngine {
     this.perfFrames++
     const elapsed = now - this.perfLastT
     if (elapsed >= 500 && this.perfFrames >= 2) {
+      const fps = (this.perfFrames * 1000) / elapsed
+      this.lastWindowFps = fps
       if (this.settings?.showFps) {
         const info = this.renderer.info
         usePerfStore.getState().set({
-          fps: (this.perfFrames * 1000) / elapsed,
+          fps,
           frameMs: elapsed / this.perfFrames,
           drawCalls: info.render.calls / this.perfFrames,
           triangles: info.render.triangles / this.perfFrames,
@@ -568,6 +585,8 @@ export class MolEngine {
           textures: info.memory.textures,
         })
       }
+      // 自动性能模式 watchdog（与指示器独立运行）
+      this.updateAutoPerf(fps)
       this.perfFrames = 0
       this.perfLastT = now
     } else if (elapsed >= 8000) {
@@ -575,6 +594,90 @@ export class MolEngine {
       this.perfFrames = 0
       this.perfLastT = now
     }
+  }
+
+  // ---------- 自动性能模式（watchdog） ----------
+
+  /** 每个统计窗口调用：低帧率连续 6 窗口（~3s）降级；降级后 ≥30fps 连续 20 窗口（~10s）恢复 */
+  private updateAutoPerf(fps: number) {
+    if (!this.settings?.autoPerf) {
+      // 自动模式关闭：若此前由自动降级 → 立即恢复基线（手动接手场景已在 applySettings 处理并退出自动模式）
+      if (this.perfBaseline) this.restorePerfBaseline('自动性能模式已关闭，画质设置已还原')
+      return
+    }
+    if (this.perfBaseline) {
+      // 已降级：观察恢复条件（≥30fps 连续 20 窗口）
+      if (fps >= 30) {
+        this.perfHighStreak++
+        if (this.perfHighStreak >= 20) {
+          this.restorePerfBaseline(`帧率已稳定（${fps.toFixed(0)} fps），自动还原后处理与分辨率`)
+        }
+      } else {
+        this.perfHighStreak = 0
+      }
+      return
+    }
+    // 未降级：低帧率连续 6 窗口触发（无可降级项时保持饱和计数，不反复触发）
+    if (fps < 15) {
+      this.perfLowStreak++
+      if (this.perfLowStreak < 6) return
+      const s = this.settings
+      const heavy = s.ssao || s.outline || this.renderer.getPixelRatio() > 1.01
+      if (!heavy) return
+      this.perfBaseline = { ssao: s.ssao, outline: s.outline }
+      this.perfPrFactor = 0.6
+      this.perfHighStreak = 0
+      // 立即生效：像素比直接下调；后处理经 store 走常规 sync 路径（同时写降级徽章）
+      this.applyPixelRatio()
+      useMolStore.getState().updateSettings({ ssao: false, outline: false })
+      usePerfStore.getState().setDegraded(true)
+      useMolStore.getState().appendLog(
+        'out',
+        `自动性能模式：帧率持续偏低（${fps.toFixed(0)} fps），已临时关闭后处理并降低分辨率（perf off 或等待恢复）`,
+      )
+    } else {
+      this.perfLowStreak = 0
+    }
+  }
+
+  /** 还原降级前的用户设置（pixel ratio 因子 + ssao/outline） */
+  private restorePerfBaseline(reason: string) {
+    const baseline = this.perfBaseline
+    this.perfBaseline = null
+    this.perfLowStreak = 0
+    this.perfHighStreak = 0
+    this.perfPrFactor = 1
+    this.applyPixelRatio()
+    if (baseline) {
+      useMolStore.getState().updateSettings({ ssao: baseline.ssao, outline: baseline.outline })
+    }
+    usePerfStore.getState().setDegraded(false)
+    useMolStore.getState().appendLog('out', reason)
+  }
+
+  /** 像素比统一入口：quality 上限 × 自动降级因子（applySettings 与 watchdog 共用） */
+  private applyPixelRatio() {
+    const cap = this.settings?.quality === 'high' ? 2 : this.settings?.quality === 'medium' ? 1.5 : 1
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, cap) * this.perfPrFactor)
+  }
+
+  /** 命令行 perf status / 恢复入口 */
+  perfStatus(): { autoPerf: boolean; degraded: boolean; fps: number } {
+    const p = usePerfStore.getState()
+    return { autoPerf: !!this.settings?.autoPerf, degraded: p.degraded, fps: this.lastWindowFps }
+  }
+
+  /** 手动恢复（perf restore）：按基线还原 */
+  perfManualRestore() {
+    if (!this.perfBaseline) {
+      // 无基线也重置因子，保证一致状态
+      this.perfPrFactor = 1
+      this.applyPixelRatio()
+      usePerfStore.getState().setDegraded(false)
+      return false
+    }
+    this.restorePerfBaseline('已手动恢复画质设置')
+    return true
   }
 
   // ---------- 坐标轴指示器（朝向罗盘） ----------
@@ -2747,6 +2850,21 @@ export class MolEngine {
     const prev = this.settings
     const changed = JSON.stringify(settings) !== JSON.stringify(prev)
     this.settings = settings
+    // 自动性能模式：降级期间用户重新开启后处理 → 交还控制权并退出自动模式（用户优先，避免反复覆盖手动选择）
+    if (this.perfBaseline && (settings.ssao || settings.outline)) {
+      this.perfBaseline = null
+      this.perfLowStreak = 0
+      this.perfHighStreak = 0
+      this.perfPrFactor = 1
+      this.applyPixelRatio()
+      usePerfStore.getState().setDegraded(false)
+      useMolStore.getState().appendLog('out', '自动性能模式：检测到手动开启后处理，已交还控制权并退出（perf on 可重新开启）')
+      useMolStore.getState().updateSettings({ autoPerf: false })
+    }
+    // 自动模式被关闭（perf off / 开关/会话恢复）→ 立即还原基线，不等下一个统计窗口
+    if (prev && prev.autoPerf && !settings.autoPerf && this.perfBaseline) {
+      this.restorePerfBaseline('自动性能模式已关闭，画质设置已还原')
+    }
     if (!changed) return
     // 背景
     this.scene.background = new THREE.Color(settings.background)
@@ -2785,9 +2903,8 @@ export class MolEngine {
     if (!settings.rock) this.rockBase = null
     // slab
     if (!settings.slab) this.setClippingInfinite()
-    // 画质
-    const cap = settings.quality === 'high' ? 2 : settings.quality === 'medium' ? 1.5 : 1
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, cap))
+    // 画质（像素比统一入口：quality 上限 × 自动降级因子）
+    this.applyPixelRatio()
     this.pickablesCache = null
   }
 

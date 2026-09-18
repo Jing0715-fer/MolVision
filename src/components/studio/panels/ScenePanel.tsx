@@ -124,6 +124,17 @@ export function ScenePanel() {
             状态栏实时显示帧率 / 绘制调用 / 三角形数（500ms 刷新，≥55 绿 · ≥30 琥珀 · &lt;30 红）。多结构大场景排查卡顿用。命令行等价：fps on / fps off。
           </p>
         )}
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Gauge className="h-3.5 w-3.5 text-amber-500" /> 自动性能模式
+          </span>
+          <Switch checked={settings.autoPerf} onCheckedChange={v => updateSettings({ autoPerf: v })} />
+        </div>
+        {settings.autoPerf && (
+          <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+            帧率持续偏低时自动关闭后处理并降低分辨率，恢复后自动还原；降级时状态栏亮起琥珀色「性能」徽章。命令行等价：perf on / perf off / perf status。
+          </p>
+        )}
       </div>
 
       <SectionTitle>交互与动画</SectionTitle>
@@ -221,15 +232,39 @@ export function ScenePanel() {
           <Switch checked={settings.slab} onCheckedChange={v => updateSettings({ slab: v })} />
         </div>
         {settings.slab && (
-          <div>
-            <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>厚度</span><span className="font-mono">{settings.slabThickness.toFixed(0)} Å</span>
+          <div className="space-y-3">
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>厚度</span><span className="font-mono">{settings.slabThickness.toFixed(0)} Å</span>
+              </div>
+              <Slider
+                value={[settings.slabThickness]} min={2} max={80} step={1}
+                onValueChange={v => updateSettings({ slabThickness: v[0] })}
+              />
             </div>
-            <Slider
-              value={[settings.slabThickness]} min={2} max={80} step={1}
-              onValueChange={v => updateSettings({ slabThickness: v[0] })}
-            />
-            <p className="mt-1 text-[10px] text-muted-foreground/70">沿视线方向仅显示厚度内的分子区域。</p>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  位置（沿视线）
+                  <button
+                    onClick={() => updateSettings({ slabOffset: 0 })}
+                    disabled={settings.slabOffset === 0}
+                    className="rounded border border-border/60 bg-background/60 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground disabled:opacity-40 disabled:hover:border-border/60 disabled:hover:text-muted-foreground"
+                    title="回到环绕目标中心（slab center）"
+                  >
+                    回中
+                  </button>
+                </span>
+                <span className="font-mono">{settings.slabOffset > 0 ? '+' : ''}{settings.slabOffset.toFixed(0)} Å</span>
+              </div>
+              <Slider
+                value={[settings.slabOffset]} min={-60} max={60} step={1}
+                onValueChange={v => updateSettings({ slabOffset: v[0] })}
+              />
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+              沿视线方向仅显示厚度内的分子区域，切层中心默认在环绕目标处；拖动「位置」或命令行 slab move ± 可推进切层穿过分子内部。命令行等价：slab 20 · slab move -5 · slab center。
+            </p>
           </div>
         )}
       </div>
