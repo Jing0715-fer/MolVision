@@ -294,6 +294,24 @@ export class MolEngine {
   private gizmoScene: THREE.Scene | null = null
   private gizmoCamera: THREE.OrthographicCamera | null = null
   private gizmoDiscTex: THREE.CanvasTexture | null = null
+  /** 罗盘逐轴部件（hover 发光反馈用）：正方向箭头+字母 / 负方向暗点 */
+  private gizmoAxisParts: {
+    dir: THREE.Vector3
+    shaft: THREE.Mesh
+    head: THREE.Mesh
+    label: THREE.Sprite
+    neg: THREE.Mesh
+    mat: THREE.MeshBasicMaterial
+    negMat: THREE.MeshBasicMaterial
+    baseColor: THREE.Color
+    labelScale: number
+    /** 正方向箭头发光值（0..1） */
+    glowPos: number
+    /** 负方向暗点发光值（0..1） */
+    glowNeg: number
+  }[] = []
+  /** 当前 hover 的轴（带符号单位向量；null = 无）；由 UI 覆盖层写入 */
+  private gizmoHover: THREE.Vector3 | null = null
 
   constructor(container: HTMLElement, private callbacks: EngineCallbacks = {}) {
     this.container = container
@@ -507,11 +525,15 @@ export class MolEngine {
 
   // ---------- 坐标轴指示器（朝向罗盘） ----------
 
+  /** hover 发光用临时白色（避免每帧 new Color） */
+  private static readonly GIZMO_WHITE = new THREE.Color(1, 1, 1)
+
   /** 懒建指示器场景：三轴箭头（RGB↔XYZ 惯例）+ 轴字母 + 负方向暗点 + 主题中性背景圆盘 */
   private buildGizmo() {
     const scene = new THREE.Scene()
     const root = new THREE.Group()
     scene.add(root)
+    this.gizmoAxisParts = []
 
     // 背景圆盘：Sprite 永远面向相机；半透明底 + 细环（深浅主题通吃）
     const px = 128
@@ -561,12 +583,19 @@ export class MolEngine {
       lbl.position.copy(dir.clone().multiplyScalar(LEN + 0.26))
       root.add(lbl)
 
-      const neg = new THREE.Mesh(
-        new THREE.SphereGeometry(0.052, 10, 10),
-        new THREE.MeshBasicMaterial({ color: a.color, transparent: true, opacity: 0.42 }),
-      )
+      const negMat = new THREE.MeshBasicMaterial({ color: a.color, transparent: true, opacity: 0.42 })
+      const neg = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 10), negMat)
       neg.position.copy(dir.clone().multiplyScalar(-0.64))
       root.add(neg)
+
+      // 记录部件供 hover 发光（renderGizmo 每帧驱动插值；正/负端独立发光）
+      this.gizmoAxisParts.push({
+        dir, shaft, head, label: lbl, neg, mat, negMat,
+        baseColor: new THREE.Color(a.color),
+        labelScale: lbl.scale.x,
+        glowPos: 0,
+        glowNeg: 0,
+      })
     }
 
     this.gizmoScene = scene
@@ -583,6 +612,40 @@ export class MolEngine {
     const w = this.container.clientWidth || 1
     const h = this.container.clientHeight || 1
     if (w < AXIS_GIZMO.size + AXIS_GIZMO.margin * 2 || h < AXIS_GIZMO.size + AXIS_GIZMO.margin * 2) return
+
+    // hover 发光动画（指数逼近；端点专属——hover 正端亮箭头，hover 负端亮暗点，
+    // 同轴另一端跟随轻微提亮保持轴级反馈）
+    const hv = this.gizmoHover
+    for (const p of this.gizmoAxisParts) {
+      const dot = hv ? p.dir.dot(hv) : 0 // +1 = 正端 hover；-1 = 负端 hover
+      const tPos = hv ? (dot > 0.5 ? 1 : dot < -0.5 ? 0.3 : 0) : 0
+      const tNeg = hv ? (dot < -0.5 ? 1 : dot > 0.5 ? 0.3 : 0) : 0
+      p.glowPos += (tPos - p.glowPos) * 0.28
+      p.glowNeg += (tNeg - p.glowNeg) * 0.28
+      const gp = p.glowPos
+      if (gp > 0.004) {
+        // 正端：箭头提亮 + 微放大
+        p.mat.color.copy(p.baseColor).lerp(MolEngine.GIZMO_WHITE, 0.42 * gp)
+        p.shaft.scale.setScalar(1 + 0.16 * gp)
+        p.head.scale.setScalar(1 + 0.22 * gp)
+        p.label.scale.setScalar(p.labelScale * (1 + 0.18 * gp))
+      } else if (gp !== 0) {
+        p.glowPos = 0
+        p.mat.color.copy(p.baseColor)
+        p.shaft.scale.setScalar(1)
+        p.head.scale.setScalar(1)
+        p.label.scale.setScalar(p.labelScale)
+      }
+      const gn = Math.max(p.glowNeg, gp * 0.3) // 正端 hover 时负点跟随微亮
+      if (gn > 0.004) {
+        p.negMat.opacity = 0.42 + 0.5 * gn
+        p.neg.scale.setScalar(1 + 0.4 * gn)
+      } else if (p.glowNeg !== 0) {
+        p.glowNeg = 0
+        p.negMat.opacity = 0.42
+        p.neg.scale.setScalar(1)
+      }
+    }
 
     const q = cam.quaternion
     gc.position.set(0, 0, 4).applyQuaternion(q)
@@ -629,6 +692,16 @@ export class MolEngine {
       }
     }
     return best
+  }
+
+  /** 设置罗盘 hover 轴（带符号单位向量；null = 移出）——驱动轴端发光反馈 */
+  setGizmoHover(dir: THREE.Vector3 | null) {
+    if (dir) {
+      if (!this.gizmoHover) this.gizmoHover = dir.clone().normalize()
+      else this.gizmoHover.copy(dir).normalize()
+    } else {
+      this.gizmoHover = null
+    }
   }
 
   /** 沿轴方向对齐视角（点击指示器轴端）：保持目标点与距离，平滑过渡；|Y| 向用 Z 作 up 防退化 */
@@ -3020,6 +3093,8 @@ export class MolEngine {
       this.gizmoDiscTex = null
       this.gizmoScene = null
       this.gizmoCamera = null
+      this.gizmoAxisParts = []
+      this.gizmoHover = null
     }
     this.renderer.dispose()
     if (this.canvas.parentElement === this.container) this.container.removeChild(this.canvas)

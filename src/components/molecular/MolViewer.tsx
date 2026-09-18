@@ -487,16 +487,23 @@ export default function MolViewer() {
         </div>
       )}
 
-      {/* 坐标轴指示器点击层（与引擎 AXIS_GIZMO 视口对齐；点击轴端平滑对齐视角） */}
+      {/* 坐标轴指示器点击层（与引擎 AXIS_GIZMO 视口对齐；hover 轴端发光反馈，点击平滑对齐视角） */}
       {showAxes && (
         <div
           className="absolute right-3 top-3 z-10 cursor-pointer rounded-full transition hover:bg-foreground/[0.04] active:bg-foreground/[0.08]"
           style={{ width: AXIS_GIZMO.size, height: AXIS_GIZMO.size }}
           title="坐标轴指示器（点击轴端对齐视角；场景面板可关闭）"
+          onMouseMove={e => {
+            engine.current?.setGizmoHover(engine.current?.gizmoAxisFromPoint(e.clientX, e.clientY) ?? null)
+          }}
+          onMouseLeave={() => {
+            engine.current?.setGizmoHover(null)
+          }}
           onClick={e => {
             const eng = engine.current
             const dir = eng?.gizmoAxisFromPoint(e.clientX, e.clientY)
             if (!eng || !dir) return
+            eng.setGizmoHover(null)
             eng.orientAlongAxis(dir)
             const name = Math.abs(dir.x) > 0.5 ? (dir.x > 0 ? '+X' : '-X')
               : Math.abs(dir.y) > 0.5 ? (dir.y > 0 ? '+Y' : '-Y')

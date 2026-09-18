@@ -1024,3 +1024,49 @@ Stage Summary:
 - 关键决策：①罗盘放右上角（左下有密度图/色标图例、右下有快速风格，右上空闲）②scissor+viewport 叠加渲染而非 HTML Canvas 覆盖（与 GTAO/直渲路径天然兼容，零 DOM 成本）③轴色用 RGB↔XYZ 科学惯例（PyMOL/ChimeraX/mol* 通行，非 UI 主题色）④点击拾取阈值 0.45 留空白防误触 ⑤ray 保持同步阻塞渲染但先 yield 双 rAF 让 toast 先绘制（感知异步）
 - 未解决问题与风险：①罗盘与 ViewBar 在 12 书签+矮视口极端组合可能视觉重叠（罕见边界）②录制 WebM 会包含罗盘（视作导航上下文，保留）③FLIP 重排动画未做（右键菜单已覆盖排序需求）
 - 下一阶段建议（优先级序）：① morph 帧插值升级（键长校正/去碰撞）② UI 偏好统一 settings store（序列条高度/控制台高度）③会话文件「合并导入」模式 ④罗盘轴端 hover 高亮（发光反馈）⑤序列条高度可调
+
+---
+Task ID: feat-r24
+Agent: main
+Task: 继续开发新功能并打磨旧功能——morph 帧精修（rigimol 风格键长约束+去碰撞）、会话合并导入、序列条/控制台高度档位、罗盘 hover 端点专属发光
+
+Work Log:
+- 读取 worklog（r23 完成罗盘/ray 异步/RepCard 紧凑/时间轴右键菜单）；dev server 运行正常
+- 【新功能 A：morph 帧精修（新模块 morph-refine.ts，rigimol 风格）】
+  - 动机：纯逐原子插值中间帧两类伪影——①键长畸变（旋转键线性插值先收缩后恢复，视感「橡皮筋抖动」）②原子穿插（侧链扫过空间与非键原子重叠）
+  - SHAKE 松弛：每键目标长度 = 两端真实构象（样条结点）键长线性插值；按逆质量权重沿键轴拉回（H 原子 w=1 / 重原子 w=1/12，H 承担大部分修正）；迭代数自适应（帧>60 用 3 轮否则 5 轮）
+  - 去碰撞：均匀空间网格（cell 4Å）找重原子非键近距对（<0.72×(ri+rj)，vdW 用 FreeSASA 集）；排除成键对（跨残基二硫键显式排除）/同残基/相邻残基；对称推开各半+0.02Å 微过冲；2 pass，每 pass 后跑 2 轮 SHAKE 修复键长
+  - 集成：buildMorph/buildMultiMorph 加 refine 参数（默认 true）；帧参数 us 用与位置插值一致的缓动参数（双构象=smoothstep e / 多态=样条均匀 u）；首尾真实构象不动；MorphResult/MultiMorphResult 增加 refine 统计
+  - 命令行：morph 尾部 norefine 标志关闭精修；输出统计行（键数/偏差均值/最大值/碰撞修复数）；COMMAND_HELP 更新
+- 【新功能 B：会话合并导入】
+  - session.ts mergeSessionFile(file)：不清空当前场景追加结构——名称冲突自动编号（4HHB-2 递增到-99 兜底时间戳）；保留文件中的叠合位姿与对称设置；命名选择合并（重名跳过、structureIndex 按新增结构尾部偏移重映射）；视角书签追加合并（重名跳过）；当前设置/相机/密度图不动；合并后 saveSession 快照
+  - views-store.ts 新增 mergeBookmarks(list)：校验+重名跳过+id 冲突重生成+MAX 截断+persist
+  - Toolbar 会话菜单新增「合并会话文件…」（GitMerge sky 图标）；sessionImportMode ref 区分 replace/merge（两菜单项各自显式设定，防模式残留）；input 复用同一隐藏元素
+  - HelpDialog「会话与文件」段新增合并文档
+- 【打磨 C：UI 偏好档位（Settings 持久化）】
+  - types.ts Settings 新增 sequenceHeight/consoleHeight（'compact'|'normal'|'tall'，默认 normal；随会话存档自动持久化+刷新恢复）
+  - SequenceBar：头部改为 flex 容器（折叠按钮 flex-1 min-w-0 + 高档位循环按钮 ChevronsUpDown）；内容区 max-h-20/40/72 + transition-[max-height]；标题 span 加 truncate 防窄面板溢出
+  - ConsoleBar：头部新增高档位循环按钮；日志区 h-24/36/56 + transition-[height]；头部各元素 min-w-0/truncate/shrink-0 防溢出
+- 【打磨 D：罗盘 hover 端点专属发光（engine.ts）】
+  - gizmoAxisParts 记录逐轴部件（shaft/head/label/neg/mat/negMat/baseColor）；gizmoHover 带符号向量由 UI 覆盖层写入（setGizmoHover 公开方法）
+  - renderGizmo 每帧驱动 glowPos/glowNeg 指数逼近（0.28）：hover 正端→箭头提亮 0.42 lerp 白+放大 1.16-1.22×+字母 1.18×；hover 负端→暗点 opacity 0.42→0.92+放大 1.4×；同轴另一端 0.3 微亮保持轴级反馈；glow<0.004 归零复位
+  - MolViewer 覆盖层 onMouseMove→gizmoAxisFromPoint→setGizmoHover；onMouseLeave/点击后清 null；dispose 清理 parts
+  - GIZMO_WHITE 静态常量避免每帧 new Color
+- 【E2E 全流程验证（agent-browser 真实交互）】
+  - morph 精修：1BQL+2LYZ（T4 溶菌酶同源对）→ morph m1 = 1BQL 2LYZ 30 → 969 原子/989 键约束/中间帧偏差均值 0.030 Å 已归零（最大 1.015 Å）/修复 102 处碰撞/总 243ms ✓
+  - norefine 对照：morph m2 … norefine → 「帧精修已关闭」+ 70ms（精修成本 ~173ms 可接受）✓
+  - 多态精修：+1LYD → morph multi mm = 1BQL 2LYZ 1LYD 40 → 339 键/偏差均值 0.158 Å（最大 1.839 Å）/修复 818 处碰撞/115ms ✓（多态偏离更大恰证明精修价值）
+  - 会话合并闭环：session export 下载 883KB → close all → load 4hhb → 会话菜单「合并会话文件…」→ upload → 「已合并会话：新增 6 个结构」+ 7 结构总数 ✓；二次合并同名文件 → 13 结构 + 1BQL-2/2LYZ-2/m1-2/m2-2/1LYD-2/mm-2 冲突编号全部出现 ✓
+  - 序列条高度：标准→加高（max-h-72 类确认）→紧凑（max-h-20）三档循环 ✓；整页刷新后保持「紧凑」（Settings 持久化）+ 13 结构恢复 ✓
+  - 控制台高度：标准(h-36)→加高(h-56)→紧凑(h-24) 循环 ✓
+  - 罗盘发光：toast 遮挡排除后像素对比——hover +Y 箭头 0→2 亮绿像素（g=205>基色 175）；hover -Y 暗点 4→12 像素增亮（opacity+scale 生效）✓；带坐标合成点击对齐回归（「视角已对齐 +Y 轴」日志）✓
+  - 移动端 390×844：scrollW=clientW=390 无横向滚动 ✓
+  - 回归：lint 0 错 0 警 ✓；tsc 应用代码 0 错 ✓；浏览器 errors 0 ✓；dev.log 无运行时错误 ✓
+  - VLM 终审 8.7/10：布局 8.5/渲染 8.0/UI 细节 9.0/溢出检查 9.5（「未发现任何元素溢出、文字截断或错位」「紧凑模式设计非常出色」「视角书签浮卡是优于传统软件的创新」）
+- 【QA 方法论补充】①agent-browser 会话可能跨 QA 存活（localStorage 残留上次结构）——测试前先 close all ②sonner toast 长时间驻留会遮挡视口右上角罗盘区域，elementFromPoint 可确认遮挡源，测试前主动移除 ③eval 的 el.click() 无 clientX/Y——罗盘等坐标敏感交互须 dispatchEvent(new MouseEvent('click',{clientX,clientY})) ④下载文件落 ~/Downloads（agent-browser 自动接受下载）⑤隐藏 input 用 upload 命令需先临时移除 hidden class（Playwright setInputFiles 本身支持隐藏元素，但快照不含 display:none 元素）
+
+Stage Summary:
+- 项目当前状态：r23 基础上完成「morph 插值算法升级 + 会话文件体系补全 + UI 偏好持久化」——①帧精修（SHAKE 键长约束+网格去碰撞，双构象/多态全覆盖，norefine 可关）②会话合并导入（结构追加+冲突编号+命名选择/书签合并）③序列条/控制台高度三档（Settings 随会话持久化）④罗盘 hover 端点专属发光
+- 关键决策：①键长目标取结点插值而非两端 lerp（多态样条中间态键长贴近邻近真实构象）②逆质量权重让 H 原子承担修正（化学上正确且视觉自然）③碰撞阈值 0.72×vdW 和排除 |Δres|≤1（肽平面/相邻侧链合法近距不误判）④合并导入不改设置/相机/密度图（合并语义=只动结构与书签）⑤发光分 glowPos/glowNeg 独立通道（端点专属反馈而非整轴点亮）
+- 未解决问题与风险：①morph 精修的网格 cell 4Å 对超大金属离子对（K-K 5.5Å）检测不到（罕见）②SHAKE 是几何投影非能量最小化——极端构象变化下键角仍可能异常（rigimol 同级别局限）③合并导入的命名选择 structureIndex 映射假设「新增结构全部成功添加」（部分失败时可能错位——已按 added 计数偏移，极端场景低概率）④VLM 建议未落地：FPS 指示器、命令行 Tab 补全、MSA 多序列视图、景深/轮廓线后处理、结构分组折叠
+- 下一阶段建议（优先级序）：① 命令行 Tab 智能补全 + 参数提示（VLM 建议，高频操作效率提升明显）② FPS/性能指示器（状态栏，多结构场景价值大）③ 结构面板分组/折叠（13+ 结构滚动成本）④ 景深/轮廓线一键出版级后处理 ⑤ UI 偏好继续归一（面板宽度等散键）⑥ 时间轴 FLIP 动画

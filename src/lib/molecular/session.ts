@@ -369,6 +369,98 @@ export async function importSessionFile(file: File): Promise<number> {
   return restored
 }
 
+/**
+ * 合并导入 .molvision 文件：不清空当前场景，把文件中的结构追加进来。
+ * · 名称冲突自动加序号后缀（如 4HHB-2）；保留文件中的叠合位姿与对称设置
+ * · 命名选择随结构合并（重名跳过）；视角书签追加（重名跳过）
+ * · 当前设置/相机/密度图保持不变（合并只动结构与书签）
+ * 返回新增结构数（-1 = 文件无效）。
+ */
+export async function mergeSessionFile(file: File): Promise<number> {
+  const text = await file.text()
+  let data: (SessionData & { format?: string }) | null = null
+  try { data = JSON.parse(text) as SessionData & { format?: string } } catch {
+    throw new Error('文件不是有效的 JSON')
+  }
+  if (!data || data.format !== SESSION_FILE_FORMAT || data.version !== 1 || !Array.isArray(data.structures)) {
+    throw new Error('不是有效的 MolVision 会话文件（.molvision）')
+  }
+  if (!data.structures.some(s => s.text)) {
+    throw new Error('会话文件中没有包含结构数据（可能导出时被裁剪）')
+  }
+
+  const store = useMolStore.getState()
+  // 名称去重：同名结构自动加序号后缀
+  const taken = new Set(store.structures.map(x => x.name))
+  const uniqueName = (want: string) => {
+    if (!taken.has(want)) { taken.add(want); return want }
+    for (let k = 2; k < 100; k++) {
+      const cand = `${want}-${k}`
+      if (!taken.has(cand)) { taken.add(cand); return cand }
+    }
+    const fallback = `${want}-${Date.now() % 10000}`
+    taken.add(fallback)
+    return fallback
+  }
+  // 命名选择重名检测（全局名称空间）
+  const takenSelNames = new Set(store.namedSelections.map(ns => ns.name))
+
+  let added = 0
+  for (const ss of data.structures) {
+    if (!ss.text) continue
+    try {
+      const parsed = parseStructure(ss.text, ss.name, ss.format)
+      if (parsed.atoms.count === 0) continue
+      const finalName = uniqueName(ss.name)
+      // 保留文件中的叠合位姿（合并语义：按原样放到当前场景）
+      if (ss.transform) applyRigidTransform(parsed, ss.transform.quat, ss.transform.translation)
+      const st = useMolStore.getState()
+      const id = st.addStructure(parsed, finalName, 0)
+      textRegistry.set(id, ss.text)
+      useMolStore.setState(s => ({
+        structures: s.structures.map(x => x.id === id
+          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible, transform: ss.transform }
+          : x),
+      }))
+      if (ss.symmetry?.radius && ss.symmetry.radius > 0) {
+        engineRef.current?.updateSymmetry(id, ss.symmetry.radius)
+      }
+      added++
+    } catch { /* 单结构失败不阻断合并 */ }
+  }
+
+  // 命名选择合并（重名跳过；structureIndex 按当前结构顺序重新映射）
+  if (Array.isArray(data.namedSelections)) {
+    // 恢复后的结构位于数组尾部：导出时 structureIndex 指向文件内结构序——
+    // 合并时新增结构依次排在原有结构之后，映射 = 原有数 + 文件内序号（仅当全部成功添加）
+    const base = useMolStore.getState().structures.length - added
+    const existing = useMolStore.getState().namedSelections
+    const merged = [...existing]
+    for (const ns of data.namedSelections) {
+      if (!ns?.name || takenSelNames.has(ns.name)) continue
+      if (base < 0) break
+      const sid = useMolStore.getState().structures[base + ns.structureIndex]?.id
+      if (!sid) continue
+      takenSelNames.add(ns.name)
+      merged.push({ name: ns.name, structureId: sid, expr: ns.expr, indices: ns.indices, count: ns.count })
+    }
+    if (merged.length > existing.length) useMolStore.setState({ namedSelections: merged })
+  }
+
+  // 视角书签合并（追加，重名跳过）
+  if (Array.isArray(data.views)) {
+    const n = useViewsStore.getState().mergeBookmarks(data.views)
+    if (n > 0) useMolStore.getState().appendLog('out', `已合并 ${n} 个视角书签（重名跳过）`)
+  }
+
+  // 合并后快照到本地存档（含原有 + 新增结构）
+  saveSession()
+  useMolStore.getState().appendLog('out', added > 0
+    ? `已合并会话（来自 ${file.name}）：新增 ${added} 个结构（名称冲突已自动编号）`
+    : `会话合并完成，但文件中没有可恢复的结构（${file.name}）`)
+  return added
+}
+
 /** 供命令行/调试 */
 export function sessionInfo(): string {
   try {

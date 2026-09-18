@@ -1,18 +1,30 @@
 'use client'
 
-// 命令行控制台（PyMOL 风格）
+// 命令行控制台（PyMOL 风格；日志区高度三档可调：紧凑/标准/加高）
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Terminal, X } from 'lucide-react'
+import { ChevronRight, ChevronsUpDown, Terminal, X } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { runCommand, COMMAND_HELP } from '@/lib/molecular/commands'
 import { cn } from '@/lib/utils'
 
 const HISTORY_KEY = 'molvision-cmd-history'
+const LOG_HEIGHT_CLASS: Record<string, string> = {
+  compact: 'h-24',
+  normal: 'h-36',
+  tall: 'h-56',
+}
+const LOG_HEIGHT_LABEL: Record<string, string> = {
+  compact: '紧凑',
+  normal: '标准',
+  tall: '加高',
+}
 
 export function ConsoleBar() {
   const ui = useMolStore(s => s.ui)
   const setUi = useMolStore(s => s.setUi)
   const consoleLog = useMolStore(s => s.consoleLog)
+  const consoleHeight = useMolStore(s => s.settings.consoleHeight)
+  const updateSettings = useMolStore(s => s.updateSettings)
   const [input, setInput] = useState('')
   const [history, setHistory] = useState<string[]>(() => {
     if (typeof window === 'undefined') return []
@@ -77,20 +89,33 @@ export function ConsoleBar() {
 
   if (!ui.consoleOpen) return null
 
+  const cycleHeight = () => {
+    const next = consoleHeight === 'compact' ? 'normal' : consoleHeight === 'normal' ? 'tall' : 'compact'
+    updateSettings({ consoleHeight: next })
+  }
+
   return (
     <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border/70 bg-popover/95 shadow-2xl backdrop-blur-md">
       <div className="flex h-8 items-center gap-2 border-b border-border/50 px-3">
-        <Terminal className="h-3.5 w-3.5 text-emerald-500" />
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">命令行</span>
-        <span className="text-[10px] text-muted-foreground/60">help 查看命令</span>
+        <Terminal className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">命令行</span>
+        <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">help 查看命令</span>
+        <button
+          onClick={cycleHeight}
+          className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+          title={`控制台高度：${LOG_HEIGHT_LABEL[consoleHeight] ?? '标准'}（点击切换）`}
+        >
+          <ChevronsUpDown className="h-3 w-3" />
+          {LOG_HEIGHT_LABEL[consoleHeight] ?? '标准'}
+        </button>
         <button
           onClick={() => setUi({ consoleOpen: false })}
-          className="ml-auto flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           <X className="h-3 w-3" />
         </button>
       </div>
-      <div ref={logRef} className="mol-scroll h-36 overflow-y-auto px-3 py-1.5 font-mono text-[11px] leading-relaxed">
+      <div ref={logRef} className={cn('mol-scroll overflow-y-auto px-3 py-1.5 font-mono text-[11px] leading-relaxed transition-[height] duration-200', LOG_HEIGHT_CLASS[consoleHeight] ?? 'h-36')}>
         {consoleLog.map((l, i) => (
           <div key={i} className={cn(
             'whitespace-pre-wrap break-all',

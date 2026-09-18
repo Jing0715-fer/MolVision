@@ -5,6 +5,7 @@
 import type { StructureData } from './parser'
 import { subsetStructure } from './parser'
 import { extractAllSequences, alignSequences, superposeStructures, quatToMatrix } from './superpose'
+import { refineMorphFrames, type RefineStats } from './morph-refine'
 
 export interface MorphResult {
   ok: boolean
@@ -22,6 +23,8 @@ export interface MorphResult {
   alignRmsd: number | null
   /** 使用的匹配策略 */
   strategy: 'sequence' | 'identity'
+  /** 帧精修统计（键长约束 + 去碰撞）；null = 未启用或无键数据 */
+  refine?: RefineStats | null
 }
 
 /** 多态 morph 结果（morph multi） */
@@ -39,6 +42,8 @@ export interface MultiMorphResult {
   /** 每个后续构象叠合到参考的 CA RMSD（Å）；恒等策略为 null */
   rmsds: (number | null)[]
   strategy: 'sequence' | 'identity'
+  /** 帧精修统计（键长约束 + 去碰撞）；null = 未启用或无键数据 */
+  refine?: RefineStats | null
 }
 
 /** 原子名精确匹配残基对内的原子（双方都有同名原子才配对） */
@@ -171,8 +176,9 @@ function superposeOnto(A: StructureData, X: StructureData): { pos: Float32Array;
  * @param A 参考构象（轨迹起点，输出坐标系 = A 的当前世界位姿）
  * @param B 目标构象（会先在内存中自动叠合到 A，不改动 B 本身）
  * @param steps 插值帧数（10–120，含首尾）
+ * @param refine 帧后处理精修（默认开启：键长约束 + 去碰撞，rigimol 风格）
  */
-export function buildMorph(A: StructureData, B: StructureData, name: string, steps = 30): MorphResult {
+export function buildMorph(A: StructureData, B: StructureData, name: string, steps = 30, refine = true): MorphResult {
   const fail = (msg: string): MorphResult => ({
     ok: false, error: msg, matchedAtoms: 0, matchedResidues: 0, matchedChains: [], frames: 0, alignRmsd: null, strategy: 'sequence',
   })
@@ -216,6 +222,7 @@ export function buildMorph(A: StructureData, B: StructureData, name: string, ste
   }
   const start = sub.atoms.positions
   const frameList: Float32Array[] = [start.slice()]
+  const us: number[] = [0]
   for (let f = 1; f < frames; f++) {
     const t = f / (frames - 1)
     // smoothstep 缓动：首尾速度为零，播放观感更接近 PyMOL morph 的 spline 感
@@ -223,7 +230,10 @@ export function buildMorph(A: StructureData, B: StructureData, name: string, ste
     const buf = new Float32Array(n * 3)
     for (let i = 0; i < n * 3; i++) buf[i] = start[i] + (target[i] - start[i]) * e
     frameList.push(buf)
+    us.push(e)
   }
+  // 帧后处理精修：键长约束（SHAKE）+ 去碰撞；首尾真实构象不动
+  const refineStats = refine ? refineMorphFrames(sub, frameList, [start, target], us) : null
   sub.ensemble = { frames: frameList }
   sub.ensembleKind = 'morph'
 
@@ -236,6 +246,7 @@ export function buildMorph(A: StructureData, B: StructureData, name: string, ste
     frames,
     alignRmsd,
     strategy,
+    refine: refineStats,
   }
 }
 
@@ -244,8 +255,9 @@ export function buildMorph(A: StructureData, B: StructureData, name: string, ste
  * 参考构象 = 第 1 个结构；每个后续构象独立匹配（取全部匹配原子的交集）并叠合到参考位姿。
  * @param sources 构象序列（≥2 个；输出坐标系 = 第 1 个的当前世界位姿）
  * @param steps 插值帧数（10–200，含首尾，均匀分布于整条样条）
+ * @param refine 帧后处理精修（默认开启：键长约束 + 去碰撞）
  */
-export function buildMultiMorph(sources: StructureData[], name: string, steps = 48): MultiMorphResult {
+export function buildMultiMorph(sources: StructureData[], name: string, steps = 48, refine = true): MultiMorphResult {
   const fail = (msg: string): MultiMorphResult => ({
     ok: false, error: msg, matchedAtoms: 0, matchedResidues: 0, matchedChains: [], frames: 0, knots: 0, rmsds: [], strategy: 'sequence',
   })
@@ -318,8 +330,10 @@ export function buildMultiMorph(sources: StructureData[], name: string, steps = 
   const m = knots.length
   const frames = Math.max(10, Math.min(200, Math.round(steps)))
   const frameList: Float32Array[] = [knots[0].slice()]
+  const us: number[] = [0]
   for (let f = 1; f < frames; f++) {
     const u = (f / (frames - 1)) * (m - 1)
+    us.push(u)
     let i = Math.floor(u)
     if (i > m - 2) i = m - 2
     const t = u - i
@@ -337,6 +351,8 @@ export function buildMultiMorph(sources: StructureData[], name: string, steps = 
     }
     frameList.push(buf)
   }
+  // 帧后处理精修：键长约束（SHAKE）+ 去碰撞；首尾真实构象不动
+  const refineStats = refine ? refineMorphFrames(sub, frameList, knots, us) : null
   sub.ensemble = { frames: frameList }
   sub.ensembleKind = 'multimorph'
   sub.ensembleKnots = m
@@ -351,5 +367,6 @@ export function buildMultiMorph(sources: StructureData[], name: string, steps = 
     knots: m,
     rmsds,
     strategy,
+    refine: refineStats,
   }
 }

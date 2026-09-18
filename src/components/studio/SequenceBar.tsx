@@ -1,13 +1,24 @@
 'use client'
 
-// 序列条：链序列 + 二级结构轨道 + 点击选择/聚焦
+// 序列条：链序列 + 二级结构轨道 + 点击选择/聚焦（高度三档可调：紧凑/标准/加高）
 import { memo, useMemo } from 'react'
-import { ChevronDown, ChevronUp, Dna, FlaskConical } from 'lucide-react'
+import { ChevronDown, ChevronUp, Dna, FlaskConical, ChevronsUpDown } from 'lucide-react'
 import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { residueOneLetter } from '@/lib/molecular/chemistry'
 import { residueCssColor, ssCssColor } from '@/lib/molecular/colors'
 import { cn } from '@/lib/utils'
 import { FadeEdge } from './FadeEdge'
+
+const SEQ_HEIGHT_CLASS: Record<string, string> = {
+  compact: 'max-h-20',
+  normal: 'max-h-40',
+  tall: 'max-h-72',
+}
+const SEQ_HEIGHT_LABEL: Record<string, string> = {
+  compact: '紧凑',
+  normal: '标准',
+  tall: '加高',
+}
 
 export function SequenceBar() {
   const ui = useMolStore(s => s.ui)
@@ -15,6 +26,8 @@ export function SequenceBar() {
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   const selection = useMolStore(s => s.selection)
+  const sequenceHeight = useMolStore(s => s.settings.sequenceHeight)
+  const updateSettings = useMolStore(s => s.updateSettings)
 
   const st = structures.find(x => x.id === activeId)
   const data = activeId ? dataRegistry.get(activeId) : null
@@ -39,22 +52,39 @@ export function SequenceBar() {
   // 点击选择整个分子、双击聚焦；不再按残基拆开
   const ligandMolecules = (data.molecules || []).slice(0, 60)
 
+  const cycleHeight = () => {
+    const next = sequenceHeight === 'compact' ? 'normal' : sequenceHeight === 'normal' ? 'tall' : 'compact'
+    updateSettings({ sequenceHeight: next })
+  }
+
   return (
     <div className="shrink-0 border-t border-border/70 bg-card/40 backdrop-blur-sm">
-      <button
-        onClick={() => setUi({ sequenceOpen: !ui.sequenceOpen })}
-        className="flex h-7 w-full items-center gap-2 px-3 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground transition hover:text-foreground"
-      >
-        <Dna className="h-3 w-3 text-emerald-500" />
-        序列
-        <span className="font-mono text-[9px] normal-case tracking-normal text-muted-foreground/60">
-          {st.name} · {polymerChains.length} 条聚合物链
-        </span>
-        <span className="ml-auto">{ui.sequenceOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}</span>
-      </button>
+      <div className="flex h-7 items-center gap-1 pr-2">
+        <button
+          onClick={() => setUi({ sequenceOpen: !ui.sequenceOpen })}
+          className="flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground transition hover:text-foreground"
+        >
+          <Dna className="h-3 w-3 shrink-0 text-emerald-500" />
+          序列
+          <span className="min-w-0 truncate font-mono text-[9px] normal-case tracking-normal text-muted-foreground/60">
+            {st.name} · {polymerChains.length} 条聚合物链
+          </span>
+          <span className="ml-auto shrink-0">{ui.sequenceOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}</span>
+        </button>
+        {ui.sequenceOpen && (
+          <button
+            onClick={cycleHeight}
+            className="flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+            title={`序列条高度：${SEQ_HEIGHT_LABEL[sequenceHeight] ?? '标准'}（点击切换）`}
+          >
+            <ChevronsUpDown className="h-3 w-3" />
+            {SEQ_HEIGHT_LABEL[sequenceHeight] ?? '标准'}
+          </button>
+        )}
+      </div>
 
       {ui.sequenceOpen && (
-        <div className="mol-scroll max-h-40 overflow-y-auto px-3 pb-2">
+        <div className={cn('mol-scroll overflow-y-auto px-3 pb-2 transition-[max-height] duration-200', SEQ_HEIGHT_CLASS[sequenceHeight] ?? 'max-h-40')}>
           {/* 配体行（置顶免滚动）：每个 chip = 一个完整分子，点击选择、双击聚焦 */}
           {ligandMolecules.length > 0 && (
             <div className="flex items-center gap-2 pb-2 pt-1">

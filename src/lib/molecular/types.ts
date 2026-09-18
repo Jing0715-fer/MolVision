@@ -165,6 +165,10 @@ export interface Settings {
   stereo: boolean
   /** 视口右上角 3D 坐标轴指示器（朝向罗盘；点击轴可对齐视角） */
   showAxes: boolean
+  /** 序列条展开高度档位（紧凑/标准/加高；随会话持久化） */
+  sequenceHeight: 'compact' | 'normal' | 'tall'
+  /** 控制台日志区高度档位（紧凑/标准/加高；随会话持久化） */
+  consoleHeight: 'compact' | 'normal' | 'tall'
 }
 
 export function defaultSettings(): Settings {
@@ -195,5 +199,7 @@ export function defaultSettings(): Settings {
     specular: true,
     stereo: false,
     showAxes: true,
+    sequenceHeight: 'normal',
+    consoleHeight: 'normal',
   }
 }

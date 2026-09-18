@@ -83,7 +83,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'xbsa', desc: '跨结构界面埋藏面积（需 xcontacts，两结构联合三路 SASA）', example: 'xbsa' },
   { cmd: 'untransform [名]', desc: '撤销叠合变换回原始位姿', example: 'untransform 1D3Z' },
   { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
-  { cmd: 'morph <名> = <A> <B> [帧]', desc: '构象插值轨迹（自动叠合+ensemble 帧）', example: 'morph m1 = 1BQL 2LYZ 40' },
+  { cmd: 'morph <名> = <A> <B> [帧] [norefine]', desc: '构象插值轨迹（自动叠合 + 键长约束/去碰撞精修）', example: 'morph m1 = 1BQL 2LYZ 40 · morph m = 1BQL 2LYZ norefine' },
   { cmd: 'morph multi <名> = <A> <B> <C>… [帧]', desc: '多态构象样条插值（Catmull-Rom 过 3+ 构象）', example: 'morph multi m = 1BQL 2LYZ 2VB1 60' },
   { cmd: 'movie play|stop|edit [秒 轮]', desc: '关键帧巡航（无秒数时走时间轴；edit 打开编排）', example: 'movie play · movie edit' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
@@ -1236,15 +1236,18 @@ export function runCommand(raw: string): void {
       : '用法：morph <新对象名> = <结构A> <结构B> [帧数]，如 morph m1 = 1BQL 2LYZ 40')
     const name = m[1]
     const tail = m[2].trim().split(/\s+/)
-    if (tail.length < 2) return err(`需要至少两个构象：morph ${isMulti ? 'multi ' : ''}<名> = <A> <B>${isMulti ? ' <C> …' : ''} [帧数]`)
+    // 尾部可选标志：norefine 关闭帧精修（键长约束 + 去碰撞）
+    const noRefine = tail.some(t => t.toLowerCase() === 'norefine')
+    const tailClean = tail.filter(t => t.toLowerCase() !== 'norefine')
+    if (tailClean.length < 2) return err(`需要至少两个构象：morph ${isMulti ? 'multi ' : ''}<名> = <A> <B>${isMulti ? ' <C> …' : ''} [帧数] [norefine]`)
     const s = useMolStore.getState()
     const resolve = (q: string) => s.structures.find(x =>
       x.name.toLowerCase() === q.toLowerCase() ||
       x.name.toLowerCase().startsWith(q.toLowerCase()) ||
       x.meta.pdbId?.toLowerCase() === q.toLowerCase())
-    const framesTok = tail[tail.length - 1]
+    const framesTok = tailClean[tailClean.length - 1]
     const framesParsed = /^\d+$/.test(framesTok) ? parseInt(framesTok, 10) : null
-    const structToks = framesParsed !== null ? tail.slice(0, -1) : tail
+    const structToks = framesParsed !== null ? tailClean.slice(0, -1) : tailClean
     const entries = structToks.map(t => resolve(t))
     const missing = structToks.filter((t, i) => !entries[i])
     if (missing.length) return err(`未找到结构：${missing.join('、')}（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
@@ -1258,13 +1261,15 @@ export function runCommand(raw: string): void {
         // ---------- 多态样条 morph ----------
         const steps = framesParsed ?? 48
         if (steps < 10 || steps > 200) return err('帧数范围 10–200（默认 48）')
-        const r = buildMultiMorph(datas as StructureData[], name, steps)
+        const r = buildMultiMorph(datas as StructureData[], name, steps, !noRefine)
         if (!r.ok || !r.data) return err(r.error ?? 'morph 失败')
         const ms = performance.now() - t0
         const id = useMolStore.getState().addStructure(r.data, name, ms)
         textRegistry.set(id, structureToPdbText(r.data))
         const chainInfo = r.matchedChains.map(([a, b]) => `${a}↔${b}`).join(' ')
         ok(`多态 morph 对象 "${name}" 已创建：${r.knots} 个构象态 · ${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基 · ${r.frames} 帧（Catmull-Rom 样条，${ms.toFixed(0)} ms）${chainInfo ? ` · 链对 ${chainInfo}` : ''}`)
+        if (r.refine) ok(`帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString()} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString()} 处`)
+        else if (noRefine) ok('帧精修已关闭（norefine）：中间帧保留纯样条插值')
         r.rmsds.forEach((rmsd, i) => {
           if (rmsd !== null) ok(`构象 ${i + 2}（${structToks[i + 1]}）叠合到参考：CA RMSD ${rmsd.toFixed(2)} Å`)
         })
@@ -1274,13 +1279,15 @@ export function runCommand(raw: string): void {
       // ---------- 双构象 morph ----------
       const steps = framesParsed ?? 30
       if (steps < 10 || steps > 120) return err('帧数范围 10–120（默认 30）')
-      const r = buildMorph(datas[0]!, datas[1]!, name, steps)
+      const r = buildMorph(datas[0]!, datas[1]!, name, steps, !noRefine)
       if (!r.ok || !r.data) return err(r.error ?? 'morph 失败')
       const ms = performance.now() - t0
       const id = useMolStore.getState().addStructure(r.data, name, ms)
       textRegistry.set(id, structureToPdbText(r.data))
       const chainInfo = r.matchedChains.map(([a, b]) => `${a}↔${b}`).join(' ')
       ok(`morph 对象 "${name}" 已创建：${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基对 · ${r.frames} 帧${chainInfo ? ` · 链对 ${chainInfo}` : ''}（${ms.toFixed(0)} ms）`)
+      if (r.refine) ok(`帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString()} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString()} 处`)
+      else if (noRefine) ok('帧精修已关闭（norefine）：中间帧保留纯插值')
       if (r.alignRmsd !== null) ok(`自动叠合 ${entries[1]!.name} → ${entries[0]!.name}：CA RMSD ${r.alignRmsd.toFixed(2)} Å（内存中完成，不改动原结构）`)
       if (r.strategy === 'identity') ok('匹配策略：恒等（同源结构按原子序对应）')
       return ok(`底部出现构象播放条——ensemble play 开始播放，V 键保存当前机位后 movie play 可巡航录制（会话存档保存第 1 帧坐标）`)

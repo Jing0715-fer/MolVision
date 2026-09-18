@@ -42,6 +42,8 @@ interface ViewsState {
   clearBookmarks: () => void
   /** 从会话文件导入书签（替换当前全部，校验+截断；返回导入数） */
   importBookmarks: (list: unknown) => number
+  /** 合并导入书签（追加到现有，重名跳过；返回新增数） */
+  mergeBookmarks: (list: unknown) => number
 }
 
 /** localStorage → 书签数组（容错：字段校验失败的条目丢弃） */
@@ -198,5 +200,32 @@ export const useViewsStore = create<ViewsState>((set, get) => ({
     persist(bookmarks)
     set({ bookmarks, hydrated: true })
     return bookmarks.length
+  },
+
+  mergeBookmarks: list => {
+    if (!Array.isArray(list)) return 0
+    if (!get().hydrated) get().hydrate()
+    const existing = get().bookmarks
+    const names = new Set(existing.map(b => b.name))
+    const ids = new Set(existing.map(b => b.id))
+    const added: ViewBookmark[] = []
+    for (const x of list) {
+      const b = validBookmark(x)
+      if (!b) continue
+      if (existing.length + added.length >= MAX_BOOKMARKS) break
+      // 重名/重 id 跳过（同名书签大概率是同一视角；重新生成 id 避免冲突）
+      if (names.has(b.name) || ids.has(b.id)) continue
+      let id = b.id
+      while (ids.has(id)) id = `${b.id}-${Math.random().toString(36).slice(2, 6)}`
+      ids.add(id)
+      names.add(b.name)
+      added.push({ ...b, id })
+    }
+    if (added.length) {
+      const next = [...existing, ...added]
+      persist(next)
+      set({ bookmarks: next })
+    }
+    return added.length
   },
 }))

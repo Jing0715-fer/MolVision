@@ -7,11 +7,11 @@ import { toast } from 'sonner'
 import {
   Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
-  FileDown, FilePlus2, FileUp, Save, HardDriveDownload,
+  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
-import { exportSessionFile, importSessionFile, newSession, sessionInfo } from '@/lib/molecular/session'
+import { exportSessionFile, importSessionFile, mergeSessionFile, newSession, sessionInfo } from '@/lib/molecular/session'
 import { TOURS } from '@/lib/molecular/tours'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import { useRecordStore } from '@/lib/molecular/record-store'
@@ -63,19 +63,28 @@ export function Toolbar() {
   const moviePlaying = useMovieStore(s => s.playing)
   const timelineOpen = useMovieStore(s => s.timelineOpen)
 
-  // 会话菜单：文件导入 + 新建确认
+  // 会话菜单：文件导入（替换/合并两种模式） + 新建确认
   const sessionFileRef = useRef<HTMLInputElement>(null)
   const [sessionImporting, setSessionImporting] = useState(false)
   const [confirmNewSession, setConfirmNewSession] = useState(false)
+  /** 待导入模式：'replace' = 清空后恢复；'merge' = 追加到当前场景 */
+  const sessionImportMode = useRef<'replace' | 'merge'>('replace')
 
   const onImportSession = async (file: File) => {
     setSessionImporting(true)
+    const mode = sessionImportMode.current
     try {
-      const n = await importSessionFile(file)
-      if (n > 0) toast.success('会话已导入', { description: `${n} 个结构 · 表示法与相机视角已还原（来自 ${file.name}）` })
-      else toast.error('会话文件中没有可恢复的结构', { description: file.name })
+      if (mode === 'merge') {
+        const n = await mergeSessionFile(file)
+        if (n > 0) toast.success('会话已合并到当前场景', { description: `新增 ${n} 个结构 · 名称冲突自动编号 · 书签重名跳过（来自 ${file.name}）` })
+        else toast.error('会话文件中没有可恢复的结构', { description: file.name })
+      } else {
+        const n = await importSessionFile(file)
+        if (n > 0) toast.success('会话已导入', { description: `${n} 个结构 · 表示法与相机视角已还原（来自 ${file.name}）` })
+        else toast.error('会话文件中没有可恢复的结构', { description: file.name })
+      }
     } catch (e) {
-      toast.error('导入会话失败', { description: e instanceof Error ? e.message : String(e) })
+      toast.error(mode === 'merge' ? '合并会话失败' : '导入会话失败', { description: e instanceof Error ? e.message : String(e) })
     } finally {
       setSessionImporting(false)
     }
@@ -187,13 +196,24 @@ export function Toolbar() {
                 <span className="block text-[10px] text-muted-foreground">导出 .molvision，可跨设备分享</span>
               </span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => sessionFileRef.current?.click()} disabled={sessionImporting} className="gap-2">
+            <DropdownMenuItem onClick={() => { sessionImportMode.current = 'replace'; sessionFileRef.current?.click() }} disabled={sessionImporting} className="gap-2">
               {sessionImporting
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
                 : <FileUp className="h-3.5 w-3.5 text-violet-500" />}
               <span className="flex-1">
                 <span className="block text-xs">打开会话文件…</span>
                 <span className="block text-[10px] text-muted-foreground">恢复 .molvision（替换当前场景）</span>
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => { sessionImportMode.current = 'merge'; sessionFileRef.current?.click() }}
+              disabled={sessionImporting}
+              className="gap-2"
+            >
+              <GitMerge className="h-3.5 w-3.5 text-sky-500" />
+              <span className="flex-1">
+                <span className="block text-xs">合并会话文件…</span>
+                <span className="block text-[10px] text-muted-foreground">叠加 .molvision 到当前场景（不清空）</span>
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -220,6 +240,7 @@ export function Toolbar() {
           type="file"
           accept=".molvision,.json"
           className="hidden"
+          onClick={() => { /* 点击时机设定模式：菜单项点击时已写入 ref */ }}
           onChange={e => {
             const f = e.target.files?.[0]
             if (f) void onImportSession(f)
