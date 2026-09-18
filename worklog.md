@@ -1169,3 +1169,27 @@ Stage Summary:
 - 关键决策：①SVG 用 CPU 组合矩阵投影而非截图转矢量——真矢量原语可编辑、体积小（4HHB 297KB）、透视正交通用 ②键的双色分段在原子-中点两段 path 上（圆头端帽模拟棍球）③深度明暗用 gl_FragCoord.z（NDC）+ 包围盒投影范围归一化，透视非线性分布下依然正确分层 ④历史共享模块 + 订阅通知（替代 props 层层传递），CustomEvent 承载「填入编辑」跨组件通信 ⑤清空历史保留置顶（置顶是用户显式工作流声明）
 - 未解决问题与风险：①SVG cartoon 为 CA/P 骨架近似（无片状/螺旋桶细节，与 3D 带状观感有差距——可后续加分段宽度/方向感的路径变宽）②对称伴侣不在 SVG 导出内（仅主结构）③贴图纹理/雾/阴影等渲染效果不进矢量（by design，矢量图保纯色）④图标类匿名按钮（相机/主题等 header 图标按钮）仍无 aria-label（下轮补）⑤VLM 建议：SVG 线宽在极小打印尺寸略细、深色主题链色对比度
 - 下一阶段建议（优先级序）：① header 图标按钮 a11y 扫尾（相机/主题/帮助/GitHub aria-label）② SVG cartoon 增强（按二级结构变宽的路径、可选中导出范围）③ 深色主题链颜色对比度自适应（VLM 两轮提及）④ 命令面板化（Ctrl+K 快速命令面板，历史+补全合体）⑤ 面板宽度等 UI 偏好收编 Settings
+
+---
+Task ID: r29
+Agent: main
+Task: 修复用户反馈三问题——①加载结构即现绿色圆球+虚线叠加 cartoon ②选中高亮过厚包裹结构 ③链换色需跨标签太繁琐
+
+Work Log:
+- 复现诊断：agent-browser 清 localStorage 后加载 4HHB 干净无叠加；执行 hbonds on 后 VLM 确认「密集青绿虚线+小球糊满屏，视觉过载」——即用户所见。排查确认「绿色圆球+虚线」= 氢键网络渲染层（teal #0d9488 被视为绿色；虚线 LineDashedMaterial + 0.24Å 端点球 InstancedMesh）
+- 根因链路：tours.ts 演示步骤执行 hbonds on（fire-and-forget void exec）→ tour stop() 无任何设置还原 → showHBonds=true 随 session 自动保存进 localStorage → 之后每次加载结构/刷新都带着氢键层，「一加载就冒绿球虚线」；用户也可能误按 B（旧版静默切换无任何提示）
+- 修复1（四层）：
+  a) tour-store.ts 重写：start 时快照 settings + zustand subscribe 持续追踪演示期间改动键（订阅方案捕获 void exec 异步落地——第一版 runStep 前后 diff 因 fire-and-forget 落空，E2E 抓到后重写）；stop/自然结束统一 endTour() 还原被改键 + 日志「已还原演示前设置（键名）」
+  b) MolViewer.tsx：B/H/W 快捷键切换加 toast.info 提示（氢键网络开/关+用法描述、氢原子、水），误触可发现可撤销
+  c) session.ts restoreSession：恢复的会话若 showHBonds=true 输出指路日志（按 B 或 场景面板关闭）——解已中毒会话的困惑
+  d) engine.ts 氢键视觉减负：虚线 opacity 0.92→0.5、dash/gap 0.28/0.18→0.3/0.22；端点球半径 0.24→0.12、opacity 0.85→0.5、segments 10x8→8x6——有意开启全蛋白网络时也不再糊屏
+- 修复2：engine.ts updateHighlight 自适应三档厚度——≤32 原子（点选/测量）保留醒目光晕（vdW×1.06+0.26, opacity 0.5）；≤2000 原子（残基级）轻薄（×1.03+0.14, 0.3）；>2000 原子（链/结构级）极轻薄纱（×1.01+0.07, 0.18）——消除「选中把结构完全厚裹」
+- 修复3：StructuresPanel 链行/配体分子行重构为 flex 容器（主按钮 flex-1 + 行尾色点按钮，避免 button 嵌套）；新增 QuickColorPopover 组件——16 色链间可区分色板（避开主题蓝紫）+ 自定义 color input + 「重置此范围颜色」；onApply 走 setActive→selectFromExpr(chainidx i)/selectMolecule→applyColor（作用于当前选择集的既有机制）；色点显示当前生效色（colorOverrides[链首原子] ?? 链调色板色），已覆盖时 ring-primary 高亮；链 SectionTitle 加「点击选链 · 色点上色」提示
+- E2E 验证（agent-browser + VLM）：氢键减负 VLM 确认「低透明度细虚线、小尺寸半透明端点、视觉重量大幅降低」；B 键 toast「氢键网络已关闭 快捷键 B · 场景面板可再开启」+虚线消失；链 A 选中高亮 VLM「轻薄半透明薄纱感，未完全遮住 cartoon」；一键换色全链路（点色点→选 #8fd694→VLM 确认视口链变绿+toast「链 A 已上色 1,069 个原子」+面板色点同步变绿）；重置（视口恢复灰白+toast）；tour 还原干净基线重测（先 B 关闭→跑 quickstart 到氢键步骤 LS=true→blur+Esc→LS=false+还原日志）——首次测试被污染会话误导（快照值=开无差异可记），建立 false 基线后验证通过；390×844 无横向溢出；浏览器 errors 0；lint 0 错 0 警；VLM 终审布局 9/10、高亮 8/10
+- 沙箱经验：ConsoleBar 提交后焦点行为影响 window.dispatchEvent 键事件可达性（先 blur 再派发）；tour 步骤 void exec 的异步落地使前后帧 diff 失效——zustand 订阅是追踪异步设置变更的可靠方案
+
+Stage Summary:
+- 项目当前状态：r29 完成用户反馈三问题闭环修复。①氢键意外显示：根因（tour 设置泄漏+持久化中毒）已断——tour 结束自动还原演示前设置，B/H/W 键 toast 化，会话恢复氢键提示日志，氢键渲染本身减负 4 项 ②选中高亮自适应三档厚度，大选择集呈轻薄薄纱 ③链/配体行内色点 Popover 一键换色（16 色板+自定义+重置），免跨标签
+- 关键决策：tour 还原用「快照+订阅追踪」而非命令拦截（覆盖 void exec 异步落地与用户演示中手改，还原到演示前值语义可预期）；链行内换色复用 applyColor 选择集机制（与命令行/颜色面板行为完全一致）；高亮分档阈值 32/2000 对应点选/残基/链级使用场景
+- 未解决问题与风险：①颜色覆盖表随链上色原子数增长（1069 原子/链），多链多覆盖时 session 体积增大（当前无感知，可观察）②配体行 sampleAtom 取首原子，多残基配体部分原子被单独覆盖过时色点可能显示不准确（罕见）③SVG 导出/演示菜单里其余演示（drug-target 等）含 slab/spin 等设置步骤，已由统一订阅还原机制覆盖 ④VLM 终审提到「保存视角」悬浮按钮位置略孤立（下轮 UI 打磨候选）
+- 下一阶段建议（优先级序）：① header 图标按钮 a11y 扫尾（相机/主题/帮助/GitHub aria-label，r28 遗留）② 链行换色色点在移动端 44px 触达目标偏小（h-6 w-6=24px，需触控热区扩大）③ ViewBar 悬浮按钮布局打磨 ④ 命令面板化（Ctrl+K）⑤ 深色主题链色对比度自适应

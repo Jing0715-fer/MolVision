@@ -1505,19 +1505,19 @@ export class MolEngine {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
       const mat = new THREE.LineDashedMaterial({
         color: hbColor,
-        dashSize: 0.28,
-        gapSize: 0.18,
+        dashSize: 0.3,
+        gapSize: 0.22,
         transparent: true,
-        opacity: 0.92,
+        opacity: 0.5,
         depthWrite: false,
       })
       const lines = new THREE.LineSegments(geo, mat)
       lines.computeLineDistances()
       lines.renderOrder = 8
       this.hbondGroup.add(lines)
-      // 端点小标记（InstancedMesh）
-      const sphereGeo = new THREE.SphereGeometry(0.24, 10, 8)
-      const sphereMat = new THREE.MeshBasicMaterial({ color: hbColor, transparent: true, opacity: 0.85, depthWrite: false })
+      // 端点小标记（InstancedMesh；小尺寸低透明——全蛋白网络开启时不成「绿球堆」）
+      const sphereGeo = new THREE.SphereGeometry(0.12, 8, 6)
+      const sphereMat = new THREE.MeshBasicMaterial({ color: hbColor, transparent: true, opacity: 0.5, depthWrite: false })
       const marker = new THREE.InstancedMesh(sphereGeo, sphereMat, endPts.length)
       const m4 = new THREE.Matrix4()
       for (let k = 0; k < endPts.length; k++) {
@@ -2870,16 +2870,22 @@ export class MolEngine {
       view.highlight = null
     }
     if (indices.length === 0 || indices.length > 40000) return
+    // 自适应高亮厚度：少量原子（点选/测量）用醒目光晕便于定位；
+    // 大选择集（残基/链/结构级）退化为轻薄薄纱——避免整个结构被「厚裹」包裹
+    const n = indices.length
+    const halo = n <= 32 ? { scale: 1.06, pad: 0.26, opacity: 0.5 }
+      : n <= 2000 ? { scale: 1.03, pad: 0.14, opacity: 0.3 }
+      : { scale: 1.01, pad: 0.07, opacity: 0.18 }
     const geo = new THREE.SphereGeometry(1, 14, 10)
     const mat = new THREE.MeshBasicMaterial({
-      color: AMBER, transparent: true, opacity: 0.55, depthWrite: false,
+      color: AMBER, transparent: true, opacity: halo.opacity, depthWrite: false,
     })
     const mesh = new THREE.InstancedMesh(geo, mat, indices.length)
     const m = new THREE.Matrix4()
     const pos = data.atoms.positions
     for (let k = 0; k < indices.length; k++) {
       const i = indices[k]
-      const r = elementInfo(data.atoms.elements[i]).vdw * 1.06 + 0.26
+      const r = elementInfo(data.atoms.elements[i]).vdw * halo.scale + halo.pad
       m.makeScale(r, r, r)
       m.setPosition(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])
       mesh.setMatrixAt(k, m)

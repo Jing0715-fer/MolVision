@@ -234,6 +234,11 @@ export function restoreSession(): number {
     }, host?.id)
   }
   useMolStore.getState().appendLog('out', `已恢复上次会话：${restored} 个结构`)
+  // 会话带着氢键网络恢复时给出可见提示——曾出现演示/误触后设置泄漏，
+  // 用户不知「绿色虚线+圆球」从何而来；此处指路关闭方式
+  if (useMolStore.getState().settings.showHBonds) {
+    useMolStore.getState().appendLog('out', '提示：本会话氢键网络为开启状态（结构上将叠加青绿虚线与端点标记）。按 B 键或「场景 → 氢键网络」可关闭。')
+  }
   return restored
 }
 

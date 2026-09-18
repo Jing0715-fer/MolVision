@@ -244,15 +244,26 @@ export default function MolViewer() {
         case 'r': case 'R':
           store.updateSettings({ rock: !store.settings.rock, ...(store.settings.rock ? {} : { spin: false }) })
           break
-        case 'h': case 'H':
-          store.updateSettings({ hideHydrogens: !store.settings.hideHydrogens })
+        case 'h': case 'H': {
+          const on = !store.settings.hideHydrogens
+          store.updateSettings({ hideHydrogens: on })
+          toast.info(on ? '氢原子已隐藏' : '氢原子已显示', { description: '快捷键 H · 场景面板可再切换' })
           break
-        case 'w': case 'W':
-          store.updateSettings({ hideWater: !store.settings.hideWater })
+        }
+        case 'w': case 'W': {
+          const on = !store.settings.hideWater
+          store.updateSettings({ hideWater: on })
+          toast.info(on ? '水分子已隐藏' : '水分子已显示', { description: '快捷键 W · 场景面板可再切换' })
           break
-        case 'b': case 'B':
-          store.updateSettings({ showHBonds: !store.settings.showHBonds })
+        }
+        case 'b': case 'B': {
+          const on = !store.settings.showHBonds
+          store.updateSettings({ showHBonds: on })
+          toast.info(on ? '氢键网络已开启' : '氢键网络已关闭', {
+            description: on ? '快捷键 B · 虚线为供体-受体氢键，整链全开时较密，可配选择集使用（场景→氢键仅选择集）' : '快捷键 B · 场景面板可再开启',
+          })
           break
+        }
         case 'p': case 'P': {
           // ensemble 播放/暂停
           const es = useEnsembleStore.getState()

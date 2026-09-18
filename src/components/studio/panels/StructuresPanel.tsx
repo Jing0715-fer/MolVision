@@ -2,7 +2,7 @@
 
 // 结构面板：结构列表（卡片可折叠）、链、配体、对称伴侣、叠合
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff, X, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight, Target, Copy, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react'
+import { Eye, EyeOff, X, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight, Target, Copy, ChevronDown, ChevronRight, ChevronsUpDown, Paintbrush, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
 import { textRegistry } from '@/lib/molecular/text-registry'
@@ -12,10 +12,109 @@ import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Badge } from '@/components/ui/badge'
 import { Slider } from '@/components/ui/slider'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+
+/** 行内快速上色色板（链间可区分性优先；避免蓝紫主色干扰主题） */
+const QUICK_PALETTE = [
+  '#e35d5d', '#e8a13a', '#e8d17a', '#8fd694', '#4fb3c6', '#5da5e0', '#7d8fe0', '#a06bd8',
+  '#d870b0', '#c98d6b', '#9aa3ad', '#7a8a99', '#ef8a5a', '#6bc5b8', '#b5cc4e', '#8a79c9',
+]
+
+/** 行内快速上色弹层：色板 + 自定义色 + 重置——免去「结构选链 → 颜色面板上色」跨标签切换 */
+function QuickColorPopover({
+  label, fallback, overrides, sampleAtom, onApply, onReset, dualColor,
+}: {
+  label: string
+  /** 未覆盖时的默认色（链调色板色） */
+  fallback: string
+  /** 结构级颜色覆盖表 */
+  overrides: Record<number, string>
+  /** 取代表原子（展示当前生效色；-1 = 无样本） */
+  sampleAtom: number
+  onApply: (hex: string) => void
+  onReset: () => void
+  /** 双色棋盘格提示（如配体双色） */
+  dualColor?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [custom, setCustom] = useState('#e35d5d')
+  const overridden = sampleAtom >= 0 && !!overrides[sampleAtom]
+  const effective = (sampleAtom >= 0 && overrides[sampleAtom]) || fallback
+  const apply = (hex: string) => {
+    onApply(hex)
+    setOpen(false)
+  }
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            'group/dot relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition hover:bg-accent',
+            overridden && 'ring-1 ring-primary/50',
+          )}
+          title={`为${label}上色（色板/自定义/重置）${overridden ? '\n已有自定义色，环高亮标记' : ''}`}
+          aria-label={`为${label}上色`}
+        >
+          {dualColor ? (
+            <span
+              className="h-3.5 w-3.5 rounded-full border border-black/10 shadow-xs"
+              style={{ background: `linear-gradient(135deg, ${effective} 50%, ${dualColor} 50%)` }}
+            />
+          ) : (
+            <span className="h-3.5 w-3.5 rounded-full border border-black/10 shadow-xs" style={{ background: effective }} />
+          )}
+          <Paintbrush className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-[3px] bg-background/90 text-muted-foreground opacity-0 transition group-hover/dot:opacity-100" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-2" align="end" side="left">
+        <p className="mb-1.5 flex items-center gap-1 px-0.5 text-[10px] font-medium text-muted-foreground">
+          <Paintbrush className="h-3 w-3" /> {label} 上色
+        </p>
+        <div className="grid grid-cols-8 gap-1">
+          {QUICK_PALETTE.map(hex => (
+            <button
+              key={hex}
+              onClick={() => apply(hex)}
+              className="h-4 w-4 rounded-[4px] border border-black/10 shadow-xs transition hover:scale-125 hover:ring-2 hover:ring-primary/50"
+              style={{ background: hex }}
+              title={hex}
+              aria-label={`上色 ${hex}`}
+            />
+          ))}
+        </div>
+        <div className="mt-2 flex items-center gap-1.5">
+          <input
+            type="color"
+            value={custom}
+            onChange={e => setCustom(e.target.value)}
+            className="h-6 w-7 cursor-pointer rounded border border-border/60 bg-background p-0.5"
+            aria-label="自定义颜色"
+          />
+          <button
+            onClick={() => apply(custom)}
+            className="flex h-6 flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 text-[10px] font-medium text-primary-foreground transition hover:opacity-90"
+          >
+            应用自定义
+          </button>
+        </div>
+        <button
+          onClick={() => { onReset(); setOpen(false) }}
+          disabled={!overridden}
+          className={cn(
+            'mt-1.5 flex h-6 w-full items-center justify-center gap-1 rounded-md border border-border/60 text-[10px] transition',
+            overridden ? 'hover:bg-accent hover:text-foreground' : 'opacity-40',
+          )}
+        >
+          <RotateCcw className="h-3 w-3" /> 重置此范围颜色
+        </button>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 const CHAIN_TYPE_ICON: Record<string, typeof Dna> = {
   protein: Dna, nucleic: Dna, water: Droplets, ligand: FlaskConical,
@@ -293,7 +392,11 @@ export function StructuresPanel() {
         }
         return (
           <>
-            <SectionTitle>链 ({st.chains.length})</SectionTitle>
+            <SectionTitle right={
+              <span className="text-[10px] text-muted-foreground/70" title="点击行选中链 · 右侧色点可直接上色（无需切到颜色标签）">
+                点击选链 · 色点上色
+              </span>
+            }>链 ({st.chains.length})</SectionTitle>
             <div className="mol-scroll max-h-56 space-y-0.5 overflow-y-auto px-2 py-1">
               {rows.map((row, k) => {
                 if (row.kind === 'molecule') {
@@ -301,27 +404,48 @@ export function StructuresPanel() {
                   const dupId = st.chains.filter(x => x.id === c.id).length > 1
                   const label = c.id === ' ' ? '—' : c.id
                   return (
-                    <button
-                      key={`mol-${mi}-${k}`}
-                      onClick={() => selectMolecule(m)}
-                      onDoubleClick={() => {
-                        const idx = selectMolecule(m)
-                        if (idx?.length) engineRef.current?.fitView([{ structureId: st.id, indices: idx }])
-                      }}
-                      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80 hover:shadow-xs"
-                      title={`选择此配体分子 ${m.label}（${m.atoms} 原子）· 双击聚焦${m.residues.length > 1 ? ` · 跨 ${m.residues.length} 个残基` : ''}`}
-                    >
-                      <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
-                      <span className="w-5 shrink-0 font-mono text-xs font-bold">{label}</span>
-                      {dupId && (
-                        <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
-                      )}
-                      <FlaskConical className="h-3 w-3 shrink-0 text-amber-600/80 dark:text-amber-400/80" />
-                      <span className="min-w-0 truncate rounded bg-amber-500/10 px-1.5 font-mono text-[10px] font-semibold text-amber-700 dark:text-amber-400" title={`${m.label}（${m.atoms} 原子）`}>
-                        {m.label}
-                      </span>
-                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">{m.atoms} at</span>
-                    </button>
+                    <div key={`mol-${mi}-${k}`} className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => selectMolecule(m)}
+                        onDoubleClick={() => {
+                          const idx = selectMolecule(m)
+                          if (idx?.length) engineRef.current?.fitView([{ structureId: st.id, indices: idx }])
+                        }}
+                        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80 hover:shadow-xs"
+                        title={`选择此配体分子 ${m.label}（${m.atoms} 原子）· 双击聚焦${m.residues.length > 1 ? ` · 跨 ${m.residues.length} 个残基` : ''}`}
+                      >
+                        <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
+                        <span className="w-5 shrink-0 font-mono text-xs font-bold">{label}</span>
+                        {dupId && (
+                          <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
+                        )}
+                        <FlaskConical className="h-3 w-3 shrink-0 text-amber-600/80 dark:text-amber-400/80" />
+                        <span className="min-w-0 truncate rounded bg-amber-500/10 px-1.5 font-mono text-[10px] font-semibold text-amber-700 dark:text-amber-400" title={`${m.label}（${m.atoms} 原子）`}>
+                          {m.label}
+                        </span>
+                        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">{m.atoms} at</span>
+                      </button>
+                      <QuickColorPopover
+                        label={`配体 ${m.label}`}
+                        fallback={c.color}
+                        overrides={st.colorOverrides}
+                        sampleAtom={data ? data.residues[m.residues[0]].start : -1}
+                        onApply={hex => {
+                          const idx = selectMolecule(m)
+                          if (idx?.length) {
+                            useMolStore.getState().applyColor(hex)
+                            toast.success(`配体 ${m.label} 已上色`, { description: `${idx.length} 个原子 · 双色点可重置` })
+                          }
+                        }}
+                        onReset={() => {
+                          const idx = selectMolecule(m)
+                          if (idx?.length) {
+                            useMolStore.getState().resetColors('selection')
+                            toast.success(`配体 ${m.label} 颜色已重置`)
+                          }
+                        }}
+                      />
+                    </div>
                   )
                 }
                 const { i, c } = row
@@ -330,35 +454,58 @@ export function StructuresPanel() {
                 // 用 chainidx 按链组索引选择，避免「点配体链却选中整条链」
                 const dupId = st.chains.filter(x => x.id === c.id).length > 1
                 const label = c.id === ' ' ? '—' : c.id
+                const selectChain = () => {
+                  const store = useMolStore.getState()
+                  store.setActive(st.id)
+                  const res = store.selectFromExpr(`chainidx ${i}`)
+                  if (res.error) toast.error(res.error)
+                  return res
+                }
                 return (
-                  <button
-                    key={`${c.id}-${i}-${k}`}
-                    onClick={() => {
-                      const store = useMolStore.getState()
-                      const res = store.selectFromExpr(`chainidx ${i}`)
-                      if (res.error) toast.error(res.error)
-                    }}
-                    onDoubleClick={() => {
-                      const store = useMolStore.getState()
-                      const res = store.selectFromExpr(`chainidx ${i}`)
-                      if (!res.error && res.count > 0) {
-                        engineRef.current?.fitView([{ structureId: st.id, indices: useMolStore.getState().selection.indices }])
-                      }
-                    }}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80 hover:shadow-xs"
-                    title={`选择此链组（${c.residues} 残基 · ${c.atoms} 原子）· 双击聚焦${dupId ? ' · 同链 ID 含多个链组，已按链组精确选择' : ''}`}
-                  >
-                    <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
-                    <span className="w-6 shrink-0 font-mono text-xs font-bold">{label}</span>
-                    {dupId && (
-                      <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
-                    )}
-                    <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    <span className="shrink-0 text-[10px] text-muted-foreground">{CHAIN_TYPE_LABEL[c.type]}</span>
-                    <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">
-                      {c.residues > 0 && `${c.residues} res`}
-                    </span>
-                  </button>
+                  <div key={`${c.id}-${i}-${k}`} className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => { selectChain() }}
+                      onDoubleClick={() => {
+                        const res = selectChain()
+                        if (!res.error && res.count > 0) {
+                          engineRef.current?.fitView([{ structureId: st.id, indices: useMolStore.getState().selection.indices }])
+                        }
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80 hover:shadow-xs"
+                      title={`选择此链组（${c.residues} 残基 · ${c.atoms} 原子）· 双击聚焦${dupId ? ' · 同链 ID 含多个链组，已按链组精确选择' : ''}`}
+                    >
+                      <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
+                      <span className="w-6 shrink-0 font-mono text-xs font-bold">{label}</span>
+                      {dupId && (
+                        <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
+                      )}
+                      <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{CHAIN_TYPE_LABEL[c.type]}</span>
+                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">
+                        {c.residues > 0 && `${c.residues} res`}
+                      </span>
+                    </button>
+                    <QuickColorPopover
+                      label={`链 ${label}`}
+                      fallback={c.color}
+                      overrides={st.colorOverrides}
+                      sampleAtom={data ? data.chains[i].start : -1}
+                      onApply={hex => {
+                        const res = selectChain()
+                        if (!res.error && res.count > 0) {
+                          useMolStore.getState().applyColor(hex)
+                          toast.success(`链 ${label} 已上色`, { description: `${res.count.toLocaleString()} 个原子 · 再点色点可换色或重置` })
+                        }
+                      }}
+                      onReset={() => {
+                        const res = selectChain()
+                        if (!res.error && res.count > 0) {
+                          useMolStore.getState().resetColors('selection')
+                          toast.success(`链 ${label} 颜色已重置`)
+                        }
+                      }}
+                    />
+                  </div>
                 )
               })}
             </div>
