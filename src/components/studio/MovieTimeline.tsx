@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { playMovie, stopMovie, useMovieStore, type TimelineEntry } from '@/lib/molecular/movie'
 import { useViewsStore, type ViewBookmark } from '@/lib/molecular/views-store'
 import { cn } from '@/lib/utils'
+import { FadeEdge } from './FadeEdge'
 
 /** 时长步进（ms） */
 const DUR_STEP = 200
@@ -176,7 +177,7 @@ export function MovieTimeline() {
           <span className="text-[10px] text-muted-foreground/70">V 键保存机位 · view save 名称 · 上限 12 帧</span>
         </div>
       ) : (
-        <div className="mol-scroll flex max-w-full items-center overflow-x-auto py-1">
+        <FadeEdge className="max-w-full items-center py-1">
           {entries.map(({ e, view }, i) => {
             const isDragging = drag?.from === i
             return (
@@ -228,7 +229,7 @@ export function MovieTimeline() {
           })}
           {/* 末尾追加槽位指示条 */}
           {insertAtEnd() && <div data-insert-end className="mx-0.5 h-14 w-[3px] shrink-0 rounded-full bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.7)]" />}
-        </div>
+        </FadeEdge>
       )}
 
       {/* 控制行：播放 + 轮数 + 选中卡片编辑 */}

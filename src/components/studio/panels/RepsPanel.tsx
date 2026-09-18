@@ -110,9 +110,9 @@ function RepCard({
       !rep.visible && 'opacity-60',
     )}>
       <div className="flex items-center gap-2">
-        <TypeIcon type={rep.type} className="h-4 w-4" />
+        <TypeIcon type={rep.type} className="h-4 w-4 shrink-0" />
         <Select value={rep.type} onValueChange={v => onUpdate(structureId, rep.id, { type: v as RepType })}>
-          <SelectTrigger className="h-7 flex-1 border-border/60 bg-background/60 text-[11px] font-medium">
+          <SelectTrigger className="h-7 min-w-0 flex-1 border-border/60 bg-background/60 text-[11px] font-medium">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -234,7 +234,7 @@ function RepCard({
           onChange={e => onUpdate(structureId, rep.id, { selection: e.target.value })}
           placeholder="选择表达式"
           className={cn(
-            'h-7 flex-1 border-border/60 bg-background/60 font-mono text-[10px]',
+            'h-7 min-w-0 flex-1 border-border/60 bg-background/60 font-mono text-[10px]',
             rep.error && 'border-destructive focus-visible:ring-destructive/30',
           )}
         />
@@ -242,7 +242,7 @@ function RepCard({
           value={PRESET_SELECTIONS.some(p => p.value === rep.selection) ? rep.selection : undefined}
           onValueChange={v => onUpdate(structureId, rep.id, { selection: v })}
         >
-          <SelectTrigger className="h-7 w-6 shrink-0 border-border/60 bg-background/60 px-1 text-[10px]" title="预设选择">
+          <SelectTrigger className="h-7 w-7 shrink-0 border-border/60 bg-background/60 px-1 text-[10px] [&_svg]:hidden" title="预设选择">
             <SelectValue placeholder={<span className="text-muted-foreground">≡</span>} />
           </SelectTrigger>
           <SelectContent>
@@ -261,7 +261,7 @@ function RepCard({
       {/* 配色 */}
       <div className="mt-1.5 flex items-center gap-1.5">
         <Select value={rep.colorScheme} onValueChange={v => onUpdate(structureId, rep.id, { colorScheme: v as ColorScheme })}>
-          <SelectTrigger className="h-7 flex-1 border-border/60 bg-background/60 text-[10px]">
+          <SelectTrigger className="h-7 min-w-0 flex-1 border-border/60 bg-background/60 text-[10px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

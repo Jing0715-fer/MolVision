@@ -115,7 +115,7 @@ export function ConsoleBar() {
           }}
           onKeyDown={onKeyDown}
           placeholder="load 4hhb · select site = within 5 of resn HEM · color red site · show cartoon …"
-          className="flex-1 bg-transparent font-mono text-xs outline-none caret-emerald-600 placeholder:text-muted-foreground/40 dark:caret-emerald-400"
+          className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none caret-emerald-600 placeholder:text-muted-foreground/40 dark:caret-emerald-400"
           spellCheck={false}
           autoComplete="off"
         />

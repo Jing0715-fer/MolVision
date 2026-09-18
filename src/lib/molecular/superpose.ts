@@ -74,9 +74,10 @@ const SIMILAR = 1
 const MISMATCH = -2
 const GAP = -2
 
-/** 相似残基判断（同生化类别，如 I/L/V） */
+/** 相似残基判断（同生化类别，如 I/L/V）；unknown/ligand/water 无生化类别语义，不算相似 */
 function isSimilar(a: string, b: string): boolean {
-  return a !== b && residueClass(a) === residueClass(b) && residueClass(a) !== 'other'
+  const cls = residueClass(a)
+  return a !== b && cls === residueClass(b) && cls !== 'unknown' && cls !== 'ligand' && cls !== 'water'
 }
 
 /** NW 全局比对；返回匹配位置对 [seqA 索引, seqB 索引]（不含 gap） */
@@ -216,7 +217,7 @@ export function rigidFit(P: number[][], Q: number[][]): RigidTransform | null {
   qw /= norm; qx /= norm; qy /= norm; qz /= norm
   // 四元数 → 旋转矩阵，t = qc − R·pc
   const R = quatToMatrix([qw, qx, qy, qz])
-  const translation = [
+  const translation: [number, number, number] = [
     qc[0] - (R[0][0] * pc[0] + R[0][1] * pc[1] + R[0][2] * pc[2]),
     qc[1] - (R[1][0] * pc[0] + R[1][1] * pc[1] + R[1][2] * pc[2]),
     qc[2] - (R[2][0] * pc[0] + R[2][1] * pc[1] + R[2][2] * pc[2]),
@@ -229,7 +230,8 @@ export function rigidFit(P: number[][], Q: number[][]): RigidTransform | null {
     const pz = R[2][0] * P[i][0] + R[2][1] * P[i][1] + R[2][2] * P[i][2] + translation[2]
     sumSq += (px - Q[i][0]) ** 2 + (py - Q[i][1]) ** 2 + (pz - Q[i][2]) ** 2
   }
-  return { quat: [qw, qx, qy, qz], translation, rmsd: Math.sqrt(sumSq / n), count: n }
+  const quat: [number, number, number, number] = [qw, qx, qy, qz]
+  return { quat, translation, rmsd: Math.sqrt(sumSq / n), count: n }
 }
 
 /** 四元数 (w,x,y,z) → 3×3 旋转矩阵 */

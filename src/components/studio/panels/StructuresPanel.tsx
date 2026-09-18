@@ -111,16 +111,16 @@ export function StructuresPanel() {
             )}
           >
             <div className="flex items-center gap-2">
-              <button className="flex flex-1 items-center gap-2 text-left" onClick={() => setActive(st.id)}>
+              <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setActive(st.id)}>
                 <span className={cn(
-                  'rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wide shadow-xs',
+                  'shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wide shadow-xs',
                   st.id === activeId
                     ? 'bg-primary text-primary-foreground shadow-emerald-500/20'
                     : 'border border-border/70 bg-background text-foreground/90',
                 )}>
                   {st.name.slice(0, 8)}
                 </span>
-                <span className="flex-1 truncate text-[11px] text-muted-foreground" title={st.meta.title}>
+                <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={st.meta.title}>
                   {st.meta.title?.slice(0, 40) || st.format.toUpperCase()}
                 </span>
               </button>
@@ -140,7 +140,7 @@ export function StructuresPanel() {
                       description: `链 ${res.mobileChain} ↔ 链 ${res.refChain} · 匹配 ${res.matched} 对 CA · RMSD ${res.rmsd.toFixed(2)} Å`,
                     })
                   }}
-                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
                   title={`叠合到 ${structures.find(x => x.id === activeId)?.name ?? '活动结构'}（序列比对 + 刚体拟合）`}
                 >
                   <Combine className="h-3.5 w-3.5" />
@@ -154,7 +154,7 @@ export function StructuresPanel() {
                     if (!r.ok) return toast.error('重置失败', { description: r.message })
                     toast.success(r.message, { description: 'untransform 命令可撤销指定结构的叠合' })
                   }}
-                  className="flex h-6 w-6 items-center justify-center rounded text-violet-500/70 opacity-0 transition hover:bg-violet-500/10 hover:text-violet-500 group-hover:opacity-100"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-violet-500/70 opacity-0 transition hover:bg-violet-500/10 hover:text-violet-500 group-hover:opacity-100"
                   title="撤销叠合变换，回到原始位姿（untransform）"
                 >
                   <Undo2 className="h-3.5 w-3.5" />
@@ -162,14 +162,14 @@ export function StructuresPanel() {
               )}
               <button
                 onClick={() => setStructureVisible(st.id, !st.visible)}
-                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
                 title={st.visible ? '隐藏' : '显示'}
               >
                 {st.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
               </button>
               <button
                 onClick={() => closeStructureWithUndo(st)}
-                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground/70 opacity-70 transition hover:bg-destructive/10 hover:text-destructive hover:opacity-100"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-70 transition hover:bg-destructive/10 hover:text-destructive hover:opacity-100"
                 title={`关闭 ${st.name}（8 秒内可撤销）`}
               >
                 <X className="h-3.5 w-3.5" />
@@ -255,7 +255,7 @@ export function StructuresPanel() {
                         <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
                       )}
                       <FlaskConical className="h-3 w-3 shrink-0 text-amber-600/80 dark:text-amber-400/80" />
-                      <span className="shrink-0 rounded bg-amber-500/10 px-1.5 font-mono text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                      <span className="min-w-0 truncate rounded bg-amber-500/10 px-1.5 font-mono text-[10px] font-semibold text-amber-700 dark:text-amber-400" title={`${m.label}（${m.atoms} 原子）`}>
                         {m.label}
                       </span>
                       <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">{m.atoms} at</span>

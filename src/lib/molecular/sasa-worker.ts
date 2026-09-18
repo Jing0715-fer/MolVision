@@ -3,6 +3,8 @@
 // 支持两种计算：
 //   kind='full'    完整结构 per-atom SASA
 //   kind='buried'  界面 ΔSASA（A alone / B alone / A∪B 三路 → delta per-atom）
+// export {}：声明为 ES 模块，避免本文件顶层标识符泄漏进 TS 全局作用域（与其他 worker 冲突）
+export {}
 
 interface ComputePayload {
   type: 'compute'

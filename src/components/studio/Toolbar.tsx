@@ -131,8 +131,8 @@ export function Toolbar() {
   return (
     <TooltipProvider delayDuration={300}>
       <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border/70 bg-card/60 px-2 backdrop-blur-sm sm:px-3">
-        {/* Logo */}
-        <div className="mr-1 flex items-center gap-2">
+        {/* Logo（固定左端） */}
+        <div className="mr-1 flex shrink-0 items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 shadow-sm shadow-emerald-500/25">
             <Atom className="h-4.5 w-4.5 text-white" strokeWidth={1.8} />
           </div>
@@ -142,7 +142,10 @@ export function Toolbar() {
           </div>
         </div>
 
-        <Separator orientation="vertical" className="mx-1 !h-6" />
+        <Separator orientation="vertical" className="mx-1 !h-6 shrink-0" />
+
+        {/* 中间工具区：窄屏可横向滑动（隐藏滚动条），宽屏自然展开 */}
+        <div className="mol-toolbar-scroll flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
 
         {/* 加载 */}
         <Tooltip>
@@ -469,16 +472,15 @@ export function Toolbar() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
 
-        <div className="flex-1" />
-
-        {/* 右侧工具 */}
+        {/* 右侧工具（固定右端） */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={() => setUi({ consoleOpen: !ui.consoleOpen })}
               className={cn(
-                'flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition hover:bg-accent',
+                'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition hover:bg-accent',
                 ui.consoleOpen ? 'bg-primary/15 text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
               )}
             >
@@ -495,7 +497,7 @@ export function Toolbar() {
             <button
               onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
               suppressHydrationWarning
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <Sun className="h-4 w-4 hidden dark:block" />
               <Moon className="h-4 w-4 dark:hidden" />
@@ -508,7 +510,7 @@ export function Toolbar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => setUi({ helpOpen: true })}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <HelpCircle className="h-4 w-4" />
             </button>

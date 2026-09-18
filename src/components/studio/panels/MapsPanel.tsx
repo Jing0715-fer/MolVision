@@ -115,13 +115,13 @@ export function MapsPanel() {
             onChange={e => setIdInput(e.target.value.toUpperCase())}
             onKeyDown={e => { if (e.key === 'Enter') doFetch(idInput, kind) }}
             placeholder="PDB 编号（如 3EKJ）"
-            className="h-8 flex-1 rounded-md border border-border/70 bg-background/60 px-2 font-mono text-xs uppercase tracking-wider outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
+            className="h-8 min-w-0 flex-1 rounded-md border border-border/70 bg-background/60 px-2 font-mono text-xs uppercase tracking-wider outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
             aria-label="PDB 编号"
           />
           <button
             onClick={() => doFetch(idInput, kind)}
             disabled={computing || (!idInput && !activePdbId)}
-            className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground shadow-sm transition hover:opacity-90 disabled:opacity-40"
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground shadow-sm transition hover:opacity-90 disabled:opacity-40"
           >
             {computing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
             <span className="hidden sm:inline">合成</span>

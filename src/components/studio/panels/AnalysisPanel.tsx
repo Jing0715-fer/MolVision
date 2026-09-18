@@ -621,7 +621,7 @@ export function AnalysisPanel() {
                   {!mapData && (
                     <p className="px-2 py-3 text-center text-[10px] text-muted-foreground">无接触数据</p>
                   )}
-                  {hoverPair && mapData && (
+                  {hover && hoverPair && mapData && (
                     <div
                       className="pointer-events-none absolute z-10 rounded-md border border-border bg-popover px-2 py-1 font-mono text-[10px] text-popover-foreground shadow-lg"
                       style={{ left: hover.x + 12, top: hover.y - 8 }}

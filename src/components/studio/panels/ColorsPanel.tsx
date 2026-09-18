@@ -55,8 +55,8 @@ export function ColorsPanel() {
                 <span key={i} className="h-4 w-4 rounded-full border border-background shadow-sm" style={{ background: c }} />
               ))}
             </div>
-            <span className="flex-1 text-xs font-medium">{COLOR_SCHEME_LABELS[sc.key]}</span>
-            <Paintbrush className="h-3.5 w-3.5 text-muted-foreground/50" />
+            <span className="min-w-0 flex-1 truncate text-xs font-medium" title={COLOR_SCHEME_LABELS[sc.key]}>{COLOR_SCHEME_LABELS[sc.key]}</span>
+            <Paintbrush className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
           </button>
         ))}
       </div>
@@ -72,7 +72,7 @@ export function ColorsPanel() {
         <Input
           value={custom}
           onChange={e => setCustom(e.target.value)}
-          className="h-8 flex-1 font-mono text-xs"
+          className="h-8 min-w-0 flex-1 font-mono text-xs"
           placeholder="#hex"
         />
         <button

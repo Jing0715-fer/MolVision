@@ -947,3 +947,45 @@ Stage Summary:
 - 关键决策：①关闭可撤销用快照重建（addStructure 复用渲染同步链路，symmetry/transform 重放）而非引擎级隐藏 ②newSession 录制中先落盘再清空（尊重用户数据）③.molvision 导入统一收口 loadFiles（拖拽/对话框/菜单共享路径，.json 失败回退结构解析）④Radix 菜单项弹 AlertDialog 用 onSelect preventDefault 模式
 - 未解决问题与风险：①批量关闭不可撤销（逐个关闭才有撤销——确认框已明示）②会话文件导入替换语义（无「合并导入」选项）③VLM 建议未落地项：视口坐标轴 HUD、RepCard 紧凑行内布局、控制台背景层级强化、序列条高度可调
 - 下一阶段建议（优先级序）：① ray 渲染异步化（OffscreenCanvas/分帧+进度 toast，r17 起遗留）② 视口左下角 3D 坐标轴指示器（VLM 建议，专业感提升明显）③ RepCard 紧凑布局（选择+配色行内排列省 40% 垂直空间）④ UI 偏好统一 settings store ⑤ 时间轴 FLIP 动画 + 卡片右键菜单 ⑥ 会话文件「合并导入」模式
+
+---
+Task ID: feat-r22
+Agent: main
+Task: 修复「已加载结构列表内容溢出卡片」+ 全面 UI 显示问题排查打磨 + 全面代码审查 + E2E 全流程测试
+
+Work Log:
+- 读取 worklog（r21 完成关闭结构/会话文件/去 emoji）；QA 冒烟 dev server 200 正常
+- 【根因定位】用户反馈「结构列表内容已出卡片」：agent-browser DOM 测量复现——结构卡 scrollWidth 382 > clientWidth 273，卡内标题 span 280px 完整展开、头部按钮 right 超卡右缘 108px。根因是经典 flexbox 陷阱：标题 span 虽有 `flex-1 truncate`（overflow:hidden 使其自身 auto-min=0），但父按钮（flex-1）缺 `min-w-0`，其 min-width:auto 解析为内容 min-content（含未截断的 40 字符标题全宽 280px），按钮膨胀到 328px 撑破 253px 容器
+- 【修复 A：结构卡（StructuresPanel）】头部主按钮 + 标题 span 双层加 min-w-0；名称徽章/叠合/撤销/眼睛/X 五个按钮加 shrink-0；配体分子行 amber 标签改 min-w-0+truncate（1IGT 长糖链 NAG+BMA+MAN+GAL+FUL 275px 行宽验证零溢出）
+- 【修复 B：全 UI 系统性排查（同类 min-width:auto 陷阱扫描）】
+  - RepsPanel：类型 SelectTrigger/配色 SelectTrigger/选择表达式 Input 三处 flex-1 加 min-w-0（Rep 卡头部曾溢出 20px，SelectTrigger 的 whitespace-nowrap 使 min-content=141px>可用 123px）；预设选择紧凑触发器 w-6→w-7 + [&_svg]:hidden（≡ 占位符+chevron 曾裁切 6px）
+  - MapsPanel：PDB 编号输入 min-w-0 + 合成按钮 shrink-0（232px 最小面板宽曾溢出 35px）
+  - ColorsPanel：方案标签 min-w-0+truncate + title 提示；自定义色 Input min-w-0
+  - ConsoleBar：命令输入 min-w-0（长命令防顶出 ↵ kbd）
+  - 验证方法：agent-browser 遍历 9 个面板 × 232/292px 面板宽扫描 scrollWidth>clientWidth 元素，修复后全部清零
+- 【修复 C：移动端工具栏不可达】390px 下工具栏 17 个按钮总宽 736px 被 root overflow-hidden 裁剪（表示法快捷键/录制/movie 等完全不可点）。重构：Logo/分隔线/右侧工具（命令行/主题/帮助/GitHub）shrink-0 固定两端，中间全部工具包进 `mol-toolbar-scroll flex min-w-0 flex-1 overflow-x-auto`（globals.css 新增隐藏滚动条类）；验证 scrollLeft=380 时 11 个隐藏按钮可达、17/17 全部可操作
+- 【新组件 D：FadeEdge 滚动渐隐提示】VLM 评审指出序列条「内容被裁掉」观感（实际可滚但无提示）。新建 FadeEdge.tsx：滚动容器 + scroll/ResizeObserver 监听 → 动态挂载 mol-fade-l/mol-fade-r mask-image 渐隐类（CSS 变量 --mol-fade-w 控宽度），滚到对应端自动摘除。接入 SequenceBar 配体行+残基行、MovieTimeline 关键帧卡片带。验证：中部双缘渐隐/滚到头右缘消失/回起点左缘消失
+- 【修复 E：深色主题对比度（VLM 8.25/10 建议）】--muted-foreground 0.68→0.72（辅助文字提亮）、--border 12%→16%、--input 15%→18%（面板边界感增强）
+- 【全面代码审查（tsc 从 16 错→应用代码 0 错）】
+  - AnalysisPanel hover 判空：hoverPair 由 hover 派生但 TS 无法穿透推断，守卫补 hover → TS18047 修复
+  - superpose isSimilar 死比较：residueClass(a)!=='other' 中 'other' 不在 ResidueClass 联合（永真死代码），语义修正为排除 unknown/ligand/water（无生化类别不算相似）
+  - superpose rigidFit：quat/translation 数组字面量推断 number[]，显式元组类型标注 → TS2367/TS2322 修复
+  - hbond-worker/sasa-worker 顶层 `export {}`：两文件原为 TS 脚本（无 import/export），Grid/ctx/ResultMessage 等顶层标识符泄漏全局作用域互相冲突（TS2300 重复标识符 + ResultMessage 合并声明冲突）→ 声明为 ES 模块隔离，运行时无影响（worker 正常加载，hbonds on 1IGT 12956 原子走 worker 路径返回 3,686 氢键验证通过）
+  - 剩余 4 个 tsc 错误均在 examples//skills/ 模板目录（非应用代码）；lint 0 错 0 警
+- 【E2E 全流程测试（agent-browser 真实交互）】
+  - 关闭/撤销：X 关闭 4HHB → toast 快照提示 + 撤销按钮 → 2 结构完整恢复（1IGT/4HHB）✓
+  - 会话：会话菜单 3 条目 ✓ 新建会话 AlertDialog（「新建会话并关闭 2 个结构？」）→ 确认 → 0 结构 + 空态 + 序列条消失 ✓
+  - 命令链：load 4hhb → select resn HEM（172 原子）→ color red（#e04545）→ show sticks（棍状表示法添加）日志逐条验证 ✓
+  - 测量：测量组按钮 →「测距：点击 2 个原子」toast ✓ 关闭恢复 ✓
+  - 书签：V 键 → 1 张书签卡 ✓
+  - 加载对话框：打开 + 9 个交互元素 ✓；表示法下拉：7 类型全列出 ✓；工具栏下拉（滚动容器内 portal 定位对齐 + 视口内）✓
+  - 帮助对话框：「会话与文件」段 + FolderOpen 图标渲染 ✓（浏览器错误日志中的 FolderOpen ReferenceError 为 HMR 编辑期瞬态残留——硬刷新后交互错误计数不增长 4→4，非现存缺陷）
+  - 移动端 390px：无横向滚动（bodyW=390）✓；深色模式溢出扫描 0 ✓
+- 【VLM 评审】移动端 6→9/10（工具栏「优秀」、渐隐「10/10 完美解决体验痛点」）；深色 8.25/10 后 token 提亮；浅色桌面终审 9/10「结构/表示法卡片溢出问题已彻底解决…类似专业科研软件的严谨感…完全可以作为正式版本发布」
+- 【QA 方法论补充】①truncate 元素 scrollWidth>clientWidth 是正常内部裁剪，扫描时须排除 ②Radix Tooltip 无 title 属性，定位按钮须按结构特征（容器 class/子按钮数）③errors --clear 在当前 agent-browser 版本不生效，用「交互前后错误计数差」判定新增 ④eval 里的正则含 [h 会被 bash 转义干扰，读源码用 Read 工具
+
+Stage Summary:
+- 项目当前状态：r21 基础上完成「UI 溢出系统性治理」——①结构卡/Rep 卡/MapsPanel/ColorsPanel/ConsoleBar 共 9 处 min-width:auto 陷阱修复（flex-1 truncate 嵌套缺 min-w-0 的经典 bug 全链路清理，9 面板 × 232/292px 零溢出）②移动端工具栏从「17 按钮 11 个被裁剪不可达」到「可滑动全可达」③FadeEdge 通用滚动渐隐组件（序列条/时间轴接入，双缘动态）④深色 token 对比度提升 ⑤应用代码 tsc 错误 16→0（含 worker 全局作用域污染、superpose 死比较两个真实代码质量问题）
+- 关键决策：①min-w-0 修在「中间 flex 层」而非只修叶子（truncate 只让叶子 auto-min=0，中间层按钮仍被内容 min-content 撑开）②工具栏采用「两端固定+中段滚动」而非隐藏按钮（保留全部功能可达性）③FadeEdge 用 mask-image 而非背景色渐变叠加（不依赖表面色，深浅主题通吃）④worker 加 export {} 隔离模块作用域（零运行时影响，纯类型层修复）
+- 未解决问题与风险：①MovieTimeline 选中卡片编辑行/AnalysisPanel 接触图 canvas 未接 FadeEdge（次要滚动区）②超级深色下 VLM 建议的「左侧面板右边线强化」已通过 border token 提升覆盖，未单独加分割线③agent-browser errors 清空命令失效（工具限制）④examples/skills 目录 4 个模板 tsc 错误（不属于应用构建）
+- 下一阶段建议（优先级序）：① ray 渲染异步化（r17 遗留）② 视口左下角 3D 坐标轴指示器（VLM 多轮建议）③ RepCard 紧凑行内布局 ④ UI 偏好统一 settings store ⑤ 时间轴 FLIP 动画 + 卡片右键菜单 ⑥ morph 帧插值升级（键长校正/去碰撞）

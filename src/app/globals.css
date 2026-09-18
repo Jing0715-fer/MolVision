@@ -90,12 +90,12 @@
   --secondary: oklch(0.24 0 0);
   --secondary-foreground: oklch(0.97 0 0);
   --muted: oklch(0.24 0 0);
-  --muted-foreground: oklch(0.68 0 0);
+  --muted-foreground: oklch(0.72 0 0);
   --accent: oklch(0.24 0.005 160);
   --accent-foreground: oklch(0.97 0 0);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
+  --border: oklch(1 0 0 / 16%);
+  --input: oklch(1 0 0 / 18%);
   --ring: oklch(0.696 0.17 162.48);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -153,6 +153,29 @@
 .mol-scroll {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklab, var(--muted-foreground) 30%, transparent) transparent;
+}
+
+/* 工具栏横向滚动（窄屏）：完全隐藏滚动条，依赖触屏滑动手势/滚轮 */
+.mol-toolbar-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.mol-toolbar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* 横向滚动行动态渐隐（JS 按滚动位置挂载/摘除）：提示两侧还有内容 */
+.mol-fade-l {
+  -webkit-mask-image: linear-gradient(to right, transparent, black var(--mol-fade-w, 24px));
+  mask-image: linear-gradient(to right, transparent, black var(--mol-fade-w, 24px));
+}
+.mol-fade-r {
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - var(--mol-fade-w, 24px)), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - var(--mol-fade-w, 24px)), transparent);
+}
+.mol-fade-l.mol-fade-r {
+  -webkit-mask-image: linear-gradient(to right, transparent, black var(--mol-fade-w, 24px), black calc(100% - var(--mol-fade-w, 24px)), transparent);
+  mask-image: linear-gradient(to right, transparent, black var(--mol-fade-w, 24px), black calc(100% - var(--mol-fade-w, 24px)), transparent);
 }
 
 /* 浅色模式柔和分层阴影（活动卡/浮层深度，深色下沉为描边感） */

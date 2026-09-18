@@ -2,6 +2,8 @@
 // 自包含实现（不导入主线程模块）：主线程把元素/水标志预编译为 Uint8 标志数组传入，
 // worker 内部重建均匀空间网格后按与 detectHBonds 相同的判据计算。
 // 判据：有氢结构 D-H…A（H…A ≤ maxDist 且角度 ≥ minAngle）；无氢结构 D…A ≤ maxHeavyDist。
+// export {}：声明为 ES 模块，避免本文件顶层标识符泄漏进 TS 全局作用域（与其他 worker 冲突）
+export {}
 
 interface DetectPayload {
   type: 'detect'

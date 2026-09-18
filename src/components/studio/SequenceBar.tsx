@@ -7,6 +7,7 @@ import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { residueOneLetter } from '@/lib/molecular/chemistry'
 import { residueCssColor, ssCssColor } from '@/lib/molecular/colors'
 import { cn } from '@/lib/utils'
+import { FadeEdge } from './FadeEdge'
 
 export function SequenceBar() {
   const ui = useMolStore(s => s.ui)
@@ -60,7 +61,7 @@ export function SequenceBar() {
               <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-card/40 pr-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                 <FlaskConical className="h-3 w-3" /> 配体
               </span>
-              <div className="mol-scroll-x flex gap-1 overflow-x-auto pb-0.5">
+              <FadeEdge className="gap-1 pb-0.5">
                 {ligandMolecules.map(m => {
                   const r0 = data.residues[m.residues[0]]
                   const isSel = m.residues.some(ri => selectedResidues.has(ri))
@@ -94,7 +95,7 @@ export function SequenceBar() {
                     </button>
                   )
                 })}
-              </div>
+              </FadeEdge>
             </div>
           )}
 
@@ -119,7 +120,7 @@ export function SequenceBar() {
                     <span className="font-mono text-[11px] font-bold">{chain.id === ' ' ? '—' : chain.id}</span>
                   </button>
                 </span>
-                <div className="mol-scroll-x flex overflow-x-auto pb-0.5">
+                <FadeEdge className="pb-0.5">
                   {(chain.residueIdx || []).map((ri, k) => {
                     const r = data.residues[ri]
                     const isSel = selectedResidues.has(ri)
@@ -150,7 +151,7 @@ export function SequenceBar() {
                       />
                     )
                   })}
-                </div>
+                </FadeEdge>
               </div>
             )
           })}
