@@ -495,7 +495,7 @@ export default function MolViewer() {
       {/* movie 序列播放指示器（顶部居中，播放时显示；演示中自动下移） */}
       <MovieBadge />
 
-      {/* movie 时间轴编排面板（底部居中，工具栏 🎬 / movie edit 开关） */}
+      {/* movie 时间轴编排面板（底部居中，工具栏 Film 按钮 / movie edit 开关） */}
       <MovieTimeline />
 
       {/* 视角书签浮层（右缘竖排，保存/跳转相机视角） */}

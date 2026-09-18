@@ -691,7 +691,7 @@ export function sfSelfTest(): { ok: boolean; details: string } {
   let ok = true
   const check = (name: string, pass: boolean, info: string): void => {
     if (!pass) ok = false
-    lines.push((pass ? '✓ ' : '✗ ') + name + (info ? ' — ' + info : ''))
+    lines.push((pass ? '[通过] ' : '[失败] ') + name + (info ? ' — ' + info : ''))
   }
 
   // ① FFT↔IFFT 往返

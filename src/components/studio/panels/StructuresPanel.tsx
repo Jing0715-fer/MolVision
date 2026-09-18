@@ -2,14 +2,20 @@
 
 // 结构面板：结构列表、链、配体、对称伴侣、叠合
 import { useState } from 'react'
-import { Eye, EyeOff, Trash2, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight, Target, Copy } from 'lucide-react'
+import { Eye, EyeOff, X, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight, Target, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
+import { textRegistry } from '@/lib/molecular/text-registry'
+import type { StructureEntry } from '@/lib/molecular/types'
 import { spaceGroupInfo } from '@/lib/molecular/symmetry'
 import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Badge } from '@/components/ui/badge'
 import { Slider } from '@/components/ui/slider'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 const CHAIN_TYPE_ICON: Record<string, typeof Dna> = {
   protein: Dna, nucleic: Dna, water: Droplets, ligand: FlaskConical,
@@ -18,12 +24,40 @@ const CHAIN_TYPE_LABEL: Record<string, string> = {
   protein: '蛋白质', nucleic: '核酸', water: '水', ligand: '配体',
 }
 
+/** 关闭单个结构：快照全部状态，toast 8 秒内可撤销（表示法/着色/叠合变换/对称伴侣均还原） */
+function closeStructureWithUndo(st: StructureEntry) {
+  const data = dataRegistry.get(st.id)
+  const text = textRegistry.get(st.id)
+  useMolStore.getState().removeStructure(st.id)
+  if (!data || !text) {
+    toast.success(`已关闭 ${st.name}`)
+    return
+  }
+  toast.success(`已关闭 ${st.name}`, {
+    description: `${st.summary.atoms.toLocaleString()} 原子 · 表示法与着色已快照，可撤销`,
+    action: {
+      label: '撤销',
+      onClick: () => {
+        const newId = useMolStore.getState().addStructure(data, st.name, 0)
+        textRegistry.set(newId, text)
+        useMolStore.setState(s => ({
+          structures: s.structures.map(x => x.id === newId
+            ? { ...x, reps: st.reps, colorOverrides: st.colorOverrides, visible: st.visible, transform: st.transform, symmetry: st.symmetry, hasSS: st.hasSS }
+            : x),
+        }))
+        if (st.symmetry?.radius) engineRef.current?.updateSymmetry(newId, st.symmetry.radius)
+        toast.success(`已恢复 ${st.name}`, { description: '表示法 / 着色 / 叠合变换 / 对称伴侣均已还原' })
+      },
+    },
+    duration: 8000,
+  })
+}
+
 export function StructuresPanel() {
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   const setActive = useMolStore(s => s.setActive)
   const setStructureVisible = useMolStore(s => s.setStructureVisible)
-  const removeStructure = useMolStore(s => s.removeStructure)
   const setUi = useMolStore(s => s.setUi)
   // 叠合工具状态（≥2 结构显示）
   const [spOpen, setSpOpen] = useState(false)
@@ -32,6 +66,8 @@ export function StructuresPanel() {
   const [spRefChain, setSpRefChain] = useState('')                // ''=自动
   // 对称伴侣半径（本地输入值，生成时才提交）
   const [symRadius, setSymRadius] = useState(20)
+  // 全部关闭确认
+  const [confirmCloseAll, setConfirmCloseAll] = useState(false)
 
   if (!structures.length) {
     return (
@@ -50,7 +86,19 @@ export function StructuresPanel() {
 
   return (
     <div className="pb-4">
-      <SectionTitle>已加载结构 ({structures.length})</SectionTitle>
+      <SectionTitle right={
+        structures.length >= 2 ? (
+          <button
+            onClick={() => setConfirmCloseAll(true)}
+            className="rounded px-1 text-[10px] text-muted-foreground/80 transition hover:bg-destructive/10 hover:text-destructive"
+            title="关闭全部已加载结构（含确认）"
+          >
+            全部关闭
+          </button>
+        ) : undefined
+      }>
+        已加载结构 ({structures.length})
+      </SectionTitle>
       <div className="space-y-1.5 px-2">
         {structures.map(st => (
           <div
@@ -120,11 +168,11 @@ export function StructuresPanel() {
                 {st.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
               </button>
               <button
-                onClick={() => { removeStructure(st.id); toast.success(`已移除 ${st.name}`) }}
-                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                title="移除"
+                onClick={() => closeStructureWithUndo(st)}
+                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground/70 opacity-70 transition hover:bg-destructive/10 hover:text-destructive hover:opacity-100"
+                title={`关闭 ${st.name}（8 秒内可撤销）`}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -480,7 +528,36 @@ export function StructuresPanel() {
           </>
         )
       })()}
-      <PanelHint>点击链选择（配体行按<b>分子</b>精确选择，双击聚焦）；结构卡片点击切换活动结构；{structures.length >= 2 ? '⧉ 按钮将此结构叠合到活动结构（superpose）。' : ''}</PanelHint>
+      <PanelHint>点击链选择（配体行按<b>分子</b>精确选择，双击聚焦）；结构卡片点击切换活动结构；{structures.length >= 2 ? '「叠合」按钮将此结构叠合到活动结构（superpose）。' : ''}</PanelHint>
+
+      {/* 全部关闭确认 */}
+      <AlertDialog open={confirmCloseAll} onOpenChange={setConfirmCloseAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>关闭全部 {structures.length} 个结构？</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p>将移除全部已加载结构及关联的标签、测量、命名选择；视角书签与 movie 时间轴保留。</p>
+                <p className="mt-1.5 text-muted-foreground">如需连书签/时间轴一并清空，请用工具栏「会话 → 新建会话」。每个结构单独关闭时 toast 内可撤销，批量关闭不可撤销。</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const n = structures.length
+                for (const st of [...structures]) useMolStore.getState().removeStructure(st.id)
+                setConfirmCloseAll(false)
+                toast.success(`已关闭 ${n} 个结构`, { description: '场景已清空——书签与时间轴保留（彻底重置用「新建会话」）' })
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              全部关闭
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

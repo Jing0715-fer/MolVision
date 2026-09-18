@@ -163,7 +163,7 @@ export function MovieTimeline() {
         <button
           onClick={() => setTimelineOpen(false)}
           className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-          title="关闭时间轴（工具栏 🎬 可重新打开）"
+          title="关闭时间轴（工具栏 Film 按钮可重新打开）"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -304,7 +304,7 @@ export function MovieTimeline() {
           </div>
         ) : (
           <span className="truncate text-[10px] text-muted-foreground/80">
-            {timeline.length ? '点击卡片编辑时长 · 拖拽排序 · 👁 预览机位' : '同步后可拖拽排序、逐段调时长'}
+            {timeline.length ? '点击卡片编辑时长 · 拖拽排序 · 「预览」查看机位' : '同步后可拖拽排序、逐段调时长'}
           </span>
         )}
       </div>

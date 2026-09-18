@@ -15,7 +15,7 @@ const waiting: Array<() => void> = []
  */
 export async function acquireHeavySlot(label: string): Promise<() => void> {
   if (active >= MAX_CONCURRENT) {
-    useMolStore.getState().appendLog('out', `⏳ ${label} 排队等待（重计算并发已满，空出后自动继续）`)
+    useMolStore.getState().appendLog('out', `${label} 排队等待（重计算并发已满，空出后自动继续）…`)
     await new Promise<void>(resolve => { waiting.push(resolve) })
   }
   active++

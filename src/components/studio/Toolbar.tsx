@@ -1,15 +1,17 @@
 'use client'
 
 // 顶部工具栏
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
   Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
+  FileDown, FilePlus2, FileUp, Save, HardDriveDownload,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
+import { exportSessionFile, importSessionFile, newSession, sessionInfo } from '@/lib/molecular/session'
 import { TOURS } from '@/lib/molecular/tours'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import { useRecordStore } from '@/lib/molecular/record-store'
@@ -19,6 +21,10 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Separator } from '@/components/ui/separator'
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -56,6 +62,31 @@ export function Toolbar() {
   const recording = useRecordStore(s => s.recording)
   const moviePlaying = useMovieStore(s => s.playing)
   const timelineOpen = useMovieStore(s => s.timelineOpen)
+
+  // 会话菜单：文件导入 + 新建确认
+  const sessionFileRef = useRef<HTMLInputElement>(null)
+  const [sessionImporting, setSessionImporting] = useState(false)
+  const [confirmNewSession, setConfirmNewSession] = useState(false)
+
+  const onImportSession = async (file: File) => {
+    setSessionImporting(true)
+    try {
+      const n = await importSessionFile(file)
+      if (n > 0) toast.success('会话已导入', { description: `${n} 个结构 · 表示法与相机视角已还原（来自 ${file.name}）` })
+      else toast.error('会话文件中没有可恢复的结构', { description: file.name })
+    } catch (e) {
+      toast.error('导入会话失败', { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setSessionImporting(false)
+    }
+  }
+
+  const doNewSession = () => {
+    const closed = newSession()
+    toast.success(closed > 0 ? `已新建会话（关闭 ${closed} 个结构）` : '已新建会话', {
+      description: '结构 / 书签 / 时间轴 / 密度图已清空 · 可随时「保存会话文件」留档分享',
+    })
+  }
 
   const capture = (scale: number, transparent: boolean) => {
     const eng = engineRef.current
@@ -124,8 +155,74 @@ export function Toolbar() {
               <span className="hidden sm:inline">加载结构</span>
             </button>
           </TooltipTrigger>
-          <TooltipContent>PDB 编号 / 本地文件</TooltipContent>
+          <TooltipContent>PDB 编号 / 本地文件 / .molvision 会话</TooltipContent>
         </Tooltip>
+
+        {/* 会话 */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 text-xs font-medium transition hover:bg-accent">
+              <Save className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="hidden md:inline">会话</span>
+              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-72">
+            <DropdownMenuLabel className="text-xs">会话文件（.molvision）与场景管理</DropdownMenuLabel>
+            <DropdownMenuItem
+              onClick={() => {
+                const ok = exportSessionFile()
+                if (!ok) toast.error('无可导出的会话（先加载结构）')
+                else toast.success('会话已导出为 .molvision 文件', { description: '含结构源文本 · 表示法 · 设置 · 相机视角 · 书签' })
+              }}
+              disabled={!structures.length}
+              className="gap-2"
+            >
+              <FileDown className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="flex-1">
+                <span className="block text-xs">保存会话文件…</span>
+                <span className="block text-[10px] text-muted-foreground">导出 .molvision，可跨设备分享</span>
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => sessionFileRef.current?.click()} disabled={sessionImporting} className="gap-2">
+              {sessionImporting
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+                : <FileUp className="h-3.5 w-3.5 text-violet-500" />}
+              <span className="flex-1">
+                <span className="block text-xs">打开会话文件…</span>
+                <span className="block text-[10px] text-muted-foreground">恢复 .molvision（替换当前场景）</span>
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={e => { e.preventDefault(); setConfirmNewSession(true) }}
+              className="gap-2"
+            >
+              <FilePlus2 className="h-3.5 w-3.5 text-rose-500" />
+              <span className="flex-1">
+                <span className="block text-xs">新建会话</span>
+                <span className="block text-[10px] text-muted-foreground">清空全部结构与视图状态，从头开始</span>
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <div className="flex items-start gap-1.5 px-2 py-1">
+              <HardDriveDownload className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                本地自动存档：{sessionInfo()}。可拖拽 .molvision 文件到视口直接导入。
+              </p>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <input
+          ref={sessionFileRef}
+          type="file"
+          accept=".molvision,.json"
+          className="hidden"
+          onChange={e => {
+            const f = e.target.files?.[0]
+            if (f) void onImportSession(f)
+            e.target.value = ''
+          }}
+        />
 
         {/* 示例 */}
         <DropdownMenu>
@@ -429,6 +526,41 @@ export function Toolbar() {
           <Github className="h-4 w-4" />
         </a>
       </header>
+
+      {/* 新建会话确认（有结构时二次确认，防误触） */}
+      <AlertDialog open={confirmNewSession} onOpenChange={setConfirmNewSession}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {structures.length > 0 ? `新建会话并关闭 ${structures.length} 个结构？` : '新建会话？'}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p>
+                  将清空全部结构、表示法、选择、测量、标签、命名选择、视角书签、movie 时间轴与电子密度图；本地自动存档同步清除。
+                </p>
+                {recording && (
+                  <p className="mt-1.5 font-medium text-amber-600 dark:text-amber-400">
+                    正在录制动画——新建前会自动保存已录制片段（WebM 自动下载）。
+                  </p>
+                )}
+                <p className="mt-1.5 text-muted-foreground">
+                  此操作不可撤销。如需保留当前场景，可先「保存会话文件」导出 .molvision 留档。
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setConfirmNewSession(false); doNewSession() }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              新建会话
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TooltipProvider>
   )
 }

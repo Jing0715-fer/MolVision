@@ -1,7 +1,7 @@
 'use client'
 
 // movie 序列播放指示器：胶片图标 + 当段视角名 + 段进度条 + 停止按钮
-// 演示引导进行中隐藏（引导卡可占满短视口；movie 仍可用——Esc 停止 / 工具栏 🎬 有状态）
+// 演示引导进行中隐藏（引导卡可占满短视口；movie 仍可用——Esc 停止 / 工具栏 Film 按钮有状态）
 import { Film, Square } from 'lucide-react'
 import { useMovieStore, stopMovie } from '@/lib/molecular/movie'
 import { useTourStore } from '@/lib/molecular/tour-store'

@@ -1,7 +1,7 @@
 'use client'
 
 // 帮助对话框：快捷键、鼠标操作、快速上手
-import { MousePointer2, Keyboard, Lightbulb, FlaskConical, Wand2, GraduationCap } from 'lucide-react'
+import { MousePointer2, Keyboard, Lightbulb, FlaskConical, Wand2, GraduationCap, FolderOpen } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -108,8 +108,8 @@ export function HelpDialog() {
             </h3>
             <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
               <p><span className="font-semibold text-foreground">视角书签</span>：快捷键 <code className="rounded bg-muted px-1 font-mono text-[10px]">V</code> 或视口右缘「保存视角」把当前相机状态存为书签（带视口缩略图），<code className="rounded bg-muted px-1 font-mono text-[10px]">Shift+数字</code> / 点击缩略图平滑过渡跳转；命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">view save 口袋</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view 2</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view del 2</code>；书签独立持久化（清空结构不清空，刷新后仍在），双击名称可重命名，导出 .molvision 会话文件时随文件携带（导入自动还原）。</p>
-              <p><span className="font-semibold text-foreground">叠合</span>：结构卡片 ⧉ 按钮或「叠合 (matchmaker)」面板，支持手动指定链对（<code className="rounded bg-muted px-1 font-mono text-[10px]">superpose 4HHB onto 1A3N chain A to A</code>）；<code className="rounded bg-muted px-1 font-mono text-[10px]">untransform</code> 撤销；多结构同屏时 <code className="rounded bg-muted px-1 font-mono text-[10px]">activate 1BQL</code> 切换活动结构（show/hide/color 命令的作用对象）。</p>
-              <p><span className="font-semibold text-foreground">电子密度</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">map fetch 3ekj</code> 从 RCSB 结构因子实时合成 2Fo−Fc 图（模型相位 + 3D FFT，Web Worker 零阻塞）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map fofc 3ekj</code> 合成 Fo−Fc 差图（正绿/负红双等值面：绿峰=密度有而模型缺、红峰=模型有而密度无）——<span className="text-foreground/70">结构未加载时会自动从 RCSB 获取作为相位模型</span>；<code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel 1.5</code> 同时调正负峰，差图可 <code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel pos 3 / neg 2.5</code> 独立调级（面板双滑块同效）；也可拖入 .ccp4/.mrc 文件；密度图面板（左侧 🧮）可视化等值面/网格；σ/模式/颜色随会话保存，刷新自动重算恢复（会话缺结构时同样自动补拉）；加载密度图后，视口左下角出现 σ 控制卡（差图正/负峰双滑块 + 模式切换 + 可见性），视线不离结构即可调级（与面板滑块等效）。</p>
+              <p><span className="font-semibold text-foreground">叠合</span>：结构卡片「叠合」按钮或「叠合 (matchmaker)」面板，支持手动指定链对（<code className="rounded bg-muted px-1 font-mono text-[10px]">superpose 4HHB onto 1A3N chain A to A</code>）；<code className="rounded bg-muted px-1 font-mono text-[10px]">untransform</code> 撤销；多结构同屏时 <code className="rounded bg-muted px-1 font-mono text-[10px]">activate 1BQL</code> 切换活动结构（show/hide/color 命令的作用对象）。</p>
+              <p><span className="font-semibold text-foreground">电子密度</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">map fetch 3ekj</code> 从 RCSB 结构因子实时合成 2Fo−Fc 图（模型相位 + 3D FFT，Web Worker 零阻塞）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map fofc 3ekj</code> 合成 Fo−Fc 差图（正绿/负红双等值面：绿峰=密度有而模型缺、红峰=模型有而密度无）——<span className="text-foreground/70">结构未加载时会自动从 RCSB 获取作为相位模型</span>；<code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel 1.5</code> 同时调正负峰，差图可 <code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel pos 3 / neg 2.5</code> 独立调级（面板双滑块同效）；也可拖入 .ccp4/.mrc 文件；密度图面板（左侧「密度图」标签）可视化等值面/网格；σ/模式/颜色随会话保存，刷新自动重算恢复（会话缺结构时同样自动补拉）；加载密度图后，视口左下角出现 σ 控制卡（差图正/负峰双滑块 + 模式切换 + 可见性），视线不离结构即可调级（与面板滑块等效）。</p>
               <p><span className="font-semibold text-foreground">B 因子分析</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">preset putty</code> 或快捷键 8——Putty 管径随 B 因子连续变化（粗=柔性/高 B、细=刚性/低 B）配 B 因子彩虹渐变，蛋白（CA）与核酸（磷酸骨架）统一映射；<code className="rounded bg-muted px-1 font-mono text-[10px]">color bfactor</code> 同款色标；视口左下角自动显示颜色标尺图例（B 值→颜色→管径三联映射）。</p>
               <p><span className="font-semibold text-foreground">对称伴侣</span>：结构面板「对称伴侣」区块或 <code className="rounded bg-muted px-1 font-mono text-[10px]">symmetry 20</code>，按 CRYST1 空间群（65 手性群全覆盖）生成晶格邻居。</p>
               <p><span className="font-semibold text-foreground">界面接触</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">contacts chain A | chain B</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">interface A B</code>——残基对连线 + 2D 图谱 + ΔSASA 埋藏面积。</p>
@@ -128,14 +128,29 @@ export function HelpDialog() {
             </h3>
             <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
               <p><span className="font-semibold text-foreground">灯光</span>：场景面板「灯光与渲染」或 <code className="rounded bg-muted px-1 font-mono text-[10px]">set ambient 0.5 / set direct 2 / set specular off</code>（哑光论文图风格）。</p>
-              <p><span className="font-semibold text-foreground">立体</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">stereo on</code> 红蓝立体（工具栏 👓）。</p>
+              <p><span className="font-semibold text-foreground">立体</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">stereo on</code> 红蓝立体（工具栏「立体」按钮）。</p>
               <p><span className="font-semibold text-foreground">视角</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">orient</code> 主轴对齐；<code className="rounded bg-muted px-1 font-mono text-[10px]">get_view</code> / <code className="rounded bg-muted px-1 font-mono text-[10px]">set_view</code> 视角导出恢复（JSON）；<code className="rounded bg-muted px-1 font-mono text-[10px]">png 4</code> 导出 4× 截图。</p>
               <p><span className="font-semibold text-foreground">Ray 级渲染</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">ray</code> 或工具栏相机菜单「Ray 级渲染」——PCF 软阴影 + 1.5× 内部超采样 + 场景自适应阴影相机，导出高清 PNG（对标 PyMOL ray；<code className="rounded bg-muted px-1 font-mono text-[10px]">ray 1920</code> 指定宽度）。同步渲染，大场景可能阻塞数秒。</p>
               <p><span className="font-semibold text-foreground">构象插值 morph</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">morph m1 = 1BQL 2LYZ 40</code>——两个同源结构间生成插值轨迹对象（自动链配对 + 残基对内原子名匹配 + 内存中叠合，不改动原结构），底部出现构象播放条，<code className="rounded bg-muted px-1 font-mono text-[10px]">ensemble play</code> 播放（P 暂停，fps/loop 可调）；同 PDB 不同构象则按恒等匹配直接插值。</p>
               <p><span className="font-semibold text-foreground">多态 morph</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">morph multi m = 1BQL 2LYZ 2VB1 60</code>——3–8 个构象态过 Catmull-Rom 样条平滑插值（各态独立叠合到参考位姿，取全部匹配原子交集）；帧滑块可停在任意中间构象，徽章显示「多态 morph · N 态 · M 帧」。</p>
-              <p><span className="font-semibold text-foreground">movie 时间轴编排</span>：工具栏 🎬 按钮或 <code className="rounded bg-muted px-1 font-mono text-[10px]">movie edit</code> 打开底部时间轴面板——「同步书签」导入关键帧后可<span className="font-semibold text-foreground">拖拽卡片排序</span>、逐段调时长（0.6–20s）、调轮数、👁 预览机位；<code className="rounded bg-muted px-1 font-mono text-[10px]">movie play</code>（无秒数参数时）按时间轴逐段巡航，显式秒数则走统一时长模式；时间轴 localStorage 持久化。</p>
+              <p><span className="font-semibold text-foreground">movie 时间轴编排</span>：工具栏 Film 按钮或 <code className="rounded bg-muted px-1 font-mono text-[10px]">movie edit</code> 打开底部时间轴面板——「同步书签」导入关键帧后可<span className="font-semibold text-foreground">拖拽卡片排序</span>、逐段调时长（0.6–20s）、调轮数、「预览」查看机位；<code className="rounded bg-muted px-1 font-mono text-[10px]">movie play</code>（无秒数参数时）按时间轴逐段巡航，显式秒数则走统一时长模式；时间轴 localStorage 持久化。</p>
               <p><span className="font-semibold text-foreground">movie 录制</span>：时间轴或 <code className="rounded bg-muted px-1 font-mono text-[10px]">movie play</code> 巡航时，先 <code className="rounded bg-muted px-1 font-mono text-[10px]">record start</code> 再播放、结束 <code className="rounded bg-muted px-1 font-mono text-[10px]">record stop</code>，把巡航录成 WebM 视频（对标 PyMOL movie + mpng 工作流）；顶部胶囊显示段进度，拖动/滚轮接管或 Esc 停止。</p>
               <p><span className="font-semibold text-foreground">实用着色</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">util cbc</code> 按链 · <code className="rounded bg-muted px-1 font-mono text-[10px]">util cbaw</code> 元素+白碳（白底论文图） · <code className="rounded bg-muted px-1 font-mono text-[10px]">util ss</code> 二级结构。</p>
+            </div>
+          </section>
+
+          <Separator />
+
+          <section>
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
+              <FolderOpen className="h-3.5 w-3.5 text-teal-500" /> 会话与文件
+            </h3>
+            <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+              <p><span className="font-semibold text-foreground">关闭结构</span>：结构卡片右侧 <span className="font-semibold text-foreground">X 按钮</span>（常显）关闭单个结构，toast 内 8 秒可撤销（表示法/着色/叠合变换/对称伴侣一并还原）；「全部关闭」批量清空（书签与时间轴保留）；命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">close</code>（活动结构）/ <code className="rounded bg-muted px-1 font-mono text-[10px]">close 4HHB</code> / <code className="rounded bg-muted px-1 font-mono text-[10px]">close all</code>。</p>
+              <p><span className="font-semibold text-foreground">保存会话文件</span>：工具栏「会话」菜单 →「保存会话文件」导出 <code className="rounded bg-muted px-1 font-mono text-[10px]">.molvision</code> 文件——含全部结构源文本、表示法、着色、设置、相机视角与视角书签，可跨设备分享；命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">session export</code>。</p>
+              <p><span className="font-semibold text-foreground">打开会话</span>：「会话」菜单 →「打开会话文件」，或直接把 .molvision 文件拖到 3D 视口 / 加载对话框（替换当前场景并自动还原全部状态）。</p>
+              <p><span className="font-semibold text-foreground">新建会话</span>：「会话」菜单 →「新建会话」（有结构时二次确认）——清空结构、选择、测量、标签、命名选择、视角书签、movie 时间轴、密度图与本地存档，回到全新状态；录制中会先自动保存已录片段。命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">session new</code>。</p>
+              <p><span className="font-semibold text-foreground">自动存档</span>：结构加载/视图变动自动写入浏览器本地（localStorage），刷新自动恢复；<code className="rounded bg-muted px-1 font-mono text-[10px]">session save / info / clear</code> 手动管理。</p>
             </div>
           </section>
 

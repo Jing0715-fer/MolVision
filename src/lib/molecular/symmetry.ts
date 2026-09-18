@@ -1179,7 +1179,7 @@ export function symmetrySelfTest(): { ok: boolean; details: string } {
   let ok = true
   const check = (name: string, pass: boolean, info: string): void => {
     if (!pass) ok = false
-    lines.push((pass ? '✓ ' : '✗ ') + name + (info ? ' — ' + info : ''))
+    lines.push((pass ? '[通过] ' : '[失败] ') + name + (info ? ' — ' + info : ''))
   }
 
   // ① 操作表完整性（det / 平移范围 / 去重 / 恒等 / 闭包）

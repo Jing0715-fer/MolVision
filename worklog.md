@@ -39,7 +39,7 @@ Agent: general-purpose
 Task: GitHub 推送准备（用户信息/建仓/git 状态/身份配置/.gitignore）
 
 Work Log:
-- curl GET /user（token 已打码 ghp_****）：login=Jing0715-fer，name=Jing0715，email=None（GitHub 账号未公开邮箱）
+- curl GET /user（token 已打码）：login=Jing0715-fer，name=Jing0715，email=None（GitHub 账号未公开邮箱）
 - POST /user/repos 创建公开仓库成功（全新创建，非 422）：full_name=Jing0715-fer/MolVision，html_url=https://github.com/Jing0715-fer/MolVision；description 含 cartoon ribbons / ball-and-stick / molecular surfaces / PyMOL-style selection language；private=false，has_issues=true，has_wiki=false
 - git 状态检查：HEAD 仅 1 个提交 4bbc01d "Initial commit"（作者为沙箱占位身份 Z User <z@container>，仅 tracked 3 个文件）；工作区 = 1 个已修改（.gitignore）+ 17 个未跟踪顶层条目，展开后 113 个待提交文件（src/ 占 85，其余 .zscripts 9、tests 3、public 2、examples 2 及配置文件等）
 - git 原有 user.name/user.email 为沙箱占位值（Z User / z@container）而非真实 GitHub 身份，按推送意图改写 local config：user.name=Jing0715-fer，user.email=Jing0715-fer@users.noreply.github.com
@@ -901,3 +901,49 @@ Stage Summary:
 - 关键决策：①分子=连通分量而非链组（链组按 chainId 连续聚合，常含多个独立小分子）②距离连通限重原子且不跨链（氢键近距离不误并、晶体堆积不误连）③CONECT 键跨链认可（权威连接记录）④水不是分子（单水残基本身即完整分子，保持残基级）⑤链列表配体组直接渲染分子行（组级选择仍可用 chainidx 命令）
 - 未解决问题与风险：①金属配位（CONECT 缺失时）距离 2.45Å 内的金属离子会并入配体分子（化学上可辩护，与 PyMOL 单残基语义略异）②极拥挤晶格中 <2.45Å 非键接触理论上可误并（实际精修结构罕见）③序列条滚动条可见性（VLM 提及，长序列浏览体验可再优化）④ViewBar 悬浮件在浅色模型上阴影较弱（VLM 提及，低危）
 - 下一阶段建议（优先级序）：① ray 渲染异步化（OffscreenCanvas/分帧+进度 toast，r17 起遗留）② UI 偏好统一 settings store（面板宽度/σ 卡位置/主题等散键归一）③ 时间轴 FLIP 动画 + 卡片右键菜单 ④ morph 帧插值升级（键长校正/去碰撞，向 rigimol 靠拢）⑤ 并发闸排队任务可取消（AbortSignal）⑥ 分子级「口袋」增强：以分子为锚点的 byres within（当前 resn 全拷贝语义）
+
+---
+Task ID: feat-r21
+Agent: main
+Task: 关闭结构功能强化 + Session 文件保存/新建 + 全面去 emoji 图标 + 细节打磨
+
+Work Log:
+- 读取 worklog（r20 完成配体分子粒度选择）；QA 冒烟 dev server 200 正常
+- 【根因定位】用户反馈「没有关闭结构功能」：结构卡片确有移除按钮但 opacity-0 group-hover 隐藏（触屏/不悬停完全不可见，且 Trash2 图标语义弱）；「保存 session 文件/新建 session」已有库层实现（session.ts 的 exportSessionFile/importSessionFile）但藏在 ScenePanel 底部，无「新建会话」概念
+- 【功能 A：关闭结构全面强化】
+  - 结构卡片 X 按钮（lucide X）常显（opacity-70，触屏可点），hover destructive 红
+  - 关闭可撤销：closeStructureWithUndo 快照 {entry.reps/colorOverrides/visible/transform/symmetry/hasSS, data, text}，toast 8 秒「撤销」action 一键还原（addStructure + setState 覆盖 + textRegistry + updateSymmetry 重放）
+  - 「全部关闭」：SectionTitle right 按钮（≥2 结构显示）→ AlertDialog 确认（说明书签/时间轴保留、引导用新建会话）
+  - 命令行 close 命令：close（活动）/ close <名|前缀|PDBID> / close all；clear/reset 输出信息同步增强
+- 【功能 B：会话文件 + 新建会话】
+  - session.ts newSession()：停 movie/ensemble/时间轴、录制中先自动落盘 WebM（不静默丢用户数据）、removeMap、逐结构 removeStructure、清测量/标签/命名选择/选择复位/测量模式 off、清书签+时间轴 localStorage 键、clearSession、resetView、everHadStructures=false
+  - Toolbar 新增「会话」下拉菜单（Save 图标）：保存会话文件（FileDown emerald，无结构禁用）/ 打开会话文件（FileUp violet，.molvision/.json）/ 新建会话（FilePlus2 rose，onSelect preventDefault + AlertDialog 确认——含录制中警示与留档引导）/ 底部本地存档信息行（sessionInfo 动态求值）
+  - 命令行 session export/file（导出 .molvision）与 session new 子命令；COMMAND_HELP 同步
+  - loader.ts loadFiles 识别 .molvision 与内容校验 .json（导入会话替换场景；.json 解析失败退回按结构解析）——拖拽到视口 / 加载对话框 / 会话菜单三入口统一走 loadFiles
+  - LoadDialog：accept + 文案增加 .molvision / .ccp4
+- 【功能 C：全面去 emoji 图标（用户要求避免 emoji）】
+  - RepsPanel TYPE_ICON：🧬🐍⚪➖⬤〰️🎈 → lucide 组件 + 语义色（cartoon=Ribbon emerald、putty=Worm amber、ballstick=CircleDot rose、sticks=Minus teal、spacefill=Circle violet、lines=Spline fuchsia、surface=Shell orange）；TypeIcon 组件统一渲染（添加菜单/卡片头/类型下拉三处）
+  - MovieTimeline：title「工具栏 🎬」→ Film 按钮；「👁 预览机位」→「「预览」查看机位」
+  - HelpDialog：👓→「立体」按钮、🎬→Film 按钮、👁→「预览」、⧉→「叠合」、🧮→「密度图」标签；新增「会话与文件」完整文档段（关闭/保存/打开/新建/自动存档五条目，FolderOpen teal 图标）
+  - StructuresPanel hint ⧉→「叠合」；commands.ts 输出 🎬→Film 按钮；MovieBadge/MolViewer 注释同步
+  - symmetry.ts/sffourier.ts 自检日志 ✓/✗→[通过]/[失败]；heavy-queue.ts ⏳ 排队提示去 emoji
+- 【QA 全量验证（agent-browser 真实交互）】
+  - X 按钮：常显验证（alwaysVisible ✓）→ 点击关闭 4HHB → toast「已关闭 4HHB 4,779 原子 · 表示法与着色已快照，可撤销」+ 撤销按钮 → 点击撤销 → 结构完整恢复（4,779 原子 + 「已恢复 4HHB」toast）✓
+  - 全部关闭：2 结构 → 按钮出现 → AlertDialog「关闭全部 2 个结构？」→ 确认 → 面板空态 + toast「已关闭 2 个结构」✓
+  - close 命令：close（面板空态 ✓）/ close 4hhb（控制台输出「已关闭 4HHB（4,779 原子）」✓）/ close all ✓
+  - 会话菜单：pointerdown 打开 → 三菜单项 + 存档信息 ✓ → 新建会话 → AlertDialog「新建会话并关闭 1 个结构？」→ 确认 → 结构清空 + localStorage 存档清除 + movie 键清除 + toast ✓
+  - session export 命令：输出「会话已导出为 .molvision 文件…」+ 实际下载 481KB 文件 ✓
+  - 导入闭环：close all 清空 → upload .molvision 到会话菜单 input → 4HHB 完整恢复（4,779 原子）+ toast「会话已导入（来自 xxx.molvision）」✓
+  - session new 命令：输出两条日志 + 存档清除 ✓
+  - RepsPanel 图标：添加菜单 7 项全 lucide SVG（ribbon/worm/circle-dot/minus/circle/spline/shell + 语义色）✓ 卡片头 lucide-ribbon ✓ 类型下拉 7 选项全图标 ✓ 零 emoji ✓
+  - 全页 emoji 扫描（DOM 文本节点正则）：唯一命中 ↵（ConsoleBar kbd 回车排版符号，非 emoji，保留）✓
+  - 移动端 390×844：scrollW=clientW=390 无横向滚动 ✓
+  - VLM 评审：工作状态截图 7.5/10（渲染质量/序列条好评；建议多为中长期项：视口坐标轴 HUD、RepCard 紧凑布局、控制台背景层级）
+  - 回归：lint 0 错 0 警 ✓；tsc 新代码零错误 ✓；dev.log 无运行时错误（仅 API 200）✓
+- 【QA 方法论补充】Radix DropdownMenuTrigger/Select trigger 须用 agent-browser 原生 click（CDP 完整事件流）或 pointerdown+up——eval 派发 click() 无效；DropdownMenuItem 内嵌 AlertDialog 用 onSelect e.preventDefault() 保持菜单挂起（原生点击可正常触发）；反引号快捷键在 bash 双引号内须 String.fromCharCode(96) 转义
+
+Stage Summary:
+- 项目当前状态：r20 基础上补齐「结构生命周期 + 会话文件管理」——①关闭结构三通道（卡片 X 常显 + 8 秒撤销快照 / 全部关闭确认 / close 命令族）②会话文件三入口（工具栏会话菜单 / 拖拽+加载对话框 loadFiles 检测 / session export 命令）+ 新建会话（newSession 全状态清理 + 确认对话框 + 录制保护）③全面去 emoji（RepsPanel lucide 组件图标系统 + 全部文案符号替换）
+- 关键决策：①关闭可撤销用快照重建（addStructure 复用渲染同步链路，symmetry/transform 重放）而非引擎级隐藏 ②newSession 录制中先落盘再清空（尊重用户数据）③.molvision 导入统一收口 loadFiles（拖拽/对话框/菜单共享路径，.json 失败回退结构解析）④Radix 菜单项弹 AlertDialog 用 onSelect preventDefault 模式
+- 未解决问题与风险：①批量关闭不可撤销（逐个关闭才有撤销——确认框已明示）②会话文件导入替换语义（无「合并导入」选项）③VLM 建议未落地项：视口坐标轴 HUD、RepCard 紧凑行内布局、控制台背景层级强化、序列条高度可调
+- 下一阶段建议（优先级序）：① ray 渲染异步化（OffscreenCanvas/分帧+进度 toast，r17 起遗留）② 视口左下角 3D 坐标轴指示器（VLM 建议，专业感提升明显）③ RepCard 紧凑布局（选择+配色行内排列省 40% 垂直空间）④ UI 偏好统一 settings store ⑤ 时间轴 FLIP 动画 + 卡片右键菜单 ⑥ 会话文件「合并导入」模式

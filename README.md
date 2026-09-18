@@ -103,7 +103,11 @@ set ambient 0.5 · set specular off · set fov 30 · stereo on · util cbaw
 ### Session persistence & `.molvision` files
 Structures, representations, colors, settings, **superposition transforms**, camera orientation and **electron-density-map state** (SF source, σ levels incl. independent positive/negative, mode, colors — recomputed automatically in the Worker on reload) are auto-saved to localStorage (debounced) and restored on reload — no work lost. Manage with `session save / info / clear`.
 
-Full sessions can also be **exported as `.molvision` files** (complete structure sources + view state + view bookmarks) and re-imported on any device — Scene panel → Session → Export/Import; imported files replace the current bookmarks when the file carries them.
+Full sessions can also be **exported as `.molvision` files** (complete structure sources + view state + view bookmarks) and re-imported on any device — toolbar **Session menu** → Save/Open session file (also `session export`, drag-and-drop a `.molvision` onto the viewport, or the load dialog); imported files replace the current bookmarks when the file carries them.
+
+**New session** (Session menu or `session new`) closes every structure and clears selections, measurements, labels, named selections, view bookmarks, movie timeline, density maps and the local archive — with a confirmation dialog when structures are loaded; an in-progress animation recording is saved first.
+
+**Closing structures**: the always-visible **X button** on each structure card closes that structure with an **8-second undo toast** (representations, colors, superposition transform and symmetry mates are snapshot-restored); *Close all* batch-clears with confirmation. Console: `close` (active) / `close 4HHB` / `close all`.
 
 ![NMR ensemble animation](public/screenshots/ensemble.png)
 

@@ -1,6 +1,6 @@
 // PyMOL 风格命令行：select / show / hide / color / bg / zoom / spin / slab / label / create / map / symmetry / stereo ...
 import { PRESETS, useMolStore, engineRef, dataRegistry, buildNamedMasks } from './store'
-import { saveSession, clearSession, sessionInfo } from './session'
+import { saveSession, clearSession, sessionInfo, exportSessionFile, newSession } from './session'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
 import { useEnsembleStore } from './ensemble-store'
@@ -89,11 +89,12 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
   { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+超采样，导出 PNG）', example: 'ray 1920' },
-  { cmd: 'session save|info|clear', desc: '会话存档管理', example: 'session save' },
+  { cmd: 'session save|export|new|info|clear', desc: '会话存档 / 文件导出 / 新建', example: 'session export · session new' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
   { cmd: 'preset <名>', desc: '应用风格预设', example: 'preset surface' },
   { cmd: 'delete <名>', desc: '删除命名选择', example: 'delete site' },
-  { cmd: 'clear', desc: '移除所有结构', example: 'clear' },
+  { cmd: 'close [名|all]', desc: '关闭结构（默认活动结构）', example: 'close · close all · close 4HHB' },
+  { cmd: 'clear', desc: '移除所有结构（同 close all）', example: 'clear' },
   { cmd: 'help', desc: '显示帮助', example: 'help' },
 ]
 
@@ -318,10 +319,35 @@ export function runCommand(raw: string): void {
     return ok(`已删除 ${name}`)
   }
 
+  if (cmd === 'close') {
+    // 关闭结构：close（活动）/ close all / close <名|前缀|PDBID>
+    const s = useMolStore.getState()
+    const arg = (parts[1] ?? '').toLowerCase()
+    if (arg === 'all' || arg === '*') {
+      const n = s.structures.length
+      if (!n) return err('当前没有已加载的结构')
+      for (const st of [...s.structures]) s.removeStructure(st.id)
+      return ok(`已关闭全部 ${n} 个结构（书签与时间轴保留；彻底重置用 session new）`)
+    }
+    let target = s.structures.find(x => x.id === s.activeId)
+    if (arg) {
+      target = s.structures.find(x =>
+        x.name.toLowerCase() === arg ||
+        x.name.toLowerCase().startsWith(arg) ||
+        x.meta.pdbId?.toLowerCase() === arg)
+      if (!target) return err(`未找到结构 "${parts[1]}"（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
+    }
+    if (!target) return err('没有活动结构（close <名> 指定，或 close all）')
+    const atoms = target.summary.atoms
+    s.removeStructure(target.id)
+    return ok(`已关闭 ${target.name}（${atoms.toLocaleString()} 原子）。结构卡片 X 按钮关闭时 toast 内可撤销`)
+  }
+
   if (cmd === 'clear' || cmd === 'reset') {
     const s = useMolStore.getState()
+    const n = s.structures.length
     for (const st of [...s.structures]) s.removeStructure(st.id)
-    return ok('已清空所有结构')
+    return ok(n > 0 ? `已清空所有结构（${n} 个；彻底重置含书签/时间轴用 session new）` : '当前没有已加载的结构')
   }
 
   if (cmd === 'orient') {
@@ -1110,6 +1136,19 @@ export function runCommand(raw: string): void {
       const n = useMolStore.getState().structures.length
       return okSaved && n > 0 ? ok(`会话已保存（${n} 个结构，含相机视角）`) : err('无可保存内容或保存失败')
     }
+    if (sub === 'export' || sub === 'file') {
+      // 导出 .molvision 会话文件（含结构源文本与全部视图状态）
+      const okExport = exportSessionFile()
+      return okExport
+        ? ok('会话已导出为 .molvision 文件（含结构源文本 · 表示法 · 设置 · 相机视角 · 书签）')
+        : err('无可导出的会话（先加载结构）')
+    }
+    if (sub === 'new') {
+      const closed = newSession()
+      return ok(closed > 0
+        ? `已新建会话（关闭 ${closed} 个结构，书签/时间轴/密度图已清空）`
+        : '已新建会话（书签/时间轴/密度图已清空）')
+    }
     if (sub === 'clear' || sub === 'reset') {
       clearSession()
       return ok('会话存档已清除（下次刷新不再恢复）')
@@ -1252,7 +1291,7 @@ export function runCommand(raw: string): void {
     }
     if (sub === 'edit' || sub === 'timeline') {
       useMovieStore.getState().setTimelineOpen(true)
-      return ok('movie 时间轴已打开（底部面板：拖拽排序、逐段时长、轮数、播放）——工具栏 🎬 图标可开关')
+      return ok('movie 时间轴已打开（底部面板：拖拽排序、逐段时长、轮数、播放）——工具栏 Film 按钮可开关')
     }
     const ms = useMovieStore.getState()
     if (ms.playing) {

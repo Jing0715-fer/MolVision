@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { detectFormat, parseStructure } from './parser'
 import { useMolStore, engineRef } from './store'
 import { textRegistry } from './text-registry'
-import { saveSession } from './session'
+import { saveSession, importSessionFile } from './session'
 import { loadMapBuffer } from './map-load'
 
 export const EXAMPLE_STRUCTURES: { id: string; title: string; desc: string }[] = [
@@ -83,6 +83,28 @@ export function loadFiles(files: FileList | File[]) {
       reader.onload = () => loadMapBuffer(reader.result as ArrayBuffer, file.name.replace(/\.[^.]+$/, ''))
       reader.onerror = () => toast.error(`读取地图文件失败: ${file.name}`)
       reader.readAsArrayBuffer(file)
+      continue
+    }
+    // .molvision 会话文件（或内容带 molvision-session 标记的 .json）→ 整会话恢复（替换场景）
+    if (/\.molvision$/i.test(lower) || /\.json$/i.test(lower)) {
+      void (async () => {
+        try {
+          const n = await importSessionFile(file)
+          if (n > 0) {
+            toast.success('会话已导入', { description: `${n} 个结构 · 表示法与相机视角已还原（来自 ${file.name}）` })
+          } else {
+            toast.error('会话文件中没有可恢复的结构', { description: file.name })
+          }
+        } catch (e) {
+          // .json 可能其实是普通结构文件（罕见命名）——退回按结构解析
+          if (/\.json$/i.test(lower)) {
+            const text = await file.text()
+            loadStructureText(text, file.name.replace(/\.[^.]+$/, ''), undefined)
+            return
+          }
+          toast.error('导入会话失败', { description: e instanceof Error ? e.message : String(e) })
+        }
+      })()
       continue
     }
     const reader = new FileReader()

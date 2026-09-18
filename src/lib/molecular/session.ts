@@ -6,8 +6,11 @@ import { defaultSettings, type RepConfig, type Settings, type RigidTransform } f
 import { textRegistry } from './text-registry'
 import { applyRigidTransform } from './superpose'
 import { useMapStore } from './map-store'
-import { fetchAndComputeMap } from './map-load'
+import { fetchAndComputeMap, removeMap } from './map-load'
 import { useViewsStore, type ViewBookmark } from './views-store'
+import { stopMovie, useMovieStore } from './movie'
+import { useEnsembleStore } from './ensemble-store'
+import { useRecordStore } from './record-store'
 
 const KEY = 'molvision-session-v1'
 /** 文本总预算（localStorage 通常 5MB） */
@@ -236,6 +239,66 @@ export function restoreSession(): number {
 
 export function clearSession() {
   try { localStorage.removeItem(KEY) } catch { /* ignore */ }
+}
+
+/**
+ * 新建会话：清空当前场景与全部关联状态（结构/表示法/选择/测量/标签/命名选择/
+ * 视角书签/movie 时间轴/ensemble 播放/密度图/录制），并清除本地存档。
+ * 确认交互由 UI 层负责（有结构时弹确认）。返回被关闭的结构数。
+ */
+export function newSession(): number {
+  const s = useMolStore.getState()
+  const closed = s.structures.length
+  // 1) 停止播放与编排
+  stopMovie()
+  const ms = useMovieStore.getState()
+  ms.clearTimeline()
+  ms.setTimelineOpen(false)
+  const ens = useEnsembleStore.getState()
+  ens.setPlaying(false)
+  ens.setTarget(null, 0)
+  // 2) 正在录制则先落盘（尊重用户数据，不静默丢弃）
+  const eng = engineRef.current
+  if (eng?.isRecording) {
+    void eng.stopRecording().then(blob => {
+      useRecordStore.getState().setRecording(false)
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `molvision-newsession-${Date.now()}.webm`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      useMolStore.getState().appendLog('out', '新建会话前已保存未完成的录制（WebM 自动下载）')
+    })
+  }
+  // 3) 密度图
+  removeMap()
+  // 4) 结构与按结构关联的状态（removeStructure 连带清理标签/测量/命名选择/选择）
+  for (const st of [...useMolStore.getState().structures]) {
+    useMolStore.getState().removeStructure(st.id)
+  }
+  // 5) 残余全局状态兜底 + 复位测量模式
+  useMolStore.setState({
+    measurements: [], measurePicks: null, labels: [], namedSelections: [],
+    selection: { structureId: null, indices: [], rev: useMolStore.getState().selection.rev + 1 },
+    measureMode: 'off',
+    everHadStructures: false,
+  })
+  // 6) 视角书签 + 时间轴持久化键
+  useViewsStore.getState().clearBookmarks()
+  try { localStorage.removeItem('molvision-movie-v1') } catch { /* ignore */ }
+  // 7) 本地会话存档
+  clearSession()
+  // 8) 相机复位（空场景）
+  requestAnimationFrame(() => {
+    engineRef.current?.resetView()
+    useMolStore.getState().bumpVisual()
+  })
+  useMolStore.getState().appendLog('out', closed > 0
+    ? `已新建会话（关闭 ${closed} 个结构 · 书签/时间轴/密度图已清空）`
+    : '已新建会话（清空书签/时间轴/密度图）')
+  return closed
 }
 
 // ---------- 会话文件导出 / 导入（.molvision） ----------

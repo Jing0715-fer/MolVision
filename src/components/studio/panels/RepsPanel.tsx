@@ -1,7 +1,7 @@
 'use client'
 
 // 表示法面板：rep 列表卡片（类型/选择/配色/参数）
-import { Eye, EyeOff, Plus, SlidersHorizontal, Trash2, Shapes, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Plus, SlidersHorizontal, Trash2, Shapes, AlertCircle, Ribbon, Worm, CircleDot, Minus, Circle, Spline, Shell } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { COLOR_SCHEME_LABELS, type ColorScheme } from '@/lib/molecular/colors'
 import { REP_LABELS, type RepConfig, type RepType } from '@/lib/molecular/types'
@@ -24,8 +24,20 @@ import {
 const REP_TYPES: RepType[] = ['cartoon', 'putty', 'ballstick', 'sticks', 'spacefill', 'lines', 'surface']
 const SCHEMES: ColorScheme[] = ['element', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'uniform']
 
-const TYPE_ICON: Record<RepType, string> = {
-  cartoon: '🧬', putty: '🐍', ballstick: '⚪', sticks: '➖', spacefill: '⬤', lines: '〰️', surface: '🎈',
+/** 表示法类型 → lucide 图标 + 语义色（取代早期 emoji） */
+const TYPE_ICON: Record<RepType, { icon: typeof Ribbon; className: string }> = {
+  cartoon: { icon: Ribbon, className: 'text-emerald-500' },
+  putty: { icon: Worm, className: 'text-amber-500' },
+  ballstick: { icon: CircleDot, className: 'text-rose-500' },
+  sticks: { icon: Minus, className: 'text-teal-500' },
+  spacefill: { icon: Circle, className: 'text-violet-500' },
+  lines: { icon: Spline, className: 'text-fuchsia-500' },
+  surface: { icon: Shell, className: 'text-orange-500' },
+}
+
+function TypeIcon({ type, className }: { type: RepType; className?: string }) {
+  const t = TYPE_ICON[type] ?? { icon: Shapes, className: 'text-muted-foreground' }
+  return <t.icon className={cn('h-3.5 w-3.5 shrink-0', t.className, className)} />
 }
 
 export function RepsPanel() {
@@ -56,8 +68,8 @@ export function RepsPanel() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {REP_TYPES.map(t => (
-              <DropdownMenuItem key={t} onClick={() => addRep(st.id, { type: t, selection: 'all' })} className="text-xs">
-                <span className="mr-1.5">{TYPE_ICON[t]}</span>{REP_LABELS[t]}
+              <DropdownMenuItem key={t} onClick={() => addRep(st.id, { type: t, selection: 'all' })} className="gap-2 text-xs">
+                <TypeIcon type={t} />{REP_LABELS[t]}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -98,7 +110,7 @@ function RepCard({
       !rep.visible && 'opacity-60',
     )}>
       <div className="flex items-center gap-2">
-        <span className="text-sm leading-none">{TYPE_ICON[rep.type]}</span>
+        <TypeIcon type={rep.type} className="h-4 w-4" />
         <Select value={rep.type} onValueChange={v => onUpdate(structureId, rep.id, { type: v as RepType })}>
           <SelectTrigger className="h-7 flex-1 border-border/60 bg-background/60 text-[11px] font-medium">
             <SelectValue />
@@ -106,7 +118,9 @@ function RepCard({
           <SelectContent>
             {REP_TYPES.map(t => (
               <SelectItem key={t} value={t} className="text-xs">
-                <span className="mr-1.5">{TYPE_ICON[t]}</span>{REP_LABELS[t]}
+                <span className="flex items-center gap-1.5">
+                  <TypeIcon type={t} className="h-3 w-3" />{REP_LABELS[t]}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>

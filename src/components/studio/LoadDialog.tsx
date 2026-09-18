@@ -83,12 +83,12 @@ export function LoadDialog() {
           >
             <FileUp className="h-5 w-5 text-muted-foreground" />
             <div className="text-sm font-medium">点击选择或拖入文件</div>
-            <div className="text-[11px] text-muted-foreground">支持 .pdb / .ent / .cif / .mmcif</div>
+            <div className="text-[11px] text-muted-foreground">支持 .pdb / .ent / .cif / .mmcif / .ccp4 密度图 / .molvision 会话</div>
             <input
               ref={fileRef}
               type="file"
               multiple
-              accept=".pdb,.ent,.cif,.mmcif,.txt"
+              accept=".pdb,.ent,.cif,.mmcif,.txt,.molvision,.json,.ccp4,.map,.mrc"
               className="hidden"
               onChange={e => {
                 if (e.target.files?.length) {
