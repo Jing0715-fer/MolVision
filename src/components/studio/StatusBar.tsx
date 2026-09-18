@@ -1,7 +1,7 @@
 'use client'
 
-// 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示
-import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets, ArrowLeftRight, Copy, Grid3x3, Glasses } from 'lucide-react'
+// 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示 / 性能指示
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets, ArrowLeftRight, Copy, Grid3x3, Glasses, Gauge } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { useHBondStore } from '@/lib/molecular/hbond-store'
@@ -9,6 +9,7 @@ import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 import { useContactStore } from '@/lib/molecular/contacts-store'
 import { useSasaStore } from '@/lib/molecular/sasa-store'
 import { useMapStore } from '@/lib/molecular/map-store'
+import { usePerfStore } from '@/lib/molecular/perf-store'
 import { cn } from '@/lib/utils'
 
 export function StatusBar() {
@@ -25,6 +26,10 @@ export function StatusBar() {
   const sasa = useSasaStore(s => s)
   const mapInfo = useMapStore(s => s.info)
   const mapComputing = useMapStore(s => s.computing)
+  // 性能指示（引擎仅在开启时上报 → 关闭时无重渲染；开启时 500ms 一次受控刷新）
+  const showFps = useMolStore(s => s.settings.showFps)
+  const outlineOn = useMolStore(s => s.settings.outline)
+  const perf = usePerfStore(s => s)
 
   const st = structures.find(x => x.id === activeId)
   const symCount = structures.reduce((acc, x) => acc + (x.symmetry?.count ?? 0), 0)
@@ -170,6 +175,33 @@ export function StatusBar() {
         )}>
           <Waves className={cn('h-3 w-3', ens.playing && 'animate-pulse')} />
           {ens.playing ? `构象 ${ens.frame + 1}/${ens.total}` : `ensemble ${ens.total} 帧`}
+        </span>
+      )}
+
+      {/* 轮廓线开启提示（与 FPS 指示互斥位罝：均在测量模式前） */}
+      {outlineOn && !showFps && (
+        <span className="hidden shrink-0 items-center gap-1 rounded-full bg-fuchsia-500/15 px-2 py-0.5 font-medium text-fuchsia-600 dark:text-fuchsia-400 md:flex">
+          <Gauge className="h-3 w-3" /> 描边
+        </span>
+      )}
+
+      {/* 性能指示器（FPS 分级配色：≥55 绿 / ≥30 琥珀 / <30 红） */}
+      {showFps && perf.fps > 0 && (
+        <span
+          className={cn(
+            'hidden shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 font-semibold tabular-nums md:flex',
+            perf.fps >= 55 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+              : perf.fps >= 30 ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                : 'bg-red-500/15 text-red-600 dark:text-red-400',
+          )}
+          title={`帧耗时 ${perf.frameMs.toFixed(1)}ms · 几何体 ${perf.geometries} · 纹理 ${perf.textures}（fps on|off 切换）`}
+        >
+          <Gauge className="h-3 w-3" />
+          {perf.fps < 10 ? perf.fps.toFixed(1) : perf.fps.toFixed(0)} fps
+          <span className="font-normal text-muted-foreground/70">{perf.drawCalls.toFixed(0)} calls</span>
+          <span className="hidden font-normal text-muted-foreground/70 lg:inline">
+            {perf.triangles >= 1e6 ? `${(perf.triangles / 1e6).toFixed(1)}M` : `${(perf.triangles / 1e3).toFixed(0)}k`} tri
+          </span>
         </span>
       )}
 

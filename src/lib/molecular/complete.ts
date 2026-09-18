@@ -1,0 +1,357 @@
+// 命令行智能补全引擎：按光标前的部分 token 产出候选（命令名/子命令/结构名/选择关键字…）
+// 纯函数模块（仅依赖静态注册表），上下文（结构列表/命名选择）由调用方注入
+import { COMMAND_HELP } from './commands'
+import { COLOR_SCHEME_LABELS } from './colors'
+import { REP_LABELS } from './types'
+
+/** 补全上下文（调用方从 store 即时读取） */
+export interface CompletionCtx {
+  structures: string[]
+  namedSelections: string[]
+  viewBookmarks: string[]
+}
+
+export type CompletionKind = 'cmd' | 'sub' | 'struct' | 'sel' | 'rep' | 'color' | 'value' | 'preset' | 'tour'
+
+export interface CompletionItem {
+  /** 替换 token 的文本 */
+  insert: string
+  kind: CompletionKind
+  /** 右侧补充说明 */
+  detail?: string
+}
+
+export interface CompletionResult {
+  items: CompletionItem[]
+  /** 替换范围（input 字符偏移） */
+  from: number
+  to: number
+  /** 识别到命令时的参数提示（来自 COMMAND_HELP） */
+  hint?: { cmd: string; desc: string; example: string } | null
+}
+
+/** 选择表达式关键字（chain/resi/…/and/or/not；within 与 byres 后接参数） */
+const SEL_KEYWORDS: [string, string][] = [
+  ['chain', '链 ID'],
+  ['chainidx', '链组序号'],
+  ['resi', '残基编号'],
+  ['resn', '残基名称'],
+  ['name', '原子名'],
+  ['elem', '元素'],
+  ['molecule', '配体分子编号'],
+  ['protein', '蛋白'],
+  ['nucleic', '核酸'],
+  ['ligand', '配体'],
+  ['water', '水'],
+  ['backbone', '主链'],
+  ['sidechain', '侧链'],
+  ['helix', '螺旋'],
+  ['sheet', '折叠'],
+  ['within', '距离内：within 5 of (…)'],
+  ['byres', '按残基扩展'],
+  ['bychain', '按链扩展'],
+  ['all', '全部原子'],
+  ['none', '空集'],
+  ['and', '交集'],
+  ['or', '并集'],
+  ['not', '补集'],
+  ['sele', '当前选择'],
+]
+
+const COMMON_COLORS: [string, string][] = [
+  ['red', '红'], ['blue', '蓝'], ['green', '绿'], ['yellow', '黄'], ['orange', '橙'],
+  ['purple', '紫'], ['cyan', '青'], ['magenta', '品红'], ['teal', '鸭绿'], ['pink', '粉'],
+  ['lime', '亮绿'], ['brown', '棕'], ['slate', '石板灰'], ['gray', '灰'], ['white', '白'], ['black', '黑'],
+]
+
+/** 命令补全注册表：主名 + 别名 + 逐 token 参数规格 */
+interface CmdDef {
+  names: string[]
+  /** 每个参数位的候选（pos=1 为首个参数；返回 null 表示该位不补全） */
+  args?: (pos: number, ctx: CompletionCtx, tokens: string[]) => CompletionItem[] | null
+  /** 选择表达式类命令（任意位置都可用选择关键字） */
+  expr?: boolean
+}
+
+const structItems = (ctx: CompletionCtx): CompletionItem[] =>
+  ctx.structures.map(n => ({ insert: n, kind: 'struct' as const, detail: '结构' }))
+
+const selItems = (ctx: CompletionCtx): CompletionItem[] => [
+  ...SEL_KEYWORDS.map(([k, d]) => ({ insert: k, kind: 'sel' as const, detail: d })),
+  ...ctx.namedSelections.map(n => ({ insert: n, kind: 'sel' as const, detail: '命名选择' })),
+]
+
+const repItems = (): CompletionItem[] => [
+  ...Object.keys(REP_LABELS).map(k => ({ insert: k, kind: 'rep' as const, detail: REP_LABELS[k as keyof typeof REP_LABELS] })),
+  { insert: 'hydrogens', kind: 'rep', detail: '显示氢' },
+  { insert: 'waters', kind: 'rep', detail: '显示水' },
+]
+
+const colorItems = (): CompletionItem[] => [
+  ...Object.keys(COLOR_SCHEME_LABELS).map(k => ({ insert: k, kind: 'color' as const, detail: COLOR_SCHEME_LABELS[k as keyof typeof COLOR_SCHEME_LABELS] })),
+  ...COMMON_COLORS.map(([c, d]) => ({ insert: c, kind: 'color' as const, detail: d })),
+]
+
+const onOff = (): CompletionItem[] => [
+  { insert: 'on', kind: 'value', detail: '开' },
+  { insert: 'off', kind: 'value', detail: '关' },
+]
+
+const REGISTRY: CmdDef[] = [
+  { names: ['load', 'fetch'], args: () => null },
+  { names: ['select', 'sel'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
+  {
+    names: ['create'],
+    expr: true,
+    args: (pos, ctx) => (pos === 2
+      ? [{ insert: '=', kind: 'value', detail: '名 = 选择' }]
+      : pos >= 3 ? selItems(ctx) : null),
+  },
+  { names: ['split_chains'] },
+  { names: ['show', 'display'], args: (pos, ctx) => (pos === 1 ? repItems() : pos >= 2 ? selItems(ctx) : null) },
+  { names: ['hide', 'undisplay'], args: (pos, ctx) => (pos === 1 ? repItems() : pos >= 2 ? selItems(ctx) : null) },
+  { names: ['color', 'colour'], args: (pos, ctx) => (pos === 1 ? colorItems() : pos >= 2 ? selItems(ctx) : null) },
+  {
+    names: ['util'],
+    args: pos => (pos === 1 ? [
+      { insert: 'cbc', kind: 'sub', detail: '按链着色' },
+      { insert: 'cnc', kind: 'sub', detail: '灰化' },
+      { insert: 'ss', kind: 'sub', detail: '二级结构' },
+      { insert: 'cbaw', kind: 'sub', detail: '元素+白碳' },
+      { insert: 'cbac', kind: 'sub', detail: '元素+灰碳' },
+    ] : null),
+  },
+  {
+    names: ['set'],
+    args: pos => (pos === 1 ? [
+      { insert: 'ambient', kind: 'value', detail: '环境光 0-2' },
+      { insert: 'direct', kind: 'value', detail: '主光 0-3' },
+      { insert: 'fill', kind: 'value', detail: '补光 0-2' },
+      { insert: 'specular', kind: 'value', detail: '高光 on/off' },
+      { insert: 'fog', kind: 'value', detail: '雾 on/off' },
+      { insert: 'fog_strength', kind: 'value', detail: '雾强度 0-1' },
+      { insert: 'fov', kind: 'value', detail: '视场角 10-100' },
+      { insert: 'spin_speed', kind: 'value', detail: '转速 0.5-20' },
+      { insert: 'quality', kind: 'value', detail: 'low/medium/high' },
+      { insert: 'stereo', kind: 'value', detail: '立体 on/off' },
+      { insert: 'axes', kind: 'value', detail: '罗盘 on/off' },
+      { insert: 'outline_strength', kind: 'value', detail: '轮廓强度 0-3' },
+      { insert: 'outline_thickness', kind: 'value', detail: '轮廓粗细 1-4 px' },
+      { insert: 'fps', kind: 'value', detail: 'FPS 指示 on/off' },
+      { insert: 'transparency', kind: 'value', detail: '表面不透明度' },
+      { insert: 'sphere_scale', kind: 'value', detail: '球半径倍率' },
+      { insert: 'stick_radius', kind: 'value', detail: '棍半径' },
+      { insert: 'cartoon_width', kind: 'value', detail: '带宽度' },
+    ] : null),
+  },
+  { names: ['bg', 'background'], args: pos => (pos === 1 ? colorItems() : null) },
+  { names: ['zoom'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
+  { names: ['activate'], args: (pos, ctx) => (pos === 1 ? structItems(ctx) : null) },
+  { names: ['orient'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
+  { names: ['get_view', 'set_view'] },
+  {
+    names: ['view'],
+    args: (pos, ctx) => (pos === 1 ? [
+      { insert: 'save', kind: 'sub', detail: '保存当前视角' },
+      { insert: 'go', kind: 'sub', detail: '跳转书签' },
+      { insert: 'del', kind: 'sub', detail: '删除书签' },
+      { insert: 'list', kind: 'sub', detail: '列出书签' },
+      ...ctx.viewBookmarks.map(b => ({ insert: b, kind: 'value' as const, detail: '视角书签' })),
+    ] : null),
+  },
+  {
+    names: ['tour'],
+    args: pos => (pos === 1 ? [
+      { insert: 'quickstart', kind: 'tour', detail: '快速上手' },
+      { insert: 'drug-target', kind: 'tour', detail: '药物口袋' },
+      { insert: 'crystallography', kind: 'tour', detail: '晶体学' },
+      { insert: 'nmr-dynamics', kind: 'tour', detail: 'NMR 动力学' },
+      { insert: 'antibody', kind: 'tour', detail: '抗体表位' },
+      { insert: 'nucleic', kind: 'tour', detail: '核酸' },
+      { insert: 'stop', kind: 'sub', detail: '停止' },
+    ] : null),
+  },
+  { names: ['count_atoms'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
+  { names: ['spin'], args: pos => (pos === 1 ? onOff() : null) },
+  { names: ['rock'], args: pos => (pos === 1 ? onOff() : null) },
+  { names: ['slab'], args: pos => (pos === 1 ? [{ insert: 'off', kind: 'value', detail: '关闭' }] : null) },
+  { names: ['stereo'], args: pos => (pos === 1 ? onOff() : null) },
+  { names: ['symmetry'], args: pos => (pos === 1 ? [{ insert: 'off', kind: 'value', detail: '关闭' }] : null) },
+  {
+    names: ['map'],
+    args: pos => (pos === 1 ? [
+      { insert: 'fetch', kind: 'sub', detail: '2Fo-Fc 密度' },
+      { insert: 'fofc', kind: 'sub', detail: 'Fo-Fc 差图' },
+      { insert: 'isolevel', kind: 'sub', detail: '等值面 σ' },
+      { insert: 'off', kind: 'sub', detail: '移除' },
+    ] : null),
+  },
+  { names: ['hbonds'], args: pos => (pos === 1 ? onOff() : null) },
+  { names: ['ssao', 'ao', 'gtao'], args: pos => (pos === 1 ? onOff() : null) },
+  { names: ['outline'], args: pos => (pos === 1 ? onOff() : null) },
+  { names: ['fps'], args: pos => (pos === 1 ? onOff() : null) },
+  {
+    names: ['superpose'],
+    args: (pos, ctx) => (pos === 1
+      ? [...structItems(ctx), { insert: 'onto', kind: 'sub', detail: '参考结构' }]
+      : pos === 2
+        ? [{ insert: 'onto', kind: 'sub', detail: '参考结构' }, { insert: 'chain', kind: 'sub', detail: '链对 A to B' }]
+        : structItems(ctx)),
+  },
+  { names: ['dssp'] },
+  { names: ['contacts'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
+  { names: ['interface'] },
+  {
+    names: ['xcontacts'],
+    expr: true,
+    args: (pos, ctx) => (pos === 1
+      ? ctx.structures.map(n => ({ insert: `${n}:`, kind: 'struct', detail: '结构:选择' }))
+      : selItems(ctx)),
+  },
+  { names: ['sasa'] },
+  { names: ['bsa'] },
+  { names: ['xbsa'] },
+  { names: ['untransform'], args: (pos, ctx) => (pos === 1 ? structItems(ctx) : null) },
+  {
+    names: ['record'],
+    args: pos => (pos === 1 ? [
+      { insert: 'start', kind: 'sub', detail: '开始录制' },
+      { insert: 'stop', kind: 'sub', detail: '完成并保存' },
+    ] : null),
+  },
+  {
+    names: ['morph'],
+    args: (pos, ctx, tokens) => {
+      const isMulti = tokens[1]?.toLowerCase() === 'multi'
+      const eqPos = isMulti ? 3 : 2
+      if (pos === 1) return [{ insert: 'multi', kind: 'sub', detail: '多态样条（3+ 构象）' }]
+      if (pos === eqPos) return [{ insert: '=', kind: 'value', detail: '名 = 构象 A 构象 B…' }]
+      if (pos > eqPos) return structItems(ctx)
+      return null // 对象名自由命名
+    },
+  },
+  {
+    names: ['movie'],
+    args: pos => (pos === 1 ? [
+      { insert: 'play', kind: 'sub', detail: '播放' },
+      { insert: 'stop', kind: 'sub', detail: '停止' },
+      { insert: 'edit', kind: 'sub', detail: '时间轴编排' },
+    ] : null),
+  },
+  {
+    names: ['ensemble'],
+    args: pos => (pos === 1 ? [
+      { insert: 'play', kind: 'sub', detail: '播放' },
+      { insert: 'stop', kind: 'sub', detail: '停止' },
+      { insert: 'frame', kind: 'sub', detail: '跳到帧' },
+      { insert: 'fps', kind: 'sub', detail: '帧率' },
+      { insert: 'info', kind: 'sub', detail: '信息' },
+    ] : null),
+  },
+  { names: ['save'], args: (pos, ctx) => (pos >= 2 ? selItems(ctx) : null) },
+  { names: ['png'] },
+  { names: ['ray'] },
+  { names: ['axes', 'axis', 'gizmo'], args: pos => (pos === 1 ? onOff() : null) },
+  {
+    names: ['session'],
+    args: pos => (pos === 1 ? [
+      { insert: 'save', kind: 'sub', detail: '本地存档' },
+      { insert: 'export', kind: 'sub', detail: '导出 .molvision' },
+      { insert: 'new', kind: 'sub', detail: '新建会话' },
+      { insert: 'info', kind: 'sub', detail: '存档信息' },
+      { insert: 'clear', kind: 'sub', detail: '清除存档' },
+    ] : null),
+  },
+  { names: ['label'], args: pos => (pos === 1 ? onOff() : null) },
+  {
+    names: ['preset', 'style'],
+    args: pos => (pos === 1 ? [
+      { insert: 'cartoon', kind: 'preset', detail: 'Cartoon 经典' },
+      { insert: 'surface', kind: 'preset', detail: '表面' },
+      { insert: 'ballstick', kind: 'preset', detail: '球棍' },
+      { insert: 'sticks', kind: 'preset', detail: '棍状' },
+      { insert: 'lines', kind: 'preset', detail: '线框' },
+      { insert: 'ligand', kind: 'preset', detail: '配体口袋' },
+      { insert: 'cinema', kind: 'preset', detail: '影院级' },
+    ] : null),
+  },
+  { names: ['delete'], args: (pos, ctx) => (pos === 1 ? ctx.namedSelections.map(n => ({ insert: n, kind: 'sel', detail: '命名选择' })) : null) },
+  { names: ['close'], args: (pos, ctx) => (pos === 1 ? [...structItems(ctx), { insert: 'all', kind: 'value', detail: '全部结构' }] : null) },
+  { names: ['clear'] },
+  { names: ['help', '?'] },
+]
+
+/** 命令名候选（主名 + 全部别名） */
+const CMD_ITEMS: CompletionItem[] = REGISTRY.flatMap(d =>
+  d.names.map(n => ({ insert: n, kind: 'cmd' as const })),
+)
+
+const HELP_BY_CMD = new Map<string, { cmd: string; desc: string; example: string }>()
+for (const h of COMMAND_HELP) HELP_BY_CMD.set(h.cmd.split(' ')[0], h)
+
+function defFor(word: string): CmdDef | null {
+  const w = word.toLowerCase()
+  return REGISTRY.find(d => d.names.includes(w)) ?? null
+}
+
+/** 排序：前缀匹配优先，再按字典序；限制数量 */
+function rank(items: CompletionItem[], frag: string, limit = 12): CompletionItem[] {
+  const f = frag.toLowerCase()
+  const scored = items
+    .filter(i => i.insert.toLowerCase().includes(f))
+    .map(i => ({ i, prefix: i.insert.toLowerCase().startsWith(f) ? 0 : 1 }))
+  scored.sort((a, b) => a.prefix - b.prefix || a.i.insert.localeCompare(b.i.insert))
+  return scored.slice(0, limit).map(s => s.i)
+}
+
+/**
+ * 计算补全：input 为完整命令行（光标默认在末尾）。
+ * 规则：按空白切 token；末尾是空格 → 补全新 token；否则补全最后一个部分 token。
+ */
+export function buildCompletions(input: string, ctx: CompletionCtx): CompletionResult | null {
+  // 定位正在输入的 token
+  const m = /(\S*)$/.exec(input)
+  const frag = m ? m[1] : ''
+  const tokenStart = input.length - frag.length
+  // 前面的 token（去掉正在输入的 frag）
+  const head = input.slice(0, tokenStart).trim()
+  const prevTokens = head ? head.split(/\s+/) : []
+  const cmdWord = prevTokens[0]?.toLowerCase() ?? ''
+
+  const hint = cmdWord ? HELP_BY_CMD.get(cmdWord) ?? null : null
+  const base: CompletionResult = { items: [], from: tokenStart, to: input.length, hint }
+
+  if (!cmdWord) {
+    // 正在输入命令名
+    const items = rank(CMD_ITEMS, frag)
+    return items.length ? { ...base, items } : null
+  }
+
+  const def = defFor(cmdWord)
+  if (!def) return null
+
+  // 正在输入的 token 序号（0=命令本身；1=第一个参数）
+  const tokenIdx = prevTokens.length
+
+  // select 名 = 表达式：第一个参数位提示已有命名（便于覆盖）
+  if ((cmdWord === 'select' || cmdWord === 'sel') && tokenIdx === 1 && frag && !head.includes('=')) {
+    const named = ctx.namedSelections.map(n => ({ insert: n, kind: 'sel' as const, detail: '覆盖命名选择' }))
+    const kw = SEL_KEYWORDS.slice(0, 8).map(([k, d]) => ({ insert: k, kind: 'sel' as const, detail: d }))
+    const items = rank([...named, ...kw], frag)
+    if (items.length) return { ...base, items }
+  }
+
+  // 通用：参数位候选（注册表 args）
+  const argItems = def.args?.(tokenIdx, ctx, prevTokens) ?? null
+  const items = rank(argItems ?? [], frag)
+  if (items.length) return { ...base, items }
+
+  // 选择表达式命令：任意参数位都补全选择关键字
+  if (def.expr) {
+    const sels = rank(selItems(ctx), frag)
+    if (sels.length) return { ...base, items: sels }
+  }
+
+  // morph 等长参数命令：后续位继续给结构候选（args 返回函数本身时已在上面处理）
+  return null
+}

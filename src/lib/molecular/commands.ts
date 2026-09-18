@@ -91,6 +91,8 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
   { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+超采样，异步+进度提示）', example: 'ray 1920' },
   { cmd: 'axes on|off', desc: '视口坐标轴指示器（点击轴端对齐视角）', example: 'axes off' },
+  { cmd: 'fps on|off', desc: '状态栏性能指示器（FPS/绘制调用/三角形）', example: 'fps on' },
+  { cmd: 'outline on|off [强度 粗细]', desc: '出版级轮廓线（Sobel 深度+亮度描边；ray 同样生效）', example: 'outline on · outline on 2 2.5' },
   { cmd: 'session save|export|new|info|clear', desc: '会话存档 / 文件导出 / 新建', example: 'session export · session new' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
   { cmd: 'preset <名>', desc: '应用风格预设', example: 'preset surface' },
@@ -586,7 +588,7 @@ export function runCommand(raw: string): void {
   if (cmd === 'set') {
     const key = (parts[1] ?? '').toLowerCase()
     const rawVal = parts.slice(2).join(' ').trim()
-    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / transparency / sphere_scale / stick_radius / cartoon_width')
+    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / transparency / sphere_scale / stick_radius / cartoon_width')
     const s = useMolStore.getState()
     const num = parseFloat(rawVal)
     const on = ['on', '1', 'true', 'open'].includes(rawVal.toLowerCase())
@@ -664,6 +666,26 @@ export function runCommand(raw: string): void {
         s.updateSettings({ showAxes: on })
         return ok(`坐标轴指示器 ${on ? '开启（点击轴端可对齐视角）' : '关闭'}`)
       }
+      case 'fps': case 'show_fps': {
+        if (!on && !off) return err('用法：set fps on|off（状态栏性能指示器）')
+        s.updateSettings({ showFps: on })
+        return ok(`性能指示器 ${on ? '开启（状态栏显示 FPS / 绘制调用 / 三角形数）' : '关闭'}`)
+      }
+      case 'outline': {
+        if (!on && !off) return err('用法：set outline on|off（出版级轮廓线；或 outline on 1.5 2）')
+        s.updateSettings({ outline: on })
+        return ok(`轮廓线 ${on ? '开启（Sobel 深度+亮度描边；ray 静帧同样生效）' : '关闭'}`)
+      }
+      case 'outline_strength': {
+        if (isNaN(num)) return err('用法：set outline_strength <0.2-3>，默认 1')
+        s.updateSettings({ outline: true, outlineStrength: clampNum(num, 0.2, 3, 1) })
+        return ok(`轮廓线强度 → ${clampNum(num, 0.2, 3, 1).toFixed(1)}（已开启）`)
+      }
+      case 'outline_thickness': {
+        if (isNaN(num)) return err('用法：set outline_thickness <1-4>（像素采样步长），默认 1.5')
+        s.updateSettings({ outline: true, outlineThickness: clampNum(num, 1, 4, 1.5) })
+        return ok(`轮廓线粗细 → ${clampNum(num, 1, 4, 1.5).toFixed(1)}px（已开启）`)
+      }
       case 'transparency': case 'surface_opacity': {
         if (isNaN(num)) return err('用法：set transparency <0-1>（0=不透明，作用于表面表示）')
         const opacity = clampNum(1 - num, 0.05, 1, 0.6)
@@ -704,6 +726,35 @@ export function runCommand(raw: string): void {
     const on = arg ? ['on', '1'].includes(arg) : !s.settings.showAxes
     s.updateSettings({ showAxes: on })
     return ok(on ? '坐标轴指示器开启（视口右上角；点击轴端对齐视角）' : '坐标轴指示器已关闭')
+  }
+
+  if (cmd === 'fps' || cmd === 'perf') {
+    const arg = (parts[1] ?? '').toLowerCase()
+    if (arg && arg !== 'on' && arg !== 'off' && arg !== '1' && arg !== '0') return err('用法：fps on|off（状态栏实时性能指示）')
+    const s = useMolStore.getState()
+    const on = arg ? ['on', '1'].includes(arg) : !s.settings.showFps
+    s.updateSettings({ showFps: on })
+    return ok(on ? '性能指示器开启（状态栏显示 FPS / 绘制调用 / 三角形数）' : '性能指示器已关闭')
+  }
+
+  if (cmd === 'outline' || cmd === 'edge') {
+    // outline on|off [强度] [粗细]
+    const rest = parts.slice(1)
+    const arg = (rest[0] ?? '').toLowerCase()
+    const s = useMolStore.getState()
+    let on: boolean
+    if (arg === 'on' || arg === '1') on = true
+    else if (arg === 'off' || arg === '0') on = false
+    else on = !s.settings.outline
+    const patch: { outline: boolean; outlineStrength?: number; outlineThickness?: number } = { outline: on }
+    const strength = rest[1] !== undefined ? parseFloat(rest[1]) : NaN
+    if (!isNaN(strength)) patch.outlineStrength = clampNum(strength, 0.2, 3, 1)
+    const thickness = rest[2] !== undefined ? parseFloat(rest[2]) : NaN
+    if (!isNaN(thickness)) patch.outlineThickness = clampNum(thickness, 1, 4, 1.5)
+    s.updateSettings(patch)
+    if (!on) return ok('轮廓线已关闭')
+    const cur = useMolStore.getState().settings
+    return ok(`轮廓线开启（强度 ${cur.outlineStrength.toFixed(1)} · 粗细 ${cur.outlineThickness.toFixed(1)}px）——出版级描边：Sobel 深度+亮度双信号，ray 静帧同样生效`)
   }
 
   if (cmd === 'symmetry' || cmd === 'symmates') {

@@ -1070,3 +1070,29 @@ Stage Summary:
 - 关键决策：①键长目标取结点插值而非两端 lerp（多态样条中间态键长贴近邻近真实构象）②逆质量权重让 H 原子承担修正（化学上正确且视觉自然）③碰撞阈值 0.72×vdW 和排除 |Δres|≤1（肽平面/相邻侧链合法近距不误判）④合并导入不改设置/相机/密度图（合并语义=只动结构与书签）⑤发光分 glowPos/glowNeg 独立通道（端点专属反馈而非整轴点亮）
 - 未解决问题与风险：①morph 精修的网格 cell 4Å 对超大金属离子对（K-K 5.5Å）检测不到（罕见）②SHAKE 是几何投影非能量最小化——极端构象变化下键角仍可能异常（rigimol 同级别局限）③合并导入的命名选择 structureIndex 映射假设「新增结构全部成功添加」（部分失败时可能错位——已按 added 计数偏移，极端场景低概率）④VLM 建议未落地：FPS 指示器、命令行 Tab 补全、MSA 多序列视图、景深/轮廓线后处理、结构分组折叠
 - 下一阶段建议（优先级序）：① 命令行 Tab 智能补全 + 参数提示（VLM 建议，高频操作效率提升明显）② FPS/性能指示器（状态栏，多结构场景价值大）③ 结构面板分组/折叠（13+ 结构滚动成本）④ 景深/轮廓线一键出版级后处理 ⑤ UI 偏好继续归一（面板宽度等散键）⑥ 时间轴 FLIP 动画
+
+---
+Task ID: r25
+Agent: main
+Task: 继续开发新功能并打磨旧功能（命令行 Tab 智能补全 + FPS 性能指示器 + 结构卡片折叠 + 出版级轮廓线后处理）
+
+Work Log:
+- 新增 src/lib/molecular/complete.ts：独立补全引擎——命令注册表（主名+别名+逐 token 参数规格，args 签名 (pos, ctx, tokens)）；选择关键字 24 个（chain/chainidx/resi/resn/name/elem/molecule/protein/ligand/water/backbone/sidechain/helix/sheet/within/byres/bychain/all/none/and/or/not/sele）+ 命名选择注入；结构名/表示法/颜色方案+16 常用色/set 键/session·view·movie·ensemble·record·map 子命令/tour id/preset 名候选；前缀优先排序限 12 条；select 首参特判「覆盖命名选择」提示；morph 依 tokens[1]===multi 自适应 = 号位
+- ConsoleBar 全面重构：补全弹层（分类图标 emerald/sky/violet/amber/teal/rose/fuchsia/purple + 命中片段高亮 + detail 右对齐 + 头部计数与 Tab/↑↓/Esc 键提示）；参数提示条（COMMAND_HELP 实时匹配 cmd 展示 desc+example）；键盘语义：弹层开启时 ↑↓ 优先导航候选（关闭时历史）、Tab 接受选中项（非仅首项）+尾随空格、Esc 先关弹层再关控制台；onMouseDown 接受候选（preventDefault 保焦点）
+- 新增 src/lib/molecular/perf-store.ts：zustand 性能快照（fps/frameMs/drawCalls/triangles/geometries/textures）+ fpsTone 分级
+- engine tick：renderer.info.autoReset=false + 帧首手动 reset（composer 多次内部 render 累计不丢失）；500ms 窗口上报（≥2 帧才结算——后台节流页 ~2fps 时避免 0.x fps 误导显示；8s 无帧兜底重置）；仅 settings.showFps 时写 store（关闭时零重渲染）
+- 新增 src/lib/molecular/edge-shader.ts：三信号描边——①剪影（几何↔背景 mask Sobel 满强度，sRGB 直出）②内部遮挡（相对深度梯度 smoothstep(0.08,0.16)×0.7——高于表面坡度~0.01、低于层叠遮挡≥0.05）③亮度边界（0.4 阈×0.5）；isBg=raw depth≥0.9995；透视线性化（正交直通）；srgbComponents() 以原始 sRGB 分量传色（不经 working-space 转换）
+- engine composer 重构：管线 RenderPass→GTAOPass→OutputPass→EdgePass；DepthTexture(DepthStencilFormat+UnsignedInt248) 挂 renderTarget1；每帧 resetComposerBuffers 指回 rt1（RenderPass 固定写 readBuffer，与启用 pass 数的 swap 奇偶无关）；OutputPass.material depthTest/Write=false（四边形写 rt1 不得破坏 depthTexture 的场景深度）；syncDepthTextureSize（WebGLRenderTarget.setSize 不更新 depthTexture——dispose 触发重分配）；EdgePass 常开：outline 关闭时退化为「背景还原+直通」——修复 composer 路径背景被 ACES 色调映射漂移 255→228 的存量问题（直接渲染 glClear 本就不 tone map，两路径现已一致；GTAO-only 同步受益）
+- rayRender：ssao||outline 时走 composer（超采样尺寸下同步 uniforms/深度纹理/缓冲重置）；ray 输出验证白天空+描边+地面接触阴影（地面为几何体保持 tone map 正确）
+- Settings 新增 showFps/outline/outlineStrength(0.2-3)/outlineThickness(1-4px) + defaultSettings；session 序列化整体含新键（刷新恢复验证通过）
+- commands.ts：fps on|off、outline on|off [强度 粗细]（outline/edge 别名）、set fps/outline/outline_strength/outline_thickness；COMMAND_HELP 三条新目
+- ScenePanel：性能指示器开关（Activity 图标）+ 轮廓线区块（PenLine；强度/粗细 Slider + 说明文案）；StatusBar：FPS 徽章（≥55 绿/≥30 琥珀/<30 红，<10 fps 显示 1 位小数，悬停 title 含帧耗时/几何体/纹理）+ 描边开启徽章（与 FPS 互斥位）；HelpDialog：补全/轮廓线/性能指示器三段文档 + 快速上手 Tab 提及
+- StructuresPanel：卡片折叠（ChevronDown/Right 切换徽章行 ↔ 紧凑单行「4,779 at · 12 链 · 1.74 Å」）；≥4 结构显示「全部折叠/全部展开」（ChevronsUpDown）；折叠集按结构名持久化 localStorage(molvision-collapsed-structures)，会话恢复/合并后仍生效
+- E2E（agent-browser）：补全五链路（命令名 col→color/参数 color r→red+residue/show st→sticks/session →5 子命令/close 4→4HHB）+ Tab 接受（选中第 2 项 sticks 非 首 项）+ ↑↓ 导航 + 鼠标点选 + 提示条文案断言；fps on → 状态栏「1.1 fps 23 calls 486k tri」（无头软渲染环境诚实数值）；outline on 2 2 → VLM 8.5/10「完美执行出版级轮廓线，背景纯净，线条专业」；bg black → 线色自动 #dfe7ee + 背景纯黑；ray 960 → 下载 PNG 1440×942 含描边线 4.9%+纯白天空；outline off + ssao on → 背景 255 纯白（存量 228 修复验证）；折叠三态（单卡/全部折叠 localStorage ["4HHB","1BNA"]/全部展开）；5 设置刷新恢复（outline/strength/thickness/showFps）；移动端 390px 无横向溢出；浏览器 errors 0；lint 0 错 0 警；应用代码 tsc 0 错
+- 【QA 方法论补充】①agent-browser 无头页 rAF 严重节流（实测 1-2fps 软渲染）——FPS 数值断言只能验「有值且更新」不能验具体帧率 ②dev server 可能崩溃（本会话发生一次 ERR_CONNECTION_REFUSED）——先 ps 查进程再重启 ③补全弹层测试前确认 dev server 未中途重启（旧页面模块状态会导致 DOM 污染假象）④backtick 是 toggle——连续 dispatch 会关掉控制台 ⑤composer+OutputPass 的 ACES 会作用于背景（直接渲染不会）——用深度 mask 在末位 pass 还原
+
+Stage Summary:
+- 项目当前状态：r24 基础上完成「命令行补全 + 性能指示 + 面板折叠 + 出版级描边」四大功能——①Tab 智能补全（命令/子命令/结构/表示法/颜色/选择关键字/参数提示条，↑↓ 导航+鼠标点选）②FPS 徽章（500ms 窗口、≥2 帧结算、分级配色、绘制调用/三角形数）③结构卡片折叠+批量折叠（按名持久化）④Sobel 三信号描边（剪影满强度+内部遮挡 70%+亮度边界 50%，ray 同步生效）⑤修复存量 composer 背景 ACES 漂移（EdgePass 常开做背景还原，GTAO-only 路径同步受益）
+- 关键决策：①补全引擎独立模块（不 import commands.ts 重量级依赖链，避免循环）②EdgePass 放 OutputPass 之后末位上屏（颜色已 sRGB——线色/背景色以原始 sRGB 分量传递；背景像素用深度 mask 还原设定色绕过 ACES）③OutputPass 四边形禁用深度测试/写入（否则破坏 rt1.depthTexture 且因场景更近被拒绝）④每帧 resetComposerBuffers 固定 RenderPass→rt1（swap 奇偶与启用 pass 数解耦）⑤内部遮挡阈值 0.08（表面坡度 ~0.01 与层叠遮挡 ≥0.05 之间）⑥FPS ≥2 帧才结算（节流环境避免 0.x 误导）
+- 未解决问题与风险：①无头环境 1-2fps 无法验证高帧率下 FPS 数值精度（逻辑已按窗口数学验证）②轮廓线在极密堆叠区（如血红蛋白四聚体中心）线密度高——已用 70% 内部遮挡弱化，可再调 outlineThickness 1px ③ray 的透明背景模式不走 composer（描边不生效——透明无背景深度语义，by design）④VLM 建议未落地：低帧率自动降级（性能模式）、导出 SVG/PDF 矢量、链颜色对比度微调、序列条位置指示器
+- 下一阶段建议（优先级序）：① 低帧率自动性能模式（FPS<15 时提示降像素比/关描边——VLM 建议）② 导出增强：SVG/PDF 矢量或 300dpi 指南 ③ 命令历史搜索（Ctrl+R 增量搜索）④ 序列条当前视口聚焦区域指示 ⑤ 深色主题下链颜色对比度提升 ⑥ UI 偏好继续归一（面板宽度等散键收编 Settings）

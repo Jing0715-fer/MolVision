@@ -6,6 +6,9 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { EdgeShader, srgbComponents } from './edge-shader'
+import { usePerfStore } from './perf-store'
 import { AnaglyphEffect } from 'three/examples/jsm/effects/AnaglyphEffect.js'
 import { marchingCubes } from './marching-cubes'
 import { mateTransforms, orthoMatrix, symOpsFor, type CrystalCell } from './symmetry'
@@ -280,11 +283,17 @@ export class MolEngine {
   private mapLayer: MapLayerState | null = null
   // 对称伴侣克隆组（structureId → 克隆容器；几何/材质与原 rep 共享）
   private symmetryGroups = new Map<string, THREE.Group>()
-  // GTAO 后处理管线（ssao 开启时懒建；gtaoFailed 构建失败后永久回退）
+  // GTAO / 轮廓线后处理管线（ssao 或 outline 开启时懒建；gtaoFailed/edgeFailed 构建失败后永久回退）
   private composer: EffectComposer | null = null
   private gtaoPass: GTAOPass | null = null
   private composerCamera: THREE.Camera | null = null
   private gtaoFailed = false
+  private edgePass: ShaderPass | null = null
+  private edgeFailed = false
+  // 帧性能统计（500ms 窗口上报 perf-store；autoReset 关闭后帧首手动清零）
+  private perfFrames = 0
+  private perfLastT = 0
+  private perfStatInit = false
   // 动画录制（WebM）
   private recorder: MediaRecorder | null = null
   private recordChunks: Blob[] = []
@@ -403,6 +412,7 @@ export class MolEngine {
     if (this.composer) {
       this.composer.setPixelRatio(this.renderer.getPixelRatio())
       this.composer.setSize(w, h)
+      this.syncDepthTextureSize(Math.round(w * this.renderer.getPixelRatio()), Math.round(h * this.renderer.getPixelRatio()))
     }
     this.stereoEffect?.setSize(w, h)
     this.pickablesCache = null
@@ -430,7 +440,13 @@ export class MolEngine {
     const now = performance.now()
     const dt = this.lastTickT ? Math.min((now - this.lastTickT) / 1000, 0.1) : 0.016
     this.lastTickT = now
-    this.controls.update()
+    // 帧统计：autoReset 关闭 → composer 多次内部 render 调用累计不丢失，帧首手动清零
+    if (!this.perfStatInit) {
+      this.renderer.info.autoReset = false
+      this.perfStatInit = true
+      this.perfLastT = now
+    }
+    this.renderer.info.reset()
     this.updateEnsemble()
     // 视角书签平滑过渡：easeInOutCubic 插值 pos/target/fov（放在 controls.update 之后，
     // 无用户输入时 OrbitControls 每帧以当前位置重算球坐标，外部修改可安全生效）
@@ -486,7 +502,7 @@ export class MolEngine {
       this.clippingPlanes[1].normal.copy(dir).negate()
       this.clippingPlanes[1].constant = dir.dot(cam.position) + half
     }
-    // 渲染：stereo 红蓝立体优先（直渲），其次 GTAO composer，最后直接渲染
+    // 渲染：stereo 红蓝立体优先（直渲，后处理停用避免串色），其次 GTAO/轮廓线 composer，最后直接渲染
     if (this.settings?.stereo) {
       if (!this.stereoEffect) {
         this.stereoEffect = new AnaglyphEffect(this.renderer)
@@ -498,18 +514,33 @@ export class MolEngine {
         this.stereoEffect.dispose()
         this.stereoEffect = null
       }
-      // GTAO 环境光遮蔽：经 EffectComposer 渲染；否则直接渲染
-      if (this.settings?.ssao && !this.gtaoFailed) {
+      // GTAO 遮蔽 / 轮廓线：经 EffectComposer 渲染；否则直接渲染
+      const wantSsao = !!this.settings?.ssao && !this.gtaoFailed
+      const wantOutline = !!this.settings?.outline && !this.edgeFailed
+      if (wantSsao || wantOutline) {
         this.ensureComposer()
-        if (this.composer && this.gtaoPass) {
-          // 刷新投影矩阵 uniform（FOV / 正交 zoom / 相机切换后仍正确）
+        if (this.composer && (this.gtaoPass || this.edgePass)) {
           const w = this.container.clientWidth || 1
           const h = this.container.clientHeight || 1
-          this.composer.setPixelRatio(this.renderer.getPixelRatio())
+          const pr = this.renderer.getPixelRatio()
+          this.composer.setPixelRatio(pr)
           this.composer.setSize(w, h)
-          this.gtaoPass.blendIntensity = this.settings.ssaoIntensity
-          // 半径为纯 uniform 更新（无 shader 重编译），每帧同步保证滑块即时生效
-          this.gtaoPass.updateGtaoMaterial({ radius: this.settings.ssaoRadius })
+          this.syncDepthTextureSize(Math.round(w * pr), Math.round(h * pr))
+          if (this.gtaoPass) {
+            // 刷新投影矩阵 uniform（FOV / 正交 zoom / 相机切换后仍正确）
+            this.gtaoPass.blendIntensity = this.settings?.ssaoIntensity ?? 1
+            // 半径为纯 uniform 更新（无 shader 重编译），每帧同步保证滑块即时生效
+            this.gtaoPass.updateGtaoMaterial({ radius: this.settings?.ssaoRadius ?? 3 })
+            this.gtaoPass.enabled = wantSsao
+          }
+          // 轮廓线 pass 常开（outline 关闭时退化为「背景还原 + 直通」，修复 composer 路径
+          // 背景被 ACES 色调映射漂移的问题——与直接渲染路径的 glClear 行为对齐）
+          if (this.edgePass) {
+            this.edgePass.enabled = true
+            this.syncEdgePass(Math.round(w * pr), Math.round(h * pr))
+          }
+          // RenderPass 固定写 readBuffer：每帧指回 rt1（其 depthTexture 供轮廓线采样，与启用 pass 数无关）
+          this.resetComposerBuffers()
           this.composer.render()
         } else {
           this.renderer.render(this.scene, cam)
@@ -521,6 +552,29 @@ export class MolEngine {
     }
     // 主渲染后叠加坐标轴指示器（右上角小视口；stereo 红蓝模式下跳过避免串色）
     this.renderGizmo(cam)
+    // 帧尾统计：500ms 窗口上报 perf-store（仅指示器开启时写入，避免无谓渲染）
+    // 至少累计 2 帧才结算（后台节流页 ~2fps 时窗口只含 1 帧会显示误导性 0.x fps）
+    this.perfFrames++
+    const elapsed = now - this.perfLastT
+    if (elapsed >= 500 && this.perfFrames >= 2) {
+      if (this.settings?.showFps) {
+        const info = this.renderer.info
+        usePerfStore.getState().set({
+          fps: (this.perfFrames * 1000) / elapsed,
+          frameMs: elapsed / this.perfFrames,
+          drawCalls: info.render.calls / this.perfFrames,
+          triangles: info.render.triangles / this.perfFrames,
+          geometries: info.memory.geometries,
+          textures: info.memory.textures,
+        })
+      }
+      this.perfFrames = 0
+      this.perfLastT = now
+    } else if (elapsed >= 8000) {
+      // 极端兜底：长时间无帧（标签页挂起恢复）重置窗口，避免陈旧基准
+      this.perfFrames = 0
+      this.perfLastT = now
+    }
   }
 
   // ---------- 坐标轴指示器（朝向罗盘） ----------
@@ -714,8 +768,8 @@ export class MolEngine {
     this.animateCameraTo({ pos: pos.toArray(), target: target.toArray(), up: up.toArray() }, dur)
   }
 
-  // ---------- GTAO 后处理管线 ----------
-  /** 懒建 EffectComposer（RenderPass → GTAOPass → OutputPass）；相机类型切换时重建；失败时安全降级 */
+  // ---------- GTAO / 轮廓线后处理管线 ----------
+  /** 懒建 EffectComposer（RenderPass → GTAOPass → OutputPass → EdgePass）；相机类型切换时重建；失败时安全降级 */
   private ensureComposer() {
     if (this.composer && this.composerCamera === this.activeCamera) return
     if (this.composer) this.disposeComposer()
@@ -742,7 +796,35 @@ export class MolEngine {
       gtao.updatePdMaterial({ radius: 8, radiusExponent: 2, samples: 16, rings: 2 })
       this.gtaoPass = gtao
       this.composer.addPass(gtao)
-      this.composer.addPass(new OutputPass())
+      // OutputPass：四边形渲染进 rt1 时不得深度测试/写入（会破坏 rt1.depthTexture 的场景深度，
+      // 且会因场景更近而拒绝片元）——色调映射输出是纯颜色合成，无深度语义
+      const output = new OutputPass()
+      output.material.depthTest = false
+      output.material.depthWrite = false
+      this.composer.addPass(output)
+      // 轮廓线/背景还原 pass（末位上屏）：采样 rt1 的场景深度（RenderPass 固定写入 readBuffer）
+      // ——OutputPass 虽也写 rt1 但已禁用深度，depthTexture 保持场景深度
+      if (!this.edgeFailed) {
+        try {
+          const dt = new THREE.DepthTexture(Math.round(w * pr), Math.round(h * pr))
+          dt.format = THREE.DepthStencilFormat
+          dt.type = THREE.UnsignedInt248Type
+          this.composer.renderTarget1.depthTexture = dt
+          const edge = new ShaderPass(EdgeShader)
+          edge.material.depthTest = false
+          edge.material.depthWrite = false
+          this.edgePass = edge
+          this.composer.addPass(edge)
+        } catch (e) {
+          console.warn('[MolVision] 轮廓线后处理初始化失败，已回退', e)
+          this.edgeFailed = true
+          this.edgePass = null
+          if (this.composer.renderTarget1.depthTexture) {
+            this.composer.renderTarget1.depthTexture.dispose()
+            this.composer.renderTarget1.depthTexture = null
+          }
+        }
+      }
       this.composer.setPixelRatio(pr)
       this.composer.setSize(w, h)
       this.composerCamera = this.activeCamera
@@ -754,12 +836,60 @@ export class MolEngine {
     }
   }
 
+  /** 每帧重置 composer 缓冲指到 rt1：RenderPass 固定渲染进 readBuffer（其 depthTexture 承载场景深度，供轮廓线采样） */
+  private resetComposerBuffers() {
+    const c = this.composer
+    if (!c) return
+    c.readBuffer = c.renderTarget1
+    c.writeBuffer = c.renderTarget2
+  }
+
+  /** 深度纹理尺寸跟随 composer 目标（WebGLRenderTarget.setSize 不自动更新 depthTexture） */
+  private syncDepthTextureSize(wPx: number, hPx: number) {
+    const dt = this.composer?.renderTarget1.depthTexture as THREE.DepthTexture | null | undefined
+    if (!dt) return
+    if (dt.image.width !== wPx || dt.image.height !== hPx) {
+      dt.image.width = wPx
+      dt.image.height = hPx
+      dt.dispose() // 触发 GPU 重新分配
+    }
+  }
+
+  /** 同步轮廓线 uniforms（分辨率/粗细/强度/相机深度范围/线色+背景色随背景亮度自适应） */
+  private syncEdgePass(wPx: number, hPx: number) {
+    const e = this.edgePass
+    const s = this.settings
+    if (!e || !s) return
+    const u = (e.material as THREE.ShaderMaterial).uniforms
+    u.uResolution.value.set(wPx, hPx)
+    u.uOutlineOn.value = s.outline ? 1 : 0
+    u.uThickness.value = s.outlineThickness
+    u.uStrength.value = s.outlineStrength
+    u.tDepth.value = this.composer?.renderTarget1.depthTexture ?? null
+    u.uBgColor.value.copy(srgbComponents(s.background))
+    // 线色：浅背景配深线 / 深背景配浅线（原始 sRGB 分量，pass 内不做色彩空间转换）
+    u.uEdgeColor.value.copy(srgbComponents(isLightBackground(s.background) ? '#1f2933' : '#dfe7ee'))
+    const cam = this.activeCamera
+    if (cam === this.orthoCamera) {
+      u.uIsOrtho.value = 1
+      u.uNear.value = cam.near
+      u.uFar.value = cam.far
+    } else {
+      u.uIsOrtho.value = 0
+      u.uNear.value = (cam as THREE.PerspectiveCamera).near
+      u.uFar.value = (cam as THREE.PerspectiveCamera).far
+    }
+  }
+
   private disposeComposer() {
     if (!this.composer) return
+    const dt = this.composer.renderTarget1.depthTexture
+    if (dt) { dt.dispose(); this.composer.renderTarget1.depthTexture = null }
     for (const pass of this.composer.passes) pass.dispose?.()
     this.composer.dispose()
     this.composer = null
     this.gtaoPass = null
+    this.edgePass = null
     this.composerCamera = null
   }
 
@@ -3005,10 +3135,30 @@ export class MolEngine {
         this.scene.fog = null
         this.renderer.setClearColor(0x000000, 0)
         this.renderer.render(this.scene, this.activeCamera)
-      } else if (this.settings?.ssao && this.composer) {
-        this.composer.setPixelRatio(1)
-        this.composer.setSize(w, h)
-        this.composer.render()
+      } else if ((this.settings?.ssao && !this.gtaoFailed) || (this.settings?.outline && !this.edgeFailed)) {
+        // ray 静帧同样享用 GTAO / 轮廓线（超采样尺寸下同步 uniforms）
+        this.ensureComposer()
+        if (this.composer && (this.gtaoPass || this.edgePass)) {
+          const wantSsao = !!this.settings?.ssao && !this.gtaoFailed
+          const wantOutline = !!this.settings?.outline && !this.edgeFailed
+          this.composer.setPixelRatio(1)
+          this.composer.setSize(w, h)
+          this.syncDepthTextureSize(w, h)
+          if (this.gtaoPass) {
+            this.gtaoPass.enabled = wantSsao
+            this.gtaoPass.blendIntensity = this.settings?.ssaoIntensity ?? 1
+            this.gtaoPass.updateGtaoMaterial({ radius: this.settings?.ssaoRadius ?? 3 })
+          }
+          // 轮廓线 pass 常开（背景还原 + 可选描边）
+          if (this.edgePass) {
+            this.edgePass.enabled = true
+            this.syncEdgePass(w, h)
+          }
+          this.resetComposerBuffers()
+          this.composer.render()
+        } else {
+          this.renderer.render(this.scene, this.activeCamera)
+        }
       } else {
         this.renderer.render(this.scene, this.activeCamera)
       }

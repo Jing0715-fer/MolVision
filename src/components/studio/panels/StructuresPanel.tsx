@@ -1,8 +1,8 @@
 'use client'
 
-// 结构面板：结构列表、链、配体、对称伴侣、叠合
-import { useState } from 'react'
-import { Eye, EyeOff, X, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight, Target, Copy } from 'lucide-react'
+// 结构面板：结构列表（卡片可折叠）、链、配体、对称伴侣、叠合
+import { useEffect, useState } from 'react'
+import { Eye, EyeOff, X, Boxes, Droplets, FlaskConical, Dna, TestTube, Combine, Undo2, ArrowRight, Target, Copy, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
 import { textRegistry } from '@/lib/molecular/text-registry'
@@ -53,6 +53,18 @@ function closeStructureWithUndo(st: StructureEntry) {
   })
 }
 
+/** 折叠结构卡片状态（按结构名持久化到 localStorage） */
+const COLLAPSED_KEY = 'molvision-collapsed-structures'
+
+function loadCollapsed(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]')
+    if (Array.isArray(saved)) return new Set(saved)
+  } catch { /* ignore */ }
+  return new Set()
+}
+
 export function StructuresPanel() {
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
@@ -68,6 +80,26 @@ export function StructuresPanel() {
   const [symRadius, setSymRadius] = useState(20)
   // 全部关闭确认
   const [confirmCloseAll, setConfirmCloseAll] = useState(false)
+  // 折叠的结构名集合（按名持久化：会话恢复/合并后仍生效）
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed())
+
+  useEffect(() => {
+    try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed])) } catch { /* ignore */ }
+  }, [collapsed])
+
+  const toggleCollapse = (name: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  const allCollapsed = structures.length > 0 && structures.every(st => collapsed.has(st.name))
+  const toggleCollapseAll = () => {
+    setCollapsed(allCollapsed ? new Set() : new Set(structures.map(st => st.name)))
+  }
 
   if (!structures.length) {
     return (
@@ -87,15 +119,27 @@ export function StructuresPanel() {
   return (
     <div className="pb-4">
       <SectionTitle right={
-        structures.length >= 2 ? (
-          <button
-            onClick={() => setConfirmCloseAll(true)}
-            className="rounded px-1 text-[10px] text-muted-foreground/80 transition hover:bg-destructive/10 hover:text-destructive"
-            title="关闭全部已加载结构（含确认）"
-          >
-            全部关闭
-          </button>
-        ) : undefined
+        <span className="flex items-center gap-1.5">
+          {structures.length >= 4 && (
+            <button
+              onClick={toggleCollapseAll}
+              className="flex items-center gap-0.5 rounded px-1 text-[10px] text-muted-foreground/80 transition hover:bg-accent hover:text-foreground"
+              title={allCollapsed ? '展开全部卡片（显示统计徽章）' : '折叠全部卡片（多结构时减少滚动）'}
+            >
+              <ChevronsUpDown className="h-3 w-3" />
+              {allCollapsed ? '全部展开' : '全部折叠'}
+            </button>
+          )}
+          {structures.length >= 2 ? (
+            <button
+              onClick={() => setConfirmCloseAll(true)}
+              className="rounded px-1 text-[10px] text-muted-foreground/80 transition hover:bg-destructive/10 hover:text-destructive"
+              title="关闭全部已加载结构（含确认）"
+            >
+              全部关闭
+            </button>
+          ) : undefined}
+        </span>
       }>
         已加载结构 ({structures.length})
       </SectionTitle>
@@ -111,6 +155,17 @@ export function StructuresPanel() {
             )}
           >
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => toggleCollapse(st.name)}
+                className={cn(
+                  'flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition hover:bg-accent hover:text-foreground',
+                  collapsed.has(st.name) && 'text-muted-foreground',
+                )}
+                title={collapsed.has(st.name) ? '展开卡片（显示原子/残基/分辨率统计）' : '折叠卡片（隐藏统计徽章）'}
+                aria-label={collapsed.has(st.name) ? `展开 ${st.name}` : `折叠 ${st.name}`}
+              >
+                {collapsed.has(st.name) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
               <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setActive(st.id)}>
                 <span className={cn(
                   'shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wide shadow-xs',
@@ -175,22 +230,29 @@ export function StructuresPanel() {
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
-                {st.summary.atoms.toLocaleString()} 原子
-              </Badge>
-              <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal tabular-nums">
-                {st.summary.residues.toLocaleString()} 残基
-              </Badge>
-              {st.meta.resolution && (
+            {!collapsed.has(st.name) && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
                 <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
-                  {st.meta.resolution} Å
+                  {st.summary.atoms.toLocaleString()} 原子
                 </Badge>
-              )}
-              <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
-                {st.loadMs < 1 ? '<1' : st.loadMs.toFixed(0)} ms
-              </Badge>
-            </div>
+                <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal tabular-nums">
+                  {st.summary.residues.toLocaleString()} 残基
+                </Badge>
+                {st.meta.resolution && (
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
+                    {st.meta.resolution} Å
+                  </Badge>
+                )}
+                <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
+                  {st.loadMs < 1 ? '<1' : st.loadMs.toFixed(0)} ms
+                </Badge>
+              </div>
+            )}
+            {collapsed.has(st.name) && st.summary.atoms > 0 && (
+              <div className="mt-0.5 pl-7 text-[9px] tabular-nums text-muted-foreground/60">
+                {st.summary.atoms.toLocaleString()} at · {st.summary.chains} 链{st.meta.resolution ? ` · ${st.meta.resolution} Å` : ''}
+              </div>
+            )}
           </div>
         ))}
       </div>

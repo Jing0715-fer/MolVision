@@ -165,6 +165,14 @@ export interface Settings {
   stereo: boolean
   /** 视口右上角 3D 坐标轴指示器（朝向罗盘；点击轴可对齐视角） */
   showAxes: boolean
+  /** 状态栏 FPS/性能指示器（引擎每 500ms 上报） */
+  showFps: boolean
+  /** 出版级轮廓线（Sobel 深度+亮度边缘检测后处理） */
+  outline: boolean
+  /** 轮廓线强度（0-3：线条不透明度倍率） */
+  outlineStrength: number
+  /** 轮廓线粗细（1-4 px 采样步长） */
+  outlineThickness: number
   /** 序列条展开高度档位（紧凑/标准/加高；随会话持久化） */
   sequenceHeight: 'compact' | 'normal' | 'tall'
   /** 控制台日志区高度档位（紧凑/标准/加高；随会话持久化） */
@@ -199,6 +207,10 @@ export function defaultSettings(): Settings {
     specular: true,
     stereo: false,
     showAxes: true,
+    showFps: false,
+    outline: false,
+    outlineStrength: 1,
+    outlineThickness: 1.5,
     sequenceHeight: 'normal',
     consoleHeight: 'normal',
   }

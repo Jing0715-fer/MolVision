@@ -2,7 +2,7 @@
 
 // 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤/会话管理
 import { useRef, useState } from 'react'
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d } from 'lucide-react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d, Activity, PenLine } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
@@ -111,6 +111,17 @@ export function ScenePanel() {
         {settings.showAxes && (
           <p className="text-[10px] leading-relaxed text-muted-foreground/70">
             视口右上角显示朝向罗盘（X 红 / Y 绿 / Z 蓝）；点击轴端可平滑对齐视角，暗点为负方向。命令行等价：axes on / axes off。
+          </p>
+        )}
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Activity className="h-3.5 w-3.5 text-emerald-500" /> 性能指示器 (FPS)
+          </span>
+          <Switch checked={settings.showFps} onCheckedChange={v => updateSettings({ showFps: v })} />
+        </div>
+        {settings.showFps && (
+          <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+            状态栏实时显示帧率 / 绘制调用 / 三角形数（500ms 刷新，≥55 绿 · ≥30 琥珀 · &lt;30 红）。多结构大场景排查卡顿用。命令行等价：fps on / fps off。
           </p>
         )}
       </div>
@@ -306,6 +317,43 @@ export function ScenePanel() {
             </div>
             <p className="text-[10px] leading-relaxed text-muted-foreground/70">
               环境光遮蔽加深缝隙与口袋的阴影（GTAO 算法），大幅增强立体感与深度感知。建议蛋白质用 2–4 Å 半径，大复合物可增大。
+            </p>
+          </>
+        )}
+      </div>
+
+      <SectionTitle>轮廓线（描边）</SectionTitle>
+      <div className="space-y-3 px-3">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <PenLine className="h-3.5 w-3.5 text-fuchsia-500" /> 出版级轮廓线
+          </span>
+          <Switch checked={settings.outline} onCheckedChange={v => updateSettings({ outline: v })} />
+        </div>
+        {settings.outline && (
+          <>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>线条强度</span>
+                <span className="font-mono">{settings.outlineStrength.toFixed(1)}×</span>
+              </div>
+              <Slider
+                value={[settings.outlineStrength]} min={0.2} max={3} step={0.1}
+                onValueChange={v => updateSettings({ outlineStrength: v[0] })}
+              />
+            </div>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>线条粗细</span>
+                <span className="font-mono">{settings.outlineThickness.toFixed(1)} px</span>
+              </div>
+              <Slider
+                value={[settings.outlineThickness]} min={1} max={4} step={0.5}
+                onValueChange={v => updateSettings({ outlineThickness: v[0] })}
+              />
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+              Sobel 深度+亮度双信号检测边缘，剪影与层叠结构描出细线（线色随背景亮度自适应）。ray 静帧渲染同样生效；开启后每帧多一次全屏后处理，交互卡顿时可关闭。命令行等价：outline on 2 2.5。
             </p>
           </>
         )}

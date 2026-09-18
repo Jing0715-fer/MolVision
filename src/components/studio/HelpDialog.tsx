@@ -60,7 +60,7 @@ export function HelpDialog() {
               <li>用「风格预设」一键切换 Cartoon / 球棍 / 空间填充 / 表面</li>
               <li>点击 3D 视图中的残基进行选择，在左侧面板调颜色与表示法</li>
               <li>工具栏切换测量模式，点击原子测量距离 / 角度 / 二面角</li>
-              <li>按 <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">`</kbd> 打开命令行，像 PyMOL 一样工作</li>
+              <li>按 <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">`</kbd> 打开命令行，像 PyMOL 一样工作；<span className="font-semibold text-foreground">Tab 智能补全</span>——命令名/子命令/结构名/表示法/颜色/选择关键字全部可补全，↑↓ 切换候选，输入时实时显示参数用法提示</li>
             </ol>
             <p className="mt-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-2 text-[11px] leading-relaxed text-violet-700 dark:text-violet-300">
               <GraduationCap className="mr-1 inline h-3.5 w-3.5 -translate-y-px" />
@@ -137,6 +137,9 @@ export function HelpDialog() {
               <p><span className="font-semibold text-foreground">movie 时间轴编排</span>：工具栏 Film 按钮或 <code className="rounded bg-muted px-1 font-mono text-[10px]">movie edit</code> 打开底部时间轴面板——「同步书签」导入关键帧后可<span className="font-semibold text-foreground">拖拽卡片排序</span>、逐段调时长（0.6–20s）、调轮数、「预览」查看机位；<code className="rounded bg-muted px-1 font-mono text-[10px]">movie play</code>（无秒数参数时）按时间轴逐段巡航，显式秒数则走统一时长模式；时间轴 localStorage 持久化。</p>
               <p><span className="font-semibold text-foreground">movie 录制</span>：时间轴或 <code className="rounded bg-muted px-1 font-mono text-[10px]">movie play</code> 巡航时，先 <code className="rounded bg-muted px-1 font-mono text-[10px]">record start</code> 再播放、结束 <code className="rounded bg-muted px-1 font-mono text-[10px]">record stop</code>，把巡航录成 WebM 视频（对标 PyMOL movie + mpng 工作流）；顶部胶囊显示段进度，拖动/滚轮接管或 Esc 停止。</p>
               <p><span className="font-semibold text-foreground">实用着色</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">util cbc</code> 按链 · <code className="rounded bg-muted px-1 font-mono text-[10px]">util cbaw</code> 元素+白碳（白底论文图） · <code className="rounded bg-muted px-1 font-mono text-[10px]">util ss</code> 二级结构。</p>
+              <p><span className="font-semibold text-foreground">轮廓线（描边）</span>：场景面板「轮廓线」区块或 <code className="rounded bg-muted px-1 font-mono text-[10px]">outline on 2 2.5</code>（强度 0.2–3 / 粗细 1–4px）——Sobel 深度+亮度双信号检测边缘，为剪影与层叠结构描出出版级细线（线色随背景亮度自适应）；<code className="rounded bg-muted px-1 font-mono text-[10px]">ray</code> 静帧同样生效；与 GTAO 可叠加。</p>
+              <p><span className="font-semibold text-foreground">性能指示器</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">fps on</code> 或场景面板开关——状态栏实时显示帧率/绘制调用/三角形数（500ms 刷新，≥55 绿 · ≥30 琥珀 · &lt;30 红，悬停看帧耗时与 GPU 资源数）；多结构大场景排查卡顿利器。</p>
+              <p><span className="font-semibold text-foreground">命令行补全</span>：输入时实时弹出候选（命令/子命令/结构名/表示法/颜色方案/选择关键字，带分类图标与说明），<code className="rounded bg-muted px-1 font-mono text-[10px]">Tab</code> 接受选中项、<code className="rounded bg-muted px-1 font-mono text-[10px]">↑↓</code> 切换（弹层开启时优先于历史）、<code className="rounded bg-muted px-1 font-mono text-[10px]">Esc</code> 关闭；识别到命令时上方显示用法提示（描述+示例）；<code className="rounded bg-muted px-1 font-mono text-[10px]">↑↓</code> 在无候选时浏览历史（最近 50 条跨会话保存）。</p>
             </div>
           </section>
 
