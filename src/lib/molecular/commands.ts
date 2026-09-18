@@ -20,6 +20,8 @@ import { useTourStore } from './tour-store'
 import { TOURS, findTour } from './tours'
 import { buildMorph, buildMultiMorph } from './morph'
 import { playMovie, stopMovie, useMovieStore } from './movie'
+import { buildSvgExport, downloadSvg } from './svg-export'
+import { clearCmdHistory } from './cmd-history'
 import { toast } from 'sonner'
 
 /** 数值裁剪（NaN 时取默认值） */
@@ -90,11 +92,13 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
   { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+超采样，异步+进度提示）', example: 'ray 1920' },
+  { cmd: 'svg [宽px]', desc: '矢量图导出（CPU 投影，无限缩放不失真；可入稿 Illustrator/Inkscape）', example: 'svg 2400' },
   { cmd: 'axes on|off', desc: '视口坐标轴指示器（点击轴端对齐视角）', example: 'axes off' },
   { cmd: 'fps on|off', desc: '状态栏性能指示器（FPS/绘制调用/三角形）', example: 'fps on' },
   { cmd: 'perf on|off|status|restore', desc: '自动性能模式（低帧率降级/恢复）', example: 'perf status · perf off' },
   { cmd: 'outline on|off [强度 粗细]', desc: '出版级轮廓线（Sobel 深度+亮度描边；ray 同样生效）', example: 'outline on · outline on 2 2.5' },
   { cmd: 'session save|export|new|info|clear', desc: '会话存档 / 文件导出 / 新建', example: 'session export · session new' },
+  { cmd: 'history [clear]', desc: '命令历史面板（搜索/置顶/执行；clear 清空）', example: 'history · history clear' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
   { cmd: 'preset <名>', desc: '应用风格预设', example: 'preset surface' },
   { cmd: 'delete <名>', desc: '删除命名选择', example: 'delete site' },
@@ -120,6 +124,17 @@ export function runCommand(raw: string): void {
     for (const h of COMMAND_HELP) ok(`  ${h.cmd.padEnd(22)} ${h.desc}  例: ${h.example}`)
     ok('选择语法：chain A / chainidx 4（按链组精确选择） / resi 1-60 / resn ALA+GLY / name CA / elem C / protein / ligand / water / backbone / helix / sheet / within 5 of (...) / byres(...)，支持 and or not ( )')
     return
+  }
+
+  if (cmd === 'history') {
+    // 打开命令历史面板（全量列表 + 搜索 + 置顶；clear 子命令直接清空）
+    const sub = (parts[1] ?? '').toLowerCase()
+    if (sub === 'clear') {
+      clearCmdHistory()
+      return ok('命令历史已清空（最近命令徽章与 Ctrl+R 搜索同步清除；置顶命令保留）')
+    }
+    useMolStore.getState().setUi({ historyOpen: true })
+    return ok('已打开命令历史面板（搜索过滤 · 星标置顶 · 点击执行 · 铅笔填入编辑）')
   }
 
   if (cmd === 'load' || cmd === 'fetch') {
@@ -636,7 +651,7 @@ export function runCommand(raw: string): void {
   if (cmd === 'set') {
     const key = (parts[1] ?? '').toLowerCase()
     const rawVal = parts.slice(2).join(' ').trim()
-    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / transparency / sphere_scale / stick_radius / cartoon_width')
+    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / cap_shading / transparency / sphere_scale / stick_radius / cartoon_width')
     const s = useMolStore.getState()
     const num = parseFloat(rawVal)
     const on = ['on', '1', 'true', 'open'].includes(rawVal.toLowerCase())
@@ -730,6 +745,13 @@ export function runCommand(raw: string): void {
         s.updateSettings({ slab: true, slabCap: true, capColor: css })
         return ok(`截面封盖色 → ${css}（slab cap 已开启）`)
       }
+      case 'cap_shading': case 'slab_cap_shading': case 'depth_cue_cap': {
+        if (!on && !off) return err('用法：set cap_shading on|off（封盖深度明暗：剖面远端加深，呈现层次）')
+        s.updateSettings({ capShading: on })
+        return ok(on
+          ? '封盖深度明暗开启：剖面按视深由亮到暗渐变（远端加深），立体层次感增强'
+          : '封盖深度明暗关闭（剖面回到统一平面色）')
+      }
       case 'auto_perf': case 'autoperf': {
         if (!on && !off) return err('用法：set auto_perf on|off（低帧率自动降级，恢复后自动还原）')
         s.updateSettings({ autoPerf: on })
@@ -772,7 +794,7 @@ export function runCommand(raw: string): void {
         return n ? ok(`cartoon 宽度 → ${clampNum(num, 0.3, 4, 1)}（${n} 个表示）`) : err('没有 cartoon 表示')
       }
       default:
-        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, cap_color, transparency, sphere_scale, stick_radius, cartoon_width`)
+        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, cap_color, cap_shading, transparency, sphere_scale, stick_radius, cartoon_width`)
     }
   }
 
@@ -968,6 +990,24 @@ export function runCommand(raw: string): void {
       }
     })()
     return
+  }
+
+  if (cmd === 'svg') {
+    // 矢量图导出：CPU 侧投影（画家算法），无限缩放不失真，可入稿 Illustrator/Inkscape
+    let width: number | undefined
+    if (parts[1]) {
+      width = clampNum(parseFloat(parts[1]), 320, 4096, NaN)
+      if (isNaN(width)) return err('用法：svg [宽 px]（如 svg 2400；缺省 1600，高度按视口纵横比）')
+    }
+    const s = useMolStore.getState()
+    const r = buildSvgExport({ width })
+    if (!r.ok || !r.svg) return err(r.error ?? 'SVG 导出失败')
+    const name = s.structures[0]?.name ?? 'molvision'
+    downloadSvg(r.svg, name)
+    const skipped = r.skippedSurfaces.length
+      ? `；跳过 ${r.skippedSurfaces.length} 个表面表示（等值面无矢量原语）`
+      : ''
+    return ok(`已导出矢量图 ${r.width}×${r.height} · ${r.items.toLocaleString()} 个原语 · ${r.ms.toFixed(0)} ms${skipped}——SVG 无限缩放不失真，可直接入稿`)
   }
 
   if (cmd === 'hbonds' || cmd === 'hbond' || cmd === 'hbon') {

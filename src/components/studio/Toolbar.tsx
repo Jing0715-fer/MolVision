@@ -7,11 +7,12 @@ import { toast } from 'sonner'
 import {
   Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
-  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge,
+  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
 import { exportSessionFile, importSessionFile, mergeSessionFile, newSession, sessionInfo } from '@/lib/molecular/session'
+import { buildSvgExport, downloadSvg } from '@/lib/molecular/svg-export'
 import { TOURS } from '@/lib/molecular/tours'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import { useRecordStore } from '@/lib/molecular/record-store'
@@ -135,6 +136,19 @@ export function Toolbar() {
         toast.error('Ray 渲染失败（试试更小尺寸或命令行 ray <宽>）')
       }
     }, 80)
+  }
+
+  // SVG 矢量导出：CPU 投影（无限缩放不失真，可入稿 Illustrator/Inkscape）
+  const svgCapture = () => {
+    const r = buildSvgExport({})
+    if (!r.ok || !r.svg) {
+      toast.error('SVG 导出失败', { description: r.error })
+      return
+    }
+    downloadSvg(r.svg, structures[0]?.name ?? 'molvision')
+    toast.success(`矢量图已导出（${r.width}×${r.height}）`, {
+      description: `${r.items.toLocaleString()} 个原语 · ${r.ms.toFixed(0)} ms · 无限缩放不失真${r.skippedSurfaces.length ? ` · 跳过 ${r.skippedSurfaces.length} 个表面表示` : ''}`,
+    })
   }
 
   return (
@@ -490,6 +504,10 @@ export function Toolbar() {
             <DropdownMenuItem onClick={rayCapture} className="gap-1.5 text-xs">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
               Ray 级渲染（软阴影 + 超采样）
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={svgCapture} className="gap-1.5 text-xs">
+              <PenLine className="h-3.5 w-3.5 text-violet-500" />
+              SVG 矢量图（可入稿，无限缩放）
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -9,6 +9,7 @@ import { ConsoleBar } from '@/components/studio/ConsoleBar'
 import { StatusBar } from '@/components/studio/StatusBar'
 import { LoadDialog } from '@/components/studio/LoadDialog'
 import { HelpDialog } from '@/components/studio/HelpDialog'
+import { HistoryDialog } from '@/components/studio/HistoryDialog'
 
 const MolViewer = dynamic(() => import('@/components/molecular/MolViewer'), {
   ssr: false,
@@ -37,6 +38,7 @@ export default function Home() {
       <StatusBar />
       <LoadDialog />
       <HelpDialog />
+      <HistoryDialog />
     </div>
   )
 }

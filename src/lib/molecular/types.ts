@@ -147,6 +147,8 @@ export interface Settings {
   slabCap: boolean
   /** 截面封盖颜色（CSS hex；随会话持久化） */
   capColor: string
+  /** 封盖深度明暗：剖面按视深由亮到暗渐变（远端加深），呈现立体层次 */
+  capShading: boolean
   hideHydrogens: boolean
   hideWater: boolean
   quality: 'low' | 'medium' | 'high'
@@ -204,6 +206,7 @@ export function defaultSettings(): Settings {
     slabOffset: 0,
     slabCap: true,
     capColor: '#ccd2d9',
+    capShading: true,
     hideHydrogens: false,
     hideWater: false,
     quality: 'high',

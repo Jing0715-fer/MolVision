@@ -140,6 +140,7 @@ const REGISTRY: CmdDef[] = [
       { insert: 'fps', kind: 'value', detail: 'FPS 指示 on/off' },
       { insert: 'auto_perf', kind: 'value', detail: '自动性能 on/off' },
       { insert: 'cap_color', kind: 'value', detail: '切层封盖色' },
+      { insert: 'cap_shading', kind: 'value', detail: '封盖深度明暗' },
       { insert: 'seq_focus', kind: 'value', detail: '序列视口聚焦' },
       { insert: 'transparency', kind: 'value', detail: '表面不透明度' },
       { insert: 'sphere_scale', kind: 'value', detail: '球半径倍率' },
@@ -278,6 +279,15 @@ const REGISTRY: CmdDef[] = [
   { names: ['save'], args: (pos, ctx) => (pos >= 2 ? selItems(ctx) : null) },
   { names: ['png'] },
   { names: ['ray'] },
+  {
+    names: ['svg'],
+    args: pos => (pos === 1 ? [
+      { insert: '1200', kind: 'value', detail: '宽 1200 px' },
+      { insert: '1600', kind: 'value', detail: '宽 1600 px（默认）' },
+      { insert: '2400', kind: 'value', detail: '宽 2400 px' },
+      { insert: '3200', kind: 'value', detail: '宽 3200 px' },
+    ] : null),
+  },
   { names: ['axes', 'axis', 'gizmo'], args: pos => (pos === 1 ? onOff() : null) },
   {
     names: ['session'],
@@ -287,6 +297,12 @@ const REGISTRY: CmdDef[] = [
       { insert: 'new', kind: 'sub', detail: '新建会话' },
       { insert: 'info', kind: 'sub', detail: '存档信息' },
       { insert: 'clear', kind: 'sub', detail: '清除存档' },
+    ] : null),
+  },
+  {
+    names: ['history'],
+    args: pos => (pos === 1 ? [
+      { insert: 'clear', kind: 'sub', detail: '清空历史（置顶保留）' },
     ] : null),
   },
   { names: ['label'], args: pos => (pos === 1 ? onOff() : null) },

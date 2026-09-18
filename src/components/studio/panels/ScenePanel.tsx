@@ -2,7 +2,7 @@
 
 // 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤/会话管理
 import { useRef, useState } from 'react'
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d, Activity, PenLine, SquareSplitHorizontal } from 'lucide-react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d, Activity, PenLine, SquareSplitHorizontal, Contrast } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
@@ -71,7 +71,7 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <CloudFog className="h-3.5 w-3.5" /> 景深雾化（depth cue）
           </span>
-          <Switch checked={settings.fog} onCheckedChange={v => updateSettings({ fog: v })} />
+          <Switch aria-label="雾效" checked={settings.fog} onCheckedChange={v => updateSettings({ fog: v })} />
         </div>
         {settings.fog && (
           <div>
@@ -89,7 +89,7 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Box className="h-3.5 w-3.5" /> 正交投影
           </span>
-          <Switch checked={settings.ortho} onCheckedChange={v => updateSettings({ ortho: v })} />
+          <Switch aria-label="正交投影" checked={settings.ortho} onCheckedChange={v => updateSettings({ ortho: v })} />
         </div>
 
         <div>
@@ -106,7 +106,7 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Axis3d className="h-3.5 w-3.5 text-teal-500" /> 坐标轴指示器
           </span>
-          <Switch checked={settings.showAxes} onCheckedChange={v => updateSettings({ showAxes: v })} />
+          <Switch aria-label="坐标轴指示器" checked={settings.showAxes} onCheckedChange={v => updateSettings({ showAxes: v })} />
         </div>
         {settings.showAxes && (
           <p className="text-[10px] leading-relaxed text-muted-foreground/70">
@@ -117,7 +117,7 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Activity className="h-3.5 w-3.5 text-emerald-500" /> 性能指示器 (FPS)
           </span>
-          <Switch checked={settings.showFps} onCheckedChange={v => updateSettings({ showFps: v })} />
+          <Switch aria-label="FPS 性能指示器" checked={settings.showFps} onCheckedChange={v => updateSettings({ showFps: v })} />
         </div>
         {settings.showFps && (
           <p className="text-[10px] leading-relaxed text-muted-foreground/70">
@@ -128,7 +128,7 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Gauge className="h-3.5 w-3.5 text-amber-500" /> 自动性能模式
           </span>
-          <Switch checked={settings.autoPerf} onCheckedChange={v => updateSettings({ autoPerf: v })} />
+          <Switch aria-label="自动性能模式" checked={settings.autoPerf} onCheckedChange={v => updateSettings({ autoPerf: v })} />
         </div>
         {settings.autoPerf && (
           <p className="text-[10px] leading-relaxed text-muted-foreground/70">
@@ -143,13 +143,13 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Gauge className="h-3.5 w-3.5" /> 自动旋转 (S)
           </span>
-          <Switch checked={settings.spin} onCheckedChange={v => updateSettings({ spin: v, ...(v ? { rock: false } : {}) })} />
+          <Switch aria-label="自动旋转" checked={settings.spin} onCheckedChange={v => updateSettings({ spin: v, ...(v ? { rock: false } : {}) })} />
         </div>
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Waves className="h-3.5 w-3.5 text-violet-400" /> 相机摇摆 (R)
           </span>
-          <Switch checked={settings.rock} onCheckedChange={v => updateSettings({ rock: v, ...(v ? { spin: false } : {}) })} />
+          <Switch aria-label="相机摇摆" checked={settings.rock} onCheckedChange={v => updateSettings({ rock: v, ...(v ? { spin: false } : {}) })} />
         </div>
         {(settings.spin || settings.rock) && (
           <div>
@@ -205,13 +205,13 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Gem className="h-3.5 w-3.5" /> 高光（镜面反射）
           </span>
-          <Switch checked={settings.specular} onCheckedChange={v => updateSettings({ specular: v })} />
+          <Switch aria-label="高光" checked={settings.specular} onCheckedChange={v => updateSettings({ specular: v })} />
         </div>
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Glasses className="h-3.5 w-3.5 text-rose-500" /> 红蓝立体（3D 眼镜）
           </span>
-          <Switch checked={settings.stereo} onCheckedChange={v => updateSettings({ stereo: v })} />
+          <Switch aria-label="红蓝立体" checked={settings.stereo} onCheckedChange={v => updateSettings({ stereo: v })} />
         </div>
         {settings.stereo && (
           <p className="text-[10px] leading-relaxed text-muted-foreground/70">
@@ -229,7 +229,7 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Layers className="h-3.5 w-3.5" /> 启用切层
           </span>
-          <Switch checked={settings.slab} onCheckedChange={v => updateSettings({ slab: v })} />
+          <Switch aria-label="启用切层" checked={settings.slab} onCheckedChange={v => updateSettings({ slab: v })} />
         </div>
         {settings.slab && (
           <div className="space-y-3">
@@ -275,11 +275,24 @@ export function ScenePanel() {
                   className="h-5 w-7 cursor-pointer rounded border border-border/60 bg-background/60 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
                   title="封盖色（set cap_color 等价）"
                 />
-                <Switch checked={settings.slabCap} onCheckedChange={v => updateSettings({ slabCap: v })} />
+                <Switch aria-label="封闭截面封盖" checked={settings.slabCap} onCheckedChange={v => updateSettings({ slabCap: v })} />
               </div>
             </div>
+            {settings.slabCap && (
+              <div className="flex items-center justify-between rounded-md border border-border/50 bg-muted/30 px-2.5 py-2">
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Contrast className="h-3.5 w-3.5 text-teal-500/80" /> 深度明暗（层次）
+                </span>
+                <Switch
+                  aria-label="封盖深度明暗"
+                  checked={settings.capShading}
+                  onCheckedChange={v => updateSettings({ capShading: v })}
+                  disabled={!settings.slabCap}
+                />
+              </div>
+            )}
             <p className="text-[10px] leading-relaxed text-muted-foreground/70">
-              沿视线方向仅显示厚度内的分子区域，切层中心默认在环绕目标处；拖动「位置」或命令行 slab move ± 可推进切层穿过分子内部。命令行等价：slab 20 · slab move -5 · slab center · slab cap off · set cap_color slate。
+              沿视线方向仅显示厚度内的分子区域，切层中心默认在环绕目标处；拖动「位置」或命令行 slab move ± 可推进切层穿过分子内部。命令行等价：slab 20 · slab move -5 · slab center · slab cap off · set cap_color slate · set cap_shading off。
             </p>
           </div>
         )}
@@ -291,13 +304,13 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <EyeOff className="h-3.5 w-3.5" /> 隐藏氢原子 (H)
           </span>
-          <Switch checked={settings.hideHydrogens} onCheckedChange={v => updateSettings({ hideHydrogens: v })} />
+          <Switch aria-label="隐藏氢原子" checked={settings.hideHydrogens} onCheckedChange={v => updateSettings({ hideHydrogens: v })} />
         </div>
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Droplets className="h-3.5 w-3.5" /> 隐藏水分子
           </span>
-          <Switch checked={settings.hideWater} onCheckedChange={v => updateSettings({ hideWater: v })} />
+          <Switch aria-label="隐藏水分子" checked={settings.hideWater} onCheckedChange={v => updateSettings({ hideWater: v })} />
         </div>
       </div>
 
@@ -307,7 +320,7 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Zap className="h-3.5 w-3.5 text-teal-400" /> 显示氢键 (B)
           </span>
-          <Switch checked={settings.showHBonds} onCheckedChange={v => updateSettings({ showHBonds: v })} />
+          <Switch aria-label="氢键网络" checked={settings.showHBonds} onCheckedChange={v => updateSettings({ showHBonds: v })} />
         </div>
         {settings.showHBonds && (
           <>
@@ -323,11 +336,11 @@ export function ScenePanel() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-muted-foreground">包含水介氢键</span>
-              <Switch checked={settings.hbondIncludeWater} onCheckedChange={v => updateSettings({ hbondIncludeWater: v })} />
+              <Switch aria-label="氢键包含水" checked={settings.hbondIncludeWater} onCheckedChange={v => updateSettings({ hbondIncludeWater: v })} />
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-muted-foreground">仅显示与选择相关的</span>
-              <Switch checked={settings.hbondSelOnly} onCheckedChange={v => updateSettings({ hbondSelOnly: v })} />
+              <Switch aria-label="氢键仅选择集" checked={settings.hbondSelOnly} onCheckedChange={v => updateSettings({ hbondSelOnly: v })} />
             </div>
             <p className="text-[10px] leading-relaxed text-muted-foreground/70">
               判据：有氢结构用 D-H…A 几何（H…A ≤ 2.5Å 且角度 ≥ 120°），无氢结构用 D…A ≤ 距离上限。虚线 + 端点标记为青色（浅色背景自动加深）。大结构（≥ 2000 原子）自动在后台线程计算，不卡交互。
@@ -342,7 +355,7 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <SunMedium className="h-3.5 w-3.5 text-amber-500" /> GTAO 遮蔽（AO）
           </span>
-          <Switch checked={settings.ssao} onCheckedChange={v => updateSettings({ ssao: v })} />
+          <Switch aria-label="环境光遮蔽" checked={settings.ssao} onCheckedChange={v => updateSettings({ ssao: v })} />
         </div>
         {settings.ssao && (
           <>
@@ -379,7 +392,7 @@ export function ScenePanel() {
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <PenLine className="h-3.5 w-3.5 text-fuchsia-500" /> 出版级轮廓线
           </span>
-          <Switch checked={settings.outline} onCheckedChange={v => updateSettings({ outline: v })} />
+          <Switch aria-label="轮廓线" checked={settings.outline} onCheckedChange={v => updateSettings({ outline: v })} />
         </div>
         {settings.outline && (
           <>

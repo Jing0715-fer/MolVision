@@ -2,18 +2,18 @@
 
 // 命令行控制台（PyMOL 风格；日志区高度三档可调；Tab 智能补全 + 参数提示 + Ctrl+R 历史搜索 + 最近命令徽章）
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronRight, ChevronsUpDown, CornerDownRight, Terminal, X, Boxes, Filter, Palette, Shapes, Sparkles, TerminalSquare, Wand2, Trash2, History } from 'lucide-react'
+import { ChevronRight, ChevronsUpDown, CornerDownRight, Terminal, X, Boxes, Filter, Palette, Shapes, Sparkles, TerminalSquare, Wand2, Trash2, History, ScrollText } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { runCommand } from '@/lib/molecular/commands'
 import { buildCompletions, type CompletionCtx, type CompletionItem, type CompletionKind, type CompletionResult } from '@/lib/molecular/complete'
 import { useViewsStore } from '@/lib/molecular/views-store'
+import {
+  appendCmdHistory, clearCmdHistory, FILL_CMD_EVENT, loadCmdHistory, subscribeCmdHistory, HISTORY_MAX,
+} from '@/lib/molecular/cmd-history'
 import { cn } from '@/lib/utils'
 import { FadeEdge } from './FadeEdge'
 
-const HISTORY_KEY = 'molvision-cmd-history'
-/** 历史上限（Ctrl+R 搜索覆盖更多长命令；localStorage 持久化） */
-const HISTORY_MAX = 200
 /** 最近命令徽章数 */
 const CHIPS_MAX = 6
 const LOG_HEIGHT_CLASS: Record<string, string> = {
@@ -66,14 +66,7 @@ export function ConsoleBar() {
   const consoleHeight = useMolStore(s => s.settings.consoleHeight)
   const updateSettings = useMolStore(s => s.updateSettings)
   const [input, setInput] = useState('')
-  const [history, setHistory] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return []
-    try {
-      const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]')
-      if (Array.isArray(saved)) return saved
-    } catch { /* ignore */ }
-    return []
-  })
+  const [history, setHistory] = useState<string[]>(() => loadCmdHistory())
   const [histIdx, setHistIdx] = useState(-1)
   const [completions, setCompletions] = useState<CompletionResult | null>(null)
   const [selIdx, setSelIdx] = useState(0)
@@ -105,11 +98,31 @@ export function ConsoleBar() {
   }, [history])
 
   const clearHistory = () => {
-    setHistory([])
+    clearCmdHistory()
     setHistIdx(-1)
-    try { localStorage.removeItem(HISTORY_KEY) } catch { /* ignore */ }
     toast.success('命令历史已清空', { description: '最近命令徽章与 Ctrl+R 搜索同步清除' })
   }
+
+  // 共享历史订阅：HistoryDialog 执行/置顶/清空 → 控制台箭头与 Ctrl+R 即时同步
+  useEffect(() => subscribeCmdHistory(() => setHistory(loadCmdHistory())), [])
+
+  // HistoryDialog「填入编辑」事件（自包含：不依赖渲染期闭包函数）
+  useEffect(() => {
+    const h = (e: Event) => {
+      const cmd = (e as CustomEvent<string>).detail
+      setInput(cmd)
+      const s = useMolStore.getState()
+      setCompletions(cmd.trim() ? buildCompletions(cmd, {
+        structures: s.structures.map(x => x.name),
+        namedSelections: s.namedSelections.map(n => n.name),
+        viewBookmarks: useViewsStore.getState().bookmarks.map(b => b.name),
+      }) : null)
+      setSelIdx(0)
+      inputRef.current?.focus()
+    }
+    window.addEventListener(FILL_CMD_EVENT, h)
+    return () => window.removeEventListener(FILL_CMD_EVENT, h)
+  }, [])
 
   useEffect(() => {
     if (logRef.current) {
@@ -172,9 +185,7 @@ export function ConsoleBar() {
     const c = cmd.trim()
     if (!c) return
     runCommand(c)
-    const next = [...history.filter(h => h !== c), c].slice(-HISTORY_MAX)
-    setHistory(next)
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+    appendCmdHistory(c)
     setHistIdx(-1)
   }
 
@@ -288,8 +299,16 @@ export function ConsoleBar() {
         <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">命令行</span>
         <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">Tab 补全 · ↑↓ 历史 · Ctrl+R 搜索 · 徽章快跑 · help 查看命令</span>
         <button
+          onClick={() => setUi({ historyOpen: true })}
+          className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-emerald-500/40 hover:text-foreground"
+          title={`命令历史面板（全量列表 + 搜索 + 置顶，${HISTORY_MAX} 条上限）`}
+        >
+          <ScrollText className="h-3 w-3" />
+          历史
+        </button>
+        <button
           onClick={cycleHeight}
-          className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+          className="flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
           title={`控制台高度：${LOG_HEIGHT_LABEL[consoleHeight] ?? '标准'}（点击切换）`}
         >
           <ChevronsUpDown className="h-3 w-3" />

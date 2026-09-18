@@ -524,6 +524,8 @@ export class MolEngine {
       this.clippingPlanes[0].constant = -(base - half)
       this.clippingPlanes[1].normal.copy(dir).negate()
       this.clippingPlanes[1].constant = base + half
+      // 封盖深度明暗：把场景包围盒投影到 NDC 取 z 范围（shader 内归一化视深用）
+      if (capUniforms.uCapShadeOn.value > 0.5) this.updateCapDepthRange(cam)
     }
     // 渲染：stereo 红蓝立体优先（直渲，后处理停用避免串色），其次 GTAO/轮廓线 composer，最后直接渲染
     if (this.settings?.stereo) {
@@ -776,6 +778,36 @@ export class MolEngine {
     }
     if (prev.visible && prev.visible.length === visible.length && prev.visible.every((b, i) => b === visible[i])) return
     useViewportStore.getState().set(id, visible)
+  }
+
+  /**
+   * 封盖深度明暗支持：把所有可见结构的包围盒 8 角投影到 NDC，取 z 范围写入共享 uniforms。
+   * 每帧调用（仅 slab+cap+shading 同时开启），8×结构数次矩阵乘——开销可忽略。
+   * 注：对称伴侣/深位姿极端场景按主结构包围盒近似（渐变仅取相对层次，绝对范围不敏感）。
+   */
+  private capDepthV = new THREE.Vector3()
+  private capDepthMat = new THREE.Matrix4()
+  private updateCapDepthRange(cam: THREE.PerspectiveCamera | THREE.OrthographicCamera) {
+    cam.updateMatrixWorld()
+    this.capDepthMat.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse)
+    let z0 = Infinity, z1 = -Infinity
+    const m = this.capDepthMat
+    const v = this.capDepthV
+    for (const entry of useMolStore.getState().structures) {
+      if (!entry.visible) continue
+      const data = dataRegistry.get(entry.id)
+      if (!data) continue
+      const { min, max } = data.bbox
+      for (let c = 0; c < 8; c++) {
+        v.set(c & 1 ? max[0] : min[0], c & 2 ? max[1] : min[1], c & 4 ? max[2] : min[2])
+        v.applyMatrix4(m)
+        if (v.z < z0) z0 = v.z
+        if (v.z > z1) z1 = v.z
+      }
+    }
+    if (!isFinite(z0)) return
+    capUniforms.uCapZ0.value = z0
+    capUniforms.uCapZ1.value = Math.max(z1, z0 + 1e-4)
   }
 
   // ---------- 坐标轴指示器（朝向罗盘） ----------
@@ -2952,13 +2984,14 @@ export class MolEngine {
     const prev = this.settings
     const changed = JSON.stringify(settings) !== JSON.stringify(prev)
     this.settings = settings
-    // 切层封盖：生效态（slab && slabCap）或颜色变化时同步 uniform + 场景材质 side
+    // 切层封盖：生效态（slab && slabCap）或颜色/明暗变化时同步 uniform + 场景材质 side
     //（置于 changed 判断之前：首次应用 prev=null 与后续切换均能落地）
     const capOn = settings.slab && settings.slabCap
     const prevCapOn = prev ? prev.slab && prev.slabCap : null
-    if (prevCapOn !== capOn || (prev && prev.capColor !== settings.capColor)
-      || capUniforms.uCapOn.value !== (capOn ? 1 : 0)) {
-      syncCapSettings(this.scene, capOn, settings.capColor)
+    if (prevCapOn !== capOn || (prev && (prev.capColor !== settings.capColor || prev.capShading !== settings.capShading))
+      || capUniforms.uCapOn.value !== (capOn ? 1 : 0)
+      || capUniforms.uCapShadeOn.value !== (capOn && settings.capShading ? 1 : 0)) {
+      syncCapSettings(this.scene, capOn, settings.capColor, settings.capShading)
     }
     // 自动性能模式：降级期间用户重新开启后处理 → 交还控制权并退出自动模式（用户优先，避免反复覆盖手动选择）
     if (this.perfBaseline && (settings.ssao || settings.outline)) {

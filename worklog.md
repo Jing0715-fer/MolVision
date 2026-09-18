@@ -1145,3 +1145,27 @@ Stage Summary:
 - 关键决策：①封盖用 gl_FrontFacing 背面平面色而非 stencil cap 几何（rep 全闭合实体前提下视觉等价且对 InstancedMesh/所有表示法零成本通用）②投影用组合矩阵 projection×view（修复初版世界坐标直接投影的静默错误——计数恒定不随相机是典型症状）③原生 DoubleSide 材质（cartoon 薄壳/表面）不参与 side 翻转（背面本身是合法可见面），仅靠 uCapOn uniform 控制平面色④可见性签名含 visualRev 与 ensemble 播放帧（结构重建/动画时残基坐标变化触发重算）⑤清空历史 toast 同步说明影响范围（徽章+搜索）
 - 未解决问题与风险：①半透明表面（opacity<1）不参与封盖（by design，混合顺序复杂）②封盖色平面填充在极深剖面（如四聚体中心堆叠）无深浅层次（可后续加深度调制的封盖色）③无头环境 FPS 极低（1-2fps），视口聚焦 150ms 节流实际按帧驱动（首帧延迟可感知，真实浏览器无此问题）④VLM 建议未落地：导出 SVG/PDF 矢量、深色主题链色对比度、面板宽度收编 Settings、低帧率降级已有但 outline+cap 叠加的极端场景未压测
 - 下一阶段建议（优先级序）：① 导出增强：ray 输出 300dpi PNG 指南 / SVG 矢量导出（VLM 两轮均提）② 面板宽度等散键 UI 偏好收编 Settings（会话持久化）③ 深色主题下链颜色对比度自适应 ④ 深度调制封盖色（剖面深浅层次）⑤ 命令历史面板化（全历史列表+搜索+置顶固定常用命令）
+
+---
+Task ID: r28
+Agent: main
+Task: 继续开发新功能并打磨旧功能——SVG 矢量导出 + 封盖深度明暗 + 命令历史面板 + a11y 修复
+
+Work Log:
+- 上下文恢复：读取 worklog 尾部（r27 切层封盖/视口聚焦/最近命令徽章已交付），dev server 存活（3000 端口），git 最新 e24e683；按 r27 遗留建议排定本轮三大功能
+- 新增 src/lib/molecular/svg-export.ts（~330 行）：CPU 侧投影矢量导出（对标 UCSF Chimera "Copy as SVG"）——取引擎活动相机组合矩阵（projection×view，透视/正交通用），逐结构逐 rep 求值选择掩码（与引擎 buildRep 相同的氢/水过滤），computeAtomColors+colorOverrides（线性→sRGB hex）；原子=circle（半径沿相机右向偏移投影，透视除法幅值），键=双色圆头线段（原子色→中点/中点→原子色，宽度=2×棍半径投影），cartoon/putty=CA/P 骨架 Catmull-Rom 4 细分平滑折线（putty 宽度按 B 因子 2-9px 分位映射）；画家算法按视深降序绘制；页脚结构名+原子数+日期署名（背景亮度自适应文字色）；surface 表示跳过并列入返回值
+- 【E2E 抓出并修复的关键 bug】worldRadiusPx 初版 dx 公式混入绝对坐标项 ((pb.x-pa.x)*0.5+0.5)*w-(pa.x*0.5+0.5)*w = (pb.x-2pa.x)*0.5*w——偏离中心的原子半径爆炸（VLM 报「巨大红灰色块遮挡结构」）→ 修复为纯差分 (pb.x-pa.x)*0.5*w；修复后 VLM 8.5/10（四链带状清晰/配体球棍可见含蓝色 Fe/深度遮挡正确/页脚完整/无缺陷）
+- commands.ts：新增 svg [宽px] 命令（320-4096 钳制，缺省 1600，高度按视口纵横比）+ history [clear] 命令（打开面板/清空）；COMMAND_HELP 两新条目；set 新键 cap_shading（别名 slab_cap_shading/depth_cue_cap），三处可用键列表同步；import clearCmdHistory
+- Toolbar.tsx：相机菜单新增「SVG 矢量图（可入稿，无限缩放）」（PenLine violet 图标）→ svgCapture（toast 报告尺寸/原语数/耗时/跳过表面数）
+- 封盖深度明暗：types.ts Settings 新增 capShading（默认 true）；cap-material.ts 注入 uCapShadeOn/uCapZ0/uCapZ1——背面分支内 gl_FragCoord.z 在场景包围盒 NDC z 范围内归一化，capColor×mix(1.06, 0.58, t)（近端微亮/远端明显加深）；engine.ts tick 内 slab 生效且 shading 开启时 updateCapDepthRange（8 角投影取 min/max NDC z，预分配向量零 GC）；applySettings 检测 capShading 变化同步 uniform；ScenePanel 切层区块新增「深度明暗（层次）」子开关（Contrast 图标，slabCap 开启时显示）；命令 set cap_shading on|off
+- 命令历史面板：新建 src/lib/molecular/cmd-history.ts 共享模块（localStorage molvision-cmd-history/molvision-pinned-cmds + Set 订阅通知 + appendCmdHistory/clearCmdHistory/toggleCmdPin/dispatchFillCmd CustomEvent）；ConsoleBar 重构接入（submitCmd 走 appendCmdHistory、清空走 clearCmdHistory、订阅同步箭头/Ctrl+R、监听 molvision:fill-cmd 填入输入行）、头部新增「历史」按钮（ScrollText 图标）；新建 HistoryDialog.tsx（Dialog + 搜索框 Enter 执行首个匹配 + 置顶区 amber 星标（上限 24）+ 全量列表新→旧（显示前 120 条）+ 行内星标/铅笔/复制操作 + 清空按钮 + 空态/无匹配态 + 计数徽章「N 条 / N/M 匹配 / K 置顶」）；store ui 新增 historyOpen；page.tsx 挂载；React Compiler lint 约束适配（懒初始化替代 effect 内 setState、内联 filter 替代闭包 useMemo）
+- complete.ts：svg 宽度候选（1200/1600/2400/3200）+ set cap_shading 键 + history clear 子命令；HelpDialog 新增「封盖深度明暗」「SVG 矢量导出」「命令历史面板」三段文档
+- a11y 修复（测试中发现）：ScenePanel 19 个匿名 Switch 全部补 aria-label（雾效/正交投影/坐标轴指示器/…/封盖深度明暗）
+- E2E（agent-browser）：4HHB 加载 → svg 命令 297KB SVG（174 circles + 2684 paths + CPK 色板 + 页脚）→ VLM 修 bug 后 8.5/10 → svg 2400 → width=2400 height=613 → show surface 后 svg 提示「跳过 1 个表面表示」→ 工具栏菜单链路（CDP 鼠标坐标点击 Radix 菜单）同样产出 297KB → slab 20 + cap shading VLM A/B 双盲对比（图1 渐变层次/图2 统一平面色/其余一致）+ 面板开关 aria-checked 翻转 + 控制同屏截图 VLM 确认 → reload 持久化（slab/slabCap/capShading 三开关全 true + 结构自动恢复）→ history 面板：4 条新→旧、搜索 cap→2/4 匹配、置顶 load 4hhb（amber 徽章+置顶区+localStorage）、点击行执行（对话框关闭+控制台打开+输出）、铅笔填入（关闭+输入行=set cap_shading on）、↑箭头取到最新历史、history clear（清空+置顶保留+徽章同步）→ sv→svg 补全、set cap_s→cap_shading 补全 → 移动端 390×844 无横向溢出（历史按钮 48×20 + 对话框 390 满宽不越界）→ 浏览器 errors 0 → lint 0 错 0 警 → 应用代码 tsc 0 错 → 终审 VLM 9/10
+- 沙箱问题记录：agent-browser 会话偶发僵死（页面截图/eval 超时但 title 可读）→ close 后重开即恢复（本轮一次，session localStorage 随 profile 丢失需重载结构）；Radix DropdownMenu 对 .click() 合成事件不响应 → 需 CDP 真鼠标（mouse move/down/up 坐标点击）；React Compiler 严格 lint（set-state-in-effect / preserve-manual-memoization）要求 effect 内不直接 setState、useMemo 不引用渲染期闭包函数
+
+Stage Summary:
+- 项目当前状态：r28 交付三大功能——①SVG 矢量导出（svg [宽px] 命令 + 相机菜单项；CPU 投影画家算法，颜色/选择/氢水过滤与 3D 视图一致，页脚署名，surface 跳过提示，可直接入稿 Illustrator/Inkscape）②封盖深度明暗（capShading 默认开；场景包围盒 NDC z 范围归一化 mix(1.06,0.58,t) 渐变，深剖面呈现前后层次；set cap_shading + 面板开关 + 会话持久化）③命令历史面板（cmd-history.ts 共享模块 + HistoryDialog：搜索/置顶/执行/填入/复制/清空；控制台箭头与 Ctrl+R 实时同步；history 命令入口）+ ScenePanel 19 Switch aria-label a11y 修复
+- 关键决策：①SVG 用 CPU 组合矩阵投影而非截图转矢量——真矢量原语可编辑、体积小（4HHB 297KB）、透视正交通用 ②键的双色分段在原子-中点两段 path 上（圆头端帽模拟棍球）③深度明暗用 gl_FragCoord.z（NDC）+ 包围盒投影范围归一化，透视非线性分布下依然正确分层 ④历史共享模块 + 订阅通知（替代 props 层层传递），CustomEvent 承载「填入编辑」跨组件通信 ⑤清空历史保留置顶（置顶是用户显式工作流声明）
+- 未解决问题与风险：①SVG cartoon 为 CA/P 骨架近似（无片状/螺旋桶细节，与 3D 带状观感有差距——可后续加分段宽度/方向感的路径变宽）②对称伴侣不在 SVG 导出内（仅主结构）③贴图纹理/雾/阴影等渲染效果不进矢量（by design，矢量图保纯色）④图标类匿名按钮（相机/主题等 header 图标按钮）仍无 aria-label（下轮补）⑤VLM 建议：SVG 线宽在极小打印尺寸略细、深色主题链色对比度
+- 下一阶段建议（优先级序）：① header 图标按钮 a11y 扫尾（相机/主题/帮助/GitHub aria-label）② SVG cartoon 增强（按二级结构变宽的路径、可选中导出范围）③ 深色主题链颜色对比度自适应（VLM 两轮提及）④ 命令面板化（Ctrl+K 快速命令面板，历史+补全合体）⑤ 面板宽度等 UI 偏好收编 Settings
