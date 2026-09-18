@@ -2,7 +2,7 @@
 
 // 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤/会话管理
 import { useRef, useState } from 'react'
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses } from 'lucide-react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
@@ -102,6 +102,17 @@ export function ScenePanel() {
             onValueChange={v => updateSettings({ fov: v[0] })}
           />
         </div>
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Axis3d className="h-3.5 w-3.5 text-teal-500" /> 坐标轴指示器
+          </span>
+          <Switch checked={settings.showAxes} onCheckedChange={v => updateSettings({ showAxes: v })} />
+        </div>
+        {settings.showAxes && (
+          <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+            视口右上角显示朝向罗盘（X 红 / Y 绿 / Z 蓝）；点击轴端可平滑对齐视角，暗点为负方向。命令行等价：axes on / axes off。
+          </p>
+        )}
       </div>
 
       <SectionTitle>交互与动画</SectionTitle>

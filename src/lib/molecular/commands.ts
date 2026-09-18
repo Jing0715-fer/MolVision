@@ -20,6 +20,7 @@ import { useTourStore } from './tour-store'
 import { TOURS, findTour } from './tours'
 import { buildMorph, buildMultiMorph } from './morph'
 import { playMovie, stopMovie, useMovieStore } from './movie'
+import { toast } from 'sonner'
 
 /** 数值裁剪（NaN 时取默认值） */
 function clampNum(v: number, min: number, max: number, dflt: number): number {
@@ -88,7 +89,8 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
-  { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+超采样，导出 PNG）', example: 'ray 1920' },
+  { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+超采样，异步+进度提示）', example: 'ray 1920' },
+  { cmd: 'axes on|off', desc: '视口坐标轴指示器（点击轴端对齐视角）', example: 'axes off' },
   { cmd: 'session save|export|new|info|clear', desc: '会话存档 / 文件导出 / 新建', example: 'session export · session new' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
   { cmd: 'preset <名>', desc: '应用风格预设', example: 'preset surface' },
@@ -584,7 +586,7 @@ export function runCommand(raw: string): void {
   if (cmd === 'set') {
     const key = (parts[1] ?? '').toLowerCase()
     const rawVal = parts.slice(2).join(' ').trim()
-    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / transparency / sphere_scale / stick_radius / cartoon_width')
+    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / transparency / sphere_scale / stick_radius / cartoon_width')
     const s = useMolStore.getState()
     const num = parseFloat(rawVal)
     const on = ['on', '1', 'true', 'open'].includes(rawVal.toLowerCase())
@@ -657,6 +659,11 @@ export function runCommand(raw: string): void {
         s.updateSettings({ stereo: on })
         return ok(on ? '红蓝立体开启（佩戴红蓝 3D 眼镜；GTAO 暂停）' : '立体渲染关闭')
       }
+      case 'axes': case 'show_axes': {
+        if (!on && !off) return err('用法：set axes on|off（视口右上角坐标轴指示器）')
+        s.updateSettings({ showAxes: on })
+        return ok(`坐标轴指示器 ${on ? '开启（点击轴端可对齐视角）' : '关闭'}`)
+      }
       case 'transparency': case 'surface_opacity': {
         if (isNaN(num)) return err('用法：set transparency <0-1>（0=不透明，作用于表面表示）')
         const opacity = clampNum(1 - num, 0.05, 1, 0.6)
@@ -679,7 +686,7 @@ export function runCommand(raw: string): void {
         return n ? ok(`cartoon 宽度 → ${clampNum(num, 0.3, 4, 1)}（${n} 个表示）`) : err('没有 cartoon 表示')
       }
       default:
-        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, transparency, sphere_scale, stick_radius, cartoon_width`)
+        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, axes, transparency, sphere_scale, stick_radius, cartoon_width`)
     }
   }
 
@@ -688,6 +695,15 @@ export function runCommand(raw: string): void {
     const on = arg === 'on' || arg === '1' || arg === 'true'
     useMolStore.getState().updateSettings({ stereo: on })
     return ok(on ? '红蓝立体开启（佩戴红蓝 3D 眼镜观看；GTAO 在立体模式下暂停）' : '立体渲染关闭')
+  }
+
+  if (cmd === 'axes' || cmd === 'axis' || cmd === 'gizmo') {
+    const arg = (parts[1] ?? '').toLowerCase()
+    if (arg && arg !== 'on' && arg !== 'off' && arg !== '1' && arg !== '0') return err('用法：axes on|off（视口右上角坐标轴指示器）')
+    const s = useMolStore.getState()
+    const on = arg ? ['on', '1'].includes(arg) : !s.settings.showAxes
+    s.updateSettings({ showAxes: on })
+    return ok(on ? '坐标轴指示器开启（视口右上角；点击轴端对齐视角）' : '坐标轴指示器已关闭')
   }
 
   if (cmd === 'symmetry' || cmd === 'symmates') {
@@ -800,7 +816,8 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'ray') {
-    // PyMOL ray 风格静帧：软阴影 + 1.5× 超采样，导出高清 PNG（同步渲染，大场景可能数秒）
+    // PyMOL ray 风格静帧：软阴影 + 1.5× 超采样，导出高清 PNG
+    // 异步化：先弹进度 toast 再渲染（双 rAF 让提示先绘制），避免长时间无反馈的「假死」观感
     const eng = engineRef.current
     if (!eng) return err('引擎未就绪')
     if (!eng.hasStructures) return err('场景为空——先加载结构再渲染（load <PDB编号>）')
@@ -810,17 +827,32 @@ export function runCommand(raw: string): void {
       if (isNaN(width)) return err('用法：ray [宽 px]（如 ray 1920；缺省按视口 2× 自适应）')
     }
     const s = useMolStore.getState()
-    try {
-      const r = eng.rayRender({ width })
-      if (!r.url) return err('Ray 渲染失败（画布尺寸限制——试试更小的宽度）')
-      const a = document.createElement('a')
-      a.href = r.url
-      a.download = `${s.structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
-      a.click()
-      return ok(`Ray 渲染完成：${r.w}×${r.h} px（PCF 软阴影 + 1.5× 内部超采样）· ${r.ms.toFixed(0)} ms——已导出 PNG`)
-    } catch {
-      return err('Ray 渲染失败（显存或画布尺寸限制——试试更小的宽度）')
-    }
+    const tid = 'ray-render'
+    ok('Ray 渲染已启动（PCF 软阴影 + 1.5× 超采样）——完成后自动导出 PNG，期间界面可能短暂停顿')
+    toast.loading('Ray 渲染中…', { id: tid, description: '软阴影 + 超采样静帧渲染，大场景需数秒' })
+    void (async () => {
+      // 双 rAF：确保 loading toast 先绘制到屏幕，再进入阻塞渲染
+      await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+      try {
+        const r = eng.rayRender({ width })
+        if (!r.url) {
+          toast.error('Ray 渲染失败', { id: tid, description: '画布尺寸限制——试试更小的宽度' })
+          useMolStore.getState().appendLog('err', 'Ray 渲染失败（画布尺寸限制——试试更小的宽度）')
+          return
+        }
+        const a = document.createElement('a')
+        a.href = r.url
+        a.download = `${s.structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
+        a.click()
+        const ms = r.ms.toFixed(0)
+        toast.success(`Ray 完成：${r.w}×${r.h} px`, { id: tid, description: `耗时 ${ms} ms · PNG 已导出` })
+        useMolStore.getState().appendLog('out', `Ray 渲染完成：${r.w}×${r.h} px（PCF 软阴影 + 1.5× 内部超采样）· ${ms} ms——已导出 PNG`)
+      } catch {
+        toast.error('Ray 渲染失败', { id: tid, description: '显存或画布尺寸限制——试试更小的宽度' })
+        useMolStore.getState().appendLog('err', 'Ray 渲染失败（显存或画布尺寸限制——试试更小的宽度）')
+      }
+    })()
+    return
   }
 
   if (cmd === 'hbonds' || cmd === 'hbond' || cmd === 'hbon') {

@@ -989,3 +989,38 @@ Stage Summary:
 - 关键决策：①min-w-0 修在「中间 flex 层」而非只修叶子（truncate 只让叶子 auto-min=0，中间层按钮仍被内容 min-content 撑开）②工具栏采用「两端固定+中段滚动」而非隐藏按钮（保留全部功能可达性）③FadeEdge 用 mask-image 而非背景色渐变叠加（不依赖表面色，深浅主题通吃）④worker 加 export {} 隔离模块作用域（零运行时影响，纯类型层修复）
 - 未解决问题与风险：①MovieTimeline 选中卡片编辑行/AnalysisPanel 接触图 canvas 未接 FadeEdge（次要滚动区）②超级深色下 VLM 建议的「左侧面板右边线强化」已通过 border token 提升覆盖，未单独加分割线③agent-browser errors 清空命令失效（工具限制）④examples/skills 目录 4 个模板 tsc 错误（不属于应用构建）
 - 下一阶段建议（优先级序）：① ray 渲染异步化（r17 遗留）② 视口左下角 3D 坐标轴指示器（VLM 多轮建议）③ RepCard 紧凑行内布局 ④ UI 偏好统一 settings store ⑤ 时间轴 FLIP 动画 + 卡片右键菜单 ⑥ morph 帧插值升级（键长校正/去碰撞）
+
+---
+Task ID: feat-r23
+Agent: main
+Task: 继续开发新功能并打磨旧功能——视口 3D 坐标轴指示器（点击对齐视角）、ray 异步渲染、RepCard 紧凑布局、movie 时间轴右键菜单
+
+Work Log:
+- 读取 worklog（r22 完成 UI 溢出治理/代码审查/E2E）；发现 dev server 进程死亡（日志截断于半行编译输出，无错误记录），后台重启 `bun run dev` 恢复
+- 【新功能 A：视口 3D 坐标轴指示器（朝向罗盘）】
+  - types.ts：Settings 新增 showAxes（默认 true；随会话自动持久化）
+  - engine.ts：①AXIS_GIZMO 导出常量（size 84 / margin 12，UI 覆盖层与引擎共用）②buildGizmo 懒建独立小场景——三轴箭头（RGB↔XYZ 科学惯例：X #d95c5c / Y #4faf63 / Z #4a7fd6，圆柱轴身+圆锥箭头）+ makeTextSprite 轴字母（彩色+白描边，深浅背景均可读）+ 负方向暗点（0.42 透明度小球）+ Sprite 背景圆盘（径向渐变半透明底+灰环，主题中性）③renderGizmo 每帧主渲染后叠加——gizmo 相机四元数与主相机同步（罗盘实时反映视角朝向），scissor+viewport 裁剪到右上角小视口，autoClear=false + clearDepth 保证不擦除主画面；stereo 模式跳过（红蓝串色）；直渲/composer(GTAO)/stereo 三条渲染路径全覆盖 ④gizmoAxisFromPoint 点击拾取（容器坐标→局部 NDC→6 轴投影最近邻，阈值 0.45 防误触）⑤orientAlongAxis 沿轴对齐视角（保持目标点与距离，复用 animateCameraTo 平滑过渡；|Y| 向用 Z 作 up 防退化）⑥dispose 释放几何/材质/圆盘纹理
+  - MolViewer.tsx：showAxes 驱动的点击覆盖层（与引擎视口像素级对齐，hover 微亮反馈；点击→对齐+控制台日志「视角已对齐 ±X/±Y/±Z 轴」）
+  - ScenePanel.tsx：Axis3d 图标开关 + 说明文字；commands.ts：axes on|off（无参切换）+ set axes 别名 + COMMAND_HELP 条目；HelpDialog.tsx：「渲染与视图」段新增完整文档
+- 【新功能 B：ray 渲染异步化】commands.ts ray 分支重写——先 appendLog「已启动」+ toast.loading（双 rAF 确保提示先绘制）再进入阻塞渲染，完成后 toast.success（尺寸+耗时）+ appendLog 结果 + 自动导出 PNG；失败路径 toast.error + err 日志；消除大场景 ray 的「假死」无反馈观感（r17 遗留项）
+- 【打磨 C：RepCard 紧凑布局】三行改两行——行 2 合并「选择表达式+预设≡+配色+自定义色」为 flex-wrap 自适应（宽面板单行 / 窄面板自动折行，p-2.5→p-2）；修复 VLM 发现的预设触发器缺陷：SelectValue 显示当前预设全文（"polymer — 聚合物(蛋白+核酸)"）在 26px 触发器内被裁切成 "poly"——改为静态 ≡ 字形 + sr-only 无障碍标签
+- 【打磨 D：movie 时间轴右键菜单】关键帧卡片 onContextMenu→原生 button 菜单（与视口右键菜单同风格）：预览此机位 / 时长 ±0.2s / 移到最前 / 移到最后 / 从时间轴移除；disabled 置灰（首帧不可移前、末帧不可移后、失效书签不可预览）+ danger 红色；window click/blur 自动关闭；视口边界防溢出钳位
+- 【E2E 全流程验证（agent-browser 真实交互）】
+  - 罗盘渲染：默认视图像素分析 R8/G42/B5；顶视图（点击 Y 轴后）R43/G2/B42（Y 朝向观察者正确近隐藏）✓
+  - 点击对齐：点击 Y 轴端→相机 (97,78,170)→(10.9,181.6,40.6) + up 正确切为 (0,0,1) ✓
+  - axes 命令：axes off→覆盖层消失；axes（无参）→恢复 ✓；set axes 同路径 ✓
+  - ray 异步：toast.loading 立即出现→完成 toast 消失（自动 dismiss）→控制台双日志「已启动…」+「完成：800×266 px · 1535 ms——已导出 PNG」✓
+  - 时间轴：view save alpha/beta→movie edit→同步书签→右键首卡→菜单 6 项全出→「移到最后」(alpha,beta)→(beta,alpha)+菜单自关 ✓→「时长 +0.2s」beta 2.6s→2.8s ✓
+  - RepCard：面板溢出扫描 NO-VISIBLE-OVERFLOW（早期命中均为 Radix 关闭态 portal 隐藏元素）✓；预设触发器修复后文本 = "≡" ✓
+  - 渲染路径矩阵：stereo on→罗盘 0 像素（正确隐藏）；ssao on→48 像素（composer 路径叠加正常）✓
+  - 持久化：axes off→整页刷新→覆盖层仍消失（showAxes 随会话往返）✓
+  - 回归：预设 2 球棍（CPK 硫黄/氧红像素确认）→预设 1→V 存书签→Shift+1 跳转 ✓；移动端 390px 无横向滚动 + 罗盘 56 像素 ✓
+  - VLM 评审：深色 9/10（罗盘「对比度极佳、表现优秀」）；浅色 9/10（「符合 PyMOL/ChimeraX 习惯、极高完成度」）；RepCard 特写 8/10（触发器裁切已修）
+  - lint 0 错 0 警 ✓；tsc 应用代码 0 错 ✓；dev.log 无运行时错误 ✓
+- 【QA 方法论补充】①agent-browser close 后重开会用全新 profile——localStorage 全部清空（勿误判为会话丢失 bug）②浏览器 eval 的 KeyboardEvent 需显式传 code+shiftKey（Digit1+'!'）③Radix SelectValue 在窄触发器内显示选中项全文会被裁切——紧凑触发器应用静态字形替代 SelectValue
+
+Stage Summary:
+- 项目当前状态：r22 基础上完成「专业感提升 + 交互打磨」——①视口右上角 3D 坐标轴指示器（实时朝向罗盘 + 点击轴端平滑对齐视角，三条渲染路径全覆盖，stereo 自动隐藏）②ray 异步化（进度 toast + 双日志，消除假死观感）③RepCard 紧凑两行布局（flex-wrap 自适应）+ 预设触发器裁切修复 ④movie 时间轴关键帧右键菜单（预览/时长/排序/移除）
+- 关键决策：①罗盘放右上角（左下有密度图/色标图例、右下有快速风格，右上空闲）②scissor+viewport 叠加渲染而非 HTML Canvas 覆盖（与 GTAO/直渲路径天然兼容，零 DOM 成本）③轴色用 RGB↔XYZ 科学惯例（PyMOL/ChimeraX/mol* 通行，非 UI 主题色）④点击拾取阈值 0.45 留空白防误触 ⑤ray 保持同步阻塞渲染但先 yield 双 rAF 让 toast 先绘制（感知异步）
+- 未解决问题与风险：①罗盘与 ViewBar 在 12 书签+矮视口极端组合可能视觉重叠（罕见边界）②录制 WebM 会包含罗盘（视作导航上下文，保留）③FLIP 重排动画未做（右键菜单已覆盖排序需求）
+- 下一阶段建议（优先级序）：① morph 帧插值升级（键长校正/去碰撞）② UI 偏好统一 settings store（序列条高度/控制台高度）③会话文件「合并导入」模式 ④罗盘轴端 hover 高亮（发光反馈）⑤序列条高度可调

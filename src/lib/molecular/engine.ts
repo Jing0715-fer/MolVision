@@ -33,6 +33,9 @@ import { useMolStore, buildNamedMasks, dataRegistry } from './store'
 import { SlotLane } from './heavy-queue'
 import type { AtomLabel, Measurement, RepConfig, Settings, StructureEntry } from './types'
 
+/** 视口右上角 3D 坐标轴指示器布局常量（CSS 像素）——引擎叠加渲染与 UI 点击覆盖层共用 */
+export const AXIS_GIZMO = { size: 84, margin: 12 } as const
+
 export interface AtomPick {
   structureId: string
   atomIdx: number
@@ -287,6 +290,10 @@ export class MolEngine {
   private recordChunks: Blob[] = []
   private recordStartT = 0
   private recordResolve: ((blob: Blob | null) => void) | null = null
+  // 视口右上角 3D 坐标轴指示器（朝向罗盘；懒建）
+  private gizmoScene: THREE.Scene | null = null
+  private gizmoCamera: THREE.OrthographicCamera | null = null
+  private gizmoDiscTex: THREE.CanvasTexture | null = null
 
   constructor(container: HTMLElement, private callbacks: EngineCallbacks = {}) {
     this.container = container
@@ -494,6 +501,144 @@ export class MolEngine {
         this.renderer.render(this.scene, cam)
       }
     }
+    // 主渲染后叠加坐标轴指示器（右上角小视口；stereo 红蓝模式下跳过避免串色）
+    this.renderGizmo(cam)
+  }
+
+  // ---------- 坐标轴指示器（朝向罗盘） ----------
+
+  /** 懒建指示器场景：三轴箭头（RGB↔XYZ 惯例）+ 轴字母 + 负方向暗点 + 主题中性背景圆盘 */
+  private buildGizmo() {
+    const scene = new THREE.Scene()
+    const root = new THREE.Group()
+    scene.add(root)
+
+    // 背景圆盘：Sprite 永远面向相机；半透明底 + 细环（深浅主题通吃）
+    const px = 128
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = px
+    const ctx = canvas.getContext('2d')!
+    const grad = ctx.createRadialGradient(px / 2, px / 2, px * 0.16, px / 2, px / 2, px * 0.5)
+    grad.addColorStop(0, 'rgba(255,255,255,0.03)')
+    grad.addColorStop(0.8, 'rgba(255,255,255,0.18)')
+    grad.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = grad
+    ctx.beginPath(); ctx.arc(px / 2, px / 2, px * 0.5, 0, Math.PI * 2); ctx.fill()
+    ctx.strokeStyle = 'rgba(127,127,138,0.7)'
+    ctx.lineWidth = 3
+    ctx.beginPath(); ctx.arc(px / 2, px / 2, px * 0.5 - 2, 0, Math.PI * 2); ctx.stroke()
+    const discTex = new THREE.CanvasTexture(canvas)
+    discTex.colorSpace = THREE.SRGBColorSpace
+    this.gizmoDiscTex = discTex
+    const disc = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: discTex, transparent: true, depthTest: false, depthWrite: false,
+    }))
+    disc.scale.set(2.62, 2.62, 1)
+    disc.renderOrder = -1
+    root.add(disc)
+
+    // 三轴箭头 + 字母 + 负方向暗点（长度单位 ≈ 指示器 NDC 的一半）
+    const AXES: { dir: [number, number, number]; color: string; label: string }[] = [
+      { dir: [1, 0, 0], color: '#d95c5c', label: 'X' },
+      { dir: [0, 1, 0], color: '#4faf63', label: 'Y' },
+      { dir: [0, 0, 1], color: '#4a7fd6', label: 'Z' },
+    ]
+    const LEN = 0.9
+    const UP = new THREE.Vector3(0, 1, 0)
+    for (const a of AXES) {
+      const dir = new THREE.Vector3(a.dir[0], a.dir[1], a.dir[2])
+      const quat = new THREE.Quaternion().setFromUnitVectors(UP, dir)
+      const mat = new THREE.MeshBasicMaterial({ color: a.color })
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, LEN - 0.17, 12), mat)
+      shaft.quaternion.copy(quat)
+      shaft.position.copy(dir.clone().multiplyScalar((LEN - 0.17) / 2))
+      const head = new THREE.Mesh(new THREE.ConeGeometry(0.092, 0.17, 12), mat)
+      head.quaternion.copy(quat)
+      head.position.copy(dir.clone().multiplyScalar(LEN - 0.085))
+      root.add(shaft, head)
+
+      const lbl = makeTextSprite(a.label, 0.4, { color: a.color, outline: 'rgba(255,255,255,0.92)', fontSize: 64 })
+      lbl.position.copy(dir.clone().multiplyScalar(LEN + 0.26))
+      root.add(lbl)
+
+      const neg = new THREE.Mesh(
+        new THREE.SphereGeometry(0.052, 10, 10),
+        new THREE.MeshBasicMaterial({ color: a.color, transparent: true, opacity: 0.42 }),
+      )
+      neg.position.copy(dir.clone().multiplyScalar(-0.64))
+      root.add(neg)
+    }
+
+    this.gizmoScene = scene
+    this.gizmoCamera = new THREE.OrthographicCamera(-1.55, 1.55, 1.55, -1.55, 0.1, 12)
+  }
+
+  /** 每帧叠加渲染：四元数与主相机同步 → 罗盘实时反映视角朝向；scissor 裁剪到右上角小视口 */
+  private renderGizmo(cam: THREE.PerspectiveCamera | THREE.OrthographicCamera) {
+    if (!this.settings?.showAxes || this.settings.stereo) return
+    if (!this.gizmoScene) this.buildGizmo()
+    const gs = this.gizmoScene
+    const gc = this.gizmoCamera
+    if (!gs || !gc) return
+    const w = this.container.clientWidth || 1
+    const h = this.container.clientHeight || 1
+    if (w < AXIS_GIZMO.size + AXIS_GIZMO.margin * 2 || h < AXIS_GIZMO.size + AXIS_GIZMO.margin * 2) return
+
+    const q = cam.quaternion
+    gc.position.set(0, 0, 4).applyQuaternion(q)
+    gc.quaternion.copy(q)
+
+    const x = w - AXIS_GIZMO.size - AXIS_GIZMO.margin
+    const y = h - AXIS_GIZMO.size - AXIS_GIZMO.margin // WebGL 视口 y 从底部起算 → 右上角
+    const prevAutoClear = this.renderer.autoClear
+    this.renderer.autoClear = false
+    this.renderer.setRenderTarget(null)
+    this.renderer.setScissorTest(true)
+    this.renderer.setScissor(x, y, AXIS_GIZMO.size, AXIS_GIZMO.size)
+    this.renderer.setViewport(x, y, AXIS_GIZMO.size, AXIS_GIZMO.size)
+    this.renderer.clearDepth()
+    this.renderer.render(gs, gc)
+    this.renderer.setScissorTest(false)
+    this.renderer.setViewport(0, 0, w, h)
+    this.renderer.autoClear = prevAutoClear
+  }
+
+  /** 指示器点击拾取：容器内坐标 → 最近的 ±X/±Y/±Z 轴（屏幕投影距离阈值内）；UI 覆盖层调用 */
+  gizmoAxisFromPoint(clientX: number, clientY: number): THREE.Vector3 | null {
+    if (!this.settings?.showAxes) return null
+    const rect = this.container.getBoundingClientRect()
+    const gx = clientX - rect.left
+    const gy = clientY - rect.top
+    const w = this.container.clientWidth || 1
+    const h = this.container.clientHeight || 1
+    const x0 = w - AXIS_GIZMO.size - AXIS_GIZMO.margin
+    const y0 = AXIS_GIZMO.margin
+    if (gx < x0 || gx > x0 + AXIS_GIZMO.size || gy < y0 || gy > y0 + AXIS_GIZMO.size) return null
+    // 覆盖层局部 NDC（-1..1；DOM y 向下 → 翻转为数学向上）
+    const nx = ((gx - x0) / AXIS_GIZMO.size) * 2 - 1
+    const ny = -(((gy - y0) / AXIS_GIZMO.size) * 2 - 1)
+    const q = this.activeCamera.quaternion
+    let best: THREE.Vector3 | null = null
+    let bestD = 0.45 * 0.45 // 距轴端投影 < 0.45 才命中（留出空白区误触保护）
+    const axes = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)]
+    for (const axis of axes) {
+      for (const sign of [1, -1] as const) {
+        const v = axis.clone().multiplyScalar(sign).applyQuaternion(q)
+        const d = (v.x - nx) ** 2 + (v.y - ny) ** 2
+        if (d < bestD) { bestD = d; best = axis.clone().multiplyScalar(sign) }
+      }
+    }
+    return best
+  }
+
+  /** 沿轴方向对齐视角（点击指示器轴端）：保持目标点与距离，平滑过渡；|Y| 向用 Z 作 up 防退化 */
+  orientAlongAxis(dir: THREE.Vector3, dur = 520) {
+    const d = dir.clone().normalize()
+    const target = this.controls.target.clone()
+    const dist = Math.max(this.activeCamera.position.distanceTo(target), 1)
+    const up = Math.abs(d.y) > 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0)
+    const pos = target.clone().addScaledVector(d, dist)
+    this.animateCameraTo({ pos: pos.toArray(), target: target.toArray(), up: up.toArray() }, dur)
   }
 
   // ---------- GTAO 后处理管线 ----------
@@ -2861,6 +3006,21 @@ export class MolEngine {
     this.sasaSlots.dispose()
     this.hbondPending.clear()
     this.sasaPending.clear()
+    // 坐标轴指示器资源释放（几何/材质/圆盘纹理；轴字母纹理走全局缓存不单独释放）
+    if (this.gizmoScene) {
+      const seen = new Set<THREE.Material>()
+      this.gizmoScene.traverse(o => {
+        const mesh = o as THREE.Mesh
+        if (mesh.isMesh) mesh.geometry.dispose()
+        const sprite = o as THREE.Sprite
+        const mat = (sprite.isSprite ? sprite.material : (mesh.isMesh ? mesh.material : null)) as THREE.Material | THREE.Material[] | null
+        if (mat && !Array.isArray(mat) && !seen.has(mat)) { seen.add(mat); mat.dispose() }
+      })
+      this.gizmoDiscTex?.dispose()
+      this.gizmoDiscTex = null
+      this.gizmoScene = null
+      this.gizmoCamera = null
+    }
     this.renderer.dispose()
     if (this.canvas.parentElement === this.container) this.container.removeChild(this.canvas)
   }

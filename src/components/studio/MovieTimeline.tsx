@@ -35,6 +35,8 @@ export function MovieTimeline() {
   const bookmarks = useViewsStore(s => s.bookmarks)
 
   const [selected, setSelected] = useState<number | null>(null)
+  // 右键菜单：作用于关键帧卡片（预览/时长/排序/移除）
+  const [ctx, setCtx] = useState<{ x: number; y: number; i: number } | null>(null)
   // 拖拽状态：from = 拖起卡片下标；dx = 位移；insert = 插入槽位（0..n，n = 追加到末尾）
   const [drag, setDrag] = useState<{ from: number; dx: number; insert: number } | null>(null)
   const dragStartX = useRef(0)
@@ -44,6 +46,18 @@ export function MovieTimeline() {
 
   // 客户端装载 localStorage 时间轴存档
   useEffect(() => { hydrate() }, [hydrate])
+
+  // 右键菜单打开时：任意点击/失焦即关闭
+  useEffect(() => {
+    if (!ctx) return
+    const close = () => setCtx(null)
+    window.addEventListener('click', close)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('blur', close)
+    }
+  }, [ctx])
 
   /** 插入指示条是否画在卡片 i 之前（原位/相邻无操作时隐藏） */
   const insertBeforeSlot = (i: number): boolean => {
@@ -191,6 +205,11 @@ export function MovieTimeline() {
                   onPointerUp={onNodePointerUp}
                   onPointerCancel={onNodePointerUp}
                   onClick={() => { if (!dragMoved.current) setSelected(i) }}
+                  onContextMenu={ev => {
+                    ev.preventDefault()
+                    ev.stopPropagation()
+                    setCtx({ x: ev.clientX, y: ev.clientY, i })
+                  }}
                   className={cn(
                     'relative w-[68px] shrink-0 cursor-grab touch-none select-none rounded-lg border bg-card/90 p-1 transition',
                     selected === i ? 'border-teal-400/80 ring-1 ring-teal-400/40' : 'border-border/60 hover:border-teal-400/40',
@@ -309,7 +328,58 @@ export function MovieTimeline() {
           </span>
         )}
       </div>
+
+      {/* 关键帧卡片右键菜单（原生 button 实现，与视口右键菜单风格一致） */}
+      {ctx && ctx.i < timeline.length && (() => {
+        const entry = entries[ctx.i]
+        const last = timeline.length - 1
+        return (
+          <div
+            className="fixed z-50 min-w-44 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-xl"
+            style={{
+              left: Math.max(8, Math.min(ctx.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 200)),
+              top: Math.max(8, Math.min(ctx.y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 300)),
+            }}
+            onClick={e => e.stopPropagation()}
+            role="menu"
+          >
+            <div className="border-b border-border/60 px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
+              <span className="block truncate">{entry.view?.name ?? '（失效书签）'}</span>
+              <span className="font-mono">{(entry.e.duration / 1000).toFixed(1)}s · 第 {ctx.i + 1}/{timeline.length} 帧</span>
+            </div>
+            <TlItem onClick={() => { if (entry.view) previewView(entry.view); setCtx(null) }} disabled={!entry.view}>预览此机位（平滑过渡）</TlItem>
+            <TlItem onClick={() => { setEntryDuration(ctx.i, timeline[ctx.i].duration - DUR_STEP); setCtx(null) }}>时长 −0.2s</TlItem>
+            <TlItem onClick={() => { setEntryDuration(ctx.i, timeline[ctx.i].duration + DUR_STEP); setCtx(null) }}>时长 +0.2s</TlItem>
+            <div className="-mx-1 my-1 h-px bg-border" />
+            <TlItem onClick={() => { if (ctx.i > 0) { reorderTimeline(ctx.i, 0); setSelected(0) }; setCtx(null) }} disabled={ctx.i === 0}>移到最前</TlItem>
+            <TlItem onClick={() => { if (ctx.i < last) { reorderTimeline(ctx.i, last); setSelected(last) }; setCtx(null) }} disabled={ctx.i === last}>移到最后</TlItem>
+            <div className="-mx-1 my-1 h-px bg-border" />
+            <TlItem danger onClick={() => { removeEntry(ctx.i); setSelected(null); setCtx(null) }}>从时间轴移除</TlItem>
+          </div>
+        )
+      })()}
     </div>
+  )
+}
+
+/** 时间轴右键菜单项：原生 button 实现（disabled 置灰；danger 红色） */
+function TlItem({ children, onClick, disabled, danger }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; danger?: boolean }) {
+  return (
+    <button
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'flex w-full select-none items-center rounded-sm px-2 py-1.5 text-left text-xs outline-none transition',
+        disabled
+          ? 'cursor-not-allowed text-muted-foreground/40'
+          : danger
+            ? 'cursor-pointer text-red-600 hover:bg-red-500/10 dark:text-red-400'
+            : 'cursor-pointer hover:bg-accent focus:bg-accent focus:outline-none',
+      )}
+    >
+      {children}
+    </button>
   )
 }
 

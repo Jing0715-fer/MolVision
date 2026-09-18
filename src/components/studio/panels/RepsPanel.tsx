@@ -105,11 +105,12 @@ function RepCard({
 }) {
   return (
     <div className={cn(
-      'rounded-lg border p-2.5 transition',
+      'rounded-lg border p-2 transition',
       rep.error ? 'border-destructive/60 bg-destructive/5' : 'border-border/60',
       !rep.visible && 'opacity-60',
     )}>
-      <div className="flex items-center gap-2">
+      {/* 行 1：类型 + 参数/可见/删除 */}
+      <div className="flex items-center gap-1.5">
         <TypeIcon type={rep.type} className="h-4 w-4 shrink-0" />
         <Select value={rep.type} onValueChange={v => onUpdate(structureId, rep.id, { type: v as RepType })}>
           <SelectTrigger className="h-7 min-w-0 flex-1 border-border/60 bg-background/60 text-[11px] font-medium">
@@ -227,14 +228,14 @@ function RepCard({
         </button>
       </div>
 
-      {/* 选择表达式 */}
-      <div className="mt-2 flex items-center gap-1.5">
+      {/* 行 2（自适应折行）：选择表达式 + 预设 + 配色 + 自定义色 */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <Input
           value={rep.selection}
           onChange={e => onUpdate(structureId, rep.id, { selection: e.target.value })}
           placeholder="选择表达式"
           className={cn(
-            'h-7 min-w-0 flex-1 border-border/60 bg-background/60 font-mono text-[10px]',
+            'h-7 min-w-[96px] flex-1 basis-[96px] grow border-border/60 bg-background/60 font-mono text-[10px]',
             rep.error && 'border-destructive focus-visible:ring-destructive/30',
           )}
         />
@@ -243,7 +244,8 @@ function RepCard({
           onValueChange={v => onUpdate(structureId, rep.id, { selection: v })}
         >
           <SelectTrigger className="h-7 w-7 shrink-0 border-border/60 bg-background/60 px-1 text-[10px] [&_svg]:hidden" title="预设选择">
-            <SelectValue placeholder={<span className="text-muted-foreground">≡</span>} />
+            <span className="text-muted-foreground" aria-hidden>≡</span>
+            <span className="sr-only">预设选择</span>
           </SelectTrigger>
           <SelectContent>
             {PRESET_SELECTIONS.map(p => (
@@ -251,17 +253,8 @@ function RepCard({
             ))}
           </SelectContent>
         </Select>
-      </div>
-      {rep.error && (
-        <p className="mt-1 flex items-center gap-1 text-[10px] text-destructive">
-          <AlertCircle className="h-3 w-3 shrink-0" /> {rep.error}
-        </p>
-      )}
-
-      {/* 配色 */}
-      <div className="mt-1.5 flex items-center gap-1.5">
         <Select value={rep.colorScheme} onValueChange={v => onUpdate(structureId, rep.id, { colorScheme: v as ColorScheme })}>
-          <SelectTrigger className="h-7 min-w-0 flex-1 border-border/60 bg-background/60 text-[10px]">
+          <SelectTrigger className="h-7 w-[92px] shrink-0 border-border/60 bg-background/60 text-[10px]" title="配色方案">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -280,6 +273,11 @@ function RepCard({
           />
         )}
       </div>
+      {rep.error && (
+        <p className="mt-1 flex items-center gap-1 text-[10px] text-destructive">
+          <AlertCircle className="h-3 w-3 shrink-0" /> {rep.error}
+        </p>
+      )}
     </div>
   )
 }

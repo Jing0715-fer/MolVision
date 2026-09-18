@@ -2,7 +2,7 @@
 
 // 3D 视图容器：引擎挂载、悬停提示、右键菜单、拖放加载、快捷键
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MolEngine, type AtomPick, type HoverInfo } from '@/lib/molecular/engine'
+import { MolEngine, AXIS_GIZMO, type AtomPick, type HoverInfo } from '@/lib/molecular/engine'
 import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { loadFiles, fetchPdbId } from '@/lib/molecular/loader'
@@ -39,6 +39,7 @@ export default function MolViewer() {
   const [dragOver, setDragOver] = useState(false)
   const visualRev = useMolStore(s => s.visualRev)
   const timelineOpen = useMovieStore(s => s.timelineOpen)
+  const showAxes = useMolStore(s => s.settings.showAxes)
   const { theme, setTheme, resolvedTheme } = useTheme()
 
   // 原子点击处理（先声明，供引擎回调引用）
@@ -484,6 +485,25 @@ export default function MolViewer() {
             释放以加载 PDB / mmCIF 文件
           </div>
         </div>
+      )}
+
+      {/* 坐标轴指示器点击层（与引擎 AXIS_GIZMO 视口对齐；点击轴端平滑对齐视角） */}
+      {showAxes && (
+        <div
+          className="absolute right-3 top-3 z-10 cursor-pointer rounded-full transition hover:bg-foreground/[0.04] active:bg-foreground/[0.08]"
+          style={{ width: AXIS_GIZMO.size, height: AXIS_GIZMO.size }}
+          title="坐标轴指示器（点击轴端对齐视角；场景面板可关闭）"
+          onClick={e => {
+            const eng = engine.current
+            const dir = eng?.gizmoAxisFromPoint(e.clientX, e.clientY)
+            if (!eng || !dir) return
+            eng.orientAlongAxis(dir)
+            const name = Math.abs(dir.x) > 0.5 ? (dir.x > 0 ? '+X' : '-X')
+              : Math.abs(dir.y) > 0.5 ? (dir.y > 0 ? '+Y' : '-Y')
+              : (dir.z > 0 ? '+Z' : '-Z')
+            useMolStore.getState().appendLog('out', `视角已对齐 ${name} 轴（保持目标点与距离）`)
+          }}
+        />
       )}
 
       {/* 快捷预设浮层（右下角） */}

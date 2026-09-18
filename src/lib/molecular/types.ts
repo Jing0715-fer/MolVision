@@ -163,6 +163,8 @@ export interface Settings {
   specular: boolean
   /** 红蓝立体（Anaglyph）渲染 */
   stereo: boolean
+  /** 视口右上角 3D 坐标轴指示器（朝向罗盘；点击轴可对齐视角） */
+  showAxes: boolean
 }
 
 export function defaultSettings(): Settings {
@@ -192,5 +194,6 @@ export function defaultSettings(): Settings {
     lightFill: 1,
     specular: true,
     stereo: false,
+    showAxes: true,
   }
 }
