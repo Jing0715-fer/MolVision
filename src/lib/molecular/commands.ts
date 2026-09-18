@@ -67,7 +67,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'count_atoms [expr]', desc: '统计原子数', example: 'count_atoms chain A' },
   { cmd: 'spin on|off', desc: '自动旋转', example: 'spin on' },
   { cmd: 'rock on|off', desc: '相机摇摆（±26°）', example: 'rock on' },
-  { cmd: 'slab <n>|move <±Å>|center|off', desc: '视向切层（厚度与位置）', example: 'slab 20 · slab move -5 · slab center' },
+  { cmd: 'slab <n>|move <±Å>|center|cap|off', desc: '视向切层（厚度/位置/截面封盖）', example: 'slab 20 · slab move -5 · slab cap off' },
   { cmd: 'stereo on|off', desc: '红蓝立体渲染', example: 'stereo on' },
   { cmd: 'symmetry <半径Å>|off', desc: '晶体对称伴侣（CRYST1）', example: 'symmetry 25' },
   { cmd: 'map fetch <id>|fofc|isolevel pos/neg', desc: '电子密度图（SF→FFT，Worker 零阻塞；结构未加载时自动获取；差图双 σ）', example: 'map fofc 3ekj' },
@@ -289,6 +289,18 @@ export function runCommand(raw: string): void {
       useMolStore.getState().updateSettings({ slab: false })
       return ok('裁剪关闭')
     }
+    if (arg === 'cap') {
+      const sub = (parts[2] ?? '').toLowerCase()
+      const cur = useMolStore.getState().settings
+      // 无参数 = 切换；显式 on/off = 设定
+      const on = sub === 'on' || sub === '1' || sub === 'true' ? true
+        : sub === 'off' || sub === '0' || sub === 'false' ? false
+        : !cur.slabCap
+      useMolStore.getState().updateSettings({ slab: true, slabCap: on })
+      return ok(on
+        ? `切层截面封盖开启：剖面以平面色填充呈实心（set cap_color 可改色，当前 ${cur.capColor}）`
+        : '切层截面封盖关闭（剖面为开放式空壳）')
+    }
     if (arg === 'center' || arg === 'reset') {
       useMolStore.getState().updateSettings({ slab: true, slabOffset: 0 })
       return ok('切层已回到环绕目标中心（偏移 0 Å）')
@@ -302,7 +314,7 @@ export function runCommand(raw: string): void {
       return ok(`切层位置 → ${off > 0 ? '+' : ''}${off.toFixed(1)} Å（slab move ${d > 0 ? '+' : ''}${d}）`)
     }
     const n = parseFloat(arg)
-    if (isNaN(n) || n <= 0) return err('用法：slab <厚度Å> | slab off | slab move <±Å> | slab center')
+    if (isNaN(n) || n <= 0) return err('用法：slab <厚度Å> | slab off | slab move <±Å> | slab center | slab cap on|off')
     useMolStore.getState().updateSettings({ slab: true, slabThickness: n })
     return ok(`裁剪厚度 → ${n} Å（切层中心在环绕目标处；slab move ± 调整位置）`)
   }
@@ -624,7 +636,7 @@ export function runCommand(raw: string): void {
   if (cmd === 'set') {
     const key = (parts[1] ?? '').toLowerCase()
     const rawVal = parts.slice(2).join(' ').trim()
-    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / transparency / sphere_scale / stick_radius / cartoon_width')
+    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / transparency / sphere_scale / stick_radius / cartoon_width')
     const s = useMolStore.getState()
     const num = parseFloat(rawVal)
     const on = ['on', '1', 'true', 'open'].includes(rawVal.toLowerCase())
@@ -707,6 +719,17 @@ export function runCommand(raw: string): void {
         s.updateSettings({ showFps: on })
         return ok(`性能指示器 ${on ? '开启（状态栏显示 FPS / 绘制调用 / 三角形数）' : '关闭'}`)
       }
+      case 'seq_focus': case 'viewport_focus': {
+        if (!on && !off) return err('用法：set seq_focus on|off（序列条视口聚焦指示）')
+        s.updateSettings({ seqFocus: on })
+        return ok(`序列条视口聚焦 ${on ? '开启（视野内残基绿色下划线标记，切层裁剪同步感知）' : '关闭'}`)
+      }
+      case 'cap_color': case 'slab_cap_color': {
+        const css = parseCssColor(rawVal.toLowerCase())
+        if (!css) return err('用法：set cap_color <#hex 或颜色名>（切层剖面封盖色，默认 #ccd2d9）')
+        s.updateSettings({ slab: true, slabCap: true, capColor: css })
+        return ok(`截面封盖色 → ${css}（slab cap 已开启）`)
+      }
       case 'auto_perf': case 'autoperf': {
         if (!on && !off) return err('用法：set auto_perf on|off（低帧率自动降级，恢复后自动还原）')
         s.updateSettings({ autoPerf: on })
@@ -749,7 +772,7 @@ export function runCommand(raw: string): void {
         return n ? ok(`cartoon 宽度 → ${clampNum(num, 0.3, 4, 1)}（${n} 个表示）`) : err('没有 cartoon 表示')
       }
       default:
-        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, transparency, sphere_scale, stick_radius, cartoon_width`)
+        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, cap_color, transparency, sphere_scale, stick_radius, cartoon_width`)
     }
   }
 

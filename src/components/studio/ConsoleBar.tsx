@@ -1,15 +1,21 @@
 'use client'
 
-// 命令行控制台（PyMOL 风格；日志区高度三档可调；Tab 智能补全 + 参数提示 + Ctrl+R 历史搜索）
+// 命令行控制台（PyMOL 风格；日志区高度三档可调；Tab 智能补全 + 参数提示 + Ctrl+R 历史搜索 + 最近命令徽章）
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronRight, ChevronsUpDown, CornerDownRight, Terminal, X, Boxes, Filter, Palette, Shapes, Sparkles, TerminalSquare, Wand2 } from 'lucide-react'
+import { ChevronRight, ChevronsUpDown, CornerDownRight, Terminal, X, Boxes, Filter, Palette, Shapes, Sparkles, TerminalSquare, Wand2, Trash2, History } from 'lucide-react'
+import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { runCommand } from '@/lib/molecular/commands'
 import { buildCompletions, type CompletionCtx, type CompletionItem, type CompletionKind, type CompletionResult } from '@/lib/molecular/complete'
 import { useViewsStore } from '@/lib/molecular/views-store'
 import { cn } from '@/lib/utils'
+import { FadeEdge } from './FadeEdge'
 
 const HISTORY_KEY = 'molvision-cmd-history'
+/** 历史上限（Ctrl+R 搜索覆盖更多长命令；localStorage 持久化） */
+const HISTORY_MAX = 200
+/** 最近命令徽章数 */
+const CHIPS_MAX = 6
 const LOG_HEIGHT_CLASS: Record<string, string> = {
   compact: 'h-24',
   normal: 'h-36',
@@ -85,6 +91,26 @@ export function ConsoleBar() {
   }, [rSearch.active, rSearch.query, history])
   const rCur = rMatches.length ? rMatches[Math.min(rSearch.idx, rMatches.length - 1)] : null
 
+  /** 最近命令徽章：历史尾部去重取前 N 条（点击执行 / 右键填入编辑） */
+  const recentChips = useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (let i = history.length - 1; i >= 0 && out.length < CHIPS_MAX; i--) {
+      const h = history[i]
+      if (!h || seen.has(h)) continue
+      seen.add(h)
+      out.push(h)
+    }
+    return out
+  }, [history])
+
+  const clearHistory = () => {
+    setHistory([])
+    setHistIdx(-1)
+    try { localStorage.removeItem(HISTORY_KEY) } catch { /* ignore */ }
+    toast.success('命令历史已清空', { description: '最近命令徽章与 Ctrl+R 搜索同步清除' })
+  }
+
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight
@@ -146,7 +172,7 @@ export function ConsoleBar() {
     const c = cmd.trim()
     if (!c) return
     runCommand(c)
-    const next = [...history.filter(h => h !== c), c].slice(-50)
+    const next = [...history.filter(h => h !== c), c].slice(-HISTORY_MAX)
     setHistory(next)
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch { /* ignore */ }
     setHistIdx(-1)
@@ -260,7 +286,7 @@ export function ConsoleBar() {
       <div className="flex h-8 items-center gap-2 border-b border-border/50 px-3">
         <Terminal className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
         <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">命令行</span>
-        <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">Tab 补全 · ↑↓ 历史 · Ctrl+R 搜索 · help 查看命令</span>
+        <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">Tab 补全 · ↑↓ 历史 · Ctrl+R 搜索 · 徽章快跑 · help 查看命令</span>
         <button
           onClick={cycleHeight}
           className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
@@ -287,6 +313,43 @@ export function ConsoleBar() {
           </div>
         ))}
       </div>
+
+      {/* 最近命令徽章：点击执行 · 右键填入编辑（历史去重前 6 条） */}
+      {recentChips.length > 0 && (
+        <div className="flex items-center gap-1.5 px-2 pt-1">
+          <span className="flex shrink-0 items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50" title="最近命令（点击执行 · 右键填入编辑）">
+            <History className="h-3 w-3" />
+          </span>
+          <FadeEdge className="gap-1">
+            {recentChips.map(h => (
+              <button
+                key={h}
+                onClick={() => {
+                  submitCmd(h)
+                  setCompletions(null)
+                }}
+                onContextMenu={e => {
+                  e.preventDefault()
+                  setInput(h)
+                  recompute(h)
+                  inputRef.current?.focus()
+                }}
+                className="max-w-[220px] shrink-0 truncate rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-foreground"
+                title={`${h}\n左键执行 · 右键填入输入行编辑`}
+              >
+                {h.length > 26 ? `${h.slice(0, 24)}…` : h}
+              </button>
+            ))}
+          </FadeEdge>
+          <button
+            onClick={clearHistory}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/50 transition hover:bg-destructive/10 hover:text-destructive"
+            title="清空命令历史（最近徽章 + Ctrl+R 搜索记录）"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       {/* 参数提示条（识别到命令时展示用法） */}
       {hint && (

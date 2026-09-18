@@ -139,6 +139,8 @@ const REGISTRY: CmdDef[] = [
       { insert: 'outline_thickness', kind: 'value', detail: '轮廓粗细 1-4 px' },
       { insert: 'fps', kind: 'value', detail: 'FPS 指示 on/off' },
       { insert: 'auto_perf', kind: 'value', detail: '自动性能 on/off' },
+      { insert: 'cap_color', kind: 'value', detail: '切层封盖色' },
+      { insert: 'seq_focus', kind: 'value', detail: '序列视口聚焦' },
       { insert: 'transparency', kind: 'value', detail: '表面不透明度' },
       { insert: 'sphere_scale', kind: 'value', detail: '球半径倍率' },
       { insert: 'stick_radius', kind: 'value', detail: '棍半径' },
@@ -180,12 +182,15 @@ const REGISTRY: CmdDef[] = [
     args: pos => (pos === 1 ? [
       { insert: 'move', kind: 'sub', detail: '沿视线移动 ±Å' },
       { insert: 'center', kind: 'sub', detail: '回中' },
+      { insert: 'cap', kind: 'sub', detail: '截面封盖 on/off' },
       { insert: 'off', kind: 'value', detail: '关闭' },
     ] : pos === 2 ? [
       { insert: '-5', kind: 'value', detail: '向相机 5 Å' },
       { insert: '5', kind: 'value', detail: '离相机 5 Å' },
       { insert: '-10', kind: 'value', detail: '向相机 10 Å' },
       { insert: '10', kind: 'value', detail: '离相机 10 Å' },
+      { insert: 'on', kind: 'value', detail: '封盖开启' },
+      { insert: 'off', kind: 'value', detail: '封盖关闭' },
     ] : null),
   },
   {

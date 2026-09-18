@@ -2,7 +2,7 @@
 
 // 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤/会话管理
 import { useRef, useState } from 'react'
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d, Activity, PenLine } from 'lucide-react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d, Activity, PenLine, SquareSplitHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
@@ -262,8 +262,24 @@ export function ScenePanel() {
                 onValueChange={v => updateSettings({ slabOffset: v[0] })}
               />
             </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <SquareSplitHorizontal className="h-3.5 w-3.5 text-teal-500" /> 封闭截面（cap）
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={settings.capColor}
+                  onChange={e => updateSettings({ capColor: e.target.value })}
+                  disabled={!settings.slabCap}
+                  className="h-5 w-7 cursor-pointer rounded border border-border/60 bg-background/60 p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="封盖色（set cap_color 等价）"
+                />
+                <Switch checked={settings.slabCap} onCheckedChange={v => updateSettings({ slabCap: v })} />
+              </div>
+            </div>
             <p className="text-[10px] leading-relaxed text-muted-foreground/70">
-              沿视线方向仅显示厚度内的分子区域，切层中心默认在环绕目标处；拖动「位置」或命令行 slab move ± 可推进切层穿过分子内部。命令行等价：slab 20 · slab move -5 · slab center。
+              沿视线方向仅显示厚度内的分子区域，切层中心默认在环绕目标处；拖动「位置」或命令行 slab move ± 可推进切层穿过分子内部。命令行等价：slab 20 · slab move -5 · slab center · slab cap off · set cap_color slate。
             </p>
           </div>
         )}

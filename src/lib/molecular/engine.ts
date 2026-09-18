@@ -9,6 +9,7 @@ import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { EdgeShader, srgbComponents } from './edge-shader'
 import { usePerfStore } from './perf-store'
+import { useViewportStore } from './viewport-store'
 import { AnaglyphEffect } from 'three/examples/jsm/effects/AnaglyphEffect.js'
 import { marchingCubes } from './marching-cubes'
 import { mateTransforms, orthoMatrix, symOpsFor, type CrystalCell } from './symmetry'
@@ -33,6 +34,7 @@ import { useHBondStore } from './hbond-store'
 import { useEnsembleStore } from './ensemble-store'
 import { makeTextSprite, disposeSprite } from './textsprite'
 import { useMolStore, buildNamedMasks, dataRegistry } from './store'
+import { patchCapMaterial, syncCapSettings, capState, applyCapSides, capUniforms } from './cap-material'
 import { SlotLane } from './heavy-queue'
 import type { AtomLabel, Measurement, RepConfig, Settings, StructureEntry } from './types'
 
@@ -330,6 +332,12 @@ export class MolEngine {
   }[] = []
   /** 当前 hover 的轴（带符号单位向量；null = 无）；由 UI 覆盖层写入 */
   private gizmoHover: THREE.Vector3 | null = null
+  // 序列条视口聚焦：残基代表原子缓存（structureId → 每残基一个原子索引）
+  private repAtomCache = new Map<string, Int32Array>()
+  /** 上次可见性计算的相机/切层签名（变化才重算） */
+  private lastVisSig = ''
+  /** 上次可见性计算时间（节流 150ms） */
+  private lastVisT = 0
 
   constructor(container: HTMLElement, private callbacks: EngineCallbacks = {}) {
     this.container = container
@@ -567,6 +575,8 @@ export class MolEngine {
     }
     // 主渲染后叠加坐标轴指示器（右上角小视口；stereo 红蓝模式下跳过避免串色）
     this.renderGizmo(cam)
+    // 序列条视口聚焦：相机/切层/结构变化时重算残基可见性（节流 150ms）
+    this.updateViewportVisibility(now)
     // 帧尾统计：500ms 窗口上报 perf-store（仅指示器开启时写入，避免无谓渲染）
     // 至少累计 2 帧才结算（后台节流页 ~2fps 时窗口只含 1 帧会显示误导性 0.x fps）
     this.perfFrames++
@@ -678,6 +688,94 @@ export class MolEngine {
     }
     this.restorePerfBaseline('已手动恢复画质设置')
     return true
+  }
+
+  // ---------- 序列条视口聚焦（残基级可见性） ----------
+
+  /** 残基代表原子：优先 CA（蛋白）/ P（核酸磷酸骨架），否则首原子（缓存） */
+  private repAtoms(structureId: string, data: StructureData): Int32Array {
+    const cached = this.repAtomCache.get(structureId)
+    if (cached) return cached
+    const out = new Int32Array(data.residues.length)
+    const names = data.atoms.names
+    for (let ri = 0; ri < data.residues.length; ri++) {
+      const r = data.residues[ri]
+      let rep = r.start
+      for (let i = r.start; i < r.end; i++) {
+        const n = names[i]
+        if (n === 'CA' || n === 'P') { rep = i; break }
+      }
+      out[ri] = rep
+    }
+    this.repAtomCache.set(structureId, out)
+    return out
+  }
+
+  /**
+   * 视口聚焦重算：相机位姿/FOV/切层/结构切换（或 ensemble 播放）触发，150ms 节流。
+   * 可见判据 = 视锥内（相机空间前置 + NDC |x|,|y| ≤ 1.02）且切层开启时满足两裁剪平面。
+   * 结果仅在变化时写入 viewport-store（避免序列条无谓重渲）。
+   */
+  private updateViewportVisibility(now: number) {
+    if (!this.settings?.seqFocus) {
+      if (useViewportStore.getState().structureId !== null) useViewportStore.getState().set(null, null)
+      this.lastVisSig = ''
+      return
+    }
+    const state = useMolStore.getState()
+    const id = state.activeId
+    const cam = this.activeCamera
+    // 签名：活动结构 / 相机位姿 / fov / 正交视锥 / 切层 / ensemble 播放状态
+    const es = useEnsembleStore.getState()
+    const sig = [
+      id ?? '',
+      cam.position.x.toFixed(2), cam.position.y.toFixed(2), cam.position.z.toFixed(2),
+      cam.quaternion.x.toFixed(3), cam.quaternion.y.toFixed(3), cam.quaternion.z.toFixed(3), cam.quaternion.w.toFixed(3),
+      this.activeCamera === this.orthoCamera ? 'ortho' : `fov${this.camera.fov.toFixed(1)}`,
+      this.settings.slab ? `${this.settings.slabThickness}|${this.settings.slabOffset ?? 0}` : 'noslab',
+      es.structureId === id && es.playing ? `ens${es.frame}` : '',
+      state.visualRev,
+    ].join(',')
+    if (sig === this.lastVisSig) return
+    if (now - this.lastVisT < 150) return // 节流（签名保持差异，下帧重试）
+    this.lastVisSig = sig
+    this.lastVisT = now
+    const data = id ? dataRegistry.get(id) : null
+    if (!id || !data) {
+      if (useViewportStore.getState().structureId !== null) useViewportStore.getState().set(null, null)
+      return
+    }
+    const reps = this.repAtoms(id, data)
+    const pos = data.atoms.positions
+    const visible = new Uint8Array(data.residues.length)
+    // 相机空间矩阵（前置判断）+ 组合投影矩阵 projection × view（直接透视除法到 NDC）
+    cam.updateMatrixWorld()
+    const viewMat = cam.matrixWorldInverse
+    const projScreen = new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, viewMat)
+    const slab = !!this.settings.slab
+    const p0 = this.clippingPlanes[0]
+    const p1 = this.clippingPlanes[1]
+    const useSlab = slab && p0.constant < 1e8
+    const v = new THREE.Vector3()
+    const ndc = new THREE.Vector3()
+    for (let ri = 0; ri < visible.length; ri++) {
+      const a = reps[ri]
+      v.set(pos[a * 3], pos[a * 3 + 1], pos[a * 3 + 2])
+      if (useSlab && (p0.distanceToPoint(v) < 0 || p1.distanceToPoint(v) < 0)) continue
+      ndc.copy(v).applyMatrix4(viewMat)
+      if (ndc.z >= 0) continue // 相机后方
+      ndc.copy(v).applyMatrix4(projScreen)  // applyMatrix4 自动做透视除法
+      if (ndc.x < -1.02 || ndc.x > 1.02 || ndc.y < -1.02 || ndc.y > 1.02) continue
+      visible[ri] = 1
+    }
+    // 变化才写入（SequenceBar 按数组身份触发重渲）
+    const prev = useViewportStore.getState()
+    if (prev.structureId !== id) {
+      useViewportStore.getState().set(id, visible)
+      return
+    }
+    if (prev.visible && prev.visible.length === visible.length && prev.visible.every((b, i) => b === visible[i])) return
+    useViewportStore.getState().set(id, visible)
   }
 
   // ---------- 坐标轴指示器（朝向罗盘） ----------
@@ -2717,6 +2815,8 @@ export class MolEngine {
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
         for (const m of mats) {
           ;(m as THREE.Material).clippingPlanes = this.clippingPlanes
+          // 切层封盖：背面平面色补丁（side 在遍历后统一按当前生效状态设置）
+          patchCapMaterial(m as THREE.Material)
           const std = m as THREE.MeshStandardMaterial
           if ('roughness' in std && this.settings) {
             if (std.userData.rough0 === undefined) std.userData.rough0 = std.roughness
@@ -2726,6 +2826,8 @@ export class MolEngine {
         }
       }
     })
+    // 新建材质按当前封盖生效状态切 side（封盖开启时 FrontSide 材质转双面）
+    if (capState.on) applyCapSides(build.group, true)
   }
 
   private updateHighlight(view: StructureView, data: StructureData, indices: number[]) {
@@ -2850,6 +2952,14 @@ export class MolEngine {
     const prev = this.settings
     const changed = JSON.stringify(settings) !== JSON.stringify(prev)
     this.settings = settings
+    // 切层封盖：生效态（slab && slabCap）或颜色变化时同步 uniform + 场景材质 side
+    //（置于 changed 判断之前：首次应用 prev=null 与后续切换均能落地）
+    const capOn = settings.slab && settings.slabCap
+    const prevCapOn = prev ? prev.slab && prev.slabCap : null
+    if (prevCapOn !== capOn || (prev && prev.capColor !== settings.capColor)
+      || capUniforms.uCapOn.value !== (capOn ? 1 : 0)) {
+      syncCapSettings(this.scene, capOn, settings.capColor)
+    }
     // 自动性能模式：降级期间用户重新开启后处理 → 交还控制权并退出自动模式（用户优先，避免反复覆盖手动选择）
     if (this.perfBaseline && (settings.ssao || settings.outline)) {
       this.perfBaseline = null

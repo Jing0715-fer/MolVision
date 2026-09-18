@@ -1,9 +1,10 @@
 'use client'
 
-// 序列条：链序列 + 二级结构轨道 + 点击选择/聚焦（高度三档可调：紧凑/标准/加高）
+// 序列条：链序列 + 二级结构轨道 + 点击选择/聚焦（高度三档可调；视口聚焦指示）
 import { memo, useMemo } from 'react'
-import { ChevronDown, ChevronUp, Dna, FlaskConical, ChevronsUpDown } from 'lucide-react'
+import { ChevronDown, ChevronUp, Dna, FlaskConical, ChevronsUpDown, Eye, EyeOff } from 'lucide-react'
 import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
+import { useViewportStore } from '@/lib/molecular/viewport-store'
 import { residueOneLetter } from '@/lib/molecular/chemistry'
 import { residueCssColor, ssCssColor } from '@/lib/molecular/colors'
 import { cn } from '@/lib/utils'
@@ -27,7 +28,10 @@ export function SequenceBar() {
   const activeId = useMolStore(s => s.activeId)
   const selection = useMolStore(s => s.selection)
   const sequenceHeight = useMolStore(s => s.settings.sequenceHeight)
+  const seqFocus = useMolStore(s => s.settings.seqFocus)
   const updateSettings = useMolStore(s => s.updateSettings)
+  const vpStructureId = useViewportStore(s => s.structureId)
+  const vpVisible = useViewportStore(s => s.visible)
 
   const st = structures.find(x => x.id === activeId)
   const data = activeId ? dataRegistry.get(activeId) : null
@@ -40,6 +44,10 @@ export function SequenceBar() {
      
   }, [selection, data, activeId])
 
+  /** 视口聚焦：残基是否在当前相机视野内（结构匹配且引擎已算出时；否则视为可见） */
+  const visArr = seqFocus && vpStructureId === activeId ? vpVisible : null
+  const inView = (ri: number) => (visArr ? visArr[ri] === 1 : true)
+
   if (!st || !data) return null
 
   // 从结构数据取链（含 residueIdx），颜色沿用摘要链调色板（顺序一致）
@@ -51,6 +59,18 @@ export function SequenceBar() {
   // 配体分子（连通分量）：每个 chip = 一个完整小分子——多残基配体（多糖/肽类）合并为一，
   // 点击选择整个分子、双击聚焦；不再按残基拆开
   const ligandMolecules = (data.molecules || []).slice(0, 60)
+
+  // 视野内统计（聚合物残基；显示在头部副标题）
+  let polymerTotal = 0
+  let polymerInView = 0
+  if (visArr) {
+    for (const { chain } of polymerChains) {
+      for (const ri of chain.residueIdx || []) {
+        polymerTotal++
+        if (visArr[ri] === 1) polymerInView++
+      }
+    }
+  }
 
   const cycleHeight = () => {
     const next = sequenceHeight === 'compact' ? 'normal' : sequenceHeight === 'normal' ? 'tall' : 'compact'
@@ -68,9 +88,27 @@ export function SequenceBar() {
           序列
           <span className="min-w-0 truncate font-mono text-[9px] normal-case tracking-normal text-muted-foreground/60">
             {st.name} · {polymerChains.length} 条聚合物链
+            {visArr && polymerTotal > 0 && (
+              <span className={cn('ml-1 rounded px-1 py-px', polymerInView === polymerTotal ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-primary/10 text-primary')}>{polymerInView}/{polymerTotal} 在视野</span>
+            )}
           </span>
           <span className="ml-auto shrink-0">{ui.sequenceOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}</span>
         </button>
+        {ui.sequenceOpen && (
+          <button
+            onClick={() => updateSettings({ seqFocus: !seqFocus })}
+            className={cn(
+              'flex h-5 shrink-0 items-center gap-1 rounded border px-1.5 transition',
+              seqFocus
+                ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'border-border/60 bg-background/60 text-muted-foreground hover:border-primary/40 hover:text-foreground',
+            )}
+            title={`视口聚焦指示：${seqFocus ? '开（绿色下划线 = 残基在当前相机视野内，切层裁剪同步感知）' : '关（set seq_focus on 开启）'}`}
+          >
+            {seqFocus ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+            聚焦
+          </button>
+        )}
         {ui.sequenceOpen && (
           <button
             onClick={cycleHeight}
@@ -95,6 +133,7 @@ export function SequenceBar() {
                 {ligandMolecules.map(m => {
                   const r0 = data.residues[m.residues[0]]
                   const isSel = m.residues.some(ri => selectedResidues.has(ri))
+                  const molInView = visArr ? m.residues.some(ri => visArr[ri] === 1) : true
                   const molIndices: number[] = []
                   for (const ri of m.residues) {
                     const rr = data.residues[ri]
@@ -117,8 +156,9 @@ export function SequenceBar() {
                         isSel
                           ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/50'
                           : 'border-amber-500/30 bg-amber-500/5 text-amber-700 hover:border-amber-500/60 hover:bg-amber-500/15 dark:text-amber-400',
+                        visArr && !molInView && 'opacity-45',
                       )}
-                      title={`${m.label}（链 ${m.chainIds.map(c => c.trim() || '?').join('/')}）· ${m.atoms} 原子${m.residues.length > 1 ? ` · ${m.residues.length} 个残基` : ''} · 点击选择 · 双击聚焦`}
+                      title={`${m.label}（链 ${m.chainIds.map(c => c.trim() || '?').join('/')}）· ${m.atoms} 原子${m.residues.length > 1 ? ` · ${m.residues.length} 个残基` : ''}${visArr ? (molInView ? ' · 在视野内' : ' · 视野外') : ''} · 点击选择 · 双击聚焦`}
                     >
                       {m.resNames.length > 1 ? m.label : m.resNames[0]}
                       <span className="ml-0.5 text-[8px] font-normal opacity-60">{r0.chainId.trim()}{r0.resSeq}{m.residues.length > 1 && m.resNames.length === 1 ? '+' : ''}</span>
@@ -154,6 +194,7 @@ export function SequenceBar() {
                   {(chain.residueIdx || []).map((ri, k) => {
                     const r = data.residues[ri]
                     const isSel = selectedResidues.has(ri)
+                    const cellInView = inView(ri)
                     return (
                       <ResidueCell
                         key={ri}
@@ -161,8 +202,10 @@ export function SequenceBar() {
                         letter={residueOneLetter(r.resName)}
                         color={residueCssColor(r.resName)}
                         ss={r.ss}
-                        title={`${r.resName} ${r.resSeq}${r.iCode || ''}（链 ${r.chainId.trim() || '?'}）${r.ss === 'H' ? ' · 螺旋' : r.ss === 'E' ? ' · 折叠' : ''}`}
+                        title={`${r.resName} ${r.resSeq}${r.iCode || ''}（链 ${r.chainId.trim() || '?'}）${r.ss === 'H' ? ' · 螺旋' : r.ss === 'E' ? ' · 折叠' : ''}${visArr ? (cellInView ? ' · 在视野内' : ' · 视野外') : ''}`}
                         selected={isSel}
+                        inView={cellInView}
+                        showInView={!!visArr}
                         position={k + 1}
                         onClick={e => {
                           useMolStore.getState().setActive(activeId!)
@@ -195,7 +238,7 @@ export function SequenceBar() {
 }
 
 const ResidueCell = memo(function ResidueCell({
-  letter, color, ss, title, selected, position, onClick,
+  letter, color, ss, title, selected, position, inView, showInView, onClick,
 }: {
   resIdx: number
   letter: string
@@ -203,6 +246,8 @@ const ResidueCell = memo(function ResidueCell({
   ss: string
   title: string
   selected: boolean
+  inView: boolean
+  showInView: boolean
   position: number
   onClick: (e: React.MouseEvent) => void
 }) {
@@ -222,6 +267,10 @@ const ResidueCell = memo(function ResidueCell({
         style={{ background: ssCssColor(ss), opacity: ss === 'L' ? 0.35 : 0.9 }}
       />
       <span className="text-[10px] font-bold leading-none text-black/90 [text-shadow:0_0_1px_rgba(255,255,255,0.35)]">{letter}</span>
+      {/* 视口聚焦下划线：残基在当前相机视野内（切层同步感知） */}
+      {showInView && inView && (
+        <span className="absolute inset-x-0.5 bottom-0 h-[2px] rounded-full bg-emerald-500 shadow-[0_0_2px_rgba(16,185,129,0.8)]" />
+      )}
       {position % 10 === 0 && (
         <span className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 font-mono text-[8px] text-muted-foreground/70">{position}</span>
       )}

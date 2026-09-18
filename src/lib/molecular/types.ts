@@ -143,6 +143,10 @@ export interface Settings {
   slabThickness: number
   /** 切层中心沿视线的偏移（Å；0 = 环绕目标处，正 = 远离相机） */
   slabOffset: number
+  /** 切层截面封闭（cap）：背面渲染统一平面色，剖面呈实心（出版级截面图） */
+  slabCap: boolean
+  /** 截面封盖颜色（CSS hex；随会话持久化） */
+  capColor: string
   hideHydrogens: boolean
   hideWater: boolean
   quality: 'low' | 'medium' | 'high'
@@ -179,6 +183,8 @@ export interface Settings {
   outlineThickness: number
   /** 序列条展开高度档位（紧凑/标准/加高；随会话持久化） */
   sequenceHeight: 'compact' | 'normal' | 'tall'
+  /** 序列条视口聚焦指示：当前相机视野内残基高亮（引擎按视锥+切层计算） */
+  seqFocus: boolean
   /** 控制台日志区高度档位（紧凑/标准/加高；随会话持久化） */
   consoleHeight: 'compact' | 'normal' | 'tall'
 }
@@ -196,6 +202,8 @@ export function defaultSettings(): Settings {
     slab: false,
     slabThickness: 18,
     slabOffset: 0,
+    slabCap: true,
+    capColor: '#ccd2d9',
     hideHydrogens: false,
     hideWater: false,
     quality: 'high',
@@ -218,6 +226,7 @@ export function defaultSettings(): Settings {
     outlineStrength: 1,
     outlineThickness: 1.5,
     sequenceHeight: 'normal',
+    seqFocus: true,
     consoleHeight: 'normal',
   }
 }
