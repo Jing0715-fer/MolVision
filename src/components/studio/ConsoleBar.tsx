@@ -101,7 +101,7 @@ export function ConsoleBar() {
           </div>
         ))}
       </div>
-      <div className="flex items-center gap-2 border-t border-border/50 px-3 py-2">
+      <div className="mx-2 mb-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 transition-colors duration-200 focus-within:border-emerald-500/60 focus-within:bg-emerald-500/[0.05] focus-within:shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25)]">
         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
         <input
           ref={inputRef}
@@ -115,10 +115,11 @@ export function ConsoleBar() {
           }}
           onKeyDown={onKeyDown}
           placeholder="load 4hhb · select site = within 5 of resn HEM · color red site · show cartoon …"
-          className="flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted-foreground/40"
+          className="flex-1 bg-transparent font-mono text-xs outline-none caret-emerald-600 placeholder:text-muted-foreground/40 dark:caret-emerald-400"
           spellCheck={false}
           autoComplete="off"
         />
+        <kbd className="hidden shrink-0 rounded border border-border/60 bg-muted/60 px-1 font-mono text-[9px] text-muted-foreground/70 sm:inline">↵</kbd>
       </div>
     </div>
   )

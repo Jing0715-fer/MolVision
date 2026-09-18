@@ -42,7 +42,7 @@ export function StatusBar() {
     <footer className="flex h-7 shrink-0 items-center gap-3 border-t border-border/70 bg-card/60 px-3 text-[10px] text-muted-foreground backdrop-blur-sm">
       {/* 结构统计 */}
       {st ? (
-        <span className="flex shrink-0 items-center gap-1.5 font-medium">
+        <span className="flex shrink-0 items-center gap-1.5 font-medium tabular-nums">
           <span className="font-mono font-bold text-foreground/80">{st.name}</span>
           <span className="text-muted-foreground/60">
             {st.summary.atoms.toLocaleString()} 原子 · {st.summary.residues.toLocaleString()} 残基 · {st.summary.chains} 链
@@ -62,7 +62,7 @@ export function StatusBar() {
 
       {/* 选择 */}
       {selection.indices.length > 0 && (
-        <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
+        <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-semibold tabular-nums text-primary ring-1 ring-primary/25">
           <Circle className="h-2 w-2 fill-current" />
           已选 {selection.indices.length.toLocaleString()} 原子
         </span>

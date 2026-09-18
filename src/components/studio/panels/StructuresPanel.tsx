@@ -57,14 +57,18 @@ export function StructuresPanel() {
             key={st.id}
             className={cn(
               'group rounded-lg border p-2.5 transition',
-              st.id === activeId ? 'border-primary/50 bg-primary/5' : 'border-border/60 hover:border-border',
+              st.id === activeId
+                ? 'mol-elevate border-primary/50 bg-primary/[0.04]'
+                : 'border-border/60 hover:border-border hover:bg-accent/40',
             )}
           >
             <div className="flex items-center gap-2">
               <button className="flex flex-1 items-center gap-2 text-left" onClick={() => setActive(st.id)}>
                 <span className={cn(
-                  'rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wide',
-                  st.id === activeId ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground/80',
+                  'rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wide shadow-xs',
+                  st.id === activeId
+                    ? 'bg-primary text-primary-foreground shadow-emerald-500/20'
+                    : 'border border-border/70 bg-background text-foreground/90',
                 )}>
                   {st.name.slice(0, 8)}
                 </span>
@@ -127,7 +131,7 @@ export function StructuresPanel() {
               <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
                 {st.summary.atoms.toLocaleString()} 原子
               </Badge>
-              <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
+              <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal tabular-nums">
                 {st.summary.residues.toLocaleString()} 残基
               </Badge>
               {st.meta.resolution && (
@@ -147,11 +151,70 @@ export function StructuresPanel() {
       {(() => {
         const st = structures.find(x => x.id === activeId)
         if (!st) return null
+        const data = dataRegistry.get(st.id)
+        // 配体链组展开为「分子行」：同一链组常含多个独立小分子（如 PO4+HEM 同链），
+        // 点行选分子而非整组——修复「点配体却选中整条链」
+        const resChain: number[] = []
+        if (data) data.chains.forEach((c, k) => c.residueIdx.forEach(ri => { resChain[ri] = k }))
+        type Row =
+          | { kind: 'chain'; i: number; c: typeof st.chains[number] }
+          | { kind: 'molecule'; i: number; c: typeof st.chains[number]; m: NonNullable<typeof data>['molecules'][number]; mi: number }
+        const rows: Row[] = []
+        st.chains.forEach((c, i) => {
+          if (data && c.type === 'ligand' && data.molecules.length > 0) {
+            const mols = data.molecules.map((m, mi) => ({ m, mi })).filter(({ m }) => resChain[m.residues[0]] === i)
+            if (mols.length > 0) {
+              for (const { m, mi } of mols) rows.push({ kind: 'molecule', i, c, m, mi })
+              return
+            }
+          }
+          rows.push({ kind: 'chain', i, c })
+        })
+        const selectMolecule = (m: NonNullable<typeof data>['molecules'][number]) => {
+          if (!data) return
+          const idx: number[] = []
+          for (const ri of m.residues) {
+            const r = data.residues[ri]
+            for (let i = r.start; i < r.end; i++) idx.push(i)
+          }
+          useMolStore.getState().setActive(st.id)
+          useMolStore.getState().setSelection(st.id, idx)
+          return idx
+        }
         return (
           <>
             <SectionTitle>链 ({st.chains.length})</SectionTitle>
-            <div className="mol-scroll max-h-56 space-y-0.5 overflow-y-auto px-2">
-              {st.chains.map((c, i) => {
+            <div className="mol-scroll max-h-56 space-y-0.5 overflow-y-auto px-2 py-1">
+              {rows.map((row, k) => {
+                if (row.kind === 'molecule') {
+                  const { i, c, m, mi } = row
+                  const dupId = st.chains.filter(x => x.id === c.id).length > 1
+                  const label = c.id === ' ' ? '—' : c.id
+                  return (
+                    <button
+                      key={`mol-${mi}-${k}`}
+                      onClick={() => selectMolecule(m)}
+                      onDoubleClick={() => {
+                        const idx = selectMolecule(m)
+                        if (idx?.length) engineRef.current?.fitView([{ structureId: st.id, indices: idx }])
+                      }}
+                      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80 hover:shadow-xs"
+                      title={`选择此配体分子 ${m.label}（${m.atoms} 原子）· 双击聚焦${m.residues.length > 1 ? ` · 跨 ${m.residues.length} 个残基` : ''}`}
+                    >
+                      <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
+                      <span className="w-5 shrink-0 font-mono text-xs font-bold">{label}</span>
+                      {dupId && (
+                        <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
+                      )}
+                      <FlaskConical className="h-3 w-3 shrink-0 text-amber-600/80 dark:text-amber-400/80" />
+                      <span className="shrink-0 rounded bg-amber-500/10 px-1.5 font-mono text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                        {m.label}
+                      </span>
+                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">{m.atoms} at</span>
+                    </button>
+                  )
+                }
+                const { i, c } = row
                 const Icon = CHAIN_TYPE_ICON[c.type] ?? TestTube
                 // 同一链 ID 可能拆成多个链组（蛋白链 A + 配体链 A + 水链 A）。
                 // 用 chainidx 按链组索引选择，避免「点配体链却选中整条链」
@@ -159,7 +222,7 @@ export function StructuresPanel() {
                 const label = c.id === ' ' ? '—' : c.id
                 return (
                   <button
-                    key={`${c.id}-${i}`}
+                    key={`${c.id}-${i}-${k}`}
                     onClick={() => {
                       const store = useMolStore.getState()
                       const res = store.selectFromExpr(`chainidx ${i}`)
@@ -172,7 +235,7 @@ export function StructuresPanel() {
                         engineRef.current?.fitView([{ structureId: st.id, indices: useMolStore.getState().selection.indices }])
                       }
                     }}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80 hover:shadow-xs"
                     title={`选择此链组（${c.residues} 残基 · ${c.atoms} 原子）· 双击聚焦${dupId ? ' · 同链 ID 含多个链组，已按链组精确选择' : ''}`}
                   >
                     <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
@@ -290,17 +353,22 @@ export function StructuresPanel() {
                           }
                         }}
                         onDoubleClick={() => {
-                          // 双击：仅选中该配体的单个拷贝（含此配体的第一个链组）
+                          // 双击：仅选中首个拷贝所在的完整配体分子（连通分量，多残基配体不截断）
                           const data = dataRegistry.get(st.id)
                           if (!data) return
-                          const seg = st.chains.findIndex(c =>
-                            c.type === 'ligand' && data.residues.some(r => r.chainId === c.id && r.resName.toUpperCase() === lg.resName.toUpperCase()))
-                          if (seg < 0) return
-                          const res = useMolStore.getState().selectFromExpr(`chainidx ${seg} and resn ${lg.resName}`)
-                          if (res.error) toast.error(res.error)
+                          const mol = data.molecules.find(m => m.resNames.includes(lg.resName.toUpperCase()))
+                          if (!mol) return
+                          const idx: number[] = []
+                          for (const ri of mol.residues) {
+                            const r = data.residues[ri]
+                            for (let i = r.start; i < r.end; i++) idx.push(i)
+                          }
+                          useMolStore.getState().setActive(st.id)
+                          useMolStore.getState().setSelection(st.id, idx)
+                          toast.success(`已选中首个 ${lg.resName} 分子拷贝`, { description: `${mol.label} · ${mol.atoms} 原子 · 双击聚焦在序列条配体行` })
                         }}
                         className="rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 font-mono text-[10px] font-medium transition hover:border-primary/50 hover:bg-primary/5"
-                        title={`选择全部 ${lg.resName}（链 ${lg.chainIds}）· 双击仅选首个拷贝`}
+                        title={`选择全部 ${lg.resName}（链 ${lg.chainIds}）· 双击仅选首个分子拷贝`}
                       >
                         {lg.resName}
                         {lg.count > 1 && <span className="ml-0.5 text-muted-foreground">×{lg.count}</span>}
@@ -412,7 +480,7 @@ export function StructuresPanel() {
           </>
         )
       })()}
-      <PanelHint>点击链/配体选择，双击聚焦；链列表已按「链组」精确选择（同链 ID 的蛋白/配体/水不会互相波及）；结构卡片点击切换活动结构；{structures.length >= 2 ? '⧉ 按钮将此结构叠合到活动结构（superpose）。' : ''}</PanelHint>
+      <PanelHint>点击链选择（配体行按<b>分子</b>精确选择，双击聚焦）；结构卡片点击切换活动结构；{structures.length >= 2 ? '⧉ 按钮将此结构叠合到活动结构（superpose）。' : ''}</PanelHint>
     </div>
   )
 }

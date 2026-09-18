@@ -256,6 +256,20 @@ const onePredicates: Record<string, OnePred> = {
     }
     return predAtom(ctx, (i) => set.has(ctx.structure.atomChain[i]))
   },
+  // 按配体分子索引选择（0 基，与链面板配体行/序列条配体 chip 编号一致）：
+  // molecule 2 = 第 3 个配体分子——多残基配体（多糖/肽类）整体选中，不波及同链其它分子
+  molecule: (ctx, vs) => {
+    const set = new Set<number>()
+    for (const v of vs) {
+      const n = parseInt(v, 10)
+      if (!isNaN(n)) set.add(n)
+    }
+    return predAtom(ctx, (i) => {
+      const m = ctx.structure.atomMolecule[i]
+      return m >= 0 && set.has(m)
+    })
+  },
+  mol: (ctx, vs) => onePredicates.molecule(ctx, vs),
   resn: (ctx, vs) => {
     const set = new Set(vs.map(v => v.toUpperCase()))
     return predAtom(ctx, (i) => set.has(ctx.structure.atoms.resNames[i].toUpperCase()))
@@ -359,6 +373,7 @@ export const PRESET_SELECTIONS: { value: string; label: string }[] = [
   { value: 'protein', label: 'protein — 氨基酸' },
   { value: 'nucleic', label: 'nucleic — 核酸' },
   { value: 'ligand', label: 'ligand — 配体' },
+  { value: 'molecule 0', label: 'molecule N — 第 N 个配体分子（0 基）' },
   { value: 'hetero', label: 'hetero — 非聚合物' },
   { value: 'water', label: 'water — 水' },
   { value: 'metal', label: 'metal — 金属离子' },

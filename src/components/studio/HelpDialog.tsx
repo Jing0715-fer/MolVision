@@ -116,7 +116,7 @@ export function HelpDialog() {
               <p><span className="font-semibold text-foreground">跨结构接触与埋藏面积</span>：superpose 后用 <code className="rounded bg-muted px-1 font-mono text-[10px]">xcontacts 1UBQ:chain A | 1D3Z:chain A</code> 检测复合物界面，再 <code className="rounded bg-muted px-1 font-mono text-[10px]">xbsa</code> 把两结构原子拼成联合坐标集做三路 SASA——游离构象视角的界面埋藏面积，面板可分别选择两侧核心残基。</p>
               <p><span className="font-semibold text-foreground">SASA / DSSP</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">sasa</code> 溶剂可及面积（可 <code className="rounded bg-muted px-1 font-mono text-[10px]">color sasa</code> 暴露度着色）；<code className="rounded bg-muted px-1 font-mono text-[10px]">dssp</code> 重算二级结构。</p>
               <p><span className="font-semibold text-foreground">对象工作流</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">create pocket = within 5 of resn HEM</code> 把选择提升为独立对象；<code className="rounded bg-muted px-1 font-mono text-[10px]">split_chains</code> 按链拆分；<code className="rounded bg-muted px-1 font-mono text-[10px]">save out.pdb chain A</code> 导出坐标。</p>
-              <p><span className="font-semibold text-foreground">配体工作流</span>：结构面板配体行 →「口袋」一键选中该配体 4.5Å 结合位点（<code className="rounded bg-muted px-1 font-mono text-[10px]">byres (within 4.5 of resn HEM)</code>）；序列条底部配体行可逐个分子选择/聚焦；右键菜单「周围环境」从任意原子出发。</p>
+              <p><span className="font-semibold text-foreground">配体工作流</span>：点击配体 → <span className="font-semibold text-foreground">选中整个分子</span>（连通分量：多残基配体如多糖/肽类抑制剂合并为一，同链其它分子互不波及）；结构面板配体行按分子精确选择、双击聚焦；「口袋」一键选中该配体 4.5Å 结合位点（<code className="rounded bg-muted px-1 font-mono text-[10px]">byres (within 4.5 of resn HEM)</code>）；序列条底部配体行可逐个分子选择/聚焦；右键菜单「选择此分子」/「周围环境」从任意原子出发。</p>
             </div>
           </section>
 
@@ -146,6 +146,7 @@ export function HelpDialog() {
             <div className="space-y-1 rounded-lg bg-muted/40 p-2.5 font-mono text-[10px] leading-relaxed">
               <div><span className="text-emerald-600 dark:text-emerald-400">chain A</span> and <span className="text-emerald-600 dark:text-emerald-400">resi 40-80</span></div>
               <div><span className="text-emerald-600 dark:text-emerald-400">chainidx 4</span>  <span className="text-muted-foreground">{'// 第 5 个链组（同链 ID 的蛋白/配体/水互不波及）'}</span></div>
+              <div><span className="text-emerald-600 dark:text-emerald-400">molecule 2</span>  <span className="text-muted-foreground">{'// 第 3 个配体分子（多残基配体整体，别名 mol）'}</span></div>
               <div><span className="text-emerald-600 dark:text-emerald-400">within 5 of</span> (resn HEM)  <span className="text-muted-foreground">{'// HEM 周围 5 Å'}</span></div>
               <div><span className="text-emerald-600 dark:text-emerald-400">byres</span>(within 4 of ligand)  <span className="text-muted-foreground">{'// 扩展到整个残基'}</span></div>
               <div>(protein or nucleic) and <span className="text-emerald-600 dark:text-emerald-400">not helix</span></div>

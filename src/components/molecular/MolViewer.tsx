@@ -69,14 +69,25 @@ export default function MolViewer() {
       return
     }
 
-    // 选择：Ctrl=单原子，默认=整个残基；Shift=追加，Alt=移除
+    // 选择：Ctrl=单原子，默认=整残基（配体原子扩展到整个配体分子）；Shift=追加，Alt=移除
     let indices: number[]
     if (pick.ctrlKey) {
       indices = [pick.atomIdx]
     } else {
-      const r = data.residues[pick.residueIdx]
+      // 配体分子粒度：多残基配体（多糖/肽类抑制剂/多个小分子共链）作为整体选中，
+      // 不波及同链组的其它分子——修复「点配体却选中整条链」
+      const molIdx = data.atomMolecule[pick.atomIdx] ?? -1
+      const mol = molIdx >= 0 ? data.molecules[molIdx] : null
       indices = []
-      for (let i = r.start; i < r.end; i++) indices.push(i)
+      if (mol) {
+        for (const ri of mol.residues) {
+          const rr = data.residues[ri]
+          for (let i = rr.start; i < rr.end; i++) indices.push(i)
+        }
+      } else {
+        const r = data.residues[pick.residueIdx]
+        for (let i = r.start; i < r.end; i++) indices.push(i)
+      }
     }
     const mode = pick.altKey ? 'remove' : pick.shiftKey ? 'add' : 'replace'
     if (!pick.shiftKey && !pick.altKey) store.setActive(pick.structureId)
@@ -96,9 +107,11 @@ export default function MolViewer() {
         const i = info.atomIdx
         const res = data.residues[data.atomResidue[i]]
         const rect = el.getBoundingClientRect()
+        const molIdx = data.atomMolecule[i] ?? -1
+        const mol = molIdx >= 0 ? data.molecules[molIdx] : null
         setHover({
           text: `${a.names[i]} · ${a.resNames[i]} ${a.resSeqs[i]}${a.iCodes[i] || ''}`,
-          sub: `链 ${a.chainIds[i].trim() || '?'} · ${a.elements[i]}${a.hetero[i] ? ' · HET' : ''}${a.bfactors[i] ? ` · B=${a.bfactors[i].toFixed(1)}` : ''}${res.ss === 'H' ? ' · 螺旋' : res.ss === 'E' ? ' · 折叠' : ''}`,
+          sub: `链 ${a.chainIds[i].trim() || '?'} · ${a.elements[i]}${a.hetero[i] ? ' · HET' : ''}${a.bfactors[i] ? ` · B=${a.bfactors[i].toFixed(1)}` : ''}${res.ss === 'H' ? ' · 螺旋' : res.ss === 'E' ? ' · 折叠' : ''}${mol ? ` · 分子 ${mol.label}（${mol.atoms} 原子）` : ''}`,
           x: info.x - rect.left + 14,
           y: info.y - rect.top + 14,
         })
@@ -317,6 +330,22 @@ export default function MolViewer() {
       useMolStore.getState().setActive(ctxMenu.pick.structureId)
       useMolStore.getState().setSelection(ctxMenu.pick.structureId, idx)
     },
+    // 整个配体分子（连通分量：多残基配体/共链多个小分子时只选所属分子）
+    molecule: () => {
+      if (!ctxMenu) return
+      const data = dataRegistry.get(ctxMenu.pick.structureId)
+      if (!data) return
+      const molIdx = data.atomMolecule[ctxMenu.pick.atomIdx] ?? -1
+      const mol = molIdx >= 0 ? data.molecules[molIdx] : null
+      if (!mol) return
+      const idx: number[] = []
+      for (const ri of mol.residues) {
+        const r = data.residues[ri]
+        for (let i = r.start; i < r.end; i++) idx.push(i)
+      }
+      useMolStore.getState().setActive(ctxMenu.pick.structureId)
+      useMolStore.getState().setSelection(ctxMenu.pick.structureId, idx)
+    },
     // 周围环境：5Å 内原子扩展到整残基（含自身残基，适合结合口袋检查）
     environment: () => {
       if (!ctxMenu) return
@@ -378,6 +407,15 @@ export default function MolViewer() {
     return `${a.chainIds[i].trim() || '?'} · ${a.resNames[i]} ${a.resSeqs[i]} · ${a.names[i]}`
   })()
 
+  // 右键目标是否为配体分子（显示「选择此分子」项）
+  const ctxMolInfo = (() => {
+    if (!ctxMenu) return null
+    const data = dataRegistry.get(ctxMenu.pick.structureId)
+    if (!data) return null
+    const molIdx = data.atomMolecule[ctxMenu.pick.atomIdx] ?? -1
+    return molIdx >= 0 ? data.molecules[molIdx] : null
+  })()
+
   return (
     <div
       ref={containerRef}
@@ -420,6 +458,10 @@ export default function MolViewer() {
           )}
           <CtxItem onClick={() => { ctxActions.atom(); setCtxMenu(null) }}>选择此原子</CtxItem>
           <CtxItem onClick={() => { ctxActions.residue(); setCtxMenu(null) }}>选择此残基</CtxItem>
+          {ctxMolInfo && (
+            <CtxItem onClick={() => { ctxActions.molecule(); setCtxMenu(null) }}
+              hint={`${ctxMolInfo.atoms} 原子`}>选择此分子（{ctxMolInfo.label}）</CtxItem>
+          )}
           <CtxItem onClick={() => { ctxActions.chain(); setCtxMenu(null) }}>选择此链（链组）</CtxItem>
           <CtxItem onClick={() => { ctxActions.sameResidue(); setCtxMenu(null) }}>选择全部 {ctxInfo?.split('·')[1]?.trim().split(' ')[0] ?? '同类'} 残基</CtxItem>
           <CtxItem onClick={() => { ctxActions.environment(); setCtxMenu(null) }}
@@ -541,6 +583,18 @@ function EmptyHint() {
         <p className="mt-3 text-[10px] text-muted-foreground/70">
           演示场景会自动加载结构并逐步讲解操作 —— 也可从工具栏「演示」菜单选择 5 个主题场景
         </p>
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-t border-border/50 pt-3 text-[10px] text-muted-foreground/80">
+          <span className="flex items-center gap-1">
+            <kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">8</kbd> 表示法预设
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">`</kbd> 命令行
+          </span>
+          <span className="flex items-center gap-1">
+            <kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">V</kbd> 存视角
+          </span>
+          <span className="flex items-center gap-1">右键 · 原子级操作</span>
+        </div>
       </div>
     </div>
   )

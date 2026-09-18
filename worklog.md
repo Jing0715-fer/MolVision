@@ -854,3 +854,50 @@ Stage Summary:
 - 关键决策：①多态匹配取全对交集而非两两链（保证参考坐标系下原子集合一致）②水残基不参与链聚合物类型投票（修复 2VB1 类高分辨含水结构被误判 ligand 的既有 bug，superpose/morph/序列工具全链路受益）③SlotLane 分离 acquire/post（过期任务直接 release 不入通道，避免结果消息错配释放他人槽位）④让位量实测修正 164→196px（DOM 矩形测量发现 16px 垂直重叠，VLM 复核确认）
 - 未解决问题与风险：①morph multi 的恒等兜底要求全部结构原子序一致（混合场景：A↔X1 序列、A↔X2 恒等可各自成立但交集以序列对为准——已按「任一恒等则全部恒等」收窄，极端混合用例报错而非错配）②时间轴卡片无 FLIP 动画（拖拽松手即时重排，无过渡——后续可加 layout animation）③并发闸排队中的任务不可取消（用户改设置只会让过期投递被跳过，排队等待本身继续）④多态 morph 会话存档仍只存第 1 帧（r18 限制延续，PDB 单模型格式约束）⑤CDP 合成事件下 Radix tooltip 不显示（真实用户无影响）
 - 下一阶段建议（优先级序）：① ray 渲染异步化（OffscreenCanvas/分帧 + 进度 toast，r17 起遗留）② UI 偏好统一 settings store（面板宽度/σ 卡位置/主题等散键归一，r17 起遗留）③ 时间轴 FLIP 动画 + 卡片右键菜单（复制/插入当前机位）④ morph 帧插值升级（键长校正/去碰撞，向 rigimol 靠拢）⑤ 并发闸排队任务可取消（AbortSignal）
+
+---
+Task ID: feat-r20
+Agent: main
+Task: 下一阶段开发 + UI 打磨：配体分子级选择（修复「点配体选中整条链」）、浅色主题细节打磨、控制台/结构卡/状态栏视觉精修
+
+Work Log:
+- 读取 worklog（r19 完成 morph multi/movie 时间轴/并发闸）；QA 冒烟 dev server 200 正常
+- 【根因定位】用户反馈「点击配体分子选中整条链」：4HHB 链 B/D 的配体链组各含 PO4+HEM 两个独立小分子（链组按连续 chainId 聚合，不区分分子）——点链列表配体行 = 选中整组（44 原子含两个分子）；3D 点击与序列条 chips 则按单残基选择（多残基配体会被拆散）。正确语义应为「配体分子」粒度（PyMOL object 语义）
+- 【功能 A：配体分子连通分量（parser.ts）】
+  - LigandMolecule 接口：{ residues, atoms, resNames, chainIds, label }；StructureData 新增 molecules + atomMolecule（原子→分子索引，-1=聚合物/水）
+  - 计算流程：非聚合物异源非水残基 → 并查集 → ①化学键连通（含 CONECT 注释键，跨链认可）②重原子近距离连通（≤2.45Å 覆盖最长共价键 S-S 2.05/金属配位 ~2.3，不跨链防晶体堆积误连；氢原子跳过——氢键近距离非共价）③分量按首残基升序稳定编号
+  - label 语义：单残基=残基名 / 同名多残基=NAG×2 / 异名多残基=NAG+SO4
+  - subsetStructure/buildStructure 全走同一入口，morph/create/split_chains/会话恢复自动获得分子信息
+- 【功能 B：全入口接入分子粒度】
+  - MolViewer handlePick：默认点击配体原子 → 扩展到整个分子（多残基配体不再拆散）；悬停 tooltip 增加「分子 HEM（43 原子）」信息
+  - 右键菜单新增「选择此分子（label）N 原子」项（仅配体原子显示，位于选择此残基与选择此链之间）
+  - StructuresPanel 链列表：配体链组渲染为分子行（链色点+链ID+#+组号+烧瓶图标+amber 分子徽章+原子数），点击选分子/双击聚焦；蛋白/核酸/水组行保持 chainidx 语义
+  - StructuresPanel 配体徽章双击：改为选首个拷贝所在完整分子（不再 chainidx+resn 组合，多残基配体不截断）
+  - SequenceBar 配体 chips：按分子分组（多残基配体合并为一 chip，title 显示残基数），点击选分子/双击聚焦
+- 【功能 C：选择语法与统计】
+  - selection.ts 新增 molecule N（0 基）与别名 mol N 谓词：molecule 2 = 第 3 个配体分子；PRESET_SELECTIONS 与 HelpDialog 语法示例同步更新
+  - store summarize 新增 summary.ligandMolecules；InfoPanel 显示「配体分子」行；HelpDialog 配体工作流段落重写
+- 【UI 打磨（浅色主题精修）】
+  - globals.css：新增 .mol-elevate 柔和分层阴影（浅色双影 / 深色下沉描边感）
+  - 结构卡：活动卡 mol-elevate + primary/[0.04] 底色；非活动徽章加边框定义感（border+bg-background+shadow-xs）；残基徽章 tabular-nums
+  - ConsoleBar：输入行改为独立圆角卡（bg-muted/40 + 边框），focus-within emerald 描边+内阴影+淡底色，caret emerald，行尾 ↵ kbd 提示
+  - StatusBar：统计 tabular-nums；已选胶囊加 ring-primary/25 + font-semibold
+  - 链列表行 hover 增强（bg-accent/80 + shadow-xs），列表容器加 py-1 呼吸感
+  - EmptyHint：底部新增快捷键提示带（1-8 表示法 / ` 命令行 / V 存视角 / 右键原子级操作，kbd 样式）
+- 【QA 全量验证（agent-browser 真实交互 + VLM 评审）】
+  - 4HHB 分子检测：6 个配体分子（HEM A142/PO4 B147/HEM B148/HEM C142/PO4 D147/HEM D148）；链列表 B#6 拆为 PO4(1 at)+HEM(43 at) 两行——点 PO4 行精确选 1 原子（旧版 44 原子整组）✓
+  - 3D 点击：聚焦 HEM B148 后视口中心合成点击 → 已选 43 原子（HEM 分子）；hover 显示「分子 HEM（43 原子）」✓
+  - 右键菜单：「选择此分子（HEM）43 原子」出现且点击生效 ✓；序列条 chips 按分子分组（HEMB148 双击=选分子+聚焦 43 原子）✓
+  - 多残基配体实证（1IGT 糖基化 IgG）：检测出 E/F 两条完整糖链分子 NAG+BMA+MAN+GAL+FUL 各 213 原子 9 残基——点行选 213 原子整体（旧版单残基或整链组）✓ chips title「9 个残基」✓
+  - 命令行：select molecule 1 → PO4 1 原子；select mol 5 → HEM D148 43 原子（0 基索引与别名均生效）✓
+  - 主题：默认浅色（html class=light，无存储偏好）；切换深色正常渲染（VLM 深色评审良好：对比度达标、层次清晰）；切回浅色视口背景跟随 ✓
+  - 移动端 390×844：无横向滚动（scrollW=clientW=390）✓
+  - VLM 最终评审浅色 9/10「布局专业严谨、3D 渲染出色、契合现代分子可视化软件视觉标准」；中评 8.5/10 时指出的控制台输入权重/链行 hover 已即时修复
+  - 回归：lint 0 错 0 警 ✓；tsc 触碰文件零错误（预存错误均在 skills/worker 旧文件）✓；浏览器 errors 空 ✓；dev.log 无运行时错误 ✓
+- 【QA 方法论补充】agent-browser mouse down/up 分命令执行间隔可超引擎 700ms 长按阈值 → 点击失效；须用单次 eval 内连续派发 pointerdown+pointerup（间隔≈0）；配体 chip 双击聚焦后画布中心即配体，是可靠的 3D 点击测试锚点
+
+Stage Summary:
+- 项目当前状态：r19 基础上补齐「配体分子粒度选择」——parser 连通分量分子识别（CONECT+距离双通道）+ 全入口接入（3D 点击/右键/链列表分子行/配体徽章/序列条 chips/命令行 molecule N）+ 统计与文档；同步完成浅色主题精修（结构卡/控制台/状态栏/链行/空态快捷键带）
+- 关键决策：①分子=连通分量而非链组（链组按 chainId 连续聚合，常含多个独立小分子）②距离连通限重原子且不跨链（氢键近距离不误并、晶体堆积不误连）③CONECT 键跨链认可（权威连接记录）④水不是分子（单水残基本身即完整分子，保持残基级）⑤链列表配体组直接渲染分子行（组级选择仍可用 chainidx 命令）
+- 未解决问题与风险：①金属配位（CONECT 缺失时）距离 2.45Å 内的金属离子会并入配体分子（化学上可辩护，与 PyMOL 单残基语义略异）②极拥挤晶格中 <2.45Å 非键接触理论上可误并（实际精修结构罕见）③序列条滚动条可见性（VLM 提及，长序列浏览体验可再优化）④ViewBar 悬浮件在浅色模型上阴影较弱（VLM 提及，低危）
+- 下一阶段建议（优先级序）：① ray 渲染异步化（OffscreenCanvas/分帧+进度 toast，r17 起遗留）② UI 偏好统一 settings store（面板宽度/σ 卡位置/主题等散键归一）③ 时间轴 FLIP 动画 + 卡片右键菜单 ④ morph 帧插值升级（键长校正/去碰撞，向 rigimol 靠拢）⑤ 并发闸排队任务可取消（AbortSignal）⑥ 分子级「口袋」增强：以分子为锚点的 byres within（当前 resn 全拷贝语义）

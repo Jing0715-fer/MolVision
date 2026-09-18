@@ -45,6 +45,20 @@ export interface Chain {
   residueIdx: number[] // 残基索引列表
 }
 
+/** 配体分子：非聚合物异源残基经化学键/距离连通的分量（水不参与） */
+export interface LigandMolecule {
+  /** 构成残基索引（升序） */
+  residues: number[]
+  /** 原子总数 */
+  atoms: number
+  /** 残基名去重（首现顺序） */
+  resNames: string[]
+  /** 链 ID 去重 */
+  chainIds: string[]
+  /** 主标签：单残基 = 残基名；同名多残基 = NAG×2；异名多残基 = NAG+SO4 */
+  label: string
+}
+
 export interface StructureData {
   id: string
   name: string
@@ -55,6 +69,10 @@ export interface StructureData {
   bonds: { a: Int32Array; b: Int32Array; count: number }
   atomResidue: Int32Array // 原子 → 残基索引
   atomChain: Int32Array   // 原子 → 链索引
+  /** 配体分子列表（连通分量，按首残基升序稳定编号；水不在其中） */
+  molecules: LigandMolecule[]
+  /** 原子 → 配体分子索引（-1 = 非配体分子：聚合物/水） */
+  atomMolecule: Int32Array
   meta: { title: string; method: string; resolution: number | null; pdbId: string | null }
   ssFromRecords: boolean
   hasHydrogens: boolean
@@ -597,6 +615,85 @@ function buildStructure(raw: RawAtoms): StructureData {
     if (e === 'H' || e === 'D') { hasHydrogens = true; break }
   }
 
+  // ---- 配体分子（连通分量）----
+  // 分子 = 非聚合物异源残基经化学键（含 CONECT）或重原子近距离（≤2.45Å，共价键范围）连通的分量；
+  // 水不参与（单个水残基本身就是完整分子，保持残基级选择即可）。
+  // 用途：点击配体 → 选中整个分子而非整个链组；多残基配体（多糖/肽类抑制剂）作为一个整体。
+  const molecules: LigandMolecule[] = []
+  const atomMolecule = new Int32Array(count).fill(-1)
+  {
+    const ligandRes = new Set<number>()
+    for (let ri = 0; ri < residues.length; ri++) {
+      const r = residues[ri]
+      if (r.hetero && !r.polymer && !r.water) ligandRes.add(ri)
+    }
+    if (ligandRes.size > 0) {
+      // 并查集（残基级）
+      const parent = new Map<number, number>()
+      for (const ri of ligandRes) parent.set(ri, ri)
+      const find = (x: number): number => {
+        let p = parent.get(x)!
+        while (p !== parent.get(p)!) p = parent.get(p)!
+        parent.set(x, p)
+        return p
+      }
+      const union = (a: number, b: number) => {
+        const ra = find(a), rb = find(b)
+        if (ra !== rb) parent.set(ra, rb)
+      }
+      // ① 化学键连通（含 CONECT 注释键；跨链也认可——CONECT 是权威连接记录）
+      for (let bi = 0; bi < bonds.count; bi++) {
+        const ra = atomResidue[bonds.a[bi]], rb = atomResidue[bonds.b[bi]]
+        if (ra !== rb && ligandRes.has(ra) && ligandRes.has(rb)) union(ra, rb)
+      }
+      // ② 重原子近距离连通（补齐距离成键的分子内残基；不跨链，防晶体堆积误连）
+      //    阈值 2.45Å：覆盖最长共价键（S-S 2.05 / 金属-配体 ~2.3），非键重原子接触通常 ≥ 2.7Å
+      for (const ri of ligandRes) {
+        const r = residues[ri]
+        for (let i = r.start; i < r.end; i++) {
+          const e = atoms.elements[i]
+          if (e === 'H' || e === 'D') continue // 氢原子近距离是氢键非共价
+          const xi = positions[i * 3], yi = positions[i * 3 + 1], zi = positions[i * 3 + 2]
+          const cand = grid.queryRadius(xi, yi, zi, 2.45, positions)
+          for (const j of cand) {
+            const rj = atomResidue[j]
+            if (rj === ri || !ligandRes.has(rj)) continue // 同残基 / 非配体残基
+            if (atoms.chainIds[j] !== atoms.chainIds[i]) continue
+            const ej = atoms.elements[j]
+            if (ej === 'H' || ej === 'D') continue
+            union(ri, rj)
+          }
+        }
+      }
+      // ③ 分量收集 + 稳定编号（按首残基升序）
+      const groups = new Map<number, number[]>()
+      for (const ri of ligandRes) {
+        const root = find(ri)
+        let arr = groups.get(root)
+        if (!arr) { arr = []; groups.set(root, arr) }
+        arr.push(ri)
+      }
+      const ordered = [...groups.values()].sort((a, b) => a[0] - b[0])
+      for (const resList of ordered) {
+        resList.sort((a, b) => a - b)
+        const resNames: string[] = []
+        const chainIds: string[] = []
+        let atomCount = 0
+        for (const ri of resList) {
+          const r = residues[ri]
+          atomCount += r.end - r.start
+          if (!resNames.includes(r.resName.toUpperCase())) resNames.push(r.resName.toUpperCase())
+          if (!chainIds.includes(r.chainId)) chainIds.push(r.chainId)
+          for (let i = r.start; i < r.end; i++) atomMolecule[i] = molecules.length
+        }
+        const label = resNames.length === 1
+          ? (resList.length > 1 ? `${resNames[0]}×${resList.length}` : resNames[0])
+          : resNames.join('+')
+        molecules.push({ residues: resList, atoms: atomCount, resNames, chainIds, label })
+      }
+    }
+  }
+
   // 无 HELIX/SHEET 记录：DSSP 兜底（Kabsch–Sander 氢键能量指认螺旋/折叠，
   // 取代旧 CA 间距启发式——旧方法无法检测 β 折叠）
   if (!ssFromRecords) {
@@ -631,6 +728,8 @@ function buildStructure(raw: RawAtoms): StructureData {
     bonds,
     atomResidue,
     atomChain,
+    molecules,
+    atomMolecule,
     meta: {
       title: raw.title || raw.name,
       method: raw.method,

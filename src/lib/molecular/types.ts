@@ -88,6 +88,8 @@ export interface StructureEntry {
   summary: {
     atoms: number; residues: number; chains: number; bonds: number
     hydrogens: number; waters: number; ligandResidues: number
+    /** 独立配体分子数（连通分量，多残基配体计为 1） */
+    ligandMolecules: number
   }
   chains: ChainSummary[]
   ligands: LigandSummary[]

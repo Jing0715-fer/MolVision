@@ -155,6 +155,18 @@
   scrollbar-color: color-mix(in oklab, var(--muted-foreground) 30%, transparent) transparent;
 }
 
+/* 浅色模式柔和分层阴影（活动卡/浮层深度，深色下沉为描边感） */
+.mol-elevate {
+  box-shadow:
+    0 1px 2px oklch(0.2 0 0 / 0.05),
+    0 4px 16px -6px oklch(0.2 0 0 / 0.08);
+}
+.dark .mol-elevate {
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.4),
+    0 4px 16px -6px oklch(0 0 0 / 0.5);
+}
+
 /* 序列条残基单元过渡 */
 .seq-cell {
   transition: transform 120ms ease, box-shadow 120ms ease;

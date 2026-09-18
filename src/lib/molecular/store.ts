@@ -117,6 +117,7 @@ function summarize(data: StructureData): { entry: Omit<StructureEntry, 'id' | 'r
         hydrogens,
         waters,
         ligandResidues: ligands.reduce((s, l) => s + l.count, 0),
+        ligandMolecules: data.molecules.length,
       },
       chains,
       ligands,

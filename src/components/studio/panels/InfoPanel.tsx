@@ -31,6 +31,7 @@ export function InfoPanel() {
     ...(st.summary.hydrogens > 0 ? [{ label: '氢原子', value: st.summary.hydrogens.toLocaleString() }] : []),
     ...(st.summary.waters > 0 ? [{ label: '水分子', value: st.summary.waters.toLocaleString() }] : []),
     ...(st.summary.ligandResidues > 0 ? [{ label: '配体残基', value: st.summary.ligandResidues.toLocaleString() }] : []),
+    ...(st.summary.ligandMolecules > 0 ? [{ label: '配体分子', value: st.summary.ligandMolecules.toLocaleString() }] : []),
     { label: '二级结构', value: st.hasSS ? '来自 HELIX/SHEET 注释' : '几何启发式推断' },
     { label: '解析耗时', value: `${st.loadMs < 1 ? '<1' : st.loadMs.toFixed(0)} ms` },
   ]

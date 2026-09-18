@@ -34,10 +34,9 @@ export function SequenceBar() {
     .map((c, i) => ({ chain: c, color: st.chains[i]?.color ?? '#9aa3ad', origIdx: i }))
   const polymerChains = chainEntries.filter(({ chain }) => chain.type === 'protein' || chain.type === 'nucleic')
 
-  // 配体残基（异源非水非聚合物）：每个残基即一个完整小分子，可单独选择/聚焦
-  const ligandResidues = (data.residues || []).map((r, ri) => ({ r, ri }))
-    .filter(({ r }) => r.hetero && !r.water && !r.polymer)
-    .slice(0, 60)
+  // 配体分子（连通分量）：每个 chip = 一个完整小分子——多残基配体（多糖/肽类）合并为一，
+  // 点击选择整个分子、双击聚焦；不再按残基拆开
+  const ligandMolecules = (data.molecules || []).slice(0, 60)
 
   return (
     <div className="shrink-0 border-t border-border/70 bg-card/40 backdrop-blur-sm">
@@ -55,31 +54,32 @@ export function SequenceBar() {
 
       {ui.sequenceOpen && (
         <div className="mol-scroll max-h-40 overflow-y-auto px-3 pb-2">
-          {/* 配体行（置顶免滚动）：每个 chip = 一个完整小分子，点击选择、双击聚焦 */}
-          {ligandResidues.length > 0 && (
+          {/* 配体行（置顶免滚动）：每个 chip = 一个完整分子，点击选择、双击聚焦 */}
+          {ligandMolecules.length > 0 && (
             <div className="flex items-center gap-2 pb-2 pt-1">
               <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-card/40 pr-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                 <FlaskConical className="h-3 w-3" /> 配体
               </span>
               <div className="mol-scroll-x flex gap-1 overflow-x-auto pb-0.5">
-                {ligandResidues.map(({ r, ri }) => {
-                  const isSel = selectedResidues.has(ri)
-                  const nAtoms = r.end - r.start
+                {ligandMolecules.map(m => {
+                  const r0 = data.residues[m.residues[0]]
+                  const isSel = m.residues.some(ri => selectedResidues.has(ri))
+                  const molIndices: number[] = []
+                  for (const ri of m.residues) {
+                    const rr = data.residues[ri]
+                    for (let i = rr.start; i < rr.end; i++) molIndices.push(i)
+                  }
                   return (
                     <button
-                      key={ri}
+                      key={m.residues[0]}
                       onClick={() => {
                         useMolStore.getState().setActive(activeId!)
-                        const indices: number[] = []
-                        for (let i = r.start; i < r.end; i++) indices.push(i)
-                        useMolStore.getState().setSelection(activeId!, indices)
+                        useMolStore.getState().setSelection(activeId!, molIndices)
                       }}
                       onDoubleClick={() => {
                         useMolStore.getState().setActive(activeId!)
-                        const indices: number[] = []
-                        for (let i = r.start; i < r.end; i++) indices.push(i)
-                        useMolStore.getState().setSelection(activeId!, indices)
-                        engineRef.current?.fitView([{ structureId: activeId!, indices }])
+                        useMolStore.getState().setSelection(activeId!, molIndices)
+                        engineRef.current?.fitView([{ structureId: activeId!, indices: molIndices }])
                       }}
                       className={cn(
                         'shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold transition',
@@ -87,10 +87,10 @@ export function SequenceBar() {
                           ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/50'
                           : 'border-amber-500/30 bg-amber-500/5 text-amber-700 hover:border-amber-500/60 hover:bg-amber-500/15 dark:text-amber-400',
                       )}
-                      title={`${r.resName} ${r.resSeq}（链 ${r.chainId.trim() || '?'}）· ${nAtoms} 原子 · 点击选择 · 双击聚焦`}
+                      title={`${m.label}（链 ${m.chainIds.map(c => c.trim() || '?').join('/')}）· ${m.atoms} 原子${m.residues.length > 1 ? ` · ${m.residues.length} 个残基` : ''} · 点击选择 · 双击聚焦`}
                     >
-                      {r.resName}
-                      <span className="ml-0.5 text-[8px] font-normal opacity-60">{r.chainId.trim()}{r.resSeq}</span>
+                      {m.resNames.length > 1 ? m.label : m.resNames[0]}
+                      <span className="ml-0.5 text-[8px] font-normal opacity-60">{r0.chainId.trim()}{r0.resSeq}{m.residues.length > 1 && m.resNames.length === 1 ? '+' : ''}</span>
                     </button>
                   )
                 })}
