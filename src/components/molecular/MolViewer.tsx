@@ -633,6 +633,9 @@ function EmptyHint() {
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-t border-border/50 pt-3 text-[10px] text-muted-foreground/80">
           <span className="flex items-center gap-1">
+            <kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">Ctrl</kbd>+<kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">K</kbd> 命令面板
+          </span>
+          <span className="flex items-center gap-1">
             <kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">8</kbd> 表示法预设
           </span>
           <span className="flex items-center gap-1">

@@ -1217,3 +1217,22 @@ Stage Summary:
 - 关键决策：①1-3 排除用邻接表懒缓存（只对供体原子展开，O(bonds) 一次性建表）②showHBonds 剥离发生在 saveSession（自动存档+导出文件同源——导入也是干净起点）而非 restoreSession 白名单（保留其余全部设置语义）③「仅选择集」成为默认语义而非全局+阈值收紧——大结构全局网络本质是噪声，VLM 两轮否决 3.2Å 后确立方向 ④命令面板 Enter 执行「示例命令」而非裸命令（示例完整可跑且条目内可见，无意外）⑤Tab 回查走 data-palette-id（DOM 文本拼接被 kbd 提示污染）
 - 未解决问题与风险：①旧存档 hbondSelOnly=false 且存档时 showHBonds 已被剥离的过渡档（用户没开过氢键就保存过一次）不会归位为 true——B 键 toast 三态文案兜底 ②命令面板「全部命令」62 项一次渲染（cmdk 虚拟列表未启用——项目数可控，暂无性能问题）③VLM 建议未落地：深度衰减虚线（远处氢键变淡）、口袋级 hbond 汇总面板（按残基统计表）④选中高亮三档阈值 32/2000 的中间档在 500-2000 原子场景仍偏厚（下轮可再细分）
 - 下一阶段建议（优先级序）：① 氢键分析面板增强：范围氢键按残基对列表 + 点击跳转 + 键长排序（VLM 建议的汇总面板化）② 深度衰减虚线（depth cueing，远处/被遮挡氢键透明度衰减）③ ViewBar 悬浮按钮布局打磨（VLM 两轮提及「保存视角按钮位置略孤立」）④ 深色主题链颜色对比度自适应 ⑤ 面板宽度等散键 UI 偏好收编 Settings
+
+---
+Task ID: r31
+Agent: main
+Task: 会话协调（并行上下文收敛）+ 命令面板快速动作增强 + 空状态 Ctrl+K 提示
+
+Work Log:
+- 【会话协调·关键】本上下文与另一并行会话独立解决了同一批用户反馈：push 时发现远端已有 r28-SVG/r29/r30 三个提交（SVG 矢量导出+cap 深度着色+命令历史面板 / 演示快照泄漏修复+三级自适应高亮+链内联换色 popover / 氢键三元根因修复+命令面板+a11y）。远端是更完整超集（含本会话未发现的 tour-store 设置快照泄漏这一第二根因、1-3 共价邻排除化学修复、中毒存档清洗、selOnly 默认语义）
+- 【收敛操作】本地 r28 提交备份为 backup-local-r28 分支 → reset --hard 到远端 c76a81c → rm -rf .next + dev_daemon.py 重启 → 远端代码全量验证（渲染零错误 / 氢键存档剥离与恢复实测 engineHb=true→savedHb=false→reload 后 0 children / Ctrl+K 面板 59→66 条目 / VLM 8.5/10）
+- 【移植：空状态 Ctrl+K 提示】MolViewer 空视口引导卡快捷键行首位插入 Ctrl+K 命令面板徽章（新用户第一眼即可发现统一入口）
+- 【增强：面板快速动作 3→10 条】CommandPalette 新增 7 条引擎/会话层快捷动作（全部走 requestAnimationFrame 先关面板再执行，避免对话框遮挡 toast）：适配视图（engine.fitView）/ 复位视角（resetView）/ 氢键网络智能开关（状态感知标签「显示↔隐藏」+ appendCmdHistory 记录）/ 导出截图 PNG 2×（eng.capture + 下载 + toast）/ 保存会话（saveSession + 成功失败分支 toast）/ 导出会话文件（exportSessionFile）/ 新建会话（newSession + 空场景提示）。数据结构重构：QUICK_ACTIONS 静态常量拆为 QUICK_ACTIONS_STATIC（对话框/面板入口）+ 组件内 quickActions useMemo（依赖 settings.showHBonds 动态标签），allItems 依赖数组同步更新；Tab 填入起点对齐真实命令名（png/zoom/orient/hbonds/session）
+- 【E2E】全新浏览器会话：Ctrl+K 开面板 → 66 条目（新 7 条快速动作全部在列：fit/hbond/shot/session 检索确认）→ 点击「显示氢键网络」→ hb=true + 面板自动关闭 + 零错误 ✓；移动端 390×844 scrollW=clientW 无横向溢出 ✓；lint 0 错 0 警 ✓；应用代码 tsc 0 错 ✓
+- 【QA 教训】①并行会话同时开发同一仓库时，push 前必须先 fetch 比对远端（本轮本地完整复刻了远端已解决的 bug——浪费半轮）②agent-browser error buffer 跨 reload/HMR 残留中间态错误（QUICK_ACTIONS is not defined 出现在改名后 allItems 未落地的 HMR 窗口）——验证必须 close+reopen 全新浏览器 ③HMR 中间态错误会被 Fast Refresh 放大为整页 Application error 并缓存，与真 bug 难区分——先全新会话复测再深挖
+
+Stage Summary:
+- 项目当前状态：r30 远端超集基础上收敛完成——空状态曝光新入口 + 面板快捷动作从 3 条扩到 10 条（视图/氢键/截图/会话四类引擎层直达，全部零命令知识可用）
+- 关键决策：①采用远端为基线而非强行 merge（本地提交与其大面积同题冲突，远端还多 3 个根因修复）②快捷动作走引擎/会话层直调而非拼命令字符串（fitView/resetView 无对应命令；hbond 智能开关需读实时状态）③quickActions 用 useMemo 依赖 settings 动态标签（「显示↔隐藏氢键网络」随状态切换）④本地工作保留在 backup-local-r28 分支可考古
+- 未解决问题与风险：①backup-local-r28 分支仅存本地（未推送，其独有内容已被远端覆盖或移植完毕）②面板 desc 列在 <360px 极窄视口未压测 ③VLM 对面板底部「彩虹色输入区」的评价实为 ConsoleBar 快捷键徽章（by design）
+- 下一阶段建议（优先级序）：① 残基级搜索直达（4HHB:A57 类定位）② 深色主题链色对比度自适应 ③ 工具栏按钮使用频率驱动收纳 ④ 导出 300dpi PNG 指南/PDF ⑤ 面板快捷动作补全（spin/rock/stereo/slab 等视觉开关）
