@@ -12,6 +12,25 @@ function notify() {
   for (const fn of listeners) fn()
 }
 
+// ---------- useSyncExternalStore 快照缓存（缓存引用稳定，写入时失效重读） ----------
+let historyCache: string[] | null = null
+let pinnedCache: string[] | null = null
+/** 历史快照（引用稳定；变更时由写入方失效） */
+export function cmdHistorySnapshot(): string[] {
+  if (!historyCache) historyCache = loadCmdHistory()
+  return historyCache
+}
+/** 置顶快照（引用稳定；变更时由写入方失效） */
+export function pinnedCmdsSnapshot(): string[] {
+  if (!pinnedCache) pinnedCache = loadPinnedCmds()
+  return pinnedCache
+}
+const EMPTY: string[] = []
+/** SSR 快照函数（useSyncExternalStore 第三参数需要 () => string[]） */
+export function emptyCmdSnapshot(): string[] {
+  return EMPTY
+}
+
 /** 订阅历史/置顶变化（返回取消函数） */
 export function subscribeCmdHistory(fn: () => void): () => void {
   listeners.add(fn)
@@ -42,12 +61,14 @@ export function appendCmdHistory(cmd: string): void {
   if (!c) return
   const next = [...loadCmdHistory().filter(h => h !== c), c].slice(-HISTORY_MAX)
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+  historyCache = null
   notify()
 }
 
 /** 清空历史（置顶保留）；通知订阅者 */
 export function clearCmdHistory(): void {
   try { localStorage.removeItem(HISTORY_KEY) } catch { /* ignore */ }
+  historyCache = null
   notify()
 }
 
@@ -67,6 +88,7 @@ export function toggleCmdPin(cmd: string): boolean {
     pinned = true
   }
   try { localStorage.setItem(PIN_KEY, JSON.stringify(cur)) } catch { /* ignore */ }
+  pinnedCache = null
   notify()
   return pinned
 }

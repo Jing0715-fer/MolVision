@@ -1193,3 +1193,27 @@ Stage Summary:
 - 关键决策：tour 还原用「快照+订阅追踪」而非命令拦截（覆盖 void exec 异步落地与用户演示中手改，还原到演示前值语义可预期）；链行内换色复用 applyColor 选择集机制（与命令行/颜色面板行为完全一致）；高亮分档阈值 32/2000 对应点选/残基/链级使用场景
 - 未解决问题与风险：①颜色覆盖表随链上色原子数增长（1069 原子/链），多链多覆盖时 session 体积增大（当前无感知，可观察）②配体行 sampleAtom 取首原子，多残基配体部分原子被单独覆盖过时色点可能显示不准确（罕见）③SVG 导出/演示菜单里其余演示（drug-target 等）含 slab/spin 等设置步骤，已由统一订阅还原机制覆盖 ④VLM 终审提到「保存视角」悬浮按钮位置略孤立（下轮 UI 打磨候选）
 - 下一阶段建议（优先级序）：① header 图标按钮 a11y 扫尾（相机/主题/帮助/GitHub aria-label，r28 遗留）② 链行换色色点在移动端 44px 触达目标偏小（h-6 w-6=24px，需触控热区扩大）③ ViewBar 悬浮按钮布局打磨 ④ 命令面板化（Ctrl+K）⑤ 深色主题链色对比度自适应
+
+---
+Task ID: r30
+Agent: main
+Task: 修复用户反馈「氢键网络还是存在且取消不掉」根因三连 + Ctrl+K 命令面板 + a11y/触控扫尾
+
+Work Log:
+- 复现诊断（agent-browser）：localStorage 中毒会话恢复 showHBonds=true → 4HHB 全局氢键网络渲染（hbondGroup 2 children）；VLM 确认「整个结构糊满青绿虚线+端点球」。B 键/ScenePanel 开关/hbonds off 三路径在引擎层均正常（hbondChildren 归 0）——用户「取消不掉」的真痛点是**每次加载都复原**+**全局网络视觉淹没**
+- 【根因 1·化学层真 bug】肽键 O(i-1)...N(i) 是共享 C 的 1-3 原子对（~2.3Å），旧 bonded 集合只排除直接成键 → **每个肽键都被误判为氢键**（4HHB ~570 条假阳性）；注释「主链 N...O=C 属于真氢键保留」为错误论断。修复：hbonds.ts + hbond-worker.ts 同步增加 1-3 共键邻居排除（邻接表 + 供体懒构建缓存 oneThreeOf）——验证：2.5Å 以下假氢键从 ~570 → 11（真紧密接触），2202→1288 条（3.2Å）
+- 【根因 2·持久化层】saveSession 剥离 showHBonds（分析叠加层不随会话自动恢复——参数仍持久化只剥总开关）；restoreSession 对旧中毒存档强制 showHBonds=false + hbondSelOnly=true 归位 + 明确日志「已自动关闭存档中的氢键网络显示…按 B 重开」。刷新不再复活（E2E 两轮验证）
+- 【根因 3·语义层】hbondSelOnly 默认 false→true（types.ts 新默认 + 中毒存档归位）：全局网络对大结构是视觉噪声（VLM 两轮否决「不可接受/淹没结构」），PyMOL 专业工作流本就按范围显示；engine updateHBonds 语义修正——selOnly 且无选择/选择在别处时不渲染（旧逻辑无选择时静默退化为全局）；B 键 toast 三态语义化（无选择/有选择/全局）；hbonds 命令输出同款说明；ScenePanel 子开关提前到首位+判据文案更新（「肽键 O…N 不会误报」）
+- 【视觉】全局网络仅虚线（无端点球）；端点球仅选择集范围显示（帮助追踪两端原子）——VLM 终审口袋范围网络：「疏密适中…cartoon 轮廓分明…端点球尺寸精巧…非常专业的分子交互分析视图」
+- 【取消途径补全】StatusBar 氢键徽章改为可点击 button（X 图标 + title/aria-label，一键关闭）——用户就地取消的最短路径
+- 【新功能：Ctrl+K 命令面板】CommandPalette.tsx（cmdk 1.1.1 + shadcn CommandDialog）：置顶/最近使用/结构切换（≥2 结构）/全部命令四分组 + 快速动作（加载结构/帮助/历史面板）；Enter 执行示例命令（「·」分隔多示例取首段，条目内可见将执行内容）、Tab 填入控制台带补全编辑（data-palette-id 属性回查——初版 textContent 拼接匹配被 kbd 提示文字污染，E2E 抓出后重构）；命令分类图标与 ConsoleBar 补全语义一致；Toolbar「命令面板」按钮（Ctrl K kbd 提示）；store ui.paletteOpen；cmd-history.ts 增加 useSyncExternalStore 快照缓存（模块级缓存 + 写入方失效——React Compiler set-state-in-effect 约束的正规解法）
+- 【E2E 抓出并修复的 SSR 500】useSyncExternalStore 第三参数误传数组（getServerSnapshot 需函数）→ 服务端渲染崩溃 GET / 500 digest 898697636；修复为 emptyCmdSnapshot() 函数，页面恢复 200
+- 【a11y/触控扫尾】Toolbar 全部图标按钮 aria-label（测量模式 4 + 视角 8 + 主题/帮助/GitHub/相机菜单）；LeftPanel 折叠按钮 aria+title；链/配体色点 h-6→h-8 + after:-inset-1.5 伪元素 = 44px 触控热区（r29 遗留）
+- 【E2E 全链路】中毒存档净化（恢复后 showHBonds=false/selOnly=true/0 渲染）→ B 无选择（0 渲染+「0 氢键」徽章+语义 toast）→ 选口袋（328 条范围氢键 + LineSegments+Mesh 端点球）→ VLM 满意 → 徽章点击关闭（children=0）→ 刷新不复活；1-3 排除距离分布验证；命令面板：Ctrl+K/工具栏按钮开、中文「氢键」+英文 slab 过滤、Enter 执行 hbonds on 3.2（showHBonds=true/maxDist=3.2 落地）、Tab 填入（consoleOpen+value=slab）、Esc 关闭、最近使用分组；390×844 无横向溢出（新工具栏按钮后复测）；浏览器 errors 0；lint 0 错 0 警；应用代码 tsc 0 错
+- 沙箱经验：①无头 1-2fps 环境下 Radix Dialog 退出动画按 rAF 帧驱动——关闭后 ~1s 内 DOM 仍查询得到（勿误判「没关上」，加长等待或二次查询）②SSR 500 的 digest 查 dev.log 尾部 strings 输出（log 是二进制混合流）③agent-browser 会话可能被 HMR 全量刷新重置面板状态（ScenePanel 回到 structures 默认页）——测子开关前先点侧栏图标
+
+Stage Summary:
+- 项目当前状态：r29 基础上完成氢键问题根因三连修复（1-3 共键排除的化学正确性 + 存档剥离的持久化根治 + 仅选择集默认的语义对齐）+ Ctrl+K 命令面板 + a11y/触控扫尾。氢键特性现在：加载干净（永不伏击）、按 B 即范围显示、状态栏徽章一键关、口袋级网络获 VLM「非常专业」评价
+- 关键决策：①1-3 排除用邻接表懒缓存（只对供体原子展开，O(bonds) 一次性建表）②showHBonds 剥离发生在 saveSession（自动存档+导出文件同源——导入也是干净起点）而非 restoreSession 白名单（保留其余全部设置语义）③「仅选择集」成为默认语义而非全局+阈值收紧——大结构全局网络本质是噪声，VLM 两轮否决 3.2Å 后确立方向 ④命令面板 Enter 执行「示例命令」而非裸命令（示例完整可跑且条目内可见，无意外）⑤Tab 回查走 data-palette-id（DOM 文本拼接被 kbd 提示污染）
+- 未解决问题与风险：①旧存档 hbondSelOnly=false 且存档时 showHBonds 已被剥离的过渡档（用户没开过氢键就保存过一次）不会归位为 true——B 键 toast 三态文案兜底 ②命令面板「全部命令」62 项一次渲染（cmdk 虚拟列表未启用——项目数可控，暂无性能问题）③VLM 建议未落地：深度衰减虚线（远处氢键变淡）、口袋级 hbond 汇总面板（按残基统计表）④选中高亮三档阈值 32/2000 的中间档在 500-2000 原子场景仍偏厚（下轮可再细分）
+- 下一阶段建议（优先级序）：① 氢键分析面板增强：范围氢键按残基对列表 + 点击跳转 + 键长排序（VLM 建议的汇总面板化）② 深度衰减虚线（depth cueing，远处/被遮挡氢键透明度衰减）③ ViewBar 悬浮按钮布局打磨（VLM 两轮提及「保存视角按钮位置略孤立」）④ 深色主题链颜色对比度自适应 ⑤ 面板宽度等散键 UI 偏好收编 Settings

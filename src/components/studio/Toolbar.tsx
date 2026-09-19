@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import {
   Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
-  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine,
+  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
@@ -353,6 +353,7 @@ export function Toolbar() {
               <TooltipTrigger asChild>
                 <button
                   onClick={() => { setMeasureMode(m.mode); if (m.mode !== 'off') toast.info(`${m.hint}`) }}
+                  aria-label={m.hint}
                   className={cn(
                     'flex h-7 w-7 items-center justify-center rounded transition',
                     measureMode === m.mode
@@ -373,6 +374,7 @@ export function Toolbar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => engineRef.current?.fitView()}
+              aria-label="适配视图"
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <Crosshair className="h-4 w-4" />
@@ -384,6 +386,7 @@ export function Toolbar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => engineRef.current?.resetView()}
+              aria-label="复位视角"
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <Home className="h-4 w-4" />
@@ -395,6 +398,7 @@ export function Toolbar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => updateSettings({ spin: !settings.spin })}
+              aria-label="自动旋转"
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
                 settings.spin ? 'bg-primary/15 text-emerald-500' : 'text-muted-foreground hover:text-foreground',
@@ -410,6 +414,7 @@ export function Toolbar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => engineRef.current?.orient()}
+              aria-label="主轴对齐视角"
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <Compass className="h-4 w-4" />
@@ -421,6 +426,7 @@ export function Toolbar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => updateSettings({ stereo: !settings.stereo })}
+              aria-label="红蓝立体视图"
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
                 settings.stereo ? 'bg-rose-500/15 text-rose-500' : 'text-muted-foreground hover:text-foreground',
@@ -454,6 +460,7 @@ export function Toolbar() {
                 'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
                 recording ? 'bg-red-500/15 text-red-500' : 'text-muted-foreground hover:text-foreground',
               )}
+              aria-label={recording ? '录制中（REC 徽章停止）' : '录制动画为 WebM 视频'}
             >
               {recording ? <CircleStop className="h-4 w-4" /> : <Video className="h-4 w-4" />}
             </button>
@@ -479,6 +486,7 @@ export function Toolbar() {
                 'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
                 moviePlaying ? 'bg-teal-500/15 text-teal-500' : timelineOpen ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400' : 'text-muted-foreground hover:text-foreground',
               )}
+              aria-label={moviePlaying ? '停止 movie 序列播放' : 'movie 时间轴编排与巡航播放'}
             >
               <Film className="h-4 w-4" />
             </button>
@@ -489,7 +497,10 @@ export function Toolbar() {
         {/* 截图 */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground">
+            <button
+              aria-label="导出图像（PNG / Ray / SVG）"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            >
               <Camera className="h-4 w-4" />
             </button>
           </DropdownMenuTrigger>
@@ -517,6 +528,21 @@ export function Toolbar() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              onClick={() => setUi({ paletteOpen: true })}
+              aria-label="命令面板（Ctrl+K）"
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            >
+              <CommandIcon className="h-3.5 w-3.5" />
+              <span className="hidden xl:inline">命令面板</span>
+              <kbd className="hidden rounded border border-border bg-muted px-1 font-mono text-[9px] md:inline">Ctrl K</kbd>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>命令面板：搜索并执行命令（Ctrl+K）</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
               onClick={() => setUi({ consoleOpen: !ui.consoleOpen })}
               className={cn(
                 'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition hover:bg-accent',
@@ -536,6 +562,7 @@ export function Toolbar() {
             <button
               onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
               suppressHydrationWarning
+              aria-label="切换深浅主题"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <Sun className="h-4 w-4 hidden dark:block" />
@@ -549,6 +576,7 @@ export function Toolbar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => setUi({ helpOpen: true })}
+              aria-label="帮助与快捷键"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <HelpCircle className="h-4 w-4" />
@@ -563,6 +591,7 @@ export function Toolbar() {
           rel="noreferrer"
           className="hidden h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground sm:flex"
           title="GitHub 仓库"
+          aria-label="GitHub 仓库（新窗口打开）"
         >
           <Github className="h-4 w-4" />
         </a>

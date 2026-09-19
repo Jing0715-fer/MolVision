@@ -1436,7 +1436,8 @@ export class MolEngine {
     this.hasContent = this.views.size > 0
   }
 
-  /** 氢键网络检测与虚线渲染（大结构经 Web Worker 异步） */
+  /** 氢键网络检测与虚线渲染（大结构经 Web Worker 异步）；全局网络仅虚线，
+   *  端点球仅选择集范围（hbondSelOnly）时显示 */
   private updateHBonds(state: Parameters<MolEngine['sync']>[0]) {
     this.lastHbondState = state
     // 清空旧渲染
@@ -1478,8 +1479,10 @@ export class MolEngine {
         hbonds = detected
       }
       if (!hbonds) continue
-      // 选择过滤
-      if (s.hbondSelOnly && state.selection.structureId === entry.id && state.selection.indices.length) {
+      // 选择过滤：仅选择集模式下，无选择（或选择在其它结构）时不渲染——
+      // 「范围显示」语义（PyMOL 专业用法）；全局网络对大结构是视觉噪声
+      if (s.hbondSelOnly) {
+        if (state.selection.structureId !== entry.id || !state.selection.indices.length) continue
         const sel = new Set(state.selection.indices)
         hbonds = hbonds.filter(hb => sel.has(hb.donor) || sel.has(hb.acceptor))
       }
@@ -1515,19 +1518,23 @@ export class MolEngine {
       lines.computeLineDistances()
       lines.renderOrder = 8
       this.hbondGroup.add(lines)
-      // 端点小标记（InstancedMesh；小尺寸低透明——全蛋白网络开启时不成「绿球堆」）
-      const sphereGeo = new THREE.SphereGeometry(0.12, 8, 6)
-      const sphereMat = new THREE.MeshBasicMaterial({ color: hbColor, transparent: true, opacity: 0.5, depthWrite: false })
-      const marker = new THREE.InstancedMesh(sphereGeo, sphereMat, endPts.length)
-      const m4 = new THREE.Matrix4()
-      for (let k = 0; k < endPts.length; k++) {
-        const i = endPts[k]
-        m4.makeTranslation(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])
-        marker.setMatrixAt(k, m4)
+      // 端点小标记（InstancedMesh）：仅选择集范围内显示——全局网络的虚线自身已可追溯，
+      // 端点球只会加重视觉重量（用户反馈「绿球堆」）；局部分析时球帮助定位两端原子
+      const scoped = s.hbondSelOnly && state.selection.structureId === entry.id && state.selection.indices.length > 0
+      if (scoped && endPts.length > 0) {
+        const sphereGeo = new THREE.SphereGeometry(0.12, 8, 6)
+        const sphereMat = new THREE.MeshBasicMaterial({ color: hbColor, transparent: true, opacity: 0.5, depthWrite: false })
+        const marker = new THREE.InstancedMesh(sphereGeo, sphereMat, endPts.length)
+        const m4 = new THREE.Matrix4()
+        for (let k = 0; k < endPts.length; k++) {
+          const i = endPts[k]
+          m4.makeTranslation(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])
+          marker.setMatrixAt(k, m4)
+        }
+        marker.instanceMatrix.needsUpdate = true
+        marker.renderOrder = 9
+        this.hbondGroup.add(marker)
       }
-      marker.instanceMatrix.needsUpdate = true
-      marker.renderOrder = 9
-      this.hbondGroup.add(marker)
       total += draw.length
       waterTotal += waterN
       if (truncated) useMolStore.getState().appendLog('out', `氢键数量超过 ${CAP}，已截断显示（共 ${hbonds.length}）`)

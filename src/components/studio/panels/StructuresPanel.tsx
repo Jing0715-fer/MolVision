@@ -53,7 +53,9 @@ function QuickColorPopover({
       <PopoverTrigger asChild>
         <button
           className={cn(
-            'group/dot relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition hover:bg-accent',
+            // h-8 视觉 + after 负外扩伪元素 = 44px 触控热区（移动端可点性，r29 遗留）
+            'group/dot relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition hover:bg-accent',
+            'after:absolute after:-inset-1.5 after:rounded-lg after:content-[""]',
             overridden && 'ring-1 ring-primary/50',
           )}
           title={`为${label}上色（色板/自定义/重置）${overridden ? '\n已有自定义色，环高亮标记' : ''}`}

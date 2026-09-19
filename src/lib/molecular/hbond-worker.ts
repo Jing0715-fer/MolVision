@@ -106,14 +106,23 @@ function detect(p: DetectPayload): DetectResult {
 
   const grid = new Grid(positions, n, 6)
 
-  // 直接成键对（排除）+ 供体重原子 → 结合氢
+  // 直接成键对（排除）+ 1-3 共键邻居（共享成键原子，如肽键 O=C-N 的 O…N ≈2.3Å——
+  // 共价几何约束而非氢键）+ 供体重原子 → 结合氢
   const bonded = new Set<number>()
+  const neighbors = new Map<number, number[]>()
+  const pushNeighbor = (a: number, b: number) => {
+    const list = neighbors.get(a)
+    if (list) list.push(b)
+    else neighbors.set(a, [b])
+  }
   const donorHydrogens = new Map<number, number[]>()
   const nb = bondA.length
   for (let b = 0; b < nb; b++) {
     const a = bondA[b], c = bondB[b]
     bonded.add(a * n + c)
     bonded.add(c * n + a)
+    pushNeighbor(a, c)
+    pushNeighbor(c, a)
     if (hasH) {
       const aH = isHydrogen[a] === 1, cH = isHydrogen[c] === 1
       if (aH && !cH && heteroFlag[c] === 1) {
@@ -126,6 +135,21 @@ function detect(p: DetectPayload): DetectResult {
         donorHydrogens.set(a, list)
       }
     }
+  }
+  /** 供体 → 1-3 共键邻居集合（懒构建缓存） */
+  const oneThreeCache = new Map<number, Set<number>>()
+  const oneThreeOf = (d: number): Set<number> => {
+    let set = oneThreeCache.get(d)
+    if (!set) {
+      set = new Set<number>()
+      for (const p of neighbors.get(d) ?? []) {
+        for (const q of neighbors.get(p) ?? []) {
+          if (q !== d) set.add(q)
+        }
+      }
+      oneThreeCache.set(d, set)
+    }
+    return set
   }
 
   const isWaterRes = (i: number) => resWater[atomResidue[i]] === 1
@@ -150,6 +174,7 @@ function detect(p: DetectPayload): DetectResult {
       if (aWater && !includeWater) continue
       if (atomResidue[a] === atomResidue[d]) continue
       if (bonded.has(d * n + a)) continue
+      if (oneThreeOf(d).has(a)) continue // 1-3 共键邻居：共价几何约束非氢键（肽键 O…N）
       if (isWaterRes(d) && aWater) continue
       const key = d < a ? d * n + a : a * n + d
       if (seen.has(key)) continue

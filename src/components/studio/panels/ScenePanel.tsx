@@ -324,6 +324,10 @@ export function ScenePanel() {
         </div>
         {settings.showHBonds && (
           <>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-muted-foreground">仅选择集范围内显示</span>
+              <Switch aria-label="氢键仅选择集" checked={settings.hbondSelOnly} onCheckedChange={v => updateSettings({ hbondSelOnly: v })} />
+            </div>
             <div>
               <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
                 <span>重原子距离上限</span>
@@ -338,12 +342,8 @@ export function ScenePanel() {
               <span className="text-[11px] text-muted-foreground">包含水介氢键</span>
               <Switch aria-label="氢键包含水" checked={settings.hbondIncludeWater} onCheckedChange={v => updateSettings({ hbondIncludeWater: v })} />
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">仅显示与选择相关的</span>
-              <Switch aria-label="氢键仅选择集" checked={settings.hbondSelOnly} onCheckedChange={v => updateSettings({ hbondSelOnly: v })} />
-            </div>
             <p className="text-[10px] leading-relaxed text-muted-foreground/70">
-              判据：有氢结构用 D-H…A 几何（H…A ≤ 2.5Å 且角度 ≥ 120°），无氢结构用 D…A ≤ 距离上限。虚线 + 端点标记为青色（浅色背景自动加深）。大结构（≥ 2000 原子）自动在后台线程计算，不卡交互。
+              判据：有氢结构用 D-H…A 几何（H…A ≤ 2.5Å 且角度 ≥ 120°），无氢结构用 D…A ≤ 距离上限（直接成键/1-3 共键邻居/同残基对已排除——肽键 O…N 不会误报）。「仅选择集」开时显示虚线 + 端点球；关闭则全结构网络仅虚线（大结构较密）。大结构（≥ 2000 原子）后台线程计算，不卡交互。
             </p>
           </>
         )}

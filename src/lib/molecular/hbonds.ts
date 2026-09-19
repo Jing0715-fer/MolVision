@@ -3,7 +3,8 @@
 //  - 有氢结构：D-H...A，H...A ≤ maxDist(默认2.5Å)，D-H...A 角度 ≥ minAngle(默认120°)
 //  - 无氢结构（多数 X-ray PDB）：D...A 重原子距离 ≤ maxHeavyDist(默认3.5Å)
 // 供体/受体杂原子：N、O、S（及带电的卤素受体可选）
-// 排除：同残基内、直接成键的原子对、水-水之间
+// 排除：同残基内、直接成键、1-3 共键邻居（共享成键原子，如肽键 O=C-N 的 O…N ≈2.3Å——
+//  共价几何约束而非氢键；旧版漏掉此排除导致每个肽键都被误判为氢键、整屏虚线）、水-水之间
 import type { StructureData } from './parser'
 import { WATERS } from './chemistry'
 
@@ -40,15 +41,15 @@ export function detectHBonds(structure: StructureData, opts: HBondOptions = {}):
   const out: HBond[] = []
   if (n === 0) return out
 
-  // 邻接表：直接成键排除
+  // 邻接表：直接成键排除 + 1-3 共键邻居（共享成键原子）排除
   const bonded = new Set<number>()
   const bondKey = (a: number, b: number) => a * n + b
+  const neighbors = new Map<number, number[]>()
 
   // 供体重原子 → 结合氢（结构有氢时）
   const donorHydrogens = new Map<number, number[]>()
   const hasH = structure.hasHydrogens
 
-  const isDonorAtom = (i: number) => DONOR_ELEMS.has(atoms.elements[i])
   const isAcceptorAtom = (i: number) => ACCEPTOR_ELEMS.has(atoms.elements[i])
   const isWaterRes = (i: number) => structure.residues[structure.atomResidue[i]].water
   if (hasH) {
@@ -57,6 +58,8 @@ export function detectHBonds(structure: StructureData, opts: HBondOptions = {}):
       const a = bonds.a[b], c = bonds.b[b]
       bonded.add(bondKey(a, c))
       bonded.add(bondKey(c, a))
+      pushNeighbor(neighbors, a, c)
+      pushNeighbor(neighbors, c, a)
       const ea = atoms.elements[a], ec = atoms.elements[c]
       const aIsH = ea === 'H' || ea === 'D'
       const cIsH = ec === 'H' || ec === 'D'
@@ -75,7 +78,24 @@ export function detectHBonds(structure: StructureData, opts: HBondOptions = {}):
     for (let b = 0; b < bonds.count; b++) {
       bonded.add(bondKey(bonds.a[b], bonds.b[b]))
       bonded.add(bondKey(bonds.b[b], bonds.a[b]))
+      pushNeighbor(neighbors, bonds.a[b], bonds.b[b])
+      pushNeighbor(neighbors, bonds.b[b], bonds.a[b])
     }
+  }
+  /** 供体 → 1-3 共键邻居集合（懒构建缓存：仅对成为供体的原子计算） */
+  const oneThreeCache = new Map<number, Set<number>>()
+  const oneThreeOf = (d: number): Set<number> => {
+    let set = oneThreeCache.get(d)
+    if (!set) {
+      set = new Set<number>()
+      for (const p of neighbors.get(d) ?? []) {
+        for (const q of neighbors.get(p) ?? []) {
+          if (q !== d) set.add(q)
+        }
+      }
+      oneThreeCache.set(d, set)
+    }
+    return set
   }
 
   const donors: number[] = []
@@ -106,6 +126,9 @@ export function detectHBonds(structure: StructureData, opts: HBondOptions = {}):
       if (structure.atomResidue[a] === structure.atomResidue[d]) continue
       // 直接成键排除（相邻残基的 N-H...O=C 肽键误报）
       if (bonded.has(bondKey(d, a))) continue
+      // 1-3 共键邻居排除：共享成键原子的原子对（肽键 O=C-N 中 O…N ≈2.3Å）——
+      // 共价几何约束而非氢键；旧版漏掉此排除导致每个肽键都被误报、整屏虚线
+      if (oneThreeOf(d).has(a)) continue
       // 水-水排除（几乎无意义且量大）
       if (isWaterRes(d) && aWater) continue
       // 对称去重（同一对只算一次：按 donor<acceptor 记录）
@@ -145,13 +168,18 @@ export function detectHBonds(structure: StructureData, opts: HBondOptions = {}):
         const ddz = pos[a * 3 + 2] - dz
         const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
         if (dist > maxHeavyDist) continue
-        // 排除同一残基相邻编号的盐桥误报（主链 N...O=C 属于真氢键，保留）
         seen.add(key)
         out.push({ donor: d, hydrogen: -1, acceptor: a, dist, angle: 180 })
       }
     }
   }
   return out
+}
+
+function pushNeighbor(map: Map<number, number[]>, a: number, b: number) {
+  const list = map.get(a)
+  if (list) list.push(b)
+  else map.set(a, [b])
 }
 
 /** 氢键统计摘要 */

@@ -100,6 +100,8 @@ export function LeftPanel() {
         </span>
         <button
           onClick={() => setUi({ panelOpen: false })}
+          aria-label="折叠面板（点击左侧图标恢复）"
+          title="折叠面板"
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           <ChevronLeft className="h-3.5 w-3.5" />

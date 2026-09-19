@@ -10,6 +10,7 @@ import { StatusBar } from '@/components/studio/StatusBar'
 import { LoadDialog } from '@/components/studio/LoadDialog'
 import { HelpDialog } from '@/components/studio/HelpDialog'
 import { HistoryDialog } from '@/components/studio/HistoryDialog'
+import { CommandPalette } from '@/components/studio/CommandPalette'
 
 const MolViewer = dynamic(() => import('@/components/molecular/MolViewer'), {
   ssr: false,
@@ -39,6 +40,7 @@ export default function Home() {
       <LoadDialog />
       <HelpDialog />
       <HistoryDialog />
+      <CommandPalette />
     </div>
   )
 }

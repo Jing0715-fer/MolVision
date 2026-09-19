@@ -22,6 +22,7 @@ const SHORTCUTS: [string, string][] = [
   ['Shift + 1-9', '平滑跳转到视角书签'],
   ['→ / ←', '演示引导中：下一步 / 上一步'],
   ['` / ~', '打开/关闭命令行'],
+  ['Ctrl + K', '命令面板：搜索全部命令/最近使用/置顶/结构切换（Enter 执行 · Tab 填入命令行编辑）'],
   ['Ctrl + R', '命令行内反向搜索历史（再按循环下一条，Esc 取出编辑）'],
   ['Esc', '退出测量 / 清除选择 / 结束演示 / 停止 movie / 关闭时间轴'],
   ['Delete', '清除当前选择'],
@@ -62,6 +63,7 @@ export function HelpDialog() {
               <li>点击 3D 视图中的残基进行选择，在左侧面板调颜色与表示法</li>
               <li>工具栏切换测量模式，点击原子测量距离 / 角度 / 二面角</li>
               <li>按 <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">`</kbd> 打开命令行，像 PyMOL 一样工作；<span className="font-semibold text-foreground">Tab 智能补全</span>——命令名/子命令/结构名/表示法/颜色/选择关键字全部可补全，↑↓ 切换候选，输入时实时显示参数用法提示</li>
+              <li>按 <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">Ctrl+K</kbd> 打开命令面板——搜索即执行：全部命令（带示例）、最近使用、置顶常用、多结构切换一键直达，无需记命令</li>
             </ol>
             <p className="mt-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-2 text-[11px] leading-relaxed text-violet-700 dark:text-violet-300">
               <GraduationCap className="mr-1 inline h-3.5 w-3.5 -translate-y-px" />
@@ -150,6 +152,8 @@ export function HelpDialog() {
               <p><span className="font-semibold text-foreground">命令行历史搜索</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">Ctrl+R</code> 进入反向搜索（输入即过滤，提示条预览当前匹配并高亮命中片段），再按 <code className="rounded bg-muted px-1 font-mono text-[10px]">Ctrl+R</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">↑↓</code> 循环下一条、<code className="rounded bg-muted px-1 font-mono text-[10px]">↵</code> 直接执行、<code className="rounded bg-muted px-1 font-mono text-[10px]">Esc</code> 取出到输入行编辑——快速重跑长命令（如 morph / superpose）不用重打。</p>
               <p><span className="font-semibold text-foreground">最近命令徽章</span>：控制台日志区下方的「最近」行展示去重后最近 6 条命令（跨会话持久保存，上限 200 条）——<span className="font-semibold text-foreground">左键直接执行</span>、<span className="font-semibold text-foreground">右键填入输入行</span>修改参数再跑；行尾垃圾桶图标一键清空全部历史。</p>
               <p><span className="font-semibold text-foreground">命令历史面板</span>：控制台头部「历史」按钮或 <code className="rounded bg-muted px-1 font-mono text-[10px]">history</code> 打开——全量历史（新→旧）+ <span className="font-semibold text-foreground">关键词搜索</span>（Enter 直接执行首个匹配）+ <span className="font-semibold text-foreground">星标置顶</span>常用工作流（置顶区置顶展示、清空历史时保留）；每行可点击<span className="font-semibold text-foreground">执行</span>、铅笔<span className="font-semibold text-foreground">填入编辑</span>、复制；与控制台箭头/Ctrl+R 实时同步（同一份 localStorage）。</p>
+              <p><span className="font-semibold text-foreground">命令面板（Ctrl+K）</span>：工具栏「命令面板」按钮或快捷键——搜索即执行的统一入口：<span className="font-semibold text-foreground">置顶/最近/结构切换/全部命令</span>四区分组展示；Enter 直接执行（条目内展示将执行的完整示例命令，无意外），Tab 把命令填入控制台继续带补全编辑；多结构场景下「切换到 4HHB」类条目一键切换活动结构。</p>
+              <p><span className="font-semibold text-foreground">氢键网络</span>：快捷键 <code className="rounded bg-muted px-1 font-mono text-[10px]">B</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">hbonds on 3.2</code>——供体-受体虚线网络（N/O/S 几何判据：直接成键/1-3 共键邻居/同残基对均已排除）；默认只画虚线，开启「仅选择集」后附带端点小球便于追踪；状态栏徽章可一键关闭。<span className="text-foreground/70">分析叠加层不随会话自动恢复，按需重开</span>。</p>
             </div>
           </section>
 
@@ -165,7 +169,7 @@ export function HelpDialog() {
               <p><span className="font-semibold text-foreground">打开会话</span>：「会话」菜单 →「打开会话文件」，或直接把 .molvision 文件拖到 3D 视口 / 加载对话框（替换当前场景并自动还原全部状态）。</p>
               <p><span className="font-semibold text-foreground">合并会话</span>：「会话」菜单 →「合并会话文件…」——不清空当前场景，把文件中的结构<span className="font-semibold text-foreground">追加</span>进来（名称冲突自动编号如 4HHB-2；叠合位姿与对称设置保留；命名选择与视角书签追加合并，重名跳过；当前设置/相机/密度图不受影响）。</p>
               <p><span className="font-semibold text-foreground">新建会话</span>：「会话」菜单 →「新建会话」（有结构时二次确认）——清空结构、选择、测量、标签、命名选择、视角书签、movie 时间轴、密度图与本地存档，回到全新状态；录制中会先自动保存已录片段。命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">session new</code>。</p>
-              <p><span className="font-semibold text-foreground">自动存档</span>：结构加载/视图变动自动写入浏览器本地（localStorage），刷新自动恢复；<code className="rounded bg-muted px-1 font-mono text-[10px]">session save / info / clear</code> 手动管理。</p>
+              <p><span className="font-semibold text-foreground">自动存档</span>：结构加载/视图变动自动写入浏览器本地（localStorage），刷新自动恢复；<code className="rounded bg-muted px-1 font-mono text-[10px]">session save / info / clear</code> 手动管理。分析叠加层（氢键网络等）不随自动存档恢复——刷新后是干净的渲染视图，按需重开。</p>
             </div>
           </section>
 

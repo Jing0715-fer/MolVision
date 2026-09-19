@@ -213,7 +213,8 @@ export function defaultSettings(): Settings {
     showHBonds: false,
     hbondMaxDist: 3.5,
     hbondIncludeWater: false,
-    hbondSelOnly: false,
+    /** 默认仅选择集：全局网络对大结构是视觉噪声（用户两轮反馈）；PyMOL 专业工作流同样按范围显示 */
+    hbondSelOnly: true,
     ssao: false,
     ssaoIntensity: 1,
     ssaoRadius: 3,

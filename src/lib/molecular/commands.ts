@@ -1022,7 +1022,11 @@ export function runCommand(raw: string): void {
     const patch: Partial<import('./types').Settings> = { showHBonds: true }
     if (!isNaN(dist) && dist >= 2 && dist <= 6) patch.hbondMaxDist = dist
     s.updateSettings(patch)
-    return ok(`氢键网络开启${!isNaN(dist) && dist >= 2 && dist <= 6 ? `（距离上限 ${dist} Å）` : '（默认 3.5 Å）'}，快捷键 B 切换`)
+    const hasSel = s.selection.indices.length > 0
+    const scope = s.settings.hbondSelOnly
+      ? (hasSel ? `当前选择集（${s.selection.indices.length.toLocaleString()} 原子）范围内` : '仅选择集模式：请先选择残基/链（无选择时暂不显示，避免全局网络淹没结构）')
+      : '全结构网络（大结构较密，可在场景面板开启「仅选择集」缩小范围）'
+    return ok(`氢键网络开启${!isNaN(dist) && dist >= 2 && dist <= 6 ? `（距离上限 ${dist} Å）` : ''}——${scope}，快捷键 B 切换`)
   }
 
   if (cmd === 'ssao' || cmd === 'ao' || cmd === 'gtao') {

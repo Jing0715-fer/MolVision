@@ -259,9 +259,19 @@ export default function MolViewer() {
         case 'b': case 'B': {
           const on = !store.settings.showHBonds
           store.updateSettings({ showHBonds: on })
-          toast.info(on ? '氢键网络已开启' : '氢键网络已关闭', {
-            description: on ? '快捷键 B · 虚线为供体-受体氢键，整链全开时较密，可配选择集使用（场景→氢键仅选择集）' : '快捷键 B · 场景面板可再开启',
-          })
+          if (!on) {
+            toast.info('氢键网络已关闭', { description: '快捷键 B · 场景面板可再开启' })
+          } else if (store.settings.hbondSelOnly && store.selection.indices.length === 0) {
+            toast.info('氢键网络已开启（仅选择集）', {
+              description: '点击残基/链建立选择后显示其氢键（带端点球）——全局网络对大结构过于密集；场景面板「氢键仅选择集」可切换全局模式',
+            })
+          } else {
+            toast.info('氢键网络已开启', {
+              description: store.settings.hbondSelOnly
+                ? '当前选择集范围内显示虚线与端点球 · 快捷键 B 关闭'
+                : '全结构网络（大结构较密）· 快捷键 B 关闭',
+            })
+          }
           break
         }
         case 'p': case 'P': {

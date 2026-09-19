@@ -1,7 +1,7 @@
 'use client'
 
 // 底部状态栏：结构统计 / 悬停信息 / 选择摘要 / 测量模式提示 / 性能指示
-import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets, ArrowLeftRight, Copy, Grid3x3, Glasses, Gauge, Cpu } from 'lucide-react'
+import { Circle, Ruler, Triangle, Rotate3d, Layers, Zap, Waves, SunMedium, Network, Droplets, ArrowLeftRight, Copy, Grid3x3, Glasses, Gauge, Cpu, X } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { useHBondStore } from '@/lib/molecular/hbond-store'
@@ -91,15 +91,22 @@ export function StatusBar() {
         </span>
       )}
 
-      {/* 氢键网络 */}
+      {/* 氢键网络（可点击关闭：就地取消途径——用户反馈「取消不掉」后补充的最短路径） */}
       {hbond.visible && (
-        <span className="flex shrink-0 items-center gap-1 rounded-full bg-teal-500/15 px-2 py-0.5 font-medium text-teal-600 dark:text-teal-400">
+        <button
+          type="button"
+          onClick={() => useMolStore.getState().updateSettings({ showHBonds: false })}
+          title="氢键网络显示中 · 点击关闭（按 B 重新开启）"
+          aria-label="关闭氢键网络"
+          className="flex shrink-0 cursor-pointer items-center gap-1 rounded-full bg-teal-500/15 px-2 py-0.5 font-medium text-teal-600 transition-colors hover:bg-teal-500/25 dark:text-teal-400"
+        >
           {hbond.computing
             ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
             : <Zap className="h-3 w-3" />}
-          {hbond.computing ? '氢键计算中…' : `${hbond.count.toLocaleString()} 氢键`}
+          <span>{hbond.computing ? '氢键计算中…' : `${hbond.count.toLocaleString()} 氢键`}</span>
           {!hbond.computing && hbond.waterCount > 0 && <span className="text-[9px] text-muted-foreground/70">（含水 {hbond.waterCount}）</span>}
-        </span>
+          <X className="h-2.5 w-2.5 opacity-60" aria-hidden />
+        </button>
       )}
 
       {/* 接触界面分析 */}

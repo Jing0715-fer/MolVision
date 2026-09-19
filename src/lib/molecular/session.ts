@@ -121,7 +121,10 @@ export function saveSession(): boolean {
     savedAt: Date.now(),
     activeIndex,
     structures: structs,
-    settings: s.settings,
+    // 氢键网络为按需分析叠加层：不随会话自动恢复（否则每次加载结构都会冒出
+    // 青绿虚线网络且用户难以察觉来源——曾连续两轮用户反馈；按 B 可随时重开）。
+    // 参数（距离/含水/仅选择集）仍持久化，只剥离总开关。
+    settings: { ...s.settings, showHBonds: false },
     camera: cam,
     map,
     namedSelections: s.namedSelections.map(ns => ({
@@ -195,8 +198,17 @@ export function restoreSession(): number {
     } catch { /* 单结构失败不阻断 */ }
   })
   if (restored === 0) return 0
-  // 恢复设置
-  useMolStore.setState(s => ({ settings: { ...defaultSettings(), ...data!.settings } }))
+  // 恢复设置（对旧存档中泄漏的 showHBonds=true 强制关闭——分析叠加层不随会话恢复；
+  // 同时把中毒存档的全局氢键语义归位为「仅选择集」，避免重开后又是一屏虚线）
+  const archivedHBondsOn = !!data.settings?.showHBonds
+  useMolStore.setState(s => ({
+    settings: {
+      ...defaultSettings(),
+      ...data!.settings,
+      showHBonds: false,
+      ...(archivedHBondsOn ? { hbondSelOnly: true } : {}),
+    },
+  }))
   // 恢复活动结构
   const activeId = indexToId.get(Math.max(0, data.activeIndex))
   if (activeId) useMolStore.setState({ activeId })
@@ -234,10 +246,10 @@ export function restoreSession(): number {
     }, host?.id)
   }
   useMolStore.getState().appendLog('out', `已恢复上次会话：${restored} 个结构`)
-  // 会话带着氢键网络恢复时给出可见提示——曾出现演示/误触后设置泄漏，
-  // 用户不知「绿色虚线+圆球」从何而来；此处指路关闭方式
-  if (useMolStore.getState().settings.showHBonds) {
-    useMolStore.getState().appendLog('out', '提示：本会话氢键网络为开启状态（结构上将叠加青绿虚线与端点标记）。按 B 键或「场景 → 氢键网络」可关闭。')
+  // 旧存档带着氢键网络总开关恢复时：已强制关闭（分析叠加层不随会话自动恢复），
+  // 给出明确交代与重开路径——彻底断绝「一加载就冒绿线且来源不明」
+  if (archivedHBondsOn) {
+    useMolStore.getState().appendLog('out', '已自动关闭存档中的氢键网络显示（分析叠加不随会话恢复，且已归位为「仅选择集」模式）。按 B 键可随时重新开启。')
   }
   return restored
 }
