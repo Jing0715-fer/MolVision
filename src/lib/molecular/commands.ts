@@ -183,6 +183,16 @@ export function runCommand(raw: string): void {
     if (!repType) return err(`未知表示法 "${parts[1]}"。可用: ${Object.keys(REP_ALIASES).slice(0, 7).join(', ')}…`)
     const selExpr = parts.slice(2).join(' ').trim() || 'all'
     if (!useMolStore.getState().activeId) return err('没有加载结构')
+    {
+      // 选择表达式即时校验（命令行 / agent 失败可感知；面板 UI 添加 rep 不走此路径）
+      const s = useMolStore.getState()
+      const data = dataRegistry.get(s.activeId!)
+      if (data) {
+        const named = buildNamedMasks(s.activeId!, data)
+        const probe = evaluateSelection(selExpr, { structure: data, named })
+        if (probe.error) return err(`选择表达式无效: ${probe.error}（"${selExpr}"）`)
+      }
+    }
     useMolStore.getState().addRep(useMolStore.getState().activeId!, { type: repType, selection: selExpr })
     ok(`已添加 ${REP_LABELS[repType]} 表示 (${selExpr})`)
     return

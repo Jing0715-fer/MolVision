@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import {
   Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
-  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon,
+  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
@@ -525,6 +525,23 @@ export function Toolbar() {
         </div>
 
         {/* 右侧工具（固定右端） */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setUi({ agentOpen: !ui.agentOpen })}
+              aria-label="AI 绘图助手"
+              className={cn(
+                'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition hover:bg-accent',
+                ui.agentOpen ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
+              )}
+            >
+              <Bot className="h-3.5 w-3.5" />
+              <span className="hidden xl:inline">AI 助手</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>AI 绘图助手：自然语言描述需求，自动翻译成命令执行</TooltipContent>
+        </Tooltip>
+
         <Tooltip>
           <TooltipTrigger asChild>
             <button

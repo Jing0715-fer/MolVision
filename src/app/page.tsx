@@ -11,6 +11,7 @@ import { LoadDialog } from '@/components/studio/LoadDialog'
 import { HelpDialog } from '@/components/studio/HelpDialog'
 import { HistoryDialog } from '@/components/studio/HistoryDialog'
 import { CommandPalette } from '@/components/studio/CommandPalette'
+import { AgentPanel } from '@/components/studio/AgentPanel'
 
 const MolViewer = dynamic(() => import('@/components/molecular/MolViewer'), {
   ssr: false,
@@ -33,6 +34,7 @@ export default function Home() {
         <main className="relative min-w-0 flex-1" aria-label="3D 分子视图">
           <MolViewer />
           <ConsoleBar />
+          <AgentPanel />
         </main>
       </div>
       <SequenceBar />

@@ -45,6 +45,8 @@ export interface MolState {
     historyOpen: boolean
     /** Ctrl+K 命令面板（命令/历史/置顶统一快速入口） */
     paletteOpen: boolean
+    /** AI 助手面板（自然语言 → 命令） */
+    agentOpen: boolean
   }
   consoleLog: { type: 'in' | 'out' | 'err'; text: string; time: string }[]
   /** 本次页面生命周期内是否加载过结构（防止恢复失败后被空自动保存抹掉存档） */
@@ -217,6 +219,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
     loadOpen: false,
     historyOpen: false,
     paletteOpen: false,
+    agentOpen: false,
   },
   consoleLog: [{ type: 'out', text: 'MolVision 命令行就绪。输入 help 查看命令列表。', time: '' }],
   everHadStructures: false,

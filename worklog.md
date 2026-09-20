@@ -1236,3 +1236,29 @@ Stage Summary:
 - 关键决策：①采用远端为基线而非强行 merge（本地提交与其大面积同题冲突，远端还多 3 个根因修复）②快捷动作走引擎/会话层直调而非拼命令字符串（fitView/resetView 无对应命令；hbond 智能开关需读实时状态）③quickActions 用 useMemo 依赖 settings 动态标签（「显示↔隐藏氢键网络」随状态切换）④本地工作保留在 backup-local-r28 分支可考古
 - 未解决问题与风险：①backup-local-r28 分支仅存本地（未推送，其独有内容已被远端覆盖或移植完毕）②面板 desc 列在 <360px 极窄视口未压测 ③VLM 对面板底部「彩虹色输入区」的评价实为 ConsoleBar 快捷键徽章（by design）
 - 下一阶段建议（优先级序）：① 残基级搜索直达（4HHB:A57 类定位）② 深色主题链色对比度自适应 ③ 工具栏按钮使用频率驱动收纳 ④ 导出 300dpi PNG 指南/PDF ⑤ 面板快捷动作补全（spin/rock/stereo/slab 等视觉开关）
+
+---
+Task ID: r32
+Agent: main
+Task: AI 绘图助手基础设施（自然语言→命令 Agent 层）+ 序列条 UI 精修
+
+Work Log:
+- 上下文恢复：读取 worklog 尾部（r31 会话收敛完成），dev server 存活，git 干净（3763976）
+- 【Agent 层基础设施】新建 src/lib/molecular/agent/ 三模块 + API 路由 + 聊天面板：
+  a) protocol.ts——AgentChatMessage / AgentCmdRecord（7 态：pending/running/ok/error/confirm/rejected/blocked）/ AgentDecision / 请求响应体 + AGENT_CHAT_KEY（localStorage 持久化，上限 40 条）+ AGENT_CMDS_MAX=10
+  b) context.ts——buildSceneContext()：结构（名称/原子数/链摘要/配体/reps/隐藏态）、当前选择、命名选择、关键渲染设置、最近 6 条命令 → 紧凑文本，每轮请求随对话送后端（LLM 实时感知场景）
+  c) runner.ts——classifyCmd 白名单三分级：AUTO（视觉/选择/分析/导出 ~50 前缀，细粒度豁免 session save|export|info、record|movie|ensemble|tour stop、perf off|status|restore、view save|go|list）/ CONFIRM（close/clear/reset/delete/session/tour——破坏性需用户点确认）/ blocked（未知命令拒绝）；execAgentCmd 执行后从 consoleLog 增量捕获输出（跳过 in 行）→ hasErr 判定 error 态；load/fetch 特殊：轮询 structures.length 增加（最多 20s，err 提前退出）——修复「load 后续命令 120ms 即执行全部报没有加载结构」的时序 bug；其余异步命令 700ms 延迟二次抓取
+  d) /api/agent/route.ts——z-ai-web-dev-sdk LLM 端点：系统提示词（角色/严格 JSON 输出协议/命令语法参考/选择表达式语法/7 条行为规则含「内联表达式优先、命名选择须先创建、破坏性不主动执行」）+ 场景上下文以首条 user 消息注入 + 历史裁剪 12 条；extractJson 容错（剥离围栏+定位大括号）→ sanitizeDecision（reply 长度/命令条数≤10/单条≤300 字符硬钳制）；瞬时故障内部重试 2 次 + 降级兜底（非 JSON 纯文本→全文当 reply commands 空，可用性优先于严格协议，永不因格式漂移 502）
+  e) AgentPanel.tsx——右侧浮动面板（356px / 移动端满宽，右滑入场动画）：头部（Bot 徽章+清空+关闭）+ 消息区（user 右气泡/assistant 左卡片）+ 命令卡片（状态图标 6 色 + mono 命令文本 + 可展开输出摘要 + 重跑按钮 + confirm 态「确认执行/跳过」按钮）+ 自适应 textarea（Enter 发送/Shift+Enter 换行）+ 4 条建议 chips + thinking 指示器；runTurn 逐条执行（120ms 间隔）+ 自动修正循环（depth<1：error 命令反馈 LLM 求修正，修正消息带 🔁 前缀）；对话 localStorage 持久化
+- 【show 命令选择校验】commands.ts show 分支增加 evaluateSelection 即时探测——无效表达式（如未创建的命名选择）直接 err 拒绝（此前静默添加带 error 的空 rep，agent 误报成功；面板 UI 添加 rep 不走此路径不受影响）
+- 【序列条 UI 精修】SequenceBar.tsx 重构：①残基搜索定位（头部「定位」Popover：残基号 57 任意链同号并选 / 链+号 A57 精确 / 配体名 HEM；Enter 选中+toast；React 受控 input 需 native setter 或 CDP fill 才触发 onChange）②选中自动滚动居中（selection.rev 变化 → data-res 属性查询 → scrollIntoView inline:center smooth，外部命令/点击/搜索统一生效）③Jalview 式序号刻度（%10==0 格子显示位置数字替代字母，格内 8.5px extrabold mono）④格子打磨（26px 宽/rounded-4px/hover -translate-y-0.5+scale-1.08+shadow/SS 轨道 hover 提亮）⑤头部升级（h-8、残基总数、视野计数改 chip 徽章+title、按钮组统一 h-6）⑥链头加残基数小字（A·141）+ hover 色条增高 ⑦配体 chips 改胶囊形（rounded-full）+ hover 上浮 + 配体行虚线分隔 ⑧行距收紧（pb-4→pb-2.5）
+- store.ts ui.agentOpen + Toolbar「AI 助手」按钮（Bot 图标，开态 emerald）+ page.tsx 挂载 AgentPanel（main 内 absolute）+ globals.css agent-panel-in 动画 + HelpDialog 两段新文档（AI 绘图助手 / 序列条搜索定位）
+- 【E2E 抓出并修复的三个真 bug】①load 时序（上述轮询等待修复）②历史格式污染：初版 assistant 历史消息附带「[上轮命令] cmd(ok)」摘要 → LLM 模仿该格式输出纯文本而非 JSON（实测两轮 502 复现）→ 移除历史命令摘要（scene 已含最近命令，冗余且有害）+ 降级兜底 ③show 静默吞错（上述校验修复）
+- 【E2E 全链路（agent-browser + VLM）】API curl 三场景一次过（彩虹色→color spectrum protein+bg white / 科普→commands 空 / 清空场景→clear 归 confirm）→ 建议流「加载 4HHB 展示血红素口袋」5 条命令全 ok（load 等待生效；LLM 自觉先 select heme_site = within 5 of (resn HEM) 创建命名选择再引用——提示词规则 7 生效）→ VLM 10/10（口袋球棍+相机缩放+命令卡片绿勾+序列条完整+无布局破损）→ A57 搜索定位（88 选中→1，GLY57 链 A，格子滚动居中 centered=true，toast 正确）→ delete all 归 confirm→点「确认执行」真实执行（输出「未找到命名选择 all」符合 delete 语义）→ 刷新对话恢复（6 卡片）→ 移动端 390×844 无溢出（agentW=390，VLM 确认消息/卡片/输入区/头部按钮全正常）→ Jalview 刻度 20 个 marker（10/20/30…）VLM 10/10 → 「出版级渲染」组合流：bg white/outline on/slab cap on/set quality high/ray 2400 全 ok + set ssao on 失败（LLM 幻觉，ssao 是独立命令非 set 键）→ 自动修正循环真实触发：失败反馈 LLM → 🔁 修正气泡 + 修正命令 3 条全 ok（含提示词已补「ssao on|off 独立命令」防复发）→ 浏览器 errors 0 → lint 0 错 0 警 → 应用代码 tsc 0 错 → VLM 终审 8.6/10（信息架构 9「自动修正气泡行业标杆级设计」/专业度 9「具备商业化落地能力」/渲染 7——outline 细线+无头环境降质，可接受）
+- 沙箱经验：①React 受控 input 用 eval 直接赋值+dispatch 不触发 onChange（value tracker 机制）——测试必须走 agent-browser fill/press（CDP 级真实输入）②LLM 偶发输出格式漂移（长历史/复杂上下文下模仿历史格式）——降级兜底比失败重试用户体验好③历史消息中任何结构化伪格式（如「cmd(ok)」）都会被 LLM 当模板模仿，跨轮上下文要传递机器状态时优先放在独立的「场景注入」消息里而非对话历史④ZAI 服务瞬时 502 存在（本会话两轮实测）——内部重试+兜底是必要防线
+
+Stage Summary:
+- 项目当前状态：r31 基础上完成两大交付——①AI 绘图助手基础设施（agent 三模块 + LLM 端点 + 聊天面板；自然语言→白名单命令→自动执行；confirm 门控/自动修正循环/降级兜底/对话持久化四层可靠性设计）②序列条 UI 精修（搜索定位 A57/57/HEM + 选中自动滚动居中 + Jalview 序号刻度 + 格子/头部/链头/配体 chips 视觉全面打磨）
+- 关键决策：①Agent 复用 runCommand 同一条执行路径（与命令行/命令面板行为一致可审计），白名单三分级（auto/confirm/blocked）而非全放行 ②load 轮询等待结构落地（命令序列时序正确性）③历史不带命令摘要（防格式模仿污染 JSON 协议），场景状态全部走独立注入消息 ④降级兜底优先于严格协议（LLM 输出漂移时展示纯文本回复而非报错）⑤搜索定位「选中即滚动」复用 selection.rev effect（外部命令/点击/搜索三入口统一）
+- 未解决问题与风险：①自动修正循环的 LLM 修正偶带重复已成功命令（幂等无害，未强制去重）②「出版级渲染」类模糊需求 LLM 组合有随机性（不同轮给的命令集不同，ssao/set quality 组合不稳定）③ray 异步命令在等待期 busy 指示由命令 running 卡片承担（面板 thinking 指示已结束——可接受）④VLM 终审 3D 渲染 7 分：outline_thickness 0.1 修正轮把描边调得过细+无头降质，真实浏览器体验更好
+- 下一阶段建议（优先级序）：① Agent 增强：多轮视觉反馈（截图送 VLM 让 agent 「看」渲染结果自查）/ 命令参数记忆（「再红一点」类增量调整）/ 快捷动作预设面板 ② 氢键分析面板化（r30 遗留：范围氢键按残基对列表+点击跳转）③ 深色主题链色对比度自适应（多轮遗留）④ 面板宽度等 UI 偏好收编 Settings ⑤ SVG cartoon 增强（按二级结构变宽路径）

@@ -1,8 +1,11 @@
 'use client'
 
-// 序列条：链序列 + 二级结构轨道 + 点击选择/聚焦（高度三档可调；视口聚焦指示）
-import { memo, useMemo } from 'react'
-import { ChevronDown, ChevronUp, Dna, FlaskConical, ChevronsUpDown, Eye, EyeOff } from 'lucide-react'
+// 序列条：链序列 + 二级结构轨道 + 点击选择/聚焦（高度三档；视口聚焦指示；
+// 残基搜索定位 A57/57/HEM；选中自动滚动居中；Jalview 式序号刻度格）
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp, Dna, FlaskConical, ChevronsUpDown, Eye, EyeOff, Search } from 'lucide-react'
+import { toast } from 'sonner'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { useViewportStore } from '@/lib/molecular/viewport-store'
 import { residueOneLetter } from '@/lib/molecular/chemistry'
@@ -33,6 +36,10 @@ export function SequenceBar() {
   const vpStructureId = useViewportStore(s => s.structureId)
   const vpVisible = useViewportStore(s => s.visible)
 
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const bodyRef = useRef<HTMLDivElement>(null)
+
   const st = structures.find(x => x.id === activeId)
   const data = activeId ? dataRegistry.get(activeId) : null
 
@@ -41,23 +48,67 @@ export function SequenceBar() {
     if (!selection.structureId || !data || selection.structureId !== activeId) return out
     for (const i of selection.indices) out.add(data.atomResidue[i])
     return out
-     
   }, [selection, data, activeId])
 
   /** 视口聚焦：残基是否在当前相机视野内（结构匹配且引擎已算出时；否则视为可见） */
   const visArr = seqFocus && vpStructureId === activeId ? vpVisible : null
   const inView = (ri: number) => (visArr ? visArr[ri] === 1 : true)
 
+  /** 选中变化 → 首个选中残基滚动居中（外部命令/序列条点击/搜索定位统一生效） */
+  const selRev = selection.rev
+  useEffect(() => {
+    if (!ui.sequenceOpen || !data || !selection.structureId || selection.structureId !== activeId) return
+    const first = selection.indices[0]
+    if (first === undefined) return
+    const ri = data.atomResidue[first]
+    const el = bodyRef.current?.querySelector<HTMLElement>(`[data-res="${ri}"]`)
+    el?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+  }, [selRev, ui.sequenceOpen, activeId, data, selection.structureId, selection.indices])
+
+  /** 残基搜索定位：A57（链+号）/ 57（任意链同号）/ HEM（配体名） */
+  const doSearch = () => {
+    const q = query.trim()
+    if (!q || !data || !activeId) return
+    const uq = q.toUpperCase()
+    const m = q.match(/^\s*([A-Za-z])?\s*(\d+)\s*([A-Za-z])?\s*$/)
+    const resHits: number[] = []
+    const ligHits: number[] = []
+    for (let ri = 0; ri < data.residues.length; ri++) {
+      const r = data.residues[ri]
+      if (r.hetero && !r.polymer && !r.water && r.resName.toUpperCase() === uq) ligHits.push(ri)
+      if (m) {
+        const chainOk = m[1] ? r.chainId.trim().toUpperCase() === m[1].toUpperCase() : true
+        const numOk = String(r.resSeq) === m[2] && (m[3] ? (r.iCode || '').toUpperCase() === m[3].toUpperCase() : !r.iCode)
+        if (chainOk && numOk) resHits.push(ri)
+      }
+    }
+    const hits = resHits.length ? resHits : ligHits
+    if (!hits.length) {
+      toast.warning(`未找到「${q}」：试试 残基号（57）、链+号（A57）或配体名（HEM）`)
+      return
+    }
+    const indices: number[] = []
+    for (const ri of hits) {
+      const r = data.residues[ri]
+      for (let i = r.start; i < r.end; i++) indices.push(i)
+    }
+    useMolStore.getState().setActive(activeId)
+    useMolStore.getState().setSelection(activeId, indices)
+    setSearchOpen(false)
+    const desc = resHits.length
+      ? `${data.residues[hits[0]].resName}${data.residues[hits[0]].resSeq}（链 ${data.residues[hits[0]].chainId.trim() || '?'}）等 ${hits.length} 个残基`
+      : `${hits.length} 个 ${uq} 残基`
+    toast.success(`已定位并选中 ${desc}`)
+  }
+
   if (!st || !data) return null
 
   // 从结构数据取链（含 residueIdx），颜色沿用摘要链调色板（顺序一致）
-  // 保留原始索引 origIdx：data.chains 与 st.chains 顺序一致，可直接映射 chainidx 表达式
   const chainEntries = (data.chains || [])
     .map((c, i) => ({ chain: c, color: st.chains[i]?.color ?? '#9aa3ad', origIdx: i }))
   const polymerChains = chainEntries.filter(({ chain }) => chain.type === 'protein' || chain.type === 'nucleic')
 
-  // 配体分子（连通分量）：每个 chip = 一个完整小分子——多残基配体（多糖/肽类）合并为一，
-  // 点击选择整个分子、双击聚焦；不再按残基拆开
+  // 配体分子（连通分量）：每个 chip = 一个完整小分子
   const ligandMolecules = (data.molecules || []).slice(0, 60)
 
   // 视野内统计（聚合物残基；显示在头部副标题）
@@ -79,7 +130,8 @@ export function SequenceBar() {
 
   return (
     <div className="shrink-0 border-t border-border/70 bg-card/40 backdrop-blur-sm">
-      <div className="flex h-7 items-center gap-1 pr-2">
+      {/* 头部：标题 + 结构摘要 + 视野徽章 | 搜索定位 / 聚焦 / 高度 */}
+      <div className="flex h-8 items-center gap-1 pr-2">
         <button
           onClick={() => setUi({ sequenceOpen: !ui.sequenceOpen })}
           className="flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground transition hover:text-foreground"
@@ -87,45 +139,83 @@ export function SequenceBar() {
           <Dna className="h-3 w-3 shrink-0 text-emerald-500" />
           序列
           <span className="min-w-0 truncate font-mono text-[9px] normal-case tracking-normal text-muted-foreground/60">
-            {st.name} · {polymerChains.length} 条聚合物链
-            {visArr && polymerTotal > 0 && (
-              <span className={cn('ml-1 rounded px-1 py-px', polymerInView === polymerTotal ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-primary/10 text-primary')}>{polymerInView}/{polymerTotal} 在视野</span>
-            )}
+            {st.name} · {polymerChains.length} 条链 · {(data.residues.length).toLocaleString()} 残基
           </span>
-          <span className="ml-auto shrink-0">{ui.sequenceOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}</span>
+          {visArr && polymerTotal > 0 && (
+            <span
+              className={cn(
+                'ml-1 shrink-0 rounded-full px-1.5 py-px font-mono text-[9px] font-medium normal-case tracking-normal',
+                polymerInView === polymerTotal
+                  ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-primary/10 text-primary',
+              )}
+              title={`视野内 ${polymerInView} / 共 ${polymerTotal} 个聚合物残基（相机移动实时更新）`}
+            >
+              {polymerInView}/{polymerTotal} 视野
+            </span>
+          )}
+          <span className="ml-auto shrink-0 text-muted-foreground/70">{ui.sequenceOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}</span>
         </button>
+
         {ui.sequenceOpen && (
-          <button
-            onClick={() => updateSettings({ seqFocus: !seqFocus })}
-            className={cn(
-              'flex h-5 shrink-0 items-center gap-1 rounded border px-1.5 transition',
-              seqFocus
-                ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                : 'border-border/60 bg-background/60 text-muted-foreground hover:border-primary/40 hover:text-foreground',
-            )}
-            title={`视口聚焦指示：${seqFocus ? '开（绿色下划线 = 残基在当前相机视野内，切层裁剪同步感知）' : '关（set seq_focus on 开启）'}`}
-          >
-            {seqFocus ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-            聚焦
-          </button>
-        )}
-        {ui.sequenceOpen && (
-          <button
-            onClick={cycleHeight}
-            className="flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
-            title={`序列条高度：${SEQ_HEIGHT_LABEL[sequenceHeight] ?? '标准'}（点击切换）`}
-          >
-            <ChevronsUpDown className="h-3 w-3" />
-            {SEQ_HEIGHT_LABEL[sequenceHeight] ?? '标准'}
-          </button>
+          <>
+            <Popover open={searchOpen} onOpenChange={setSearchOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+                  title="搜索定位残基：残基号（57）、链+号（A57）或配体名（HEM）"
+                  aria-label="搜索定位残基"
+                >
+                  <Search className="h-3 w-3" />
+                  定位
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-60 p-2" align="end" side="top">
+                <input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') doSearch() }}
+                  placeholder="57 · A57 · HEM…"
+                  autoFocus
+                  aria-label="残基搜索词"
+                  className="h-7 w-full rounded-md border border-border bg-background px-2 font-mono text-[11px] outline-none transition focus:border-primary/60"
+                />
+                <p className="mt-1.5 px-0.5 text-[9px] leading-relaxed text-muted-foreground">
+                  Enter 定位：残基号（任意链同号并选）、链字母+号（精确到链）、配体名（如 HEM）。选中后自动滚动到可见位置。
+                </p>
+              </PopoverContent>
+            </Popover>
+            <button
+              onClick={() => updateSettings({ seqFocus: !seqFocus })}
+              className={cn(
+                'flex h-6 shrink-0 items-center gap-1 rounded-md border px-1.5 text-[9px] font-medium transition',
+                seqFocus
+                  ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : 'border-border/60 bg-background/60 text-muted-foreground hover:border-primary/40 hover:text-foreground',
+              )}
+              title={`视口聚焦指示：${seqFocus ? '开（绿色下划线 = 残基在当前相机视野内，切层裁剪同步感知）' : '关（set seq_focus on 开启）'}`}
+              aria-pressed={seqFocus}
+            >
+              {seqFocus ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+              聚焦
+            </button>
+            <button
+              onClick={cycleHeight}
+              className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+              title={`序列条高度：${SEQ_HEIGHT_LABEL[sequenceHeight] ?? '标准'}（点击切换）`}
+            >
+              <ChevronsUpDown className="h-3 w-3" />
+              {SEQ_HEIGHT_LABEL[sequenceHeight] ?? '标准'}
+            </button>
+          </>
         )}
       </div>
 
       {ui.sequenceOpen && (
-        <div className={cn('mol-scroll overflow-y-auto px-3 pb-2 transition-[max-height] duration-200', SEQ_HEIGHT_CLASS[sequenceHeight] ?? 'max-h-40')}>
+        <div ref={bodyRef} className={cn('mol-scroll overflow-y-auto px-3 pb-2 transition-[max-height] duration-200', SEQ_HEIGHT_CLASS[sequenceHeight] ?? 'max-h-40')}>
           {/* 配体行（置顶免滚动）：每个 chip = 一个完整分子，点击选择、双击聚焦 */}
           {ligandMolecules.length > 0 && (
-            <div className="flex items-center gap-2 pb-2 pt-1">
+            <div className="mb-1 flex items-center gap-2 border-b border-dashed border-border/50 pb-2.5 pt-1">
               <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-card/40 pr-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                 <FlaskConical className="h-3 w-3" /> 配体
               </span>
@@ -152,10 +242,10 @@ export function SequenceBar() {
                         engineRef.current?.fitView([{ structureId: activeId!, indices: molIndices }])
                       }}
                       className={cn(
-                        'shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-semibold transition',
+                        'shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold transition',
                         isSel
                           ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/50'
-                          : 'border-amber-500/30 bg-amber-500/5 text-amber-700 hover:border-amber-500/60 hover:bg-amber-500/15 dark:text-amber-400',
+                          : 'border-amber-500/30 bg-amber-500/5 text-amber-700 hover:-translate-y-px hover:border-amber-500/60 hover:bg-amber-500/15 dark:text-amber-400',
                         visArr && !molInView && 'opacity-45',
                       )}
                       title={`${m.label}（链 ${m.chainIds.map(c => c.trim() || '?').join('/')}）· ${m.atoms} 原子${m.residues.length > 1 ? ` · ${m.residues.length} 个残基` : ''}${visArr ? (molInView ? ' · 在视野内' : ' · 视野外') : ''} · 点击选择 · 双击聚焦`}
@@ -175,22 +265,23 @@ export function SequenceBar() {
               useMolStore.getState().selectFromExpr(`chainidx ${origIdx}`)
             }
             return (
-              <div key={`${chain.id}-${ci}`} className="flex items-center gap-2 pt-1 pb-4">
-                <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1.5 bg-card/40 pr-1">
+              <div key={`${chain.id}-${ci}`} className="flex items-center gap-2 pb-2.5 pt-0.5">
+                <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-card/40 pr-1.5">
                   <button
                     onClick={selectChain}
                     onDoubleClick={() => {
                       selectChain()
                       engineRef.current?.fitView([{ structureId: activeId!, indices: useMolStore.getState().selection.indices }])
                     }}
-                    className="flex shrink-0 items-center gap-1.5 rounded px-0.5 py-0.5 transition hover:bg-accent"
-                    title={`点击选择链 ${chain.id.trim() || '—'}（链组）· 双击聚焦`}
+                    className="group flex shrink-0 items-center gap-1 rounded px-0.5 py-0.5 transition hover:bg-accent"
+                    title={`点击选择链 ${chain.id.trim() || '—'}（${(chain.residueIdx || []).length} 残基）· 双击聚焦`}
                   >
-                    <span className="h-3 w-1 rounded-full" style={{ background: color }} />
-                    <span className="font-mono text-[11px] font-bold">{chain.id === ' ' ? '—' : chain.id}</span>
+                    <span className="h-3.5 w-1 rounded-full transition group-hover:h-4" style={{ background: color }} />
+                    <span className="font-mono text-[11px] font-bold leading-none">{chain.id === ' ' ? '—' : chain.id}</span>
+                    <span className="font-mono text-[8px] leading-none text-muted-foreground/70">{(chain.residueIdx || []).length}</span>
                   </button>
                 </span>
-                <FadeEdge className="pb-0.5">
+                <FadeEdge className="pb-1">
                   {(chain.residueIdx || []).map((ri, k) => {
                     const r = data.residues[ri]
                     const isSel = selectedResidues.has(ri)
@@ -238,7 +329,7 @@ export function SequenceBar() {
 }
 
 const ResidueCell = memo(function ResidueCell({
-  letter, color, ss, title, selected, position, inView, showInView, onClick,
+  letter, color, ss, title, selected, position, inView, showInView, resIdx, onClick,
 }: {
   resIdx: number
   letter: string
@@ -251,28 +342,38 @@ const ResidueCell = memo(function ResidueCell({
   position: number
   onClick: (e: React.MouseEvent) => void
 }) {
+  const isMarker = position % 10 === 0
   return (
     <button
       onClick={onClick}
       title={title}
+      data-res={resIdx}
+      aria-label={title}
       className={cn(
-        'group relative flex h-7 w-6 shrink-0 flex-col items-center justify-end rounded-[3px] transition-all',
-        selected ? 'ring-2 ring-primary ring-offset-1 ring-offset-card' : 'hover:scale-110 hover:z-10 hover:shadow-md',
+        'group relative flex h-7 w-[26px] shrink-0 flex-col items-center justify-end rounded-[4px] outline-none transition-all duration-100',
+        selected
+          ? 'z-10 ring-2 ring-primary ring-offset-1 ring-offset-card'
+          : 'hover:-translate-y-0.5 hover:z-10 hover:scale-[1.08] hover:shadow-md',
       )}
       style={{ background: color }}
     >
-      {/* 二级结构轨道 */}
+      {/* 二级结构轨道（hover 时提亮） */}
       <span
-        className="absolute inset-x-0.5 top-0.5 h-[3px] rounded-[1px]"
-        style={{ background: ssCssColor(ss), opacity: ss === 'L' ? 0.35 : 0.9 }}
+        className="absolute inset-x-0.5 top-0.5 h-[3px] rounded-[1px] transition-opacity group-hover:opacity-100"
+        style={{ background: ssCssColor(ss), opacity: ss === 'L' ? 0.3 : 0.85 }}
       />
-      <span className="text-[10px] font-bold leading-none text-black/90 [text-shadow:0_0_1px_rgba(255,255,255,0.35)]">{letter}</span>
+      {/* Jalview 式序号刻度：每 10 位显示位置数字，字母让位 */}
+      <span
+        className={cn(
+          'text-[10px] font-bold leading-none',
+          isMarker ? 'font-mono text-[8.5px] font-extrabold text-black/75' : 'text-black/90 [text-shadow:0_0_1px_rgba(255,255,255,0.35)]',
+        )}
+      >
+        {isMarker ? position : letter}
+      </span>
       {/* 视口聚焦下划线：残基在当前相机视野内（切层同步感知） */}
       {showInView && inView && (
         <span className="absolute inset-x-0.5 bottom-0 h-[2px] rounded-full bg-emerald-500 shadow-[0_0_2px_rgba(16,185,129,0.8)]" />
-      )}
-      {position % 10 === 0 && (
-        <span className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 font-mono text-[8px] text-muted-foreground/70">{position}</span>
       )}
     </button>
   )
