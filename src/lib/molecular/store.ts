@@ -180,6 +180,13 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
       { ...defaultRep('ballstick', 'within 4.5 of (ligand)', 'element') },
     ],
   },
+  publication: {
+    label: '出版级互作',
+    reps: () => [
+      { ...defaultRep('cartoon', 'polymer', 'chain') },
+      { ...defaultRep('ballstick', 'within 4.5 of (ligand) and not water', 'element') },
+    ],
+  },
   hybrid: {
     label: '混合风格',
     reps: () => [
@@ -317,13 +324,12 @@ export const useMolStore = create<MolState>()((set, get) => ({
     if (!entry) return
     const p = PRESETS[preset]
     if (!p) return
-    const data = dataRegistry.get(entry.id)
     set({
-      structures: s.structures.map(x => x.id === entry.id ? { ...x, reps: p.reps(), rev: x.rev + 1 } : x),
+      structures: s.structures.map(x => x.id === entry.id ? { ...x, reps: p.reps(), colorOverrides: {}, rev: x.rev + 1 } : x),
       visualRev: s.visualRev + 1,
     })
-    // 预设同时清理颜色覆盖
-    void data
+    // 预设同时清理颜色覆盖（colorOverrides 会盖住所有 rep 的配色方案——
+    // 之前 color 命令烘焙的逐原子色若不清理，preset 后卡通带仍被旧色污染）
   },
 
   applyColor: (target) => {

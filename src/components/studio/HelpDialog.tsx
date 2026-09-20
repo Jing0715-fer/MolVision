@@ -9,7 +9,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 
 const SHORTCUTS: [string, string][] = [
-  ['1 – 8', '快速切换风格预设（8 = Putty B 因子管，蛋白+核酸全覆盖）'],
+  ['1 – 9', '快速切换风格预设（6 = 结合口袋，7 = 出版级互作，9 = Putty B 因子管）'],
   ['F', '适配视图（缩放到结构）'],
   ['S', '自动旋转 开/关'],
   ['R', '相机摇摆 开/关（±26°）'],
@@ -59,7 +59,7 @@ export function HelpDialog() {
             </h3>
             <ol className="ml-4 list-decimal space-y-1 text-xs leading-relaxed text-muted-foreground">
               <li>顶部输入 PDB 编号（如 <code className="rounded bg-muted px-1 font-mono">4HHB</code>）加载结构，或拖入本地文件；空状态下也可点击一键示例</li>
-              <li>用「风格预设」一键切换 Cartoon / 球棍 / 空间填充 / 表面</li>
+              <li>用「风格预设」一键切换 Cartoon / 球棍 / 空间填充 / 表面 / 出版级互作（7）</li>
               <li>点击 3D 视图中的残基进行选择，在左侧面板调颜色与表示法</li>
               <li>工具栏切换测量模式，点击原子测量距离 / 角度 / 二面角</li>
               <li>按 <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">`</kbd> 打开命令行，像 PyMOL 一样工作；<span className="font-semibold text-foreground">Tab 智能补全</span>——命令名/子命令/结构名/表示法/颜色/选择关键字全部可补全，↑↓ 切换候选，输入时实时显示参数用法提示</li>
@@ -113,7 +113,7 @@ export function HelpDialog() {
               <p><span className="font-semibold text-foreground">视角书签</span>：快捷键 <code className="rounded bg-muted px-1 font-mono text-[10px]">V</code> 或视口右缘「保存视角」把当前相机状态存为书签（带视口缩略图），<code className="rounded bg-muted px-1 font-mono text-[10px]">Shift+数字</code> / 点击缩略图平滑过渡跳转；命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">view save 口袋</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view 2</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view del 2</code>；书签独立持久化（清空结构不清空，刷新后仍在），双击名称可重命名，导出 .molvision 会话文件时随文件携带（导入自动还原）。</p>
               <p><span className="font-semibold text-foreground">叠合</span>：结构卡片「叠合」按钮或「叠合 (matchmaker)」面板，支持手动指定链对（<code className="rounded bg-muted px-1 font-mono text-[10px]">superpose 4HHB onto 1A3N chain A to A</code>）；<code className="rounded bg-muted px-1 font-mono text-[10px]">untransform</code> 撤销；多结构同屏时 <code className="rounded bg-muted px-1 font-mono text-[10px]">activate 1BQL</code> 切换活动结构（show/hide/color 命令的作用对象）。</p>
               <p><span className="font-semibold text-foreground">电子密度</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">map fetch 3ekj</code> 从 RCSB 结构因子实时合成 2Fo−Fc 图（模型相位 + 3D FFT，Web Worker 零阻塞）；<code className="rounded bg-muted px-1 font-mono text-[10px]">map fofc 3ekj</code> 合成 Fo−Fc 差图（正绿/负红双等值面：绿峰=密度有而模型缺、红峰=模型有而密度无）——<span className="text-foreground/70">结构未加载时会自动从 RCSB 获取作为相位模型</span>；<code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel 1.5</code> 同时调正负峰，差图可 <code className="rounded bg-muted px-1 font-mono text-[10px]">map isolevel pos 3 / neg 2.5</code> 独立调级（面板双滑块同效）；也可拖入 .ccp4/.mrc 文件；密度图面板（左侧「密度图」标签）可视化等值面/网格；σ/模式/颜色随会话保存，刷新自动重算恢复（会话缺结构时同样自动补拉）；加载密度图后，视口左下角出现 σ 控制卡（差图正/负峰双滑块 + 模式切换 + 可见性），视线不离结构即可调级（与面板滑块等效）。</p>
-              <p><span className="font-semibold text-foreground">B 因子分析</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">preset putty</code> 或快捷键 8——Putty 管径随 B 因子连续变化（粗=柔性/高 B、细=刚性/低 B）配 B 因子彩虹渐变，蛋白（CA）与核酸（磷酸骨架）统一映射；<code className="rounded bg-muted px-1 font-mono text-[10px]">color bfactor</code> 同款色标；视口左下角自动显示颜色标尺图例（B 值→颜色→管径三联映射）。</p>
+              <p><span className="font-semibold text-foreground">B 因子分析</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">preset putty</code> 或快捷键 9——Putty 管径随 B 因子连续变化（粗=柔性/高 B、细=刚性/低 B）配 B 因子彩虹渐变，蛋白（CA）与核酸（磷酸骨架）统一映射；<code className="rounded bg-muted px-1 font-mono text-[10px]">color bfactor</code> 同款色标；视口左下角自动显示颜色标尺图例（B 值→颜色→管径三联映射）。</p>
               <p><span className="font-semibold text-foreground">对称伴侣</span>：结构面板「对称伴侣」区块或 <code className="rounded bg-muted px-1 font-mono text-[10px]">symmetry 20</code>，按 CRYST1 空间群（65 手性群全覆盖）生成晶格邻居。</p>
               <p><span className="font-semibold text-foreground">界面接触</span>：<code className="rounded bg-muted px-1 font-mono text-[10px]">contacts chain A | chain B</code> 或 <code className="rounded bg-muted px-1 font-mono text-[10px]">interface A B</code>——残基对连线 + 2D 图谱 + ΔSASA 埋藏面积。</p>
               <p><span className="font-semibold text-foreground">跨结构接触与埋藏面积</span>：superpose 后用 <code className="rounded bg-muted px-1 font-mono text-[10px]">xcontacts 1UBQ:chain A | 1D3Z:chain A</code> 检测复合物界面，再 <code className="rounded bg-muted px-1 font-mono text-[10px]">xbsa</code> 把两结构原子拼成联合坐标集做三路 SASA——游离构象视角的界面埋藏面积，面板可分别选择两侧核心残基。</p>

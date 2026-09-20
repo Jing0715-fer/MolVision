@@ -62,6 +62,42 @@ const SCHEME_ALIASES: Record<string, ColorScheme> = {
   uniform: 'uniform',
 }
 
+/** 按残基实例分组（同一残基编号的原子归为一实例——如 4 个 HEM 各为一实例）*/
+function groupInstances(data: StructureData, indices: number[]): { indices: number[]; label: string }[] {
+  const byRes = new Map<number, number[]>()
+  for (const i of indices) {
+    const ri = data.atomResidue[i]
+    const arr = byRes.get(ri)
+    if (arr) arr.push(i)
+    else byRes.set(ri, [i])
+  }
+  const out: { indices: number[]; label: string }[] = []
+  for (const [ri, idxs] of byRes) {
+    const res = data.residues[ri]
+    out.push({ indices: idxs, label: `${res.resName}${res.resSeq}${res.chainId.trim() ? '·' + res.chainId.trim() : ''}` })
+  }
+  return out
+}
+
+/** 多配体兑底：挑离相机目标最近的残基实例（view from 失败时的自动单配体聚焦） */
+function nearestInstance(data: StructureData, indices: number[], eng: NonNullable<typeof engineRef.current>): { indices: number[]; label: string } | null {
+  const insts = groupInstances(data, indices)
+  if (insts.length < 2) return insts[0] ?? null
+  const t = eng.getCameraState().target
+  let best: { indices: number[]; label: string } | null = null
+  let bestD = Infinity
+  for (const inst of insts) {
+    let cx = 0, cy = 0, cz = 0
+    for (const i of inst.indices) {
+      cx += data.atoms.positions[i * 3]; cy += data.atoms.positions[i * 3 + 1]; cz += data.atoms.positions[i * 3 + 2]
+    }
+    cx /= inst.indices.length; cy /= inst.indices.length; cz /= inst.indices.length
+    const d = Math.hypot(cx - t[0], cy - t[1], cz - t[2])
+    if (d < bestD) { bestD = d; best = inst }
+  }
+  return best
+}
+
 export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'load <id>', desc: '从 RCSB 加载 PDB 结构', example: 'load 4hhb' },
   { cmd: 'create <名> = <选择>', desc: '从选择创建新对象', example: 'create pocket = within 5 of resn HEM' },
@@ -117,7 +153,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'session save|export|new|info|clear', desc: '会话存档 / 文件导出 / 新建', example: 'session export · session new' },
   { cmd: 'history [clear]', desc: '命令历史面板（搜索/置顶/执行；clear 清空）', example: 'history · history clear' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
-  { cmd: 'preset <名>', desc: '应用风格预设', example: 'preset surface' },
+  { cmd: 'preset <名>', desc: '应用风格预设（含出版级互作）', example: 'preset publication' },
   { cmd: 'delete <名>', desc: '删除命名选择', example: 'delete site' },
   { cmd: 'close [名|all]', desc: '关闭结构（默认活动结构）', example: 'close · close all · close 4HHB' },
   { cmd: 'clear', desc: '移除所有结构（同 close all）', example: 'clear' },
@@ -544,6 +580,31 @@ export function runCommand(raw: string): void {
     useViewsStore.getState().hydrate()  // 首次（未装载）时从 localStorage 填充
     const vs = useViewsStore.getState() // hydrate 会替换 state 对象——必须重新获取
     const sub = (parts[1] ?? '').toLowerCase()
+    // view from <选择>：从选择方向观察（口袋开口正对相机）——先于书签跳转判定
+    if (sub === 'from') {
+      const selExpr = input.slice(parts[0].length).trim().replace(/^from\s+/i, '').replace(/,/g, ' ').trim()
+      const s = useMolStore.getState()
+      if (!selExpr) return err('用法：view from <选择>（如 view from ligand / view from (resn HEM and chain A)）——从选择方向观察，口袋开口正对相机')
+      if (!s.activeId) return err('没有活动结构')
+      const data = dataRegistry.get(s.activeId)
+      if (!data) return err('结构数据不存在')
+      const named = buildNamedMasks(s.activeId, data)
+      const r = evaluateSelection(selExpr, { structure: data, named })
+      if (r.error) return err(`选择错误: ${r.error}`)
+      const indices = maskToIndices(r.mask)
+      if (!indices.length) return err('选择为空')
+      const eng = engineRef.current
+      if (!eng) return err('引擎未就绪')
+      if (eng.viewFrom([{ structureId: s.activeId, indices }])) {
+        return ok(`视角 → 从「${selExpr}」方向观察（选择在前景、开口正对相机，17° 仰角增加纵深）`)
+      }
+      // 多配体兑底：选择质心贴近结构中心（如 ligand 覆盖 4 个 HEM 均布）→ 自动挑离相机目标最近的配体实例重试
+      const inst = nearestInstance(data, indices, eng)
+      if (inst && eng.viewFrom([{ structureId: s.activeId, indices: inst.indices }])) {
+        return ok(`视角 → 从「${selExpr}」方向观察——多配体均布已自动聚焦 ${inst.label}（选择在前景、开口正对相机）`)
+      }
+      return err('选择贴近结构中心、方向无意义（多配体均布或深埋）——先 zoom (resn XXX and chain A), 6 聚焦单个配体，再 view from (resn XXX and chain A)（口袋正对相机）')
+    }
     // 正交视角预设（先于书签跳转判定——与书签名不冲突）：view front/top/left/right/back/bottom/x/y/z
     const AXIS_VIEW_LABELS: Record<string, string> = {
       front: '正面', back: '背面', top: '俯视', bottom: '仰视', left: '左视', right: '右视',
@@ -556,7 +617,7 @@ export function runCommand(raw: string): void {
       return ok(`视角 → ${AXIS_VIEW_LABELS[sub]}（保持目标点与距离，平滑过渡）`)
     }
     if (!sub || sub === 'list' || sub === 'ls') {
-      if (!vs.bookmarks.length) return ok('暂无视角书签——view save [名称] 保存当前视角（或快捷键 V）；view front/top/left/right 转正交视角')
+      if (!vs.bookmarks.length) return ok('暂无视角书签——view save [名称] 保存当前视角（或快捷键 V）；view front/top/left/right 转正交视角；view from ligand 从配体方向观察')
       ok(`视角书签（${vs.bookmarks.length}/${MAX_BOOKMARKS}）：`)
       vs.bookmarks.forEach((b, i) => {
         const t = new Date(b.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -1060,6 +1121,8 @@ export function runCommand(raw: string): void {
     void (async () => {
       // 双 rAF：确保 loading toast 先绘制到屏幕，再进入阻塞渲染
       await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+      // 相机动画落位等待：view from / 视角书签过渡期间直接 ray 会把中途帧（旧构图）渲染进静帧
+      for (let i = 0; i < 25 && eng.isCameraAnimating(); i++) await new Promise<void>(r => setTimeout(r, 100))
       try {
         const r = eng.rayRender({ width })
         if (!r.url) {
@@ -1126,12 +1189,16 @@ export function runCommand(raw: string): void {
       s.updateSettings({ ssao: false })
       return ok('环境光遮蔽已关闭')
     }
-    let radius = parseFloat(parts[2] ?? '')
-    if (isNaN(radius)) radius = parseFloat(arg)
+    // ssao on [半径Å] [强度]（`ssao on 1.5 2` 的第二个数此前被静默忽略——LLM 常给双参数）
+    let idx = arg === 'on' ? 2 : 1
+    let radius = parseFloat(parts[idx] ?? '')
+    if (!isNaN(radius)) idx++
+    const intensity = parseFloat(parts[idx] ?? '')
     const patch: Partial<import('./types').Settings> = { ssao: true }
     if (!isNaN(radius) && radius >= 0.5 && radius <= 12) patch.ssaoRadius = radius
+    if (!isNaN(intensity) && intensity >= 0.2 && intensity <= 2.5) patch.ssaoIntensity = intensity
     s.updateSettings(patch)
-    return ok(`GTAO 环境光遮蔽开启${!isNaN(radius) && radius >= 0.5 && radius <= 12 ? `（采样半径 ${radius} Å）` : '（默认 3 Å）'}，可在场景面板调节强度与半径`)
+    return ok(`GTAO 环境光遮蔽开启${!isNaN(radius) && radius >= 0.5 && radius <= 12 ? `（采样半径 ${radius} Å）` : '（默认 3 Å）'}${!isNaN(intensity) && intensity >= 0.2 && intensity <= 2.5 ? `，强度 ${intensity}` : ''}，可在场景面板调节强度与半径`)
   }
 
   if (cmd === 'superpose' || cmd === 'match' || cmd === 'align' || cmd === 'mm') {

@@ -76,7 +76,8 @@ zoom site
 bg black · spin on · rock on · slab 20 · label on · preset surface
 ssao on 3 · hbonds on 3.2 · ensemble play · ensemble fps 15
 superpose 4hhb onto 2hhb · superpose 4hhb onto 1a3n chain A to A · activate 1bql · record start · morph m1 = 1bql 2lyz 40 · morph multi m = 1bql 2lyz 2vb1 60 · movie play 4 2 · movie edit
-interface A B · interface chain A chain B · contacts chain A | chain B 4.0 · dssp
+interface A B · interface chain A chain B · contacts chain A | chain B 4.0 · contacts ligand | polymer 4.5 · dssp
+preset publication · view from ligand · view from (resn HEM and chain A) · outline on 0.5 1 · ray 2400
 xcontacts 1ubq:chain A | 1d3z:chain A 5.0 · sasa 1.4 256 · color sasa · bsa · xbsa · untransform 1d3z
 map fetch 3ekj · map fofc 3ekj · map isolevel 1.5 · map isolevel pos 3 / neg 2.5 · map mesh · symmetry 20 · symmetry off
 create pocket = within 5 of resn HEM · split_chains · save model.pdb chain A
@@ -93,7 +94,8 @@ set ambient 0.5 · set specular off · set fov 30 · stereo on · util cbaw
 ### AI drawing assistant (toolbar "AI 助手" / natural language)
 Every feature of the workbench is reachable through natural language — loading, representations, coloring, selection, measurement, analysis, conformation morphing, movies and exports are all translated into whitelisted commands and auto-executed on the exact same code path as the console:
 - **Command cards** audit each executed command (status icon, expandable output, re-run; destructive commands require explicit confirmation)
-- **Visual self-check** — after commands run, a screenshot is sent to a vision model that verifies the render against your goal and issues up to 3 correction commands when the result misses (Eye toggle in the panel header)
+- **Visual self-check (bounded double-check)** — after commands run, a screenshot is sent to a vision model that verifies the render against your goal and issues correction commands; the corrections are themselves re-checked once more, so the loop converges to the intended look (Eye toggle in the panel header). Goals that include a publication image always re-`ray` after corrections
+- **Publication recipe** — "出版级 / 互作图" requests follow a battle-tested pipeline: `contacts ligand | polymer 4.5` (interaction analysis) → `preset publication` (chain-colored cartoon + CPK ball-stick pocket, clears stale baked colors) → `view from ligand` (pocket straight at the camera, adaptive close-up distance, auto-picks the nearest ligand instance in multi-ligand assemblies) → `bg white` + `outline on 0.5 1` (measured VLM-optimal subtle edging) → `ray 2400` last
 - **Incremental adjustment** — "再粗一点 / 再亮一点" style requests compute new absolute values from the current numeric settings in the scene context
 - **Auto-retry-fix loop** — failed commands are fed back to the LLM for one correction round; graceful degradation salvages commands from prose replies when the JSON protocol drifts
 
@@ -158,7 +160,7 @@ Full sessions can also be **exported as `.molvision` files** (complete structure
 ![GTAO ambient occlusion](public/screenshots/ssao.png)
 
 ## ⌨️ Shortcuts
-`1-8` presets (`8` = putty B-factor tubes, protein + nucleic) · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `V` save view bookmark · `Shift+1-9` jump to bookmark · `→/←` tour step (during a demo) · `` ` `` console · `Esc` exit mode/clear/end tour/stop movie/close timeline · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
+`1-9` presets (`6` = binding site, `7` = publication-ready protein–ligand view, `9` = putty B-factor tubes, protein + nucleic) · `F` fit view · `S` spin · `R` rock · `H` hydrogens · `W` waters · `B` hydrogen bonds · `P` ensemble play/pause · `L` label · `V` save view bookmark · `Shift+1-9` jump to bookmark · `→/←` tour step (during a demo) · `` ` `` console · `Esc` exit mode/clear/end tour/stop movie/close timeline · `Ctrl+click` single atom · `Shift+click` add · `Alt+click` remove · double-click focus residue
 
 ## 🚀 Quick start
 

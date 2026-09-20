@@ -2,7 +2,8 @@
 
 // AI 助手面板：自然语言 → MolVision 命令（LLM 决策 + 白名单执行 + 命令卡片审计 + VLM 视觉自查）
 // 浮动于 3D 视图右侧；对话持久化 localStorage；confirm 态命令需用户点确认；
-// 视觉自查：命令执行完毕后截图送 VLM 审视渲染结果，未达标自动给出修正命令（不二次自查，防循环）
+// 视觉自查：命令执行完毕后截图送 VLM 审视渲染结果，未达标自动给出修正命令，
+// 修正命令本身还会被再自查一轮（有界双轮：修到效果理想为止，不无限循环）
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Ban, Bot, Check, ChevronDown, Clock, Eye, EyeOff, Loader2, RotateCw, Send, Sparkles, Trash2, X, AlertTriangle,
@@ -179,11 +180,13 @@ export function AgentPanel() {
 
   /**
    * 逐条执行命令（白名单分类；confirm 留给用户；间隔 120ms 给引擎喘息）。
-   * depth：自动修正轮次——失败命令反馈 LLM 求修正，最多 1 轮（agentic retry）。
-   * allowVisual：本轮完成后是否做视觉自查（自动修正轮 / 视觉修正轮不再触发，防循环）。
-   * imageBefore：命令执行前的视口截图（视觉自查前后对比——让 VLM 判断变化是否真实发生）。
+   * depth：命令报错自动修正轮次（失败反馈 LLM 求修正，最多 1 轮 agentic retry）。
+   * visualBudget：剩余视觉自查次数（主轮 2 → 修正后再自查 1 次 → 二次修正不再查：
+   *   有界防循环，同时保证「修正 → 复查 → 直到效果理想」的闭环；修正轮的 imageBefore
+   *   传入上一轮自查截图，VLM 可验证修正是否真实生效）。
+   * imageBefore：本轮命令执行前的视口截图（视觉自查前后对比——判断变化是否真实发生）。
    */
-  const runTurn = useCallback(async (msgId: string, cmds: string[], depth: number, priorMsgs: AgentChatMessage[], allowVisual: boolean, imageBefore?: string) => {
+  const runTurn = useCallback(async (msgId: string, cmds: string[], depth: number, priorMsgs: AgentChatMessage[], visualBudget: number, imageBefore?: string) => {
     const records: AgentCmdRecord[] = cmds.map(cmd => ({ cmd, status: 'pending' as const }))
     patchCmds(msgId, records)
     for (let i = 0; i < records.length; i++) {
@@ -201,6 +204,7 @@ export function AgentPanel() {
       await sleep(120)
     }
     // 自动修正：有失败命令且未到深度上限 → 把失败信息反馈 LLM 求修正命令
+    let fixTurnRan = false
     const fails = records.filter(r => r.status === 'error' && r.output)
     if (fails.length && depth < 1) {
       setPhase('think')
@@ -216,13 +220,15 @@ export function AgentPanel() {
           commands: fixCmds.length ? fixCmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
         }
         setMsgs(m => [...m, fixMsg])
-        if (fixCmds.length) await runTurn(fixId, fixCmds, depth + 1, [...priorMsgs, fixMsg], false)
+        if (fixCmds.length) { await runTurn(fixId, fixCmds, depth + 1, [...priorMsgs, fixMsg], visualBudget, imageBefore); fixTurnRan = true }
       }
     }
-    // 视觉自查：有成功执行的可视命令 → 截图送 VLM 审视（一次，修正命令不再触发）
-    if (allowVisual && visualOn && records.some(r => r.status === 'ok' && isVisualCmd(r.cmd))) {
+    // 视觉自查：修正轮已自带自查（同一画面不再重复检查，节省一次 VLM 调用）
+    if (!fixTurnRan && visualBudget > 0 && visualOn && records.some(r => r.status === 'ok' && isVisualCmd(r.cmd))) {
       setPhase('visual')
       await sleep(800) // 让引擎渲染稳定（ray/异步命令落地）
+      // ray 阻塞期间相机 tween 被冻结（过期定时器先行触发）——等渲染循环追上、动画落位再截图
+      for (let i = 0; i < 15 && engineRef.current?.isCameraAnimating(); i++) await sleep(100)
       const eng = engineRef.current
       if (eng) {
         try {
@@ -240,7 +246,8 @@ export function AgentPanel() {
             setMsgs(m => [...m, revMsg])
             if (revCmds.length) {
               setPhase('exec')
-              await runTurn(revId, revCmds, depth, [...priorMsgs, revMsg], false)
+              // 修正轮消耗一次自查预算；上轮截图作为 before，VLM 可验证修正真实生效
+              await runTurn(revId, revCmds, depth, [...priorMsgs, revMsg], visualBudget - 1, shot)
             }
           }
         } catch { /* 截图/VLM 失败不影响主流程 */ }
@@ -283,7 +290,7 @@ export function AgentPanel() {
           } catch { before = undefined }
           if (!before) before = undefined
         }
-        await runTurn(aiId, cmds, 0, [...history, aiMsg], true, before)
+        await runTurn(aiId, cmds, 0, [...history, aiMsg], 2, before)
       }
     } finally {
       setBusy(false)

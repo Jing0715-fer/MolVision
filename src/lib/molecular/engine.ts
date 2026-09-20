@@ -1676,18 +1676,22 @@ export class MolEngine {
     this.buildContactGeometry(verts, cols, endPts.map(i => ({ pos: [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]] as [number, number, number] })), endCols)
   }
 
-  /** 组装接触连线 + 端点标记（两种模式共用） */
+  /** 组装接触连线 + 端点标记（两种模式共用）——虚线（出版惯例：互作用以虚线标示） */
   private buildContactGeometry(verts: Float32Array, cols: Float32Array, endPts: { pos: [number, number, number] }[], endCols: number[]) {
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(verts, 3))
     geo.setAttribute('color', new THREE.BufferAttribute(cols, 3))
-    const mat = new THREE.LineBasicMaterial({
+    // 虚线：dash/gap 以 Å 计（0.6/0.4 在口袋特写下呈清晰刻度虚线）
+    const mat = new THREE.LineDashedMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.85,
       depthWrite: false,
+      dashSize: 0.6,
+      gapSize: 0.4,
     })
     const lines = new THREE.LineSegments(geo, mat)
+    lines.computeLineDistances() // LineSegments 逐段计算（每段独立起算）
     lines.renderOrder = 7
     this.contactGroup.add(lines)
     // 端点小标记（按各自连线颜色着色）
@@ -3182,6 +3186,44 @@ export class MolEngine {
     this.fitView()
   }
 
+  /** view from <选择>：沿「结构质心 → 选择质心」方向观察——配体在前景、口袋开口正对相机
+   *  （结合位点出版图的标准视角）；叠加 ~17° 仰角增加纵深。距离按选择包围球自适应拉近
+   *  （配体约占画面 1/3-1/2 的特写构图）。方向无意义（选择贴近全局质心，如多配体均布）
+   *  时返回 false 由调用方回退（命令层会自动挑离相机目标最近的配体实例重试）。 */
+  viewFrom(refs?: { structureId: string; indices?: number[] }[]): boolean {
+    const selPts = this.collectFitPoints(refs)
+    const allPts = this.collectFitPoints()
+    if (selPts.length < 1 || allPts.length < 4) return false
+    const centroid = (pts: number[][]) => {
+      const c = new THREE.Vector3()
+      for (const p of pts) c.add(new THREE.Vector3(p[0], p[1], p[2]))
+      return c.multiplyScalar(1 / pts.length)
+    }
+    const selC = centroid(selPts)
+    const allC = centroid(allPts)
+    const dir = selC.clone().sub(allC)
+    if (dir.length() < 6) return false // 方向无意义：选择就在结构中心附近
+    dir.normalize()
+    // 仰角 ~17°（tan≈0.3）：打破纯正视的扁平感；dir 近竖直时换参考轴避免退化
+    const upRef = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0)
+    dir.addScaledVector(upRef, 0.3).normalize()
+    // 距离：选择包围球半径 + 5Å 口袋环境（fov 适配；配体约占画面 1/3-1/2 —— 实测 VLM 终审认可的特写构图）
+    const min: [number, number, number] = [Infinity, Infinity, Infinity]
+    const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+    for (const p of selPts) {
+      for (let d = 0; d < 3; d++) {
+        if (p[d] < min[d]) min[d] = p[d]
+        if (p[d] > max[d]) max[d] = p[d]
+      }
+    }
+    const selRadius = 0.5 * Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2])
+    const radius = Math.max(4, selRadius + 4)
+    const dist = Math.max(10, (radius / Math.sin((this.camera.fov * Math.PI) / 360)) * 0.95)
+    const pos = selC.clone().addScaledVector(dir, dist)
+    this.animateCameraTo({ pos: pos.toArray(), target: selC.toArray(), up: upRef.toArray() })
+    return true
+  }
+
   /** 对标 PyMOL orient：按 PCA 主轴对齐视角（最长轴→屏幕水平，次轴→垂直）再适配 */
   orient(refs?: { structureId: string; indices?: number[] }[]): boolean {
     const pts = this.collectFitPoints(refs)
@@ -3214,6 +3256,11 @@ export class MolEngine {
     this.controls.update()
     this.fitView(refs)
     return true
+  }
+
+  /** 相机动画是否进行中（视觉自查截图前等待落位——ray 阻塞期间 tween 被冻结需等渲染循环追上） */
+  isCameraAnimating(): boolean {
+    return !!this.camAnim
   }
 
   /** 相机状态导出（get_view） */

@@ -69,7 +69,7 @@ export function buildSceneContext(): string {
     if (cam) {
       const dist = Math.hypot(cam.pos[0] - cam.target[0], cam.pos[1] - cam.target[1], cam.pos[2] - cam.target[2])
       const mode = dist < 45 ? '特写' : dist > 140 ? '全景' : '中景'
-      lines.push(`- 相机：${mode}（距目标中心 ${dist.toFixed(0)} Å）——可调：zoom <选择> 聚焦 / zoom in|out 推拉 / turn x|y|z ±° 旋转 / move x|y|z ±Å 平移 / view front|top 正交视角`)
+      lines.push(`- 相机：${mode}（距目标中心 ${dist.toFixed(0)} Å）——可调：zoom <选择> 聚焦 / zoom in|out 推拉 / turn x|y|z ±° 旋转 / move x|y|z ±Å 平移 / view front|top 正交视角 / view from <选择> 口袋正对相机`)
     }
   } catch { /* 引擎未就绪时忽略 */ }
 

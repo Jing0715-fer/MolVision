@@ -1351,3 +1351,27 @@ Stage Summary:
 - E2E 证据链：用户原话复现零报错 + turn y -30/view right/zoom (resn HEM and chain A), 4 全部生效 + VLM 终审「特写镜头出版级」+ 相机状态 LLM 复述准确
 - 未解决问题与风险：①`hide surface, not (...)` 按选择表达式移除 rep 是精确字符串匹配（返回「已移除 0 个」）——hide 语义与 PyMOL（按原子掩码隐藏）不同，属已知限制；②纯问答指令（「只回答不要执行命令」）LLM 偶尔仍执行命令——规则遵循问题，非阻断；③ray 2400 在 SwiftShader 软渲染下需 1-3 分钟，真实 GPU 环境无此问题
 - 下一阶段建议：① hide 按选择掩码隐藏（PyMOL 语义，含 rep 内部分原子隐藏）② Agent 对话流式输出（SSE）③ 氢键分析面板化（r30 遗留）④ 快捷动作预设面板 ⑤ 深色主题链色对比度自适应
+
+---
+Task ID: r36
+Agent: main
+Task: 用户反馈「效果还是不太理想，增强 agent 并测试直到理想」——出版级互作图全链路实战调优（视角控制/构图/描边参数/视觉自查闭环）
+
+Work Log:
+- 【上下文】r35 后用户 16:18 实测：逗号语法/视角命令全部执行成功，但视觉自查把「outline on 2 2 白底」误判为渲染异常 → 修正轮全关特效 + preset 重置（摧毁已建好的构图：口袋残基丢失、无描边、修正后无重 ray）——最终产出素净无质感
+- 【修复①预设层】新增 preset publication（出版级互作：cartoon 链色 + within 4.5Å 口袋球棍元素色·not water）；修复 applyPreset 不清 colorOverrides 的隐藏 bug（烘焙色会盖住所有 rep 配色——用户实测「口袋卡通被 CPK 染花」根因）
+- 【修复②视角层】engine.viewFrom 新方法：沿「结构质心→选择质心」方向观察（口袋开口正对相机 + 17° 仰角纵深 + 按选择包围球自适应特写距离）；命令 view from <sel>；多配体结构（4HHB 四 HEM 均布、全配体质心=结构中心）自动挑离相机目标最近的残基实例重试（HEM148·D）——view from ligand 在多配体结构上「开箱即用」
+- 【修复③ray 时序】ray 命令在相机 tween 仅 ~5% 时渲染（导出 PNG = 视角命令前的旧构图）→ ray 前等待 isCameraAnimating 落位（上限 2.5s）；视觉自查截图前同样等待（ray 阻塞期间过期定时器先于 rAF 触发、tween 被冻结）
+- 【修复④视觉自查】AgentPanel 有界双轮（visualBudget=2：修正后再自查一轮直至收敛，修正轮 imageBefore=上轮截图验证修正真实生效）；错误修正轮跑过则主轮跳过自查（消除重复检查）；REVIEW_PROMPT 新增修正纪律（不得摧毁已成功构图/只调出问题参数）、出版图修正后必须重 ray、线稿感→降参数而非全关、口袋残基缺失症状、特写构图判据（配体+口袋集群 ≥1/3 画面）
+- 【参数实测标定（三轮 VLM A/B）】outline 1 1.5 → 7/10「过重线稿化」；outline off → 8.5/10；outline 0.5 1 → 9/10「非常克制、层次分离好」→ 配方定为 0.5 1；viewFrom 距离 (selRadius+4)/sin(fov/2)×0.95 ≈ 28-33Å（配体约占画面 1/3，实测 VLM 接受的特写构图；51.7Å 会被判「广角」）
+- 【接触连线出版化】LineBasicMaterial → LineDashedMaterial（0.6/0.4Å 虚线 + computeLineDistances）——互作用虚线是出版惯例；像素扫描确认渲染（261 红琥珀采样点）
+- 【SYSTEM_PROMPT 规则 16】出版级标准流程：contacts ligand | polymer 4.5 → preset publication → view from ligand（多配体自动挑最近实例）→ bg white → outline on 0.5 1 → ray 2400 收尾；命令上限 6→8；规则 15 禁止 color within N of ligand 烘焙口袋
+- 【E2E 终验（用户原话全链路）】「分析药物结合位点，调整合适角度，产出出版级别图片」→ 主轮 6 命令零报错（contacts 91 对接触/preset publication/view from ligand 自动聚焦 HEM148·D/bg white/outline 0.5 1/ray 2400）→ 视觉自查#1 发现构图偏广 → 修正 view from (resn HEM and chain A) + ray 2400（重渲染规则）→ 视觉自查#2「已成功聚焦于链A的HEM结合位点…符合出版级图片要求」接受收敛（一轮修正即收敛）→ 外部 VLM 终审 8.5/10「已达到高水平期刊投稿标准」；lint 0 错 0 警、tsc 应用代码 0 错、浏览器 errors 0、dev.log 无异常
+- 【已知噪声】外部 VLM 对同一构图族的两轮判读存在摆动（37.9Å 判「特写」vs 32.8Å 判「广角侧视」）；内部自查（glm-4.6v + 完整场景上下文 + 构图判据）是稳定的用户侧质量闸门
+
+Stage Summary:
+- r36 状态：用户「效果还是不太理想」反馈闭环——agent 出版级能力从「命令能跑」升级到「构图能打」：① preset publication 一键出版构图（含烘焙色清理 bug 修复）② view from 口袋正对相机智能视角（自适应特写距离 + 多配体自动选实例）③ ray/自查的相机动画落位等待（导出图与所见一致）④ 有界双轮视觉自查（修正→复查→收敛）⑤ 描边/距离参数 VLM 实测标定（0.5 1 / 28-33Å）⑥ 接触虚线出版化
+- 关键决策：viewFrom 距离标定锚定「VLM 接受的构图」而非几何满屏（28-33Å 而非 52Å）；多配体兜底放在命令层（残基实例分组 + 最近相机目标）而非提示词（LLM 无法可靠判断均布）；修正纪律用提示词约束「只修出问题的参数」而非代码钳制
+- 证据链：主轮零报错含自动聚焦 → 一轮修正收敛 → 内部自查接受 → 外部 VLM 8.5/10 期刊标准 → 像素级虚线确认 → 零错误零警告
+- 未解决与风险：①外部 VLM 判读摆动（同构图 7-9 分波动）——内部自查为稳定闸门 ②ray 2400 在 SwiftShader 需 1-2 分钟（沙箱限制）③视觉自查每轮 +1 VLM 调用 ④移动端布局本轮未改 CSS（r33/r34 已验证 390px）
+- 下一阶段建议：① 氢键分析面板化（r30 遗留）② Agent 对话流式输出（SSE）③ 深色主题链色对比度自适应 ④ SVG cartoon 增强 ⑤ hide 按选择掩码隐藏（PyMOL 语义）

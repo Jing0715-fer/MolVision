@@ -229,8 +229,8 @@ export default function MolViewer() {
         return
       }
       switch (e.key) {
-        case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': {
-          const keys = ['cartoon', 'ballstick', 'spacefill', 'wireframe', 'surface', 'bindingsite', 'hybrid', 'putty']
+        case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
+          const keys = ['cartoon', 'ballstick', 'spacefill', 'wireframe', 'surface', 'bindingsite', 'publication', 'hybrid', 'putty']
           const preset = keys[Number(e.key) - 1]
           if (preset && store.activeId) store.applyPreset(preset)
           break

@@ -161,6 +161,7 @@ const REGISTRY: CmdDef[] = [
   {
     names: ['view'],
     args: (pos, ctx) => (pos === 1 ? [
+      { insert: 'from', kind: 'sub', detail: '从选择方向观察（口袋正对相机）' },
       { insert: 'front', kind: 'sub', detail: '正视（沿 Z）' },
       { insert: 'top', kind: 'sub', detail: '俯视（沿 Y）' },
       { insert: 'left', kind: 'sub', detail: '左视' },
@@ -172,6 +173,9 @@ const REGISTRY: CmdDef[] = [
       { insert: 'del', kind: 'sub', detail: '删除书签' },
       { insert: 'list', kind: 'sub', detail: '列出书签' },
       ...ctx.viewBookmarks.map(b => ({ insert: b, kind: 'value' as const, detail: '视角书签' })),
+    ] : pos === 2 ? [
+      { insert: 'ligand', kind: 'sel', detail: '全部配体' },
+      { insert: 'protein', kind: 'sel', detail: '蛋白' },
     ] : null),
   },
   { names: ['activate'], args: (pos, ctx) => (pos === 1 ? structItems(ctx) : null) },
@@ -323,13 +327,15 @@ const REGISTRY: CmdDef[] = [
   {
     names: ['preset', 'style'],
     args: pos => (pos === 1 ? [
+      { insert: 'publication', kind: 'preset', detail: '出版级互作（卡通+口袋球棍）' },
+      { insert: 'bindingsite', kind: 'preset', detail: '结合口袋' },
       { insert: 'cartoon', kind: 'preset', detail: 'Cartoon 经典' },
-      { insert: 'surface', kind: 'preset', detail: '表面' },
-      { insert: 'ballstick', kind: 'preset', detail: '球棍' },
-      { insert: 'sticks', kind: 'preset', detail: '棍状' },
-      { insert: 'lines', kind: 'preset', detail: '线框' },
-      { insert: 'ligand', kind: 'preset', detail: '配体口袋' },
-      { insert: 'cinema', kind: 'preset', detail: '影院级' },
+      { insert: 'ballstick', kind: 'preset', detail: '球棍模型' },
+      { insert: 'spacefill', kind: 'preset', detail: '空间填充' },
+      { insert: 'wireframe', kind: 'preset', detail: '线框' },
+      { insert: 'surface', kind: 'preset', detail: '分子表面' },
+      { insert: 'hybrid', kind: 'preset', detail: '混合风格' },
+      { insert: 'putty', kind: 'preset', detail: 'Putty B 因子管' },
     ] : null),
   },
   { names: ['delete'], args: (pos, ctx) => (pos === 1 ? ctx.namedSelections.map(n => ({ insert: n, kind: 'sel', detail: '命名选择' })) : null) },
