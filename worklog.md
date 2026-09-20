@@ -1326,3 +1326,28 @@ Stage Summary:
 - r34 最终状态：①composer FBO 完整性架构重构（RenderPass→GTAO→EdgePass，OutputPass 移除、ACES 内联进 EdgeShader、syncComposerTargets 统一尺寸同步）②灯光过曝褪色重标定（env 0.45×/key 1.1/fill 0.35/ambient 0.08）③agent 视觉自查前后双图对比 + 修正命令锚定当前值 + 命令语义规则 11-13——用户三项反馈（彩虹不显色/灰白线稿/灯光无变化）全部闭环
 - 沙箱教训（r34 全程）：①操纵第三方库内部枚举前先核实真实值（GTAOPass.OUTPUT.Default=0 而非想当然的 6——一天的「blend 失效」调查源于此）②toDataURL/截图测量要警惕 stale frame 与 alpha-0 clear color 污染（早期 setClearColor(0,0) 调试残留让背景读成黑色）③live loop 每帧覆写 gtaoPass.enabled/blendIntensity——外部改内部状态做 A/B 测量会被下一帧冲掉，必须走 store 命令路径 ④SwiftShader 对非常规深度纹理格式（纯 DepthFormat 附件）可能挂起——改 FBO 附件格式要保守
 - 下一阶段建议：①氢键分析面板化（r30 遗留）②Agent 对话流式输出（SSE）③快捷动作预设面板 ④深色主题链色对比度自适应 ⑤SVG cartoon 增强
+
+---
+Task ID: r35
+Agent: main
+Task: 修复 agent 命令执行失效三连 bug（逗号语法/视角控制/互作分析工作流）+ agent 能力强化
+
+Work Log:
+- 【根因定位】用户实测「分析药物分子和蛋白的互作，生产出版级别渲染图」暴露三连 bug：①`show ballstick, ligand` 报「未知表示法 "ballstick,"」——LLM 的 PyMOL 惯性逗号语法不被支持，且视觉自查修正轮又重复给同样命令（死循环）；②自动修正后 cartoon 被 `show ballstick`(all) 全原子球棍盖满，视觉自查判读「cartoon 丢失」却无法修复（修正命令本身失败）；③收尾无聚焦命令，全景视角下配体不可见（用户「视角控制方面」痛点的核心）
+- 【修复①逗号语法】commands.ts 新增 commaSplit/joinSel helper：show/hide/color/zoom/orient 五命令全部支持 PyMOL 标准 `<参数>, <选择>` 语法（空格语法不变）——选择表达式本身无顶层逗号，首个逗号必是分隔符，安全
+- 【修复②视角控制五件套】engine.ts 新增：turnCamera（绕屏幕轴旋转，x俯仰/y方位/z滚转）、moveCamera（屏幕轴平移）、dollyCamera（推拉）、setAxisView（front/back/top/bottom/left/right/x/y/z 正交视角预设，走 animateCameraTo 平滑过渡）、cameraBasis/syncCameraPeer（双相机位姿同步）。commands.ts 新增 turn/move 命令 + zoom in|out 推拉 + zoom <sel>, <缓冲Å>（PyMOL 语义）+ view 正交视角（先于书签跳转判定，不冲突）
+- 【修复③表示法工作流】SYSTEM_PROMPT 新增规则 14（视角控制：视角类需求必须用视角命令收尾；口袋/互作任务务必收尾聚焦；多配体结构 ligand 选择覆盖全蛋白，聚焦单个用 zoom (resn HEM and chain A), 6）+ 规则 15（蛋白+配体混合表示标准解法：show cartoon, protein + show ballstick, ligand，绝不要 show ballstick 作用 all）
+- 【agent 上下文增强】context.ts 注入相机状态行（特写<45Å/中景/全景>140Å + 距离 + 可用视角命令速记）——LLM/VLM 决策视角的依据；REVIEW_PROMPT 症状速查新增：未聚焦→zoom（含多配体单聚焦策略）、视角不佳→orient/view/turn、cartoon 被球棍盖住→preset cartoon 再 show ballstick, ligand
+- 【白名单与补全】runner.ts AUTO_PREFIXES + route.ts KNOWN_CMD_HEADS 加 turn/move；complete.ts 补全 view 正交视角 + turn/move 轴参数；COMMAND_HELP 更新
+- 【E2E 实测①用户原话复现】「分析一下药物分子和蛋白的互作，生产出版级别渲染图」→ agent 执行 hide water/show cartoon, polymer/show ballstick, ligand/color element, ligand/outline on 2 2/ssao on/bg white/ray 2400 全部 ok（零「未知表示法」错误）→ 视觉自查发现「配体偏小未聚焦」→ zoom ligand, 8/outline off/bg #f0f5f9 → 第二轮视觉自查发现「巨大红色 PO4 表面干扰构图」→ hide surface/zoom (resn HEM and chain A), 6/turn y -30 全部 ok → 两次 ray 2400 完成导出 → VLM 确认「蛋白彩色 Cartoon + HEM 球棍元素色 + 聚焦口袋」
+- 【E2E 实测②视角自然语言】「从侧面看一下，拉近一点配体」→ view right + zoom ligand, 5（正交视角+聚焦缓冲一键到位）→ 视觉自查自动收紧 zoom ligand, 4
+- 【E2E 实测③相机状态注入】「当前相机是什么状态」→ LLM 准确复述「距目标中心105Å，中景状态」——context.ts 相机行验证通过
+- 【E2E 实测④多配体单聚焦】「聚焦一个血红素配体，给我特写镜头」→ zoom (resn HEM and chain A), 4（规则 14 多配体策略生效，不再覆盖全蛋白）→ VLM 终审确认特写镜头出版级
+- lint 0 错 0 警、tsc 应用代码 0 错、浏览器 errors 0、dev.log 无异常
+
+Stage Summary:
+- r35 状态：用户反馈的「命令确认执行但无实际效果」三连 bug 全部闭环——①逗号语法（PyMOL 惯性写法全线支持：show/hide/color/zoom/orient）②视角控制五件套（turn/move/zoom in·out/view 正交/zoom 缓冲，engine 平滑动画）③互作分析标准工作流（规则 15 分离表示 + 规则 14 收尾聚焦）④相机状态注入 LLM/VLM 上下文（特写/全景判定）⑤视觉自查症状速查扩容（未聚焦/视角不佳/cartoon 被盖三类新症状）
+- 关键决策：逗号语法在命令入口统一 commaSplit（而非教 LLM 改写法——LLM 的 PyMOL 训练惯性无法靠提示词根除）；正交视角挂在 view 命令的保留字上（与书签系统零冲突）；相机距离阈值 45/140Å 判定景别
+- E2E 证据链：用户原话复现零报错 + turn y -30/view right/zoom (resn HEM and chain A), 4 全部生效 + VLM 终审「特写镜头出版级」+ 相机状态 LLM 复述准确
+- 未解决问题与风险：①`hide surface, not (...)` 按选择表达式移除 rep 是精确字符串匹配（返回「已移除 0 个」）——hide 语义与 PyMOL（按原子掩码隐藏）不同，属已知限制；②纯问答指令（「只回答不要执行命令」）LLM 偶尔仍执行命令——规则遵循问题，非阻断；③ray 2400 在 SwiftShader 软渲染下需 1-3 分钟，真实 GPU 环境无此问题
+- 下一阶段建议：① hide 按选择掩码隐藏（PyMOL 语义，含 rep 内部分原子隐藏）② Agent 对话流式输出（SSE）③ 氢键分析面板化（r30 遗留）④ 快捷动作预设面板 ⑤ 深色主题链色对比度自适应

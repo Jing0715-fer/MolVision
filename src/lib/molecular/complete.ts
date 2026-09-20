@@ -150,12 +150,23 @@ const REGISTRY: CmdDef[] = [
   },
   { names: ['bg', 'background'], args: pos => (pos === 1 ? colorItems() : null) },
   { names: ['zoom'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
-  { names: ['activate'], args: (pos, ctx) => (pos === 1 ? structItems(ctx) : null) },
-  { names: ['orient'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
-  { names: ['get_view', 'set_view'] },
+  {
+    names: ['turn', 'move'],
+    args: pos => (pos === 1 ? [
+      { insert: 'x', kind: 'sub', detail: '屏幕右轴（turn 俯仰 / move 右移）' },
+      { insert: 'y', kind: 'sub', detail: '屏幕上轴（turn 水平方位 / move 上移）' },
+      { insert: 'z', kind: 'sub', detail: '视线轴（turn 滚转 / move 推拉）' },
+    ] : null),
+  },
   {
     names: ['view'],
     args: (pos, ctx) => (pos === 1 ? [
+      { insert: 'front', kind: 'sub', detail: '正视（沿 Z）' },
+      { insert: 'top', kind: 'sub', detail: '俯视（沿 Y）' },
+      { insert: 'left', kind: 'sub', detail: '左视' },
+      { insert: 'right', kind: 'sub', detail: '右视（沿 X）' },
+      { insert: 'back', kind: 'sub', detail: '后视' },
+      { insert: 'bottom', kind: 'sub', detail: '仰视' },
       { insert: 'save', kind: 'sub', detail: '保存当前视角' },
       { insert: 'go', kind: 'sub', detail: '跳转书签' },
       { insert: 'del', kind: 'sub', detail: '删除书签' },
@@ -163,6 +174,9 @@ const REGISTRY: CmdDef[] = [
       ...ctx.viewBookmarks.map(b => ({ insert: b, kind: 'value' as const, detail: '视角书签' })),
     ] : null),
   },
+  { names: ['activate'], args: (pos, ctx) => (pos === 1 ? structItems(ctx) : null) },
+  { names: ['orient'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
+  { names: ['get_view', 'set_view'] },
   {
     names: ['tour'],
     args: pos => (pos === 1 ? [

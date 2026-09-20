@@ -9,10 +9,10 @@ import type { AgentRequestBody, AgentDecision } from '@/lib/molecular/agent/prot
 const COMMAND_REF = `## 命令速查（全部小写；[sel] 为可选选择表达式，省略时作用于活动结构或当前选择）
 
 加载/对象：load <pdb编号>（从 RCSB 加载，如 load 4hhb） · create <名> = <表达式> · split_chains · activate <名|编号>（切换活动结构）
-表示法：preset <cartoon|ballstick|spacefill|wireframe|surface|bindingsite|hybrid|putty> · show <rep> [sel]（rep: cartoon/putty/ballstick/sticks/lines/spacefill/surface） · hide <rep|all> [sel] · show hydrogens / hide hydrogens / show waters / hide waters
-着色：color <方案|颜色> [sel]（方案: element/chain/spectrum/residue/ss/bfactor/sasa/uniform；或 red/#ff8800） · util cbc|cnc|ss|cbaw · reset_colors · bg <颜色>
+表示法：preset <cartoon|ballstick|spacefill|wireframe|surface|bindingsite|hybrid|putty> · show <rep> <sel>（rep 与 sel 用空格或逗号分隔均可：show ballstick, ligand ≡ show ballstick ligand；rep: cartoon/putty/ballstick/sticks/lines/spacefill/surface） · hide <rep|all> <sel> · show hydrogens / hide hydrogens / show waters / hide waters
+着色：color <方案|颜色> <sel>（逗号/空格分隔均可；方案: element/chain/spectrum/residue/ss/bfactor/sasa/uniform；或 red/#ff8800） · util cbc|cnc|ss|cbaw · reset_colors · bg <颜色>
 选择/统计：select [名=]<表达式> · count_atoms [表达式]
-视角：zoom [sel] · orient [sel] · view save <名> / view go <名> / view list（视角书签）
+视角：zoom <sel>（聚焦选择；zoom ligand, 5 带缓冲Å；zoom in / zoom out 推拉；无参=全量适配） · orient [sel]（PCA 主轴对齐） · turn <x|y|z> <±角度°>（旋转视角：x=俯仰 y=水平方位 z=滚转） · move <x|y|z> <±Å>（平移：x=右 y=上 z=推拉） · view front|back|top|bottom|left|right|x|y|z（正交视角预设） · view save <名> / view go <名> / view list（视角书签）
 视觉：set <项> <值>（项: ambient direct fill specular fog fog_strength fov spin_speed quality low|medium|high axes fps seq_focus cap_color cap_shading auto_perf outline outline_strength outline_thickness transparency sphere_scale stick_radius cartoon_width） · spin on|off · rock on|off · slab <nÅ>|off|move <±Å>|center|cap on|off · stereo on|off · ssao on|off [半径]（独立命令，非 set 键） · outline on|off [强度 粗细] · axes on|off · fps on|off · label on|off（标记当前选择） · hbonds on|off [nÅ] · symmetry <Å>|off · map fofc <id>（差值电子密度）
 分析：contacts <A> | <B> [nÅ] · interface <链A> <链B> · xcontacts <A>:<expr> | <B>:<expr>（跨结构） · sasa · bsa · xbsa · dssp（重算二级结构） · superpose <名> onto <名> [chain X to Y] · untransform [名]
 测量：measure dist (exprA) (exprB) · measure angle (A) (B) (C) · measure dihedral (A) (B) (C) (D) · measure clear（多原子选择距离取最近原子对，角度/二面角取质心最近原子；例：measure dist (resn HEM) (within 5 of resn HEM and protein)）
@@ -44,7 +44,9 @@ ${COMMAND_REF}
 10. 构象动画（morph/ensemble/movie/record）与叠合（superpose）等多结构工作流照常支持：先用 load 加载所需构象再执行
 11. 灯光语义：ambient/direct/fill 正常值均为 1（环境光含环境贴图贡献）；视觉变化是渐变的——1→1.2 变化轻微，要「明显变亮/变暗」至少 ±0.4；用户反馈「没有变化」时给更大步长（如 1→1.5）而非重复小幅调整
 12. 着色与背景搭配：spectrum/bfactor 等渐变着色在纯白背景下对比度低——用户要求「彩虹上色」且背景为白时，可建议同时换深背景（bg black）提升观感；颜色变更 (color) 只影响几何体颜色，背景用 bg
-13. ssao 与 outline 是独立命令（ssao on / outline on [强度 粗细]），不是 set 的键；两者可叠加，叠加后画面更重——用户说「太脏/太重」时先关其一`
+13. ssao 与 outline 是独立命令（ssao on / outline on [强度 粗细]），不是 set 的键；两者可叠加，叠加后画面更重——用户说「太脏/太重」时先关其一
+14. 视角控制：聚焦/看XX/转到/俯视/仰视/正视/侧面看/旋转一点/拉近拉远等需求必须用视角命令收尾——zoom <sel>（聚焦）/ zoom in|out（推拉）/ turn <x|y|z> ±°（旋转）/ move <x|y|z> ±Å（平移）/ view front|top|left|right（正交视角）/ orient（主轴对齐）。视角命令可与其他命令自由组合（如 preset bindingsite 后 zoom within 5 of (ligand)）。「结合口袋/互作/配体环境」类任务务必收尾聚焦：zoom within 5 of (ligand)——全景视角下配体几乎不可见；多配体结构（如 4HHB 四个 HEM 分布四条链）ligand 选择覆盖全蛋白，聚焦单个用 zoom (resn HEM and chain A), 6（场景信息相机行显示全景/中景时必须聚焦）
+15. 蛋白+配体混合表示（「蛋白 cartoon 配体球棍」类需求的标准解法）：蛋白部分 show cartoon, protein（或 polymer），配体部分 show ballstick, ligand，口袋环境可加 show ballstick, within 4.5 of (ligand) and polymer；着色同理带选择（color element, ligand）。绝不要 show ballstick 不带选择（作用 all 会盖满蛋白主链，cartoon 就看不见了）；已有表示冲突时先 preset <名> 重置再叠加`
 
 /** 视觉自查提示词（VLM 分支）：审视执行后截图（可选前后对比），判断目标达成度 */
 const REVIEW_PROMPT = `你是 MolVision（Web 端 PyMOL 风格分子可视化工作台）的视觉自查模块。用户提出绘图目标，助手已执行若干命令。随消息可能附两张截图：第一张是命令执行【前】、第二张是执行【后】（只附一张时即为执行后状态）。请对比前后并审视，判断目标是否达成并给出结论。
@@ -66,6 +68,9 @@ const REVIEW_PROMPT = `你是 MolVision（Web 端 PyMOL 风格分子可视化工
   · 黑色线条噪感、边缘刺目、卡通面丢失 → outline_thickness 过大 → set outline_thickness 2 或 outline off
   · 场景过暗发灰 → 灯光过低 → set ambient 1 · set direct 1.2
   · 层次感不足、扁平 → 需要环境光遮蔽 → ssao on（独立命令，非 set 键）
+  · 配体/主体太小或未聚焦、画面主体不突出 → zoom within 5 of (ligand)（或 zoom ligand；相机状态见场景信息的「相机」行，全景时必须聚焦）；结构含多个分散配体时（如 4HHB 四个 HEM 分布四条链）ligand 选择覆盖全蛋白——聚焦单个：zoom (resn HEM and chain A), 6，必要时再 zoom in 拉近
+  · 视角不佳（结构斜置、纵深不清晰、配体被蛋白遮挡） → orient 或 view front / turn y 30（换个角度再看）
+  · 蛋白只剩球棍/线框、cartoon 带状丢失 → 表示法叠加冲突（ballstick 盖住 cartoon） → preset cartoon 再 show ballstick, ligand（只给配体加球棍，绝不能作用 all）
   · 结构消失 / 只剩线稿轮廓 / 画面大面积空白 → 后处理渲染异常 → ssao off 后单独 outline on 重试；仍异常则 ssao off · outline off
   · 颜色看不清（白背景下偏淡） → bg 后改深色再观察，或直接说颜色正常仅对比度低 → bg black 或 bg #1a2e35
   · 「恢复正常」类目标 → 灯光回默认（ambient 1 / direct 1 / fill 1），outline_thickness ≤ 2
@@ -92,7 +97,7 @@ const KNOWN_CMD_HEADS = new Set([
   'load', 'fetch', 'create', 'split_chains', 'splitchains', 'activate', 'use',
   'select', 'sel', 'show', 'display', 'hide', 'undisplay', 'preset', 'style',
   'color', 'colour', 'util', 'reset_colors', 'recolor', 'bg', 'background',
-  'zoom', 'fit', 'orient', 'get_view', 'set_view', 'view', 'views', 'bookmark',
+  'zoom', 'fit', 'orient', 'turn', 'move', 'get_view', 'set_view', 'view', 'views', 'bookmark',
   'set', 'spin', 'rock', 'slab', 'stereo', 'axes', 'axis', 'gizmo', 'fps',
   'outline', 'edge', 'ssao', 'ao', 'gtao', 'label',
   'hbonds', 'hbond', 'hbon', 'count_atoms', 'count', 'symmetry', 'symmates',

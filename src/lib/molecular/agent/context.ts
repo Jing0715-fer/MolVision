@@ -1,6 +1,6 @@
 // 场景上下文构建器：把当前工作台状态序列化为 LLM 友好的紧凑文本
 // （结构/链/配体/reps/选择/命名选择/关键渲染设置——每轮请求随对话一起送后端）
-import { useMolStore } from '../store'
+import { useMolStore, engineRef } from '../store'
 import { REP_LABELS } from '../types'
 import { useViewsStore } from '../views-store'
 
@@ -62,6 +62,16 @@ export function buildSceneContext(): string {
   lines.push(
     `- 数值参数（增量调整时基于这些当前值计算新值）：outline强度${v.outlineStrength}/粗细${v.outlineThickness}px · SSAO强度${v.ssaoIntensity}/半径${v.ssaoRadius}Å · 灯光 环境${v.lightAmbient}/主光${v.lightKey}/补光${v.lightFill} · FOV${v.fov}° · 雾强度${v.fogStrength} · spin速度${v.spinSpeed} · 高光${on(v.specular)}`,
   )
+
+  // 相机/视角状态（视角决策依据：特写 or 全景、当前朝向）
+  try {
+    const cam = engineRef.current?.getCameraState()
+    if (cam) {
+      const dist = Math.hypot(cam.pos[0] - cam.target[0], cam.pos[1] - cam.target[1], cam.pos[2] - cam.target[2])
+      const mode = dist < 45 ? '特写' : dist > 140 ? '全景' : '中景'
+      lines.push(`- 相机：${mode}（距目标中心 ${dist.toFixed(0)} Å）——可调：zoom <选择> 聚焦 / zoom in|out 推拉 / turn x|y|z ±° 旋转 / move x|y|z ±Å 平移 / view front|top 正交视角`)
+    }
+  } catch { /* 引擎未就绪时忽略 */ }
 
   // 测量与书签（agent 可报告/管理）
   if (s.measurements.length) {

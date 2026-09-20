@@ -3246,6 +3246,77 @@ export class MolEngine {
     }
   }
 
+  /** 非活动相机位姿同步（turn/move/dolly 修改 activeCamera 后调用，与 fitView 同策略） */
+  private syncCameraPeer() {
+    if (this.activeCamera === this.orthoCamera) {
+      this.camera.position.copy(this.orthoCamera.position)
+      this.camera.up.copy(this.orthoCamera.up)
+    } else {
+      this.orthoCamera.position.copy(this.camera.position)
+      this.orthoCamera.up.copy(this.camera.up)
+    }
+  }
+
+  /** 相机屏幕坐标系基向量（x=屏幕右 y=屏幕上 z=视线向外） */
+  private cameraBasis() {
+    const dir = new THREE.Vector3().subVectors(this.activeCamera.position, this.controls.target).normalize()
+    const right = new THREE.Vector3().crossVectors(dir, this.activeCamera.up).normalize()
+    const up = new THREE.Vector3().crossVectors(right, dir).normalize()
+    return { dir, right, up }
+  }
+
+  /** 对标 PyMOL turn：绕屏幕轴旋转相机（x=俯仰 y=水平方位 z=滚转），target 不动 */
+  turnCamera(axis: 'x' | 'y' | 'z', deg: number) {
+    const { dir, right, up } = this.cameraBasis()
+    const worldAxis = axis === 'x' ? right : axis === 'y' ? up : dir
+    const q = new THREE.Quaternion().setFromAxisAngle(worldAxis, (deg * Math.PI) / 180)
+    const offset = new THREE.Vector3().subVectors(this.activeCamera.position, this.controls.target)
+    offset.applyQuaternion(q)
+    this.activeCamera.position.copy(this.controls.target).add(offset)
+    this.activeCamera.up.applyQuaternion(q).normalize()
+    this.syncCameraPeer()
+    this.controls.update()
+  }
+
+  /** 对标 PyMOL move：沿屏幕轴平移相机与目标（x=右 y=上 z=推拉，正 z=远离主体） */
+  moveCamera(axis: 'x' | 'y' | 'z', dist: number) {
+    const { dir, right, up } = this.cameraBasis()
+    const worldAxis = axis === 'x' ? right : axis === 'y' ? up : dir
+    const delta = worldAxis.multiplyScalar(dist)
+    this.activeCamera.position.add(delta)
+    this.controls.target.add(delta)
+    this.syncCameraPeer()
+    this.controls.update()
+  }
+
+  /** 推拉镜头（factor<1 拉近 · >1 拉远；zoom in / zoom out） */
+  dollyCamera(factor: number) {
+    const offset = new THREE.Vector3().subVectors(this.activeCamera.position, this.controls.target)
+    const len = Math.max(3, Math.min(800, offset.length() * factor))
+    this.activeCamera.position.copy(this.controls.target).addScaledVector(offset.normalize(), len)
+    this.syncCameraPeer()
+    this.controls.update()
+  }
+
+  /** 正交视角预设（front/back/top/bottom/left/right · x/y/z 别名）——保持 target 与距离，平滑过渡 */
+  setAxisView(name: string): boolean {
+    const dirs: Record<string, [number, number, number]> = {
+      front: [0, 0, 1], back: [0, 0, -1],
+      top: [0, 1, 0], bottom: [0, -1, 0],
+      left: [-1, 0, 0], right: [1, 0, 0],
+      x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1],
+    }
+    const d = dirs[name.toLowerCase()]
+    if (!d) return false
+    const dist = Math.max(3, this.activeCamera.position.distanceTo(this.controls.target))
+    // 视线平行 up 时换 up（top/bottom 视角）
+    const vertical = Math.abs(d[1]) > 0.99
+    const up: [number, number, number] = vertical ? [0, 0, d[1] > 0 ? -1 : 1] : [0, 1, 0]
+    const pos = this.controls.target.clone().add(new THREE.Vector3(d[0], d[1], d[2]).multiplyScalar(dist))
+    this.animateCameraTo({ pos: pos.toArray(), target: this.controls.target.toArray(), up })
+    return true
+  }
+
   /** 视角书签平滑过渡：easeInOutCubic 插值（pos/target/fov），up 在结尾落位；
    *  spin/rock 开启或参数非法时直接落位（每帧改相机的模式与过渡动画互相打架） */
   animateCameraTo(s: { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }, dur = 650) {

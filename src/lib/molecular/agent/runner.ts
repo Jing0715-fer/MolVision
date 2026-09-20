@@ -17,7 +17,7 @@ const AUTO_PREFIXES = new Set([
   // 着色
   'color', 'colour', 'util', 'reset_colors', 'recolor', 'bg', 'background',
   // 视角
-  'zoom', 'fit', 'orient', 'get_view', 'set_view', 'view', 'views', 'bookmark',
+  'zoom', 'fit', 'orient', 'turn', 'move', 'get_view', 'set_view', 'view', 'views', 'bookmark',
   // 视觉设置
   'set', 'spin', 'rock', 'slab', 'stereo', 'axes', 'axis', 'gizmo', 'fps',
   'outline', 'edge', 'ssao', 'ao', 'gtao', 'label',

@@ -30,6 +30,19 @@ function clampNum(v: number, min: number, max: number, dflt: number): number {
   return Math.max(min, Math.min(max, v))
 }
 
+/** PyMOL 逗号语法拆分：`show ballstick, ligand` → head='ballstick' tail='ligand'。
+ *  选择表达式语法本身不含顶层逗号，首个逗号必是 <参数>, <选择> 分隔（LLM 的 PyMOL 惯性写法，实测高频）。 */
+function commaSplit(rest: string): { head: string; tail: string } {
+  const i = rest.indexOf(',')
+  if (i === -1) return { head: rest.trim(), tail: '' }
+  return { head: rest.slice(0, i).trim(), tail: rest.slice(i + 1).replace(/\s*,\s*/g, ' ').trim() }
+}
+
+/** <head> 与 <tail> 里的空格式选择拼接（空格语法与逗号语法统一后的选择表达式） */
+function joinSel(head: string, tail: string): string {
+  return [head, tail].filter(Boolean).join(' ').trim()
+}
+
 const REP_ALIASES: Record<string, RepType> = {
   cartoon: 'cartoon', ribbon: 'cartoon',
   putty: 'putty', 'b-factor': 'putty', bfactor: 'putty',
@@ -54,13 +67,16 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'create <名> = <选择>', desc: '从选择创建新对象', example: 'create pocket = within 5 of resn HEM' },
   { cmd: 'split_chains', desc: '按链组拆分为多个对象', example: 'split_chains' },
   { cmd: 'select [name=]expr', desc: '选择原子（可命名）', example: 'select site = within 5 of resn HEM' },
-  { cmd: 'show <rep> [sel]', desc: '添加表示法（cartoon/putty/sticks…）', example: 'show putty polymer' },
+  { cmd: 'show <rep> [sel]', desc: '添加表示法（逗号/空格分隔皆可）', example: 'show ballstick, ligand · show cartoon protein' },
   { cmd: 'hide <rep> [sel]', desc: '移除匹配的表示法', example: 'hide lines' },
   { cmd: 'color <方案|颜色> [sel]', desc: '给选择上色', example: 'color red chain A' },
   { cmd: 'util cbc|cnc|ss|cbaw', desc: '实用着色（链/灰/二级结构/元素+白碳）', example: 'util cbc' },
   { cmd: 'set <项> <值>', desc: '渲染设置（灯光/fov/质量…）', example: 'set ambient 0.5' },
   { cmd: 'bg <颜色>', desc: '设置背景色', example: 'bg black' },
-  { cmd: 'zoom [sel]', desc: '缩放到选择/全部', example: 'zoom ligand' },
+  { cmd: 'zoom [sel|in|out]', desc: '聚焦选择/推拉镜头（zoom ligand, 5 带缓冲）', example: 'zoom ligand · zoom in · zoom out' },
+  { cmd: 'turn <x|y|z> <±°>', desc: '旋转视角（x俯仰 y水平 z滚转）', example: 'turn y 30 · turn x -15' },
+  { cmd: 'move <x|y|z> <±Å>', desc: '平移视角（x右 y上 z推拉）', example: 'move z -10 · move x 5' },
+  { cmd: 'view <front|top|left|right|back|bottom|x|y|z>', desc: '正交视角预设（保持距离平滑转）', example: 'view top · view front' },
   { cmd: 'activate <名|编号>', desc: '切换活动结构（多结构工作流）', example: 'activate 1BQL' },
   { cmd: 'orient [sel]', desc: '主轴对齐视角（PCA）', example: 'orient chain A' },
   { cmd: 'get_view / set_view', desc: '视角导出/恢复（JSON）', example: 'get_view' },
@@ -171,7 +187,10 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'show' || cmd === 'display') {
-    const repAlias = (parts[1] ?? '').toLowerCase()
+    // 逗号语法（PyMOL 惯例）：show ballstick, ligand —— 与空格语法 show ballstick ligand 等价
+    const { head, tail } = commaSplit(input.slice(parts[0].length).trim())
+    const headWords = head.split(/\s+/)
+    const repAlias = (headWords[0] ?? '').toLowerCase()
     if (repAlias === 'hydrogens' || repAlias === 'h') {
       useMolStore.getState().updateSettings({ hideHydrogens: false })
       return ok('已显示氢原子')
@@ -181,8 +200,8 @@ export function runCommand(raw: string): void {
       return ok('已显示水分子')
     }
     const repType = REP_ALIASES[repAlias]
-    if (!repType) return err(`未知表示法 "${parts[1]}"。可用: ${Object.keys(REP_ALIASES).slice(0, 7).join(', ')}…`)
-    const selExpr = parts.slice(2).join(' ').trim() || 'all'
+    if (!repType) return err(`未知表示法 "${headWords[0]}"。可用: ${Object.keys(REP_ALIASES).slice(0, 7).join(', ')}…`)
+    const selExpr = joinSel(headWords.slice(1).join(' '), tail) || 'all'
     if (!useMolStore.getState().activeId) return err('没有加载结构')
     {
       // 选择表达式即时校验（命令行 / agent 失败可感知；面板 UI 添加 rep 不走此路径）
@@ -200,7 +219,10 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'hide' || cmd === 'undisplay') {
-    const arg = (parts[1] ?? '').toLowerCase()
+    // 逗号语法：hide cartoon, chain A —— 与空格语法等价
+    const { head, tail } = commaSplit(input.slice(parts[0].length).trim())
+    const headWords = head.split(/\s+/)
+    const arg = (headWords[0] ?? '').toLowerCase()
     if (arg === 'hydrogens' || arg === 'h') {
       useMolStore.getState().updateSettings({ hideHydrogens: true })
       return ok('已隐藏氢原子')
@@ -213,8 +235,8 @@ export function runCommand(raw: string): void {
     const s = useMolStore.getState()
     const entry = s.structures.find(x => x.id === s.activeId)
     if (!entry) return err('没有加载结构')
+    const selExpr = joinSel(headWords.slice(1).join(' '), tail)
     if (repType) {
-      const selExpr = parts.slice(2).join(' ').trim()
       const reps = entry.reps.filter(r => r.type === repType && (!selExpr || r.selection === selExpr))
       for (const r of reps) s.removeRep(entry.id, r.id)
       return ok(`已移除 ${reps.length} 个 ${REP_LABELS[repType]} 表示`)
@@ -225,11 +247,14 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'color' || cmd === 'colour') {
-    const target = (parts[1] ?? '').toLowerCase()
-    const selExpr = parts.slice(2).join(' ').trim()
+    // 逗号语法（PyMOL 惯例）：color element, ligand / color red, chain A —— 与空格语法等价
+    const { head, tail } = commaSplit(input.slice(parts[0].length).trim())
+    const headWords = head.split(/\s+/)
+    const target = (headWords[0] ?? '').toLowerCase()
+    const selExpr = joinSel(headWords.slice(1).join(' '), tail)
     const scheme = SCHEME_ALIASES[target]
     const css = parseCssColor(target)
-    if (!scheme && !css) return err(`未知颜色 "${parts[1]}"。可用方案: ${Object.keys(SCHEME_ALIASES).join(', ')} 或 #hex / 颜色名`)
+    if (!scheme && !css) return err(`未知颜色 "${headWords[0]}"。可用方案: ${Object.keys(SCHEME_ALIASES).join(', ')} 或 #hex / 颜色名`)
     const s = useMolStore.getState()
     if (!s.activeId) return err('没有加载结构')
     if (selExpr) {
@@ -265,14 +290,29 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'zoom' || cmd === 'fit') {
-    const selExpr = parts.slice(1).join(' ').trim()
+    const rest = input.slice(parts[0].length).trim()
+    // 推拉镜头：zoom in / zoom out（拉近 / 拉远一步）
+    const zoomArg = rest.toLowerCase()
+    if (zoomArg === 'in') {
+      engineRef.current?.dollyCamera(0.72)
+      return ok('已拉近（可连按；zoom <选择> 可聚焦特定部分）')
+    }
+    if (zoomArg === 'out') {
+      engineRef.current?.dollyCamera(1.38)
+      return ok('已拉远（可连按；zoom 无参数回到全量适配）')
+    }
+    // 逗号语法 + 可选缓冲距离（PyMOL：zoom ligand, 5 → 聚焦后退 5 Å）
+    const { head, tail } = commaSplit(rest)
+    const buffer = parseFloat(tail)
+    const selExpr = head.trim()
     const s = useMolStore.getState()
     if (selExpr) {
       const res = s.selectFromExpr(selExpr)
       if (res.error) return err(`选择错误: ${res.error}`)
       const sel = useMolStore.getState().selection
       if (sel.structureId) engineRef.current?.fitView([{ structureId: sel.structureId, indices: sel.indices }])
-      return ok(`缩放到 ${selExpr}`)
+      if (!isNaN(buffer) && buffer !== 0) engineRef.current?.moveCamera('z', Math.max(-50, Math.min(50, buffer)))
+      return ok(`缩放到 ${selExpr}${!isNaN(buffer) && buffer !== 0 ? `（缓冲 ${buffer > 0 ? '+' : ''}${buffer} Å）` : ''}`)
     }
     engineRef.current?.fitView()
     return ok('缩放到全部结构')
@@ -429,10 +469,10 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'orient') {
-    // 主轴对齐（PyMOL orient：PCA）；可带选择表达式
+    // 主轴对齐（PyMOL orient：PCA）；可带选择表达式（容忍逗号写法 orient ligand, 5）
     const eng = engineRef.current
     if (!eng) return err('引擎未就绪')
-    const rest = input.slice(parts[0].length).trim()
+    const rest = input.slice(parts[0].length).trim().replace(/,/g, ' ')
     if (rest) {
       const s = useMolStore.getState()
       if (!s.activeId) return err('没有活动结构')
@@ -448,6 +488,34 @@ export function runCommand(raw: string): void {
     }
     eng.orient()
     return ok('已按主轴对齐视角（全部可见结构）')
+  }
+
+  if (cmd === 'turn') {
+    // 对标 PyMOL turn：绕屏幕轴旋转相机（x=俯仰 y=水平方位 z=滚转）
+    const axis = (parts[1] ?? '').toLowerCase()
+    const deg = clampNum(parseFloat(parts[2] ?? ''), -180, 180, NaN)
+    if (!/^[xyz]$/.test(axis) || isNaN(deg) || deg === 0) {
+      return err('用法：turn <x|y|z> <±角度°>（x=俯仰 y=水平方位 z=滚转；如 turn y 30、turn x -15）')
+    }
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    eng.turnCamera(axis as 'x' | 'y' | 'z', deg)
+    const axisName = axis === 'x' ? '水平屏轴（俯仰）' : axis === 'y' ? '竖直屏轴（水平方位）' : '视线轴（滚转）'
+    return ok(`视角旋转：绕${axisName} ${deg > 0 ? '+' : ''}${deg}°（turn 反向可退回）`)
+  }
+
+  if (cmd === 'move') {
+    // 对标 PyMOL move：沿屏幕轴平移（x=右 y=上 z=推拉；正 z=远离主体）
+    const axis = (parts[1] ?? '').toLowerCase()
+    const d = clampNum(parseFloat(parts[2] ?? ''), -200, 200, NaN)
+    if (!/^[xyz]$/.test(axis) || isNaN(d) || d === 0) {
+      return err('用法：move <x|y|z> <±Å>（x=右移 y=上移 z=推拉；如 move z -10 拉近）')
+    }
+    const eng = engineRef.current
+    if (!eng) return err('引擎未就绪')
+    eng.moveCamera(axis as 'x' | 'y' | 'z', d)
+    const axisName = axis === 'x' ? '水平右移' : axis === 'y' ? '竖直上移' : d > 0 ? '推远' : '拉近'
+    return ok(`视角平移：${axisName} ${d > 0 ? '+' : ''}${d} Å`)
   }
 
   if (cmd === 'get_view') {
@@ -476,8 +544,19 @@ export function runCommand(raw: string): void {
     useViewsStore.getState().hydrate()  // 首次（未装载）时从 localStorage 填充
     const vs = useViewsStore.getState() // hydrate 会替换 state 对象——必须重新获取
     const sub = (parts[1] ?? '').toLowerCase()
+    // 正交视角预设（先于书签跳转判定——与书签名不冲突）：view front/top/left/right/back/bottom/x/y/z
+    const AXIS_VIEW_LABELS: Record<string, string> = {
+      front: '正面', back: '背面', top: '俯视', bottom: '仰视', left: '左视', right: '右视',
+      x: '右视（沿 X 轴）', y: '俯视（沿 Y 轴）', z: '正面（沿 Z 轴）',
+    }
+    if (AXIS_VIEW_LABELS[sub]) {
+      const eng = engineRef.current
+      if (!eng) return err('引擎未就绪')
+      if (!eng.setAxisView(sub)) return err('引擎未就绪')
+      return ok(`视角 → ${AXIS_VIEW_LABELS[sub]}（保持目标点与距离，平滑过渡）`)
+    }
     if (!sub || sub === 'list' || sub === 'ls') {
-      if (!vs.bookmarks.length) return ok('暂无视角书签——view save [名称] 保存当前视角（或快捷键 V）')
+      if (!vs.bookmarks.length) return ok('暂无视角书签——view save [名称] 保存当前视角（或快捷键 V）；view front/top/left/right 转正交视角')
       ok(`视角书签（${vs.bookmarks.length}/${MAX_BOOKMARKS}）：`)
       vs.bookmarks.forEach((b, i) => {
         const t = new Date(b.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
