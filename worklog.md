@@ -1262,3 +1262,28 @@ Stage Summary:
 - 关键决策：①Agent 复用 runCommand 同一条执行路径（与命令行/命令面板行为一致可审计），白名单三分级（auto/confirm/blocked）而非全放行 ②load 轮询等待结构落地（命令序列时序正确性）③历史不带命令摘要（防格式模仿污染 JSON 协议），场景状态全部走独立注入消息 ④降级兜底优先于严格协议（LLM 输出漂移时展示纯文本回复而非报错）⑤搜索定位「选中即滚动」复用 selection.rev effect（外部命令/点击/搜索三入口统一）
 - 未解决问题与风险：①自动修正循环的 LLM 修正偶带重复已成功命令（幂等无害，未强制去重）②「出版级渲染」类模糊需求 LLM 组合有随机性（不同轮给的命令集不同，ssao/set quality 组合不稳定）③ray 异步命令在等待期 busy 指示由命令 running 卡片承担（面板 thinking 指示已结束——可接受）④VLM 终审 3D 渲染 7 分：outline_thickness 0.1 修正轮把描边调得过细+无头降质，真实浏览器体验更好
 - 下一阶段建议（优先级序）：① Agent 增强：多轮视觉反馈（截图送 VLM 让 agent 「看」渲染结果自查）/ 命令参数记忆（「再红一点」类增量调整）/ 快捷动作预设面板 ② 氢键分析面板化（r30 遗留：范围氢键按残基对列表+点击跳转）③ 深色主题链色对比度自适应（多轮遗留）④ 面板宽度等 UI 偏好收编 Settings ⑤ SVG cartoon 增强（按二级结构变宽路径）
+
+---
+Task ID: r33
+Agent: main
+Task: AI 助手全功能化（自然语言触达全部功能）+ 视觉自查回路（VLM 看渲染结果自动修正）+ measure 命令实装
+
+Work Log:
+- 上下文恢复：worklog r32 尾部 + git 干净（6c8bf79 r32）+ dev server 存活；审计 commands.ts 全命令集 vs runner 白名单 + LLM 提示词，发现 morph/measure/dist/history/reset_colors 及 30+ 别名不在白名单、morph/measure 等在提示词中无文档
+- 【白名单全量化】runner.ts AUTO_PREFIXES 按分类重组并补全全部别名（加载对象/表示/着色/视角/视觉/分析/测量/构象媒体/导出/信息十组，~80 个头）；移除不存在的 invert；CONFIRM 加 demo 别名豁免同步；ASYNC 集合同步扩充（morph/movie/ensemble/record/symmetry 等）
+- 【measure 命令实装】commands.ts 原占位 err 替换为真实现：measure dist|angle|dihedral (exprA) (exprB)[…] —— 顶层括号组解析（组间杂内容报错）→ evaluateSelection 求值每组（>4 万原子拒）→ 距离取两组间最近原子对（≤3000 万对守卫）、角度/二面角每组取质心最近原子 → 计算值 + 原子描述（链/残基/原子名）→ 写入 store.measurements（引擎自动渲染虚线+数值标签，与点击测量共用存储/面板）；measure clear 清全部；COMMAND_HELP 增条目（help 输出同步）
+- 【上下文增强】context.ts 新增「数值参数」行（outline 强度/粗细、SSAO 强度/半径、灯光三值、FOV、雾强度、spin 速度、高光）——增量调整的基准值；测量计数与视角书签计数（countViewBookmarks 安全包装）
+- 【视觉自查回路】protocol.ts 加 image/goal 请求字段 + AGENT_VISUAL_KEY + 消息 kind: 'visual'；route.ts 新增 VLM 分支（createVision glm-4.6v）：REVIEW_PROMPT 含目标达成判定 + 症状→根因速查表（白色过曝→灯光过高→set ambient 1；黑色线条噪感→outline_thickness 过大→set outline_thickness 2/off；过暗→升灯；恢复正常→回默认）+ 修正幅度护栏（单次 ≤50%、灯光上限 1.5）；AgentPanel runTurn 完成后（allowVisual 且有 ok 视觉命令）延迟 800ms → engine.capture → shrinkImage 压缩 768px JPEG 0.72 → 视觉自查请求 → 「视觉自查」徽章消息 + 修正命令执行（不再二次自查防循环；自动修正轮同样禁用）
+- 【SYSTEM_PROMPT 重写】命令速查按十类分组覆盖全部功能（含 morph/measure/dssp/xcontacts/xbsa/record/movie/ensemble/get_view/untransform/reset_colors/history 等 r32 缺失项）；行为规则扩到 10 条：新增增量调整规则（基于数值参数给绝对值+幅度护栏）、measure 指引、多结构工作流指引
+- 【协议稳定性三重加固】实测抓到两处格式漂移根因：①commands 字段偶发为字符串（"set a 1; set b 2"）被 sanitize 静默丢弃 → normalizeCommands 兼容数组/字符串 ②长历史稀释 JSON 协议（历史全是散文 assistant 回复，LLM 模仿后只输出散文无命令——curl 单条正常而浏览器多轮复现）→ 最后一条 user 消息附加 PROTOCOL_SUFFIX（recency 加固）③降级兜底从纯文本打捞命令行（salvageCommands：已知命令头开头 + ≤120 字符 + 去装饰符 + 去尾标点 + 去重）
+- 【AgentPanel UI 打磨】建议区改 4 组分类（渲染质感/加载聚焦/分析测量/构象动画 ×2 条）；忙碌指示升级三阶段（正在思考/正在执行命令/视觉自查中 + 右侧提示语，visual 阶段换 Sparkles 脉冲图标）；头部 Eye/EyeOff 开关（aria-pressed + localStorage 持久化）；视觉自查消息样式（Eye 徽章 + emerald 左边框）；空状态宣传「执行后自动审视渲染结果」；自动修正消息去掉 🔁 emoji 改纯文字「自动修正：」；输入区 placeholder/提示语更新
+- 【HelpDialog/README】助手章节扩三段（全功能自然语言/视觉自查/增量调整）+ 测量命令段；README 新增 AI drawing assistant 小节 + measure 命令行 + 序列条搜索
+- 【E2E 全链路（agent-browser + VLM 双向验证）】curl 三场景一次过（NL→measure 命令生成正确 / VLM 空场景识别+修复命令 / 增量调整）→ 浏览器实测：①「load 4hhb」NL 加载 → 视觉自查确认「结构完整显示，4 条蛋白链及 HEM 配体，目标达成」②「测一下血红素配体和5埃内蛋白残基的距离」→ measure dist 执行 → 距离 1.98 Å D/HEM148/FE—D/HIS92/NE2（配位键化学正确）→ 视觉自查确认「可见测量线及数值」③增量调整「轮廓线再粗一点，灯光再亮一些」→ set outline_thickness 2.5 + set ambient 1.5 → 视觉自查发现 outline 未开自动补 outline on 1 4 + 增亮 ④【抓到过曝振荡 bug】视觉自查修正过激（ambient 2.0 严重过曝白噪）→ 外部 VLM 确认「严重过曝，白色溢出」→ 加症状速查表+幅度护栏后重测：黑色线条噪点正确归因 outline_thickness 4 → 修正为 2 + 灯光回默认 → 终态 9/10「平滑卡通彩虹渐变无过曝无噪点」⑤「依次执行这些命令：…」多命令链路 7 条全执行 → 视觉自查确认全部生效 ⑥Eye 开关 off/on 持久化验证 ⑦移动端 390×844：面板满宽 390、无横向溢出、VLM 9/10 ⑧协议修复前后对比：修复前「恢复光照」请求只出散文无命令，修复后命令稳定执行 ⑨浏览器 errors 0、lint 0 错 0 警、tsc src 零错误
+- 沙箱经验：①agent-browser 交互焦点陷阱——agent textarea 的 stopPropagation 会挡全局快捷键（Ctrl+K），控制台折叠时键盘输入全进 agent 面板（意外变成 NL 链路测试）；控制台打开要走命令面板→填入或 StatusBar 入口 ②视觉自查的修正命令本身可能过激——必须带症状→根因映射 + 数值护栏，否则「用户要亮→VLM 看到过曝→降到过低」振荡 ③LLM JSON 协议在长对话历史下衰减是结构性问题（散文历史稀释协议），PROTOCOL_SUFFIX 尾部加固比重试有效 ④VLM 视觉自查是「最后一公里」质量保证：文本 LLM 报告命令成功 ≠ 视觉上达成（outline on 前提下 set thickness 无效果，只有看图才发现）
+
+Stage Summary:
+- 项目当前状态：r32 基础上完成 agent 能力三重跃迁——①全功能自然语言覆盖（白名单 ~80 命令头 + 提示词全量分类速查，morph/measure/history 等此前不可达命令全部打通）②视觉自查回路（glm-4.6v 看截图→症状归因→修正命令≤3 条自动执行，真实抓到并修复了 outline 未开/灯光过曝两次视觉缺陷）③协议稳定性（commands 字符串兼容 + PROTOCOL_SUFFIX 尾部加固 + 纯文本命令打捞，长历史格式漂移不再丢命令）
+- 新增硬功能：measure 命令（选择表达式测距/角/二面角，最近原子对/质心语义，3D 标注+面板管理，命令行与 agent 与点击三入口共用存储）
+- 关键决策：①视觉自查修正命令不再触发二次自查（防 VLM 振荡循环），质量护栏放在提示词层（症状速查+幅度限制）而非代码层钳制 ②截图压缩到 768px JPEG 0.72（VLM 载荷 ~100KB）③增量调整走「上下文注入数值参数 + LLM 算绝对值」而非前端参数记忆（更通用）④协议加固用 recency 原理（尾部注入）解决历史稀释
+- 未解决问题与风险：①视觉自查每轮 +1 次 VLM 调用（~2-5s），追求响应速度的用户可 Eye 关闭 ②LLM 对「恢复正常」类模糊目标偶尔给出过强组合（ssao+outline+quality high 一起上），提示词已限「1-2 条为宜」但非硬约束 ③salvageCommands 打捞的命令未经 LLM 复核直接执行（白名单分级仍在，风险可控）④morph 全链路未在本轮 E2E 重测（白名单打通但执行路径沿用 r28-r30 已验证代码）
+- 下一阶段建议（优先级序）：① 氢键分析面板化（r30 遗留：范围氢键按残基对列表+点击跳转）② Agent 对话流式输出（SSE 打字机效果）③ 快捷动作预设面板（「出版级/科普风格/口袋特写」一键组合）④ 深色主题链色对比度自适应（多轮遗留）⑤ SVG cartoon 增强（按二级结构变宽路径）⑥ 结构列表溢出滚动优化

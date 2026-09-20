@@ -85,10 +85,17 @@ set ambient 0.5 · set specular off · set fov 30 · stereo on · util cbaw
 ```
 
 ### Measurement & annotation
-- **Distance / angle / dihedral** measurement with 3D labels — click atoms in measure mode
+- **Distance / angle / dihedral** measurement with 3D labels — click atoms in measure mode, or command/agent-driven: `measure dist (resn HEM) (within 5 of resn HEM and protein)` (closest atom pair between selections; centroid-nearest atom for angles/dihedrals), `measure clear`
 - Atom **labels** (press `L` on a selection)
-- **Sequence viewer** with per-residue biochemical coloring, secondary-structure track, click-to-select / double-click-to-focus
+- **Sequence viewer** with per-residue biochemical coloring, secondary-structure track, click-to-select / double-click-to-focus, residue search (`A57` / `57` / `HEM`)
 - **Context menu** (right-click): select atom/residue/chain/same-residue, measure-from-here, label, focus
+
+### AI drawing assistant (toolbar "AI 助手" / natural language)
+Every feature of the workbench is reachable through natural language — loading, representations, coloring, selection, measurement, analysis, conformation morphing, movies and exports are all translated into whitelisted commands and auto-executed on the exact same code path as the console:
+- **Command cards** audit each executed command (status icon, expandable output, re-run; destructive commands require explicit confirmation)
+- **Visual self-check** — after commands run, a screenshot is sent to a vision model that verifies the render against your goal and issues up to 3 correction commands when the result misses (Eye toggle in the panel header)
+- **Incremental adjustment** — "再粗一点 / 再亮一点" style requests compute new absolute values from the current numeric settings in the scene context
+- **Auto-retry-fix loop** — failed commands are fed back to the LLM for one correction round; graceful degradation salvages commands from prose replies when the JSON protocol drifts
 
 ### Interface analysis (Analysis panel / `interface` command)
 - Contact detection between arbitrary selections with adjustable cutoff (3–8 Å)

@@ -66,6 +66,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'get_view / set_view', desc: '视角导出/恢复（JSON）', example: 'get_view' },
   { cmd: 'view save|go|del|list…', desc: '视角书签（缩略图+平滑跳转，Shift+数字）', example: 'view save 口袋' },
   { cmd: 'tour [id]|stop', desc: '引导式演示场景（逐步自动操作）', example: 'tour quickstart' },
+  { cmd: 'measure dist|angle|dihedral (选择A) (选择B)…', desc: '选择表达式测量（距离取最近原子对，角度/二面角取质心；3D 标注入测量面板）', example: 'measure dist (resn HEM) (within 5 of resn HEM and protein) · measure clear' },
   { cmd: 'count_atoms [expr]', desc: '统计原子数', example: 'count_atoms chain A' },
   { cmd: 'spin on|off', desc: '自动旋转', example: 'spin on' },
   { cmd: 'rock on|off', desc: '相机摇摆（±26°）', example: 'rock on' },
@@ -1559,7 +1560,131 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'measure' || cmd === 'dist') {
-    return err('测量请使用工具栏的测量模式按钮（距离/角度/二面角），然后在 3D 视图中点击原子')
+    // measure dist|angle|dihedral (选择A) (选择B) […] —— 选择表达式测量（命令行 / AI 助手 / 面板点击三种入口共用 measurements 存储）
+    if ((parts[1] ?? '').toLowerCase() === 'clear' || (parts[1] ?? '').toLowerCase() === 'off') {
+      useMolStore.getState().clearMeasurements()
+      return ok('已清除全部测量标注')
+    }
+    const MEASURE_MODES: Record<string, 'distance' | 'angle' | 'dihedral'> = {
+      dist: 'distance', distance: 'distance',
+      angle: 'angle', ang: 'angle',
+      dihedral: 'dihedral', torsion: 'dihedral', dihe: 'dihedral',
+    }
+    const parenStart = input.indexOf('(')
+    const headTok = ((parenStart >= 0 ? input.slice(0, parenStart) : input).trim().split(/\s+/)[1] ?? '').toLowerCase()
+    if (parenStart < 0 || (headTok && !MEASURE_MODES[headTok])) {
+      return err('用法：measure dist|angle|dihedral (选择A) (选择B) [(选择C) (选择D)] 或 measure clear。例：measure dist (resn HEM) (within 5 of resn HEM and protein)')
+    }
+    const mode = MEASURE_MODES[headTok] ?? 'distance'
+    const need = mode === 'distance' ? 2 : mode === 'angle' ? 3 : 4
+    // 顶层括号组切分（组间只允许空白）
+    const groups: string[] = []
+    let depth = 0, cur = '', topJunk = ''
+    for (const ch of input.slice(parenStart)) {
+      if (ch === '(') { depth++; if (depth === 1) { cur = ''; continue } }
+      else if (ch === ')') {
+        depth--
+        if (depth === 0) { groups.push(cur.trim()); continue }
+        if (depth < 0) return err('括号不匹配')
+      }
+      if (depth >= 1) cur += ch
+      else if (depth === 0 && ch.trim()) topJunk += ch
+    }
+    if (depth !== 0) return err('括号不匹配')
+    if (topJunk.trim()) return err(`括号组之间存在多余内容「${topJunk.trim()}」——每个选择用一对括号包裹`)
+    if (groups.length !== need) {
+      return err(`${mode === 'distance' ? '距离' : mode === 'angle' ? '角度' : '二面角'}测量需要 ${need} 个选择（括号组），当前 ${groups.length} 个`)
+    }
+    const sMeas = useMolStore.getState()
+    if (!sMeas.activeId) return err('没有加载结构（测量作用于活动结构）')
+    const dataMeas = dataRegistry.get(sMeas.activeId)
+    if (!dataMeas) return err('结构数据不存在')
+    const namedMeas = buildNamedMasks(sMeas.activeId, dataMeas)
+    const P = dataMeas.atoms.positions
+    // 各组求值 → 原子索引
+    const idxPerGroup: number[] = []
+    const countPerGroup: number[] = []
+    for (const g of groups) {
+      const r = evaluateSelection(g, { structure: dataMeas, named: namedMeas })
+      if (r.error) return err(`选择错误: ${r.error}（"${g}"）`)
+      if (!r.count) return err(`选择 "${g}" 命中 0 个原子`)
+      idxPerGroup.push(...maskToIndices(r.mask))
+      countPerGroup.push(r.count)
+      if (idxPerGroup.length > 40000) return err('选择过大（>4万原子），请缩小范围后测量')
+    }
+    // 每组代表原子：单原子直接用；多原子取质心最近原子（距离模式取两组间最近原子对）
+    const centroidNearest = (from: number, to: number): number => {
+      const idxs = idxPerGroup.slice(from, to)
+      if (idxs.length === 1) return idxs[0]
+      let cx = 0, cy = 0, cz = 0
+      for (const i of idxs) { cx += P[i * 3]; cy += P[i * 3 + 1]; cz += P[i * 3 + 2] }
+      cx /= idxs.length; cy /= idxs.length; cz /= idxs.length
+      let best = Infinity, bi = idxs[0]
+      for (const i of idxs) {
+        const d = (cx - P[i * 3]) ** 2 + (cy - P[i * 3 + 1]) ** 2 + (cz - P[i * 3 + 2]) ** 2
+        if (d < best) { best = d; bi = i }
+      }
+      return bi
+    }
+    const groupStarts: number[] = []
+    { let acc = 0; for (const c of countPerGroup) { groupStarts.push(acc); acc += c } }
+    let selIdx: number[]
+    let value: number
+    const atomDesc = (i: number) => {
+      const ch2 = (dataMeas.atoms.chainIds[i] ?? '?').trim() || '?'
+      return `${ch2}/${dataMeas.atoms.resNames[i]}${dataMeas.atoms.resSeqs[i]}/${dataMeas.atoms.names[i]}`
+    }
+    if (mode === 'distance') {
+      const idxA = idxPerGroup.slice(0, countPerGroup[0])
+      const idxB = idxPerGroup.slice(groupStarts[1])
+      if (idxA.length * idxB.length > 30_000_000) return err('两个选择过大（>3000万原子对），请缩小范围')
+      let best = Infinity, bi = idxA[0], bj = idxB[0]
+      for (const i of idxA) {
+        const ax = P[i * 3], ay = P[i * 3 + 1], az = P[i * 3 + 2]
+        for (const j of idxB) {
+          const d = (ax - P[j * 3]) ** 2 + (ay - P[j * 3 + 1]) ** 2 + (az - P[j * 3 + 2]) ** 2
+          if (d < best) { best = d; bi = i; bj = j }
+        }
+      }
+      value = Math.sqrt(best)
+      selIdx = [bi, bj]
+      ok(`距离 ${value.toFixed(2)} Å：${atomDesc(bi)} — ${atomDesc(bj)}${countPerGroup.some(c => c > 1) ? '（多原子选择取最近原子对）' : ''}`)
+    } else {
+      // 角度/二面角：每组取质心最近原子
+      selIdx = groupStarts.map((st, gi) => centroidNearest(st, st + countPerGroup[gi]))
+      const pos = selIdx.map(i => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]])
+      if (mode === 'angle') {
+        const [a, b, c] = pos
+        const v1 = [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+        const v2 = [c[0] - b[0], c[1] - b[1], c[2] - b[2]]
+        const dot = v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
+        const n1 = Math.hypot(...v1), n2 = Math.hypot(...v2)
+        value = Math.acos(Math.max(-1, Math.min(1, dot / (n1 * n2)))) * 180 / Math.PI
+        ok(`键角 ${value.toFixed(1)}°：${atomDesc(selIdx[0])} — ${atomDesc(selIdx[1])} — ${atomDesc(selIdx[2])}${countPerGroup.some(c => c > 1) ? '（多原子选择取质心最近原子）' : ''}`)
+      } else {
+        const b1 = [pos[1][0] - pos[0][0], pos[1][1] - pos[0][1], pos[1][2] - pos[0][2]]
+        const b2 = [pos[2][0] - pos[1][0], pos[2][1] - pos[1][1], pos[2][2] - pos[1][2]]
+        const b3 = [pos[3][0] - pos[2][0], pos[3][1] - pos[2][1], pos[3][2] - pos[2][2]]
+        const n1 = [b1[1] * b2[2] - b1[2] * b2[1], b1[2] * b2[0] - b1[0] * b2[2], b1[0] * b2[1] - b1[1] * b2[0]]
+        const n2 = [b2[1] * b3[2] - b2[2] * b3[1], b2[2] * b3[0] - b2[0] * b3[2], b2[0] * b3[1] - b2[1] * b3[0]]
+        const m = [b2[1] * n1[2] - b2[2] * n1[1], b2[2] * n1[0] - b2[0] * n1[2], b2[0] * n1[1] - b2[1] * n1[0]]
+        const x = n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2]
+        const y = m[0] * n2[0] + m[1] * n2[1] + m[2] * n2[2]
+        value = Math.atan2(y, x) * 180 / Math.PI
+        ok(`二面角 ${value.toFixed(1)}°：${selIdx.map(atomDesc).join(' — ')}${countPerGroup.some(c => c > 1) ? '（多原子选择取质心最近原子）' : ''}`)
+      }
+    }
+    useMolStore.setState(st => ({
+      measurements: [...st.measurements, {
+        id: Math.random().toString(36).slice(2, 10),
+        structureId: st.activeId!,
+        type: mode,
+        atoms: selIdx,
+        value,
+      }],
+      visualRev: st.visualRev + 1,
+    }))
+    return ok('已添加 3D 测量标注（测量面板可查看/删除全部测量）')
   }
 
   err(`未知命令 "${parts[0]}"。输入 help 查看可用命令。`)

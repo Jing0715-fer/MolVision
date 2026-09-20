@@ -2,6 +2,16 @@
 // （结构/链/配体/reps/选择/命名选择/关键渲染设置——每轮请求随对话一起送后端）
 import { useMolStore } from '../store'
 import { REP_LABELS } from '../types'
+import { useViewsStore } from '../views-store'
+
+/** 视角书签数量（store 在 SSR/首帧前为空——安全读取） */
+function countViewBookmarks(): number {
+  try {
+    return useViewsStore.getState().bookmarks.length
+  } catch {
+    return 0
+  }
+}
 
 /** 构建场景上下文（无结构时也返回基本盘，LLM 能引导用户 load） */
 export function buildSceneContext(): string {
@@ -41,6 +51,18 @@ export function buildSceneContext(): string {
   const v = s.settings
   const on = (b: boolean) => (b ? '开' : '关')
   lines.push(`- 渲染设置：背景${v.background} · spin${on(v.spin)} · slab切层${on(v.slab)}${v.slab ? `(厚度${v.slabThickness}Å)` : ''} · 氢键${on(v.showHBonds)} · SSAO${on(v.ssao)} · 轮廓线${on(v.outline)} · 立体${on(v.stereo)} · 隐藏氢${on(v.hideHydrogens)} · 隐藏水${on(v.hideWater)} · 主题质量${v.quality}`)
+
+  // 数值参数（「再粗一点/再亮一点」类增量调整的基准值）
+  lines.push(
+    `- 数值参数（增量调整时基于这些当前值计算新值）：outline强度${v.outlineStrength}/粗细${v.outlineThickness}px · SSAO强度${v.ssaoIntensity}/半径${v.ssaoRadius}Å · 灯光 环境${v.lightAmbient}/主光${v.lightKey}/补光${v.lightFill} · FOV${v.fov}° · 雾强度${v.fogStrength} · spin速度${v.spinSpeed} · 高光${on(v.specular)}`,
+  )
+
+  // 测量与书签（agent 可报告/管理）
+  if (s.measurements.length) {
+    lines.push(`- 已有 ${s.measurements.length} 个测量标注（measure clear 可清除）`)
+  }
+  const views = countViewBookmarks()
+  if (views > 0) lines.push(`- 视角书签 ${views} 个（view list 可列出）`)
 
   // 最近命令（让 LLM 知道用户刚做过什么）
   const recent = s.consoleLog.filter(l => l.type === 'in').slice(-6).map(l => l.text)

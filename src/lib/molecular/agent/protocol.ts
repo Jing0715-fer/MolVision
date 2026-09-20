@@ -19,6 +19,8 @@ export interface AgentChatMessage {
   time: string
   /** assistant 消息携带的命令记录（用户消息为空） */
   commands?: AgentCmdRecord[]
+  /** visual = 视觉自查消息（VLM 看截图后的评估/修正） */
+  kind?: 'chat' | 'visual'
 }
 
 /** 后端 LLM 返回的决策（严格 JSON） */
@@ -35,6 +37,10 @@ export interface AgentRequestBody {
   messages: { role: 'user' | 'assistant'; content: string }[]
   /** 前端构建的当前场景上下文（结构/reps/选择/设置摘要） */
   scene: string
+  /** 视觉自查模式：执行命令后的视口截图（JPEG data URL，宽 ≤768） */
+  image?: string
+  /** 视觉自查模式：本轮用户目标（原始自然语言需求） */
+  goal?: string
 }
 
 /** POST /api/agent 响应体 */
@@ -47,6 +53,9 @@ export interface AgentResponseBody {
 /** 会话持久化键与上限 */
 export const AGENT_CHAT_KEY = 'molvision-agent-chat'
 export const AGENT_CHAT_MAX = 40
+
+/** 视觉自查开关持久化键（'off' = 关闭，缺席 = 默认开启） */
+export const AGENT_VISUAL_KEY = 'molvision-agent-visual'
 
 /** 单轮命令条数上限（防止 LLM 失控刷命令） */
 export const AGENT_CMDS_MAX = 10

@@ -5,23 +5,48 @@ import { useMolStore } from '../store'
 import type { AgentCmdRecord } from './protocol'
 
 /**
- * 自动执行的安全命令前缀（视觉/选择/分析/导出类）。
+ * 自动执行的安全命令前缀（视觉/选择/分析/导出/构象类）。
+ * 覆盖 commands.ts 的全部命令及其别名——自然语言可触达应用全部功能。
  * load 亦安全（只新增结构不动既有数据）。
  */
 const AUTO_PREFIXES = new Set([
-  'load', 'fetch', 'select', 'sel', 'show', 'hide', 'color', 'colour', 'util', 'bg', 'background',
-  'zoom', 'orient', 'preset', 'set', 'spin', 'rock', 'slab', 'stereo', 'label', 'axes', 'fps',
-  'outline', 'ssao', 'hbonds', 'count_atoms', 'create', 'split_chains', 'activate', 'get_view',
-  'set_view', 'symmetry', 'contacts', 'interface', 'xcontacts', 'sasa', 'bsa', 'xbsa', 'dssp',
-  'superpose', 'untransform', 'save', 'png', 'ray', 'svg', 'help', 'view', 'perf', 'record',
-  'movie', 'ensemble', 'map', 'orient', 'invert',
+  // 加载与对象
+  'load', 'fetch', 'create', 'split_chains', 'splitchains', 'activate', 'use',
+  // 选择与表示
+  'select', 'sel', 'show', 'display', 'hide', 'undisplay', 'preset', 'style',
+  // 着色
+  'color', 'colour', 'util', 'reset_colors', 'recolor', 'bg', 'background',
+  // 视角
+  'zoom', 'fit', 'orient', 'get_view', 'set_view', 'view', 'views', 'bookmark',
+  // 视觉设置
+  'set', 'spin', 'rock', 'slab', 'stereo', 'axes', 'axis', 'gizmo', 'fps',
+  'outline', 'edge', 'ssao', 'ao', 'gtao', 'label',
+  // 分析
+  'hbonds', 'hbond', 'hbon', 'count_atoms', 'count', 'symmetry', 'symmates',
+  'contacts', 'contact', 'clash', 'interface', 'iface',
+  'xcontacts', 'xcontact', 'xiface', 'sasa', 'area', 'bsa', 'buried', 'bsa-area',
+  'xbsa', 'xburied', 'xbsa-area', 'dssp', 'secstr',
+  'superpose', 'match', 'align', 'mm', 'untransform', 'unpose',
+  // 测量
+  'measure', 'dist',
+  // 构象与媒体
+  'morph', 'movie', 'ensemble', 'ens', 'record', 'rec',
+  // 密度图与导出
+  'map', 'save', 'png', 'ray', 'svg',
+  // 信息
+  'help', 'history', 'perf',
 ])
 
 /** 破坏性/高影响命令：需用户在面板上确认后才执行 */
-const CONFIRM_PREFIXES = new Set(['close', 'clear', 'reset', 'delete', 'session', 'tour'])
+const CONFIRM_PREFIXES = new Set(['close', 'clear', 'reset', 'delete', 'session', 'tour', 'demo'])
 
 /** 异步命令：执行后延迟抓取输出（fetch/计算在后台落地） */
-const ASYNC_PREFIXES = new Set(['load', 'fetch', 'map', 'sasa', 'bsa', 'xbsa', 'ray', 'svg', 'superpose', 'contacts', 'xcontacts', 'create'])
+const ASYNC_PREFIXES = new Set([
+  'load', 'fetch', 'map', 'sasa', 'area', 'bsa', 'buried', 'xbsa', 'xburied',
+  'ray', 'svg', 'superpose', 'match', 'align', 'mm', 'contacts', 'contact', 'clash',
+  'xcontacts', 'xcontact', 'xiface', 'create', 'morph', 'movie', 'ensemble', 'ens',
+  'record', 'rec', 'symmetry', 'symmates',
+])
 
 export type CmdClass = 'auto' | 'confirm' | 'blocked'
 
@@ -34,9 +59,11 @@ export function classifyCmd(rawCmd: string): CmdClass {
     // 细粒度豁免：session save/export/info、record stop、movie stop、perf off/status 等非破坏子命令
     const rest = rawCmd.trim().toLowerCase()
     if (/^session\s+(save|export|info)/.test(rest)) return 'auto'
-    if (/^(record|movie|ensemble|tour)\s+stop/.test(rest)) return 'auto'
+    if (/^(record|rec)\s+stop/.test(rest)) return 'auto'
+    if (/^(movie|ensemble|ens|tour|demo)\s+stop/.test(rest)) return 'auto'
     if (/^perf\s+(off|status|restore)/.test(rest)) return 'auto'
     if (/^view\s+(save|go|list|del|next|prev)/.test(rest)) return 'auto'
+    if (/^(set_view|get_view)/.test(rest)) return 'auto'
     return 'confirm'
   }
   if (AUTO_PREFIXES.has(cmd)) {
