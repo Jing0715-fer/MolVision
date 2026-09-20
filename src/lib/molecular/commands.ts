@@ -1284,25 +1284,29 @@ export function runCommand(raw: string): void {
       engineRef.current?.updateContacts()
       return ok('接触连线已显示')
     }
-    // 解析 "exprA | exprB [cutoff]"
+    // 解析 "exprA | exprB [cutoff]"（cutoff 前导空格或逗号均可：contacts A | B 4.5 / contacts A | B, 4.5——LLM 的 PyMOL 惯性写法）
     const rest = input.slice(parts[0].length).trim()
     const pipeM = rest.match(/^(.+?)\s*\|\s*(.+)$/)
     let aExpr: string | undefined, bExpr: string | undefined, cutoff: number | undefined
     if (pipeM) {
       aExpr = pipeM[1].trim()
       let bPart = pipeM[2].trim()
-      const lastSpace = bPart.lastIndexOf(' ')
-      if (lastSpace > 0) {
-        const maybeNum = parseFloat(bPart.slice(lastSpace + 1))
-        if (!isNaN(maybeNum) && maybeNum >= 2.5 && maybeNum <= 10) {
-          cutoff = maybeNum
-          bPart = bPart.slice(0, lastSpace).trim()
+      const tailNum = bPart.match(/[\s,，]\s*(\d+(?:\.\d+)?)\s*$/)
+      if (tailNum) {
+        const n = parseFloat(tailNum[1])
+        if (n >= 2.5 && n <= 10) {
+          cutoff = n
+          bPart = bPart.slice(0, bPart.length - tailNum[0].length).trim()
         }
       }
       bExpr = bPart
-    } else {
+    } else if (arg) {
       const maybeNum = parseFloat(arg)
       if (!isNaN(maybeNum) && maybeNum >= 2.5 && maybeNum <= 10) cutoff = maybeNum
+      else {
+        // 非 off/show/hide/数字却无管道：不静默复用 store 残留表达式（agent 修正轮会拿到莫名其妙的旧错误）
+        return err('用法：contacts <exprA> | <exprB> [cutoff]（A/B 两组用 | 分隔），如 contacts chain A | chain B 4.0；contacts off 清除')
+      }
     }
     const outcome = runContactAnalysis(aExpr, bExpr, cutoff)
     if (!outcome.ok) return err(outcome.message)

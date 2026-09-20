@@ -245,8 +245,8 @@ export function runContactAnalysis(aExpr?: string, bExpr?: string, cutoff?: numb
   if (!store.activeId) return { ok: false, message: '没有活动结构' }
   const data = dataRegistry.get(store.activeId)
   if (!data) return { ok: false, message: '结构数据不存在' }
-  const A = (aExpr ?? cs.aExpr).trim()
-  const B = (bExpr ?? cs.bExpr).trim()
+  const A = (aExpr ?? cs.aExpr).trim().replace(/[,，\s]+$/, '').trim()
+  const B = (bExpr ?? cs.bExpr).trim().replace(/[,，\s]+$/, '').trim()
   const cut = cutoff ?? cs.cutoff
   if (!A || !B) return { ok: false, message: '请提供 A/B 两组选择表达式' }
 
@@ -259,8 +259,9 @@ export function runContactAnalysis(aExpr?: string, bExpr?: string, cutoff?: numb
   // 同步表达式与参数到 store（面板反映命令行调用）
   useContactStore.setState({ aExpr: A, bExpr: B, cutoff: cut, defaulted: true })
   if (ra.error || rb.error) {
-    useContactStore.getState().setResult({ structureId: store.activeId, pairs: [], residuesA: [], residuesB: [], atomsA: ra.count, atomsB: rb.count, errors })
-    engineRef.current?.updateContacts()
+    // 表达式错误不摧毁已有分析结果（agent 修正轮的失败命令不应清掉成功的 83 对接触——实测踩坑）；
+    // 只记录错误供面板提示，旧结果保留到下一次成功运行或显式 clear
+    useContactStore.setState({ errors })
     return { ok: false, message: `表达式错误：${[errors.a, errors.b].filter(Boolean).join('；')}` }
   }
   if (ra.count === 0 || rb.count === 0) {

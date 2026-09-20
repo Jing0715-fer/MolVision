@@ -29,7 +29,7 @@ import {
   type SasaComputeOptions, type SasaStats, type BuriedSasaResult,
 } from './sasa'
 import { useSasaStore } from './sasa-store'
-import { useHBondStore } from './hbond-store'
+import { useHBondStore, type HBondPairSummary } from './hbond-store'
 import { useEnsembleStore } from './ensemble-store'
 import { makeTextSprite, disposeSprite } from './textsprite'
 import { useMolStore, buildNamedMasks, dataRegistry } from './store'
@@ -1491,9 +1491,13 @@ export class MolEngine {
       this.hbondPending.clear()
       useHBondStore.getState().setStats(0, 0, false)
       useHBondStore.getState().setComputing(false)
+      useHBondStore.getState().setPairs([])
       return
     }
     let total = 0, waterTotal = 0
+    // 活动结构的残基对汇总（分析面板表格）
+    const activeId = useMolStore.getState().activeId
+    const pairMap = new Map<string, { donorRes: number; acceptorRes: number; minDist: number; count: number }>()
     for (const entry of state.structures) {
       if (!entry.visible) continue
       const data = dataRegistry.get(entry.id)
@@ -1542,6 +1546,21 @@ export class MolEngine {
         endPts.push(from, hb.acceptor)
         if (data.residues[data.atomResidue[hb.donor]].water || data.residues[data.atomResidue[hb.acceptor]].water) waterN++
       }
+      // 残基对汇总（仅活动结构——表格与选择/聚焦联动）
+      if (entry.id === activeId) {
+        for (const hb of draw) {
+          const dr = data.atomResidue[hb.donor]
+          const ar = data.atomResidue[hb.acceptor]
+          const key = `${dr}:${ar}`
+          const agg = pairMap.get(key)
+          if (agg) {
+            if (hb.dist < agg.minDist) agg.minDist = hb.dist
+            agg.count++
+          } else {
+            pairMap.set(key, { donorRes: dr, acceptorRes: ar, minDist: hb.dist, count: 1 })
+          }
+        }
+      }
       const geo = new THREE.BufferGeometry()
       geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
       const mat = new THREE.LineDashedMaterial({
@@ -1579,6 +1598,14 @@ export class MolEngine {
     }
     useHBondStore.getState().setStats(total, waterTotal, true)
     useHBondStore.getState().setComputing(this.hbondPending.size > 0)
+    // 距离最近优先，上限 300 行（表格可用性保护）
+    const pairs: HBondPairSummary[] = activeId
+      ? [...pairMap.values()]
+        .sort((a, b) => a.minDist - b.minDist)
+        .slice(0, 300)
+        .map(p => ({ ...p, structureId: activeId }))
+      : []
+    useHBondStore.getState().setPairs(pairs)
   }
 
   // ---------- 接触界面连线（分析面板触发计算，此处渲染） ----------

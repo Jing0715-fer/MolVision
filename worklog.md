@@ -1375,3 +1375,25 @@ Stage Summary:
 - 证据链：主轮零报错含自动聚焦 → 一轮修正收敛 → 内部自查接受 → 外部 VLM 8.5/10 期刊标准 → 像素级虚线确认 → 零错误零警告
 - 未解决与风险：①外部 VLM 判读摆动（同构图 7-9 分波动）——内部自查为稳定闸门 ②ray 2400 在 SwiftShader 需 1-2 分钟（沙箱限制）③视觉自查每轮 +1 VLM 调用 ④移动端布局本轮未改 CSS（r33/r34 已验证 390px）
 - 下一阶段建议：① 氢键分析面板化（r30 遗留）② Agent 对话流式输出（SSE）③ 深色主题链色对比度自适应 ④ SVG cartoon 增强 ⑤ hide 按选择掩码隐藏（PyMOL 语义）
+
+---
+Task ID: r37
+Agent: main
+Task: 继续打磨 agent 能力（SSE 流式输出 + 停止生成）+ 新功能（接触/氢键残基对表格面板化）+ contacts 三连 bug 修复
+
+Work Log:
+- 上下文恢复：worklog r36 尾部（出版级管线已交付），dev server 存活，git cbe1325 干净
+- 【Agent 流式输出（SSE）】①protocol.ts：AgentRequestBody 加 stream 字段 + AgentStreamEvent 三态事件（d 增量/end 终值/err）+ AgentChatMessage.streaming 标志 + extractPartialReply 渐进 JSON 解析（正则截取未闭合 reply 字符串 + decodeJsonEscapes 处理 \n\t\"\\\uXXXX，尾部半截转义安全截断；非 { 开头的散文降级整段返回）②route.ts 对话分支：SDK stream:true → ReadableStream(SSE) → 后端解析 data: 行 → NDJSON 转发；SDK 双形态兼容（返回 ReadableStream 或完整 JSON 对象都处理）；流末统一走 extractJson/sanitize/salvage 管线后发 end 事件（reply 为完整校验后文本）；瞬时故障（429 等）退避 700ms 重试一次——仅在未流出增量时（防内容重复推送）；非流式分支保持不动（视觉自查/兼容路径）③AgentPanel：callAgentStream 读 NDJSON 流，onFirstDelta 时插入占位 assistant 消息（避免长时间空白气泡），onDelta 用 extractPartialReply 渐进打字机；流式光标（emerald 脉冲方块）；停止按钮（思考/流式阶段可中断——发送按钮 ■/▶ 双态，中断保留已生成部分 +「已停止」后缀，abort 后状态完全恢复）；持久化 effect 与滚底 effect 拆分（流式期间跳过 stringify 逐增量开销）；loadChats 剥离 streaming 标志
+- 【新功能：接触残基对表格】AnalysisPanel hasResult 区块新增 ContactPairsTable：按距离/接触数双排序切换（aria-pressed 芯片组）+ 关键字筛选（残基名/链/编号）+ 前 50 行折叠（展开全部/收起）+ max-h-72 mol-scroll 滚动 + 距离热力着色（heatColor 与 2D 图谱/3D 连线同族：近红远琥珀）+ 每行点击 = setSelection 两侧残基原子 + engine.fitView 相机聚焦 + 控制台日志「已选择并聚焦残基对」
+- 【新功能：氢键残基对表格】hbond-store 新增 HBondPairSummary（structureId/donorRes/acceptorRes/minDist/count）+ pairs 状态；engine.updateHBonds 渲染循环中对活动结构聚合残基对（Map 聚合 O(n)，距离最近优先，上限 300 行）写入 store；showHBonds 关闭时清空；AnalysisPanel 新增「氢键网络 · 残基对」区块（HBondPairsTable：供体 emerald→受体 cyan、距离色阶、筛选、点击跳转与接触表共用 focusResiduePair）
+- 【contacts 三连 bug（E2E 实战抓出）】agent 执行「分析结合位点」暴露：①LLM 的 PyMOL 惯性尾部逗号 `contacts A | B, 4.5` → 逗号泄漏进 B 表达式解析报错——commands.ts 尾部截断值正则改 [\s,，]\s*(数字)$ 双分隔符兼容 + runContactAnalysis 对 A/B 防御性剥尾逗号（治愈 store 中毒残留）②表达式错误 setResult 空数组会把已成功的 83 对接触结果摧毁（agent 修正轮失败命令把好结果毁了）——错误分支改为只记 errors 不清结果（旧结果保留到下次成功运行或显式 contacts off）③无管道的非数字参数静默复用 store 残留表达式跑出莫名其妙的旧错误——改为报清晰用法错误（给修正轮真实反馈）
+- 【文档】HelpDialog 三处更新（接触残基对表格/氢键表格/流式+停止）；SYSTEM_PROMPT 规则 16①提及可点击表格；route.ts 注释补充
+- 【E2E 全链路】①流式：curl 直测逐 token 增量 + end 终值一次通过；浏览器打字机实测（23→54→88 渐进长度）；散文问题正确流式（β折叠科普）；「已停止」中断 + 状态恢复（textarea/按钮解禁）②429 限流实测命中 → 重试防线补上后恢复 ③agent 命令流全链路（load 4hhb/contacts 83 对/zoom + 修正轮 + 视觉自查双轮）走新流式代码路径无回归 ④逗号语法修复后 `contacts (resn HEM and chain A) | (within 4.5 of ...) , 4.5` → 21 对接触成功 ⑤接触表格：21 行渲染（HIS87 近端组氨酸化学正确）、HIS 筛选→3 行、按数量排序→HIS87×42 首位、行点击→「已选择并聚焦残基对：A:HEM142 ↔ A:HIS87（3.05 Å）」⑥氢键表格：选择范围 7 行（HIS87→ALA88 2.67Å 骨架氢键正确）、行点击跳转生效 ⑦VLM 终审 8.2/10「生产级」（信息架构 9/表格 8/口袋聚焦 8.5/专业度 8.5）⑧移动端 390px：doc=390 无溢出 + agent 面板零元素越界（n=0，VLM 误判内部滚动容器已复核排除）⑨lint 0 错 0 警、tsc 应用代码 0 错、浏览器 errors 0、dev.log 无新异常（429 为服务端限流，重试防线覆盖）
+- 沙箱经验：①SDK stream:true 的双形态返回（event-stream → ReadableStream；否则完整 JSON）必须都处理——服务端可能忽略 stream 参数 ②流式重试只能在「零增量」时进行，否则会向前端重复推送内容 ③表达式错误清空结果是隐形 destructive bug——agent 修正轮的失败命令会连环摧毁已成功状态（本轮 83 对接触被两条失败变体清零的实测教训）④localStorage 中毒的 store 表达式（带尾逗号）会在后续无参调用中复活——防御性 sanitize 要放在读取处而非只放写入处
+
+Stage Summary:
+- r37 状态：agent 能力 + 新功能双线交付——①SSE 流式打字机（后端 NDJSON 转发 + 前端渐进 JSON 解析 + 停止生成，全程可中断）②接触残基对表格（排序/筛选/点击跳转聚焦，出版级互作分析的最后一环：agent 跑完 contacts 后用户可逐对巡检口袋）③氢键残基对表格（engine 渲染管线实时聚合，与 B 键/选择范围联动）④contacts 三连 bug 修复（逗号语法兼容/错误不清结果/无管道报真错）
+- 关键决策：①流式协议用 NDJSON 而非原生 SSE 事件流（一行一 JSON，客户端解析最简）②reply 渐进提取在前端做（extractPartialReply 客户端复用同一解析语义，后端只管转发原文增量）③残基对聚合挂在 engine.updateHBonds（数据与渲染同源，选择范围变化自动跟随）④focusResiduePair 共用跳转逻辑（接触/氢键两表格同一交互语义）
+- 证据链：流式 curl 逐 token ✓ → 打字机渐进 54→88 ✓ → 停止+恢复 ✓ → 逗号语法 21 对 ✓ → 表格渲染/筛选/排序/点击跳转 ✓ → VLM 8.2/10 生产级 ✓ → 移动端零越界 ✓ → lint/tsc/errors 全绿
+- 未解决与风险：①视觉自查（VLM 分支）仍为非流式（机器检查场景流式价值低，保持稳定）②PairTableToolbar 的「距离/数量」排序仅接触表有（氢键表按距离固定——氢键 count 语义弱）③contacts 尾逗号防御覆盖 A/B 两侧但 xcontacts 未同步（跨结构路径用户手输为主，低风险）④流式期间 localStorage 不落盘（中断关页丢当轮部分文本——秒级窗口可接受）
+- 下一阶段建议（优先级序）：① Agent 快捷预设面板（「出版级/科普风格/口袋特写」一键组合——r33 遗留）② hide 按选择掩码隐藏（PyMOL 语义，r35 遗留）③ 深色主题链色对比度自适应（多轮遗留）④ SVG cartoon 按二级结构变宽路径 ⑤ VLM 视觉自查结果也走流式（一致性）

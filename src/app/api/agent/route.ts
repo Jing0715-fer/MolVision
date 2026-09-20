@@ -48,7 +48,7 @@ ${COMMAND_REF}
 14. 视角控制：聚焦/看XX/转到/俯视/仰视/正视/侧面看/旋转一点/拉近拉远等需求必须用视角命令收尾——zoom <sel>（聚焦）/ zoom in|out（推拉）/ turn <x|y|z> ±°（旋转）/ move <x|y|z> ±Å（平移）/ view front|top|left|right（正交视角）/ view from <sel>（从选择方向观察，口袋正对相机+自适应特写距离，多配体自动挑最近实例）/ orient（主轴对齐）。视角命令可与其他命令自由组合（如 preset bindingsite 后 zoom within 5 of (ligand)）。「结合口袋/互作/配体环境」类任务务必收尾聚焦：zoom within 5 of (ligand) 或 view from ligand——全景视角下配体几乎不可见（场景信息相机行显示全景/中景时必须聚焦）；用户点名特定配体时用 zoom (resn HEM and chain A), 6 或 view from (resn HEM and chain A)
 15. 蛋白+配体混合表示（「蛋白 cartoon 配体球棍」类需求的标准解法）：首选 preset publication（一键：cartoon 链色 + 口袋球棍元素色 + 清除旧烘焙色）；手动分解时蛋白部分 show cartoon, protein（或 polymer），配体部分 show ballstick, ligand，口袋环境可加 show ballstick, within 4.5 of (ligand) and polymer。着色同理带选择（color element, ligand）——绝不要 color <方案>, within N of (ligand) 这种写法（会把 CPK 烘焙进口袋区域，连卡通带一起染花）；已有表示冲突时先 preset <名> 重置再叠加。绝不要 show ballstick 不带选择（作用 all 会盖满蛋白主链，cartoon 就看不见了）
 16. 出版级图标准流程（「出版级/投稿图/高清图/互作图/药物-蛋白结合图/分析结合位点出图」类需求，按此顺序，ray 必须是最后一条）：
-   ① contacts ligand | polymer 4.5（互作分析：接触残基与距离输出在控制台与分析面板）
+   ① contacts ligand | polymer 4.5（互作分析：接触残基与距离输出在控制台，并在分析面板生成可点击的「接触残基对」表格——用户可逐对点击跳转聚焦，reply 中可提示这一点）
    ② preset publication（蛋白 cartoon 链色 + 配体及 4.5Å 口袋残基球棍元素色）
    ③ view from ligand（口袋正对相机的标准视角，自适应特写距离；多配体结构自动挑选离相机最近的配体实例聚焦，无需手动指定；用户点名特定配体时用 view from (resn XXX and chain A)）
    ④ bg white → outline on 0.5 1（出版描边最优值：强度 0.5 · 粗细 1px——实测 VLM 终审 9/10「非常克制、层次分离好」；强度 ≥1 会线稿化、≥2 严重）
@@ -251,6 +251,83 @@ export async function POST(req: Request) {
       content: (i === history.length - 1 ? m.content + PROTOCOL_SUFFIX : m.content).slice(0, 2400),
     })),
   ]
+
+  // ---------- 流式模式：SDK stream:true → ReadableStream(SSE) → NDJSON 转发 ----------
+  // 事件协议见 protocol.ts AgentStreamEvent；瞬时故障重试（仅在未流出增量时——防内容重复）
+  if (body.stream) {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (ev: { t: string; [k: string]: unknown }) => {
+          try { controller.enqueue(encoder.encode(`${JSON.stringify(ev)}\n`)) } catch { /* 已中止 */ }
+        }
+        let full = ''
+        let decision: AgentDecision | null = null
+        let lastErr = ''
+        try {
+          const zai = await ZAI.create()
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              // SDK stream:true 且响应为 event-stream 时返回 ReadableStream，否则返回完整 JSON（双形态）
+              const raw = await zai.chat.completions.create({ messages, stream: true, thinking: { type: 'disabled' } })
+              if (raw instanceof ReadableStream || (raw && typeof raw.getReader === 'function')) {
+                const reader = (raw as ReadableStream<Uint8Array>).getReader()
+                const decoder = new TextDecoder()
+                let buf = ''
+                for (;;) {
+                  const { done, value } = await reader.read()
+                  if (done) break
+                  buf += decoder.decode(value, { stream: true })
+                  // SSE 行协议：空行分隔事件，data: 前缀承载 JSON
+                  const events = buf.split('\n\n')
+                  buf = events.pop() ?? ''
+                  for (const ev of events) {
+                    for (const line of ev.split('\n')) {
+                      if (!line.startsWith('data:')) continue
+                      const payload = line.slice(5).trim()
+                      if (!payload || payload === '[DONE]') continue
+                      try {
+                        const j = JSON.parse(payload) as { choices?: { delta?: { content?: string }; message?: { content?: string } }[] }
+                        const piece = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ''
+                        if (piece) { full += piece; send({ t: 'd', v: piece }) }
+                      } catch { /* 忽略不可解析的分片 */ }
+                    }
+                  }
+                }
+              } else if (raw && typeof raw === 'object') {
+                // 非流式形态（服务端忽略 stream 参数）：一次性文本 + 单条增量
+                const text = (raw as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content ?? ''
+                if (text) { full = text; send({ t: 'd', v: text }) }
+              }
+              decision = sanitizeDecision(extractJson(full))
+              if (!decision) {
+                // 降级兜底：全文当 reply + 打捞命令行（可用性优先于严格协议）
+                const plain = full.trim()
+                if (plain.length > 4) {
+                  decision = { reply: plain.replace(/^```[a-z]*\n?|```$/g, '').trim().slice(0, 800), commands: salvageCommands(plain) }
+                }
+              }
+              if (decision || full.trim().length > 4) break // 有产出即成功
+              lastErr = 'AI 返回为空'
+            } catch (e) {
+              lastErr = e instanceof Error ? e.message : 'LLM 调用异常'
+              if (full) break // 已流出内容不重试（重发会重复推送增量）
+            }
+            // 瞬时故障退避后重试
+            await new Promise(r => setTimeout(r, 700))
+          }
+        } catch (e) {
+          lastErr = e instanceof Error ? e.message : 'LLM 调用异常'
+        }
+        if (decision) send({ t: 'end', decision })
+        else send({ t: 'err', error: `${lastErr}，请重试或换个说法` })
+        try { controller.close() } catch { /* 客户端已断开 */ }
+      },
+    })
+    return new Response(stream, {
+      headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' },
+    })
+  }
 
   try {
     const zai = await ZAI.create()

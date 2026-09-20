@@ -21,6 +21,8 @@ export interface AgentChatMessage {
   commands?: AgentCmdRecord[]
   /** visual = 视觉自查消息（VLM 看截图后的评估/修正） */
   kind?: 'chat' | 'visual'
+  /** 流式生成中（打字机光标显示；持久化前剥离——中断重载不再是流式态） */
+  streaming?: boolean
 }
 
 /** 后端 LLM 返回的决策（严格 JSON） */
@@ -43,7 +45,15 @@ export interface AgentRequestBody {
   imageBefore?: string
   /** 视觉自查模式：本轮用户目标（原始自然语言需求） */
   goal?: string
+  /** 对话分支流式模式：后端以 NDJSON 增量推送（d 增量 / end 终值 / err 错误） */
+  stream?: boolean
 }
+
+/** 流式响应的事件行（每行一个 JSON 对象，\n 分隔） */
+export type AgentStreamEvent =
+  | { t: 'd'; v: string }        // 文本增量（累积拼接）
+  | { t: 'end'; decision: AgentDecision } // 完整决策（终值，reply 为完整校验后文本）
+  | { t: 'err'; error: string }
 
 /** POST /api/agent 响应体 */
 export interface AgentResponseBody {
@@ -61,3 +71,38 @@ export const AGENT_VISUAL_KEY = 'molvision-agent-visual'
 
 /** 单轮命令条数上限（防止 LLM 失控刷命令） */
 export const AGENT_CMDS_MAX = 10
+
+/** 解码 JSON 字符串字面量转义（\n \t \" \\ \uXXXX；流式半截序列安全丢弃） */
+function decodeJsonEscapes(s: string): string {
+  let out = ''
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (ch !== '\\') { out += ch; continue }
+    const c = s[i + 1]
+    if (c === undefined) break // 尾部孤立反斜杠（增量半截）
+    if (c === 'n') { out += '\n'; i++ }
+    else if (c === 't') { out += '\t'; i++ }
+    else if (c === '"') { out += '"'; i++ }
+    else if (c === '\\') { out += '\\'; i++ }
+    else if (c === 'u' && i + 6 <= s.length) {
+      const hex = s.slice(i + 2, i + 6)
+      if (/^[0-9a-fA-F]{4}$/.test(hex)) { out += String.fromCharCode(parseInt(hex, 16)); i += 5 }
+      else out += c
+    } else out += c
+  }
+  return out
+}
+
+/**
+ * 从流式累积文本中渐进提取 reply 字段值（打字机显示用）。
+ * - LLM 按 JSON 协议输出：{"reply": "..." — 截取未闭合字符串的已到部分
+ * - 降级散文输出（非 { 开头）：整段即回复
+ * - 半截转义（尾部孤立 \ 或不完整 \uXXXX）安全截断
+ */
+export function extractPartialReply(text: string): string {
+  const trimmed = text.trimStart()
+  if (!trimmed.startsWith('{')) return trimmed
+  const m = /"reply"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(trimmed)
+  if (!m?.[1]) return ''
+  return decodeJsonEscapes(m[1])
+}

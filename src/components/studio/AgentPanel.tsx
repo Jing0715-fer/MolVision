@@ -6,14 +6,14 @@
 // 修正命令本身还会被再自查一轮（有界双轮：修到效果理想为止，不无限循环）
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Ban, Bot, Check, ChevronDown, Clock, Eye, EyeOff, Loader2, RotateCw, Send, Sparkles, Trash2, X, AlertTriangle,
+  Ban, Bot, Check, ChevronDown, Clock, Eye, EyeOff, Loader2, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
 import { buildSceneContext } from '@/lib/molecular/agent/context'
 import { classifyCmd, execAgentCmd, splitCommands } from '@/lib/molecular/agent/runner'
 import {
-  AGENT_CHAT_KEY, AGENT_CHAT_MAX, AGENT_VISUAL_KEY, type AgentChatMessage, type AgentCmdRecord, type AgentDecision,
+  AGENT_CHAT_KEY, AGENT_CHAT_MAX, AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentStreamEvent,
 } from '@/lib/molecular/agent/protocol'
 import { cn } from '@/lib/utils'
 
@@ -91,6 +91,74 @@ async function callAgent(
   }
 }
 
+/** 流式调用结果：决策 / 用户中止（携带已生成的部分文本）/ 错误 */
+type StreamResult =
+  | { kind: 'decision'; decision: AgentDecision }
+  | { kind: 'aborted'; partial: string }
+  | { kind: 'error'; partial: string }
+
+/** 调后端流式 LLM：onDelta 收累积原文，返回最终决策；signal 中断返回 aborted */
+async function callAgentStream(
+  apiMessages: { role: 'user' | 'assistant'; content: string }[],
+  scene: string,
+  opts: { signal?: AbortSignal; onFirstDelta?: () => void; onDelta?: (acc: string) => void },
+): Promise<StreamResult> {
+  let acc = ''
+  try {
+    const res = await fetch('/api/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: apiMessages, scene, stream: true }),
+      signal: opts.signal,
+    })
+    if (!res.ok || !res.body) {
+      let msg = res.statusText
+      try {
+        const data = await res.json() as { error?: string }
+        if (data.error) msg = data.error
+      } catch { /* 非 JSON 错误体 */ }
+      toast.error(`AI 助手出错：${msg}`)
+      return { kind: 'error', partial: acc }
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        let ev: AgentStreamEvent
+        try { ev = JSON.parse(line) as AgentStreamEvent } catch { continue }
+        if (ev.t === 'd') {
+          const first = acc === ''
+          acc += ev.v
+          if (first) opts.onFirstDelta?.()
+          opts.onDelta?.(acc)
+        } else if (ev.t === 'end') {
+          return { kind: 'decision', decision: ev.decision }
+        } else if (ev.t === 'err') {
+          toast.error(`AI 助手出错：${ev.error}`)
+          return { kind: 'error', partial: acc }
+        }
+      }
+    }
+    // 流意外结束（无 end 事件）：用累积文本打捞纯文本决策
+    if (acc.trim().length > 4) {
+      return { kind: 'decision', decision: { reply: acc.replace(/^```[a-z]*\n?|```$/g, '').trim().slice(0, 800), commands: [] } }
+    }
+    toast.error('AI 助手连接中断，请重试')
+    return { kind: 'error', partial: acc }
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return { kind: 'aborted', partial: acc }
+    toast.error(`AI 助手网络异常：${e instanceof Error ? e.message : '未知错误'}`)
+    return { kind: 'error', partial: acc }
+  }
+}
+
 function newId(): string {
   return Math.random().toString(36).slice(2, 10)
 }
@@ -106,7 +174,8 @@ function loadChats(): AgentChatMessage[] {
     const raw = localStorage.getItem(AGENT_CHAT_KEY)
     if (!raw) return []
     const arr = JSON.parse(raw) as AgentChatMessage[]
-    return Array.isArray(arr) ? arr.slice(-AGENT_CHAT_MAX) : []
+    // streaming 标志不持久化（中断重载后不再处于流式态）
+    return Array.isArray(arr) ? arr.slice(-AGENT_CHAT_MAX).map(m => ({ ...m, streaming: undefined })) : []
   } catch {
     return []
   }
@@ -126,8 +195,8 @@ function CmdStatusIcon({ status }: { status: AgentCmdRecord['status'] }) {
   }
 }
 
-/** 忙碌阶段（思考 → 执行 → 视觉自查） */
-type BusyPhase = 'think' | 'exec' | 'visual'
+/** 忙碌阶段（思考 → 流式生成 → 执行 → 视觉自查） */
+type BusyPhase = 'think' | 'stream' | 'exec' | 'visual'
 
 export function AgentPanel() {
   const open = useMolStore(s => s.ui.agentOpen)
@@ -140,12 +209,19 @@ export function AgentPanel() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const scrollRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  /** 当前流式请求的中断器（停止生成按钮） */
+  const abortRef = useRef<AbortController | null>(null)
 
-  // 持久化 + 自动滚底（DOM 副作用，不触碰 setState）
+  // 持久化（流式进行中跳过——终值到达时统一落盘，避免逐增量 stringify 开销）
   useEffect(() => {
+    if (msgs.some(m => m.streaming)) return
     try {
       localStorage.setItem(AGENT_CHAT_KEY, JSON.stringify(msgs.slice(-AGENT_CHAT_MAX)))
     } catch { /* 配额满等异常静默 */ }
+  }, [msgs])
+
+  // 自动滚底（每个增量都跟随）
+  useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [msgs, busy])
 
@@ -264,38 +340,62 @@ export function AgentPanel() {
     setMsgs(history)
     setBusy(true)
     setPhase('think')
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    // 占位 assistant 消息：首个增量到达时插入（避免长时间空白气泡）
+    const aiId = newId()
+    let inserted = false
+    const ensureMsg = () => {
+      if (inserted) return
+      inserted = true
+      setMsgs(m => [...m, { id: aiId, role: 'assistant', content: '', time: nowTime(), streaming: true }])
+    }
+    const patchAi = (patch: Partial<AgentChatMessage>) => {
+      setMsgs(m => m.map(x => (x.id === aiId ? { ...x, ...patch } : x)))
+    }
     try {
-      const decision = await callAgent(buildApiHistory(history), buildSceneContext())
-      if (!decision) {
-        setMsgs(m => [...m, {
-          id: newId(), role: 'assistant',
-          content: '出错了，请重试或换个说法。', time: nowTime(),
-        }])
-        return
-      }
-      const cmds = splitCommands(decision.commands)
-      const aiId = newId()
-      const aiMsg: AgentChatMessage = {
-        id: aiId, role: 'assistant', content: decision.reply, time: nowTime(),
-        commands: cmds.length ? cmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
-      }
-      setMsgs(m => [...m, aiMsg])
-      if (cmds.length) {
-        setPhase('exec')
-        // 执行前抓基线截图（视觉自查前后对比；结构未加载或截图失败时静默跳过）
-        let before: string | undefined
-        if (visualOn && cmds.some(isVisualCmd)) {
-          try {
-            before = await shrinkImage(engineRef.current?.capture({ scale: 1 }) ?? '', 768)
-          } catch { before = undefined }
-          if (!before) before = undefined
+      const r = await callAgentStream(buildApiHistory(history), buildSceneContext(), {
+        signal: ctrl.signal,
+        onFirstDelta: () => { ensureMsg(); setPhase('stream') },
+        // 增量原文 → 渐进提取 reply 字段（JSON 半截/散文降级两态都安全）
+        onDelta: acc => patchAi({ content: extractPartialReply(acc) }),
+      })
+      if (r.kind === 'decision') {
+        const cmds = splitCommands(r.decision.commands)
+        ensureMsg()
+        const aiMsg: AgentChatMessage = {
+          id: aiId, role: 'assistant',
+          content: r.decision.reply, time: nowTime(),
+          commands: cmds.length ? cmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
         }
-        await runTurn(aiId, cmds, 0, [...history, aiMsg], 2, before)
+        patchAi({ content: aiMsg.content, streaming: false, commands: aiMsg.commands })
+        if (cmds.length) {
+          setPhase('exec')
+          // 执行前抓基线截图（视觉自查前后对比；结构未加载或截图失败时静默跳过）
+          let before: string | undefined
+          if (visualOn && cmds.some(isVisualCmd)) {
+            try {
+              before = await shrinkImage(engineRef.current?.capture({ scale: 1 }) ?? '', 768)
+            } catch { before = undefined }
+            if (!before) before = undefined
+          }
+          await runTurn(aiId, cmds, 0, [...history, aiMsg], 2, before)
+        }
+      } else if (r.kind === 'aborted') {
+        ensureMsg()
+        patchAi({ content: (extractPartialReply(r.partial) || '…') + '（已停止）', streaming: false })
+        toast.info('已停止生成')
+      } else {
+        // 错误：保留已流出的部分文本并标记中断
+        if (inserted) patchAi({ content: (extractPartialReply(r.partial) || '…') + '（生成中断，请重试）', streaming: false })
+        else setMsgs(m => [...m, { id: newId(), role: 'assistant', content: '出错了，请重试或换个说法。', time: nowTime() }])
       }
     } finally {
       setBusy(false)
+      setPhase('think')
+      if (abortRef.current === ctrl) abortRef.current = null
     }
-  }, [msgs, busy, runTurn, buildApiHistory])
+  }, [msgs, busy, runTurn, buildApiHistory, visualOn])
 
   /** confirm 卡片的「执行 / 跳过」与「重跑」 */
   const act = useCallback(async (msgId: string, idx: number, mode: 'confirm-run' | 'confirm-skip' | 'rerun') => {
@@ -325,8 +425,10 @@ export function AgentPanel() {
 
   if (!open) return null
 
-  const phaseLabel = phase === 'think' ? '正在思考' : phase === 'exec' ? '正在执行命令' : '视觉自查中'
-  const phaseHint = phase === 'visual' ? '审视渲染结果' : phase === 'exec' ? '命令将自动执行' : '理解你的需求'
+  const phaseLabel = phase === 'think' ? '正在思考' : phase === 'stream' ? '回复生成中' : phase === 'exec' ? '正在执行命令' : '视觉自查中'
+  const phaseHint = phase === 'visual' ? '审视渲染结果' : phase === 'exec' ? '命令将自动执行' : phase === 'stream' ? '逐字生成，可随时停止' : '理解你的需求'
+  // 思考/流式阶段 LLM 请求可中断；命令执行与视觉自查阶段不可（停止无意义）
+  const canAbort = busy && (phase === 'think' || phase === 'stream')
 
   return (
     <div
@@ -426,6 +528,10 @@ export function AgentPanel() {
               )}
             >
               {m.content}
+              {m.streaming && (
+                <span aria-hidden className="ml-0.5 inline-block h-3 w-[5px] animate-pulse rounded-[1px] bg-emerald-500 align-middle" />
+              )}
+              {m.streaming && !m.content && <span className="sr-only">正在生成回复</span>}
             </div>
             {/* 命令卡片组 */}
             {m.commands && m.commands.length > 0 && (
@@ -531,16 +637,22 @@ export function AgentPanel() {
             className="mol-scroll max-h-24 min-h-[22px] flex-1 resize-none bg-transparent text-[11.5px] leading-relaxed outline-none placeholder:text-muted-foreground/50"
           />
           <button
-            onClick={() => void send(input)}
-            disabled={busy || !input.trim()}
-            aria-label="发送给 AI 助手"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition hover:bg-emerald-500 disabled:opacity-40"
+            onClick={() => { if (canAbort) abortRef.current?.abort(); else void send(input) }}
+            disabled={!canAbort && (busy || !input.trim())}
+            aria-label={canAbort ? '停止生成' : '发送给 AI 助手'}
+            title={canAbort ? '停止生成（保留已生成部分）' : '发送（Enter）'}
+            className={cn(
+              'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white transition disabled:opacity-40',
+              canAbort ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500',
+            )}
           >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            {busy
+              ? (canAbort ? <Square className="h-3 w-3" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" />)
+              : <Send className="h-3.5 w-3.5" />}
           </button>
         </div>
         <p className="mt-1.5 px-1 text-[9px] text-muted-foreground/60">
-          Enter 发送 · Shift+Enter 换行
+          Enter 发送 · Shift+Enter 换行 · 生成中可点 ■ 停止
           {visualOn ? ' · 视觉自查开（Eye 可关）' : ' · 视觉自查关'}
         </p>
       </div>

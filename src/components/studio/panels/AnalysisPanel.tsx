@@ -2,12 +2,15 @@
 
 // 分析面板：界面接触检测（表达式组 A/B + 距离截断）+ 2D 接触图谱 + 界面残基选择 + SASA/ΔSASA + DSSP 重算 + 跨结构接触
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Play, Trash2, MousePointerClick, Network, RefreshCw, Droplets, Palette, Layers, ArrowLeftRight } from 'lucide-react'
+import { Play, Trash2, MousePointerClick, Network, RefreshCw, Droplets, Palette, Layers, ArrowLeftRight, Crosshair, Search, MoveUpRight } from 'lucide-react'
 import { dataRegistry, engineRef, useMolStore, buildNamedMasks } from '@/lib/molecular/store'
 import { runContactAnalysis, runBuriedSasa, runCrossBuriedSasa, interfaceAtomIndices, runCrossContactAnalysis } from '@/lib/molecular/contacts'
+import type { ContactPair } from '@/lib/molecular/contacts'
 import { useContactStore } from '@/lib/molecular/contacts-store'
+import { useHBondStore, type HBondPairSummary } from '@/lib/molecular/hbond-store'
 import { useSasaStore } from '@/lib/molecular/sasa-store'
 import { evaluateSelection } from '@/lib/molecular/selection'
+import type { StructureData } from '@/lib/molecular/parser'
 import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Slider } from '@/components/ui/slider'
@@ -310,6 +313,25 @@ export function AnalysisPanel() {
     setSelection(activeId, idx)
     appendLog('out', `已选择${side === 'a' ? 'A 侧' : side === 'b' ? 'B 侧' : '全部'}界面残基：${idx.length} 原子（${side === 'a' ? residuesA.length : side === 'b' ? residuesB.length : residuesA.length + residuesB.length} 残基）`)
   }
+
+  // ---------- 残基对跳转（接触/氢键表格共用：选择两侧残基原子 + 相机聚焦） ----------
+  const focusResiduePair = useCallback((resA: number, resB: number, label: string) => {
+    if (!activeId || !data) return
+    const ra = data.residues[resA]
+    const rb = data.residues[resB]
+    if (!ra || !rb) return
+    const idx: number[] = []
+    for (let i = ra.start; i < ra.end; i++) idx.push(i)
+    for (let i = rb.start; i < rb.end; i++) idx.push(i)
+    setSelection(activeId, idx)
+    engineRef.current?.fitView([{ structureId: activeId, indices: idx }])
+    appendLog('out', `已选择并聚焦残基对：${label}`)
+  }, [activeId, data, setSelection, appendLog])
+
+  // ---------- 氢键网络残基对（跟随 B 键 / hbonds 命令的实时状态） ----------
+  const hbPairs = useHBondStore(s => s.pairs)
+  const hbCount = useHBondStore(s => s.count)
+  const hbValid = data && hbPairs.length > 0 && hbPairs[0].structureId === activeId
 
   const hasResult = structureId === activeId && pairs.length > 0
   const hoverPair = hover && mapData ? mapData.pairs[hover.pairIdx] : null
@@ -661,6 +683,36 @@ export function AnalysisPanel() {
                     选全部界面
                   </button>
                 </div>
+
+                {/* 接触残基对列表（按距离/接触数排序 · 筛选 · 点击跳转聚焦） */}
+                {mapData && (
+                  <ContactPairsTable
+                    data={mapData.data}
+                    pairs={mapData.pairs}
+                    cutoff={cutoff}
+                    onPick={focusResiduePair}
+                  />
+                )}
+              </div>
+            </>
+          )}
+
+          {/* 氢键网络残基对（B 键 / hbonds 命令开启后实时联动） */}
+          {hbValid && (
+            <>
+              <SectionTitle right={
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  共 {hbCount.toLocaleString()} 键 · 按距离
+                </span>
+              }>
+                氢键网络 · 残基对
+              </SectionTitle>
+              <div className="px-2">
+                <HBondPairsTable data={data} pairs={hbPairs} onPick={focusResiduePair} />
+                <p className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <Crosshair className="h-3 w-3 shrink-0" />
+                  点击行选择并聚焦该氢键两侧残基；范围随当前选择变化（B 键重开）。
+                </p>
               </div>
             </>
           )}
@@ -922,6 +974,217 @@ function SSComposition({ structureId }: { structureId: string | null }) {
         <span className="text-amber-600 dark:text-amber-400">折叠 {stats.e}（{pct(stats.e)}%）</span>
         <span className="text-muted-foreground">环 {stats.l}（{pct(stats.l)}%）</span>
       </div>
+    </div>
+  )
+}
+
+// ---------- 残基对表格（接触 / 氢键共用交互：点击行 = 选择两侧残基 + 相机聚焦） ----------
+
+/** 表格工具条：筛选输入 + 排序切换 + 展开/收起 */
+function PairTableToolbar({
+  filter, onFilter, sortBy, onSortBy, shown, total,
+}: {
+  filter: string
+  onFilter: (v: string) => void
+  sortBy: 'dist' | 'count'
+  onSortBy: (v: 'dist' | 'count') => void
+  shown: number
+  total: number
+}) {
+  return (
+    <div className="mb-1.5 flex items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border/60 bg-card/60 px-1.5 py-1">
+        <Search className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+        <input
+          value={filter}
+          onChange={e => onFilter(e.target.value)}
+          onKeyDown={e => e.stopPropagation()}
+          placeholder="筛选残基 / 链…"
+          spellCheck={false}
+          aria-label="筛选残基对"
+          className="min-w-0 flex-1 bg-transparent font-mono text-[10px] text-foreground outline-none placeholder:text-muted-foreground/50"
+        />
+        {filter && (
+          <button
+            onClick={() => onFilter('')}
+            aria-label="清除筛选"
+            className="shrink-0 rounded text-[9px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+      <div className="flex shrink-0 overflow-hidden rounded-md border border-border/60" role="group" aria-label="排序方式">
+        <button
+          onClick={() => onSortBy('dist')}
+          aria-pressed={sortBy === 'dist'}
+          className={cn('px-1.5 py-1 text-[9px] font-medium transition', sortBy === 'dist' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent')}
+        >
+          距离
+        </button>
+        <button
+          onClick={() => onSortBy('count')}
+          aria-pressed={sortBy === 'count'}
+          className={cn('px-1.5 py-1 text-[9px] font-medium transition', sortBy === 'count' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent')}
+        >
+          数量
+        </button>
+      </div>
+      <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{shown}/{total.toLocaleString()}</span>
+    </div>
+  )
+}
+
+/** 接触残基对列表：距离热力着色（与 2D 图谱同族）、点击跳转 */
+function ContactPairsTable({ data, pairs, cutoff, onPick }: {
+  data: StructureData
+  pairs: ContactPair[]
+  cutoff: number
+  onPick: (resA: number, resB: number, label: string) => void
+}) {
+  const [filter, setFilter] = useState('')
+  const [sortBy, setSortBy] = useState<'dist' | 'count'>('dist')
+  const [showAll, setShowAll] = useState(false)
+  const rows = useMemo(() => {
+    const f = filter.trim().toLowerCase()
+    const list = pairs.map(p => {
+      const ra = data.residues[p.resA], rb = data.residues[p.resB]
+      const la = `${ra.chainId.trim()}:${ra.resName}${ra.resSeq}`
+      const lb = `${rb.chainId.trim()}:${rb.resName}${rb.resSeq}`
+      return { p, la, lb, text: `${la} ${lb}`.toLowerCase() }
+    }).filter(r => !f || r.text.includes(f))
+    list.sort((a, b) => (sortBy === 'dist' ? a.p.minDist - b.p.minDist : b.p.count - a.p.count))
+    return list
+  }, [pairs, data, filter, sortBy])
+  const LIMIT = 50
+  const shown = showAll ? rows : rows.slice(0, LIMIT)
+  if (!rows.length) return null
+  return (
+    <div className="mt-2 rounded-lg border border-border/60 bg-card/40 p-1.5">
+      <PairTableToolbar filter={filter} onFilter={setFilter} sortBy={sortBy} onSortBy={setSortBy} shown={shown.length} total={rows.length} />
+      <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label="接触残基对列表">
+        {shown.map(({ p, la, lb }) => {
+          // 距离热力（近红远琥珀，与 2D 图谱/3D 连线同族）
+          const t = Math.max(0, Math.min(1, (p.minDist - 2.5) / Math.max(0.5, cutoff - 2.5)))
+          const [r, g, b] = heatColor(t)
+          return (
+            <button
+              key={`${p.resA}:${p.resB}`}
+              role="option"
+              aria-selected={false}
+              onClick={() => onPick(p.resA, p.resB, `${la} ↔ ${lb}（${p.minDist.toFixed(2)} Å）`)}
+              className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] transition hover:bg-accent/60"
+            >
+              <span className="min-w-0 flex-1 truncate">
+                <span className="text-rose-600 dark:text-rose-400">{la}</span>
+                <span className="mx-1 text-muted-foreground/60">↔</span>
+                <span className="text-cyan-600 dark:text-cyan-300">{lb}</span>
+              </span>
+              <span className="w-14 shrink-0 text-right font-bold" style={{ color: `rgb(${r},${g},${b})` }}>
+                {p.minDist.toFixed(2)} Å
+              </span>
+              <span className="w-8 shrink-0 text-right text-muted-foreground">×{p.count}</span>
+              <MoveUpRight className="h-3 w-3 shrink-0 text-muted-foreground/40 transition group-hover:text-primary" />
+            </button>
+          )
+        })}
+      </div>
+      {rows.length > LIMIT && (
+        <button
+          onClick={() => setShowAll(v => !v)}
+          className="mt-1 w-full rounded py-1 text-center text-[9.5px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          {showAll ? '收起（仅前 50 行）' : `展开全部 ${rows.length} 行`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** 氢键残基对列表：供体 → 受体（emerald/cyan），点击跳转 */
+function HBondPairsTable({ data, pairs, onPick }: {
+  data: StructureData
+  pairs: HBondPairSummary[]
+  onPick: (resA: number, resB: number, label: string) => void
+}) {
+  const [filter, setFilter] = useState('')
+  const [showAll, setShowAll] = useState(false)
+  const rows = useMemo(() => {
+    const f = filter.trim().toLowerCase()
+    return pairs
+      .map(p => {
+        const rd = data.residues[p.donorRes], ra = data.residues[p.acceptorRes]
+        const ld = `${rd.chainId.trim()}:${rd.resName}${rd.resSeq}`
+        const la = `${ra.chainId.trim()}:${ra.resName}${ra.resSeq}`
+        return { p, ld, la, text: `${ld} ${la}`.toLowerCase() }
+      })
+      .filter(r => !f || r.text.includes(f))
+  }, [pairs, data, filter])
+  const LIMIT = 50
+  const shown = showAll ? rows : rows.slice(0, LIMIT)
+  if (!rows.length) return null
+  return (
+    <div className="rounded-lg border border-border/60 bg-card/40 p-1.5">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border/60 bg-card/60 px-1.5 py-1">
+          <Search className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+          <input
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            onKeyDown={e => e.stopPropagation()}
+            placeholder="筛选残基 / 链…"
+            spellCheck={false}
+            aria-label="筛选氢键残基对"
+            className="min-w-0 flex-1 bg-transparent font-mono text-[10px] text-foreground outline-none placeholder:text-muted-foreground/50"
+          />
+          {filter && (
+            <button
+              onClick={() => setFilter('')}
+              aria-label="清除筛选"
+              className="shrink-0 rounded text-[9px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{shown.length}/{rows.length}</span>
+      </div>
+      <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label="氢键残基对列表">
+        {shown.map(({ p, ld, la }) => {
+          const t = Math.max(0, Math.min(1, (p.minDist - 2.0) / 1.5))
+          return (
+            <button
+              key={`${p.donorRes}:${p.acceptorRes}`}
+              role="option"
+              aria-selected={false}
+              onClick={() => onPick(p.donorRes, p.acceptorRes, `${ld} → ${la}（${p.minDist.toFixed(2)} Å）`)}
+              className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] transition hover:bg-accent/60"
+            >
+              <span className="min-w-0 flex-1 truncate">
+                <span className="text-emerald-600 dark:text-emerald-400">{ld}</span>
+                <span className="mx-1 text-muted-foreground/60">→</span>
+                <span className="text-cyan-600 dark:text-cyan-300">{la}</span>
+              </span>
+              <span
+                className="w-14 shrink-0 text-right font-bold"
+                style={{ color: `rgb(${Math.round(16 + 220 * t)},${Math.round(185 - 120 * t)},${Math.round(129 - 80 * t)})` }}
+              >
+                {p.minDist.toFixed(2)} Å
+              </span>
+              <span className="w-8 shrink-0 text-right text-muted-foreground">×{p.count}</span>
+              <MoveUpRight className="h-3 w-3 shrink-0 text-muted-foreground/40 transition group-hover:text-primary" />
+            </button>
+          )
+        })}
+      </div>
+      {rows.length > LIMIT && (
+        <button
+          onClick={() => setShowAll(v => !v)}
+          className="mt-1 w-full rounded py-1 text-center text-[9.5px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          {showAll ? '收起（仅前 50 行）' : `展开全部 ${rows.length} 行`}
+        </button>
+      )}
     </div>
   )
 }
