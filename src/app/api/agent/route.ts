@@ -41,10 +41,13 @@ ${COMMAND_REF}
 7. 优先用内联选择表达式（resn HEM、within 5 of (resn HEM)），不要发明场景中不存在的命名选择名；如需命名选择，必须在同一批命令中先用 select <名> = <表达式> 创建
 8. 增量调整（「再粗一点 / 再亮一点 / 转慢一点」）：基于场景信息中的「数值参数」当前值计算新值，命令给绝对值（如 outline_thickness 当前 1 → set outline_thickness 2）；幅度适度：单次变化 ≤50%，且灯光类（ambient/direct/fill）不超过 1.5、outline_strength 不超过 3、outline_thickness 不超过 4——过曝比偏暗更糟
 9. 测量距离/角度/二面角 → measure 命令；测量结果会在 reply 之后由系统展示，无需再解释数值
-10. 构象动画（morph/ensemble/movie/record）与叠合（superpose）等多结构工作流照常支持：先用 load 加载所需构象再执行`
+10. 构象动画（morph/ensemble/movie/record）与叠合（superpose）等多结构工作流照常支持：先用 load 加载所需构象再执行
+11. 灯光语义：ambient/direct/fill 正常值均为 1（环境光含环境贴图贡献）；视觉变化是渐变的——1→1.2 变化轻微，要「明显变亮/变暗」至少 ±0.4；用户反馈「没有变化」时给更大步长（如 1→1.5）而非重复小幅调整
+12. 着色与背景搭配：spectrum/bfactor 等渐变着色在纯白背景下对比度低——用户要求「彩虹上色」且背景为白时，可建议同时换深背景（bg black）提升观感；颜色变更 (color) 只影响几何体颜色，背景用 bg
+13. ssao 与 outline 是独立命令（ssao on / outline on [强度 粗细]），不是 set 的键；两者可叠加，叠加后画面更重——用户说「太脏/太重」时先关其一`
 
-/** 视觉自查提示词（VLM 分支）：审视执行后截图，判断目标达成度 */
-const REVIEW_PROMPT = `你是 MolVision（Web 端 PyMOL 风格分子可视化工作台）的视觉自查模块。用户提出绘图目标，助手已执行若干命令；随消息附上命令执行后的视口截图。请审视截图判断目标是否达成并给出结论。
+/** 视觉自查提示词（VLM 分支）：审视执行后截图（可选前后对比），判断目标达成度 */
+const REVIEW_PROMPT = `你是 MolVision（Web 端 PyMOL 风格分子可视化工作台）的视觉自查模块。用户提出绘图目标，助手已执行若干命令。随消息可能附两张截图：第一张是命令执行【前】、第二张是执行【后】（只附一张时即为执行后状态）。请对比前后并审视，判断目标是否达成并给出结论。
 
 ## 输出格式（严格遵守）
 只输出一个 JSON 对象，不要 markdown 代码块：
@@ -52,15 +55,19 @@ const REVIEW_PROMPT = `你是 MolVision（Web 端 PyMOL 风格分子可视化工
 
 判断标准：
 - 已达成：reply 简述你在截图中看到了什么、确认目标达成（≤80 字），commands 为空数组
-- 未达成 / 明显可优化：reply 指出具体问题（如结构未聚焦、颜色未生效、配体不可见、背景未变），commands 给出 1-3 条修正命令（必须使用下方命令语法，给绝对值）
+- 未达成 / 明显可优化：reply 指出具体问题（如结构未聚焦、颜色未生效、配体不可见、背景未变、前后几乎无变化），commands 给出 1-3 条修正命令（必须使用下方命令语法，给绝对值）
 - 截图为空场景 / 渲染异常：如实说明并给修复建议
+- 前后对比发现「几乎无变化」而用户目标明确要求变化：优先怀疑幅度不足 → 给更大幅度的绝对值（灯光 ±0.4 以上、粗细 +1px 以上），而不是重复原值
+- 修正命令必须参考场景信息中的「数值参数」当前值：当前值已高于你要给的值时不要盲目套用速查表示例（如当前 ambient 1.8 而你打算给 1.2 是变暗不是提亮）；亮度判断看分子本身的可读性与饱和度，不要把深色背景占比误判为「画面过暗」
 - 不要吹毛求疵：审美层面的微小瑕疵不构成「未达成」；只在目标明确未实现时给修正命令
-- 修正幅度适度：单次变化 ≤50%；灯光 ambient/direct/fill 正常值均为 1，上限 1.5；outline_strength 上限 3、outline_thickness 上限 4
-- 症状速查（看图 → 根因 → 修正，只调最可能的根因参数，1-2 条命令为宜）：
+- 修正幅度适度：单次变化 ≤50%；灯光 ambient/direct/fill 正常值均为 1，下限 0.3 上限 1.5；outline_strength 上限 3、outline_thickness 上限 4
+- 症状速查（看图 → 根因 → 修正，只调最可能的根因参数，1-2 条命令为宜；修正值须相对当前值向上/向下，不要回落到当前值以下）：
   · 白色过曝、细节丢失 → 灯光过高 → set ambient 1 · set direct 1
   · 黑色线条噪感、边缘刺目、卡通面丢失 → outline_thickness 过大 → set outline_thickness 2 或 outline off
   · 场景过暗发灰 → 灯光过低 → set ambient 1 · set direct 1.2
-  · 层次感不足、扁平 → set ssao 无效（ssao 是独立命令）→ ssao on
+  · 层次感不足、扁平 → 需要环境光遮蔽 → ssao on（独立命令，非 set 键）
+  · 结构消失 / 只剩线稿轮廓 / 画面大面积空白 → 后处理渲染异常 → ssao off 后单独 outline on 重试；仍异常则 ssao off · outline off
+  · 颜色看不清（白背景下偏淡） → bg 后改深色再观察，或直接说颜色正常仅对比度低 → bg black 或 bg #1a2e35
   · 「恢复正常」类目标 → 灯光回默认（ambient 1 / direct 1 / fill 1），outline_thickness ≤ 2
 
 ${COMMAND_REF}`
@@ -152,7 +159,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: '缺少 scene' }, { status: 400 })
   }
 
-  // ---------- 视觉自查分支（VLM 看截图） ----------
+  // ---------- 视觉自查分支（VLM 看截图，可选前后对比） ----------
   if (body.image && body.goal) {
     try {
       const zai = await ZAI.create()
@@ -160,20 +167,20 @@ export async function POST(req: Request) {
       let lastErr = ''
       for (let attempt = 0; attempt < 2 && !decision; attempt++) {
         try {
+          type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+          const imageParts: ContentPart[] = [
+            {
+              type: 'text',
+              text: `用户目标：${body.goal.slice(0, 500)}\n\n【自动注入的当前场景信息】\n${body.scene.slice(0, 3000)}`,
+            },
+          ]
+          if (body.imageBefore) imageParts.push({ type: 'image_url', image_url: { url: body.imageBefore } })
+          imageParts.push({ type: 'image_url', image_url: { url: body.image } })
           const completion = await zai.chat.completions.createVision({
             model: 'glm-4.6v',
             messages: [
               { role: 'assistant', content: REVIEW_PROMPT },
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'text',
-                    text: `用户目标：${body.goal.slice(0, 500)}\n\n【自动注入的当前场景信息】\n${body.scene.slice(0, 3000)}`,
-                  },
-                  { type: 'image_url', image_url: { url: body.image } },
-                ],
-              },
+              { role: 'user', content: imageParts },
             ],
             thinking: { type: 'disabled' },
           })

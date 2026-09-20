@@ -1,10 +1,13 @@
-// 出版级轮廓线（描边）后处理：三信号边缘检测
+// 出版级轮廓线（描边）后处理：三信号边缘检测 + 色调映射上屏
 // ① 剪影（几何↔背景边界，mask Sobel，满强度）——论文图描边的主要来源
 // ② 内部遮挡（几何↔几何的显著深度落差，高阈值弱化）——保留前后层叠暗示
 // ③ 亮度边界（配色区域分界，最弱）——链着色等区域轮廓补充
-// 本 pass 位于 OutputPass 之后（最终上屏）：颜色已是 ACES+sRGB 编码；
-// 背景像素在此时还原为用户设定色（OutputPass 的色调映射只应作用于几何体，
-// 与直接渲染路径的 glClear 行为一致）；线色/背景色以原始 sRGB 分量传入。
+// 本 pass 为 composer 末位（唯一直接上屏）：输入为线性场景色（RenderPass→rt1 / GTAO→rt2），
+// 在 shader 内完成 ACES 色调映射 + sRGB 编码（吸收原 OutputPass 职责）——由此 RenderPass 之后
+// 任何 pass 都不再写回 rt1，rt1.depthTexture 的场景深度全程保持完好（旧架构中 fsQuad 写入
+// 挂载 depth-stencil 纹理的 rt1 会触发 GL 反馈环/INVALID_OPERATION，静默破坏颜色与深度）。
+// 背景像素此时还原为用户设定色（ACES 只应作用于几何体，与直接渲染路径的 glClear 行为对齐）；
+// 线色/背景色以原始 sRGB 分量传入。
 import * as THREE from 'three'
 
 /** hex（#rrggbb）→ 原始 sRGB 分量（不做 working-space 转换；着色器直接输出上屏） */
@@ -23,9 +26,9 @@ export const EdgeShader = {
     uThickness: { value: 1.5 },
     /** 内部遮挡相对深度梯度阈值（越小内部线越多） */
     uInteriorThresh: { value: 0.08 },
-    /** 亮度梯度阈值 */
+    /** 亮度梯度阈值（伽马空间） */
     uColorThresh: { value: 0.4 },
-    /** 轮廓线开关（关闭时仅做背景还原的直通） */
+    /** 轮廓线开关（关闭时仅做色调映射+背景还原的直通） */
     uOutlineOn: { value: 1 },
     /** 线条不透明度倍率 */
     uStrength: { value: 1 },
@@ -33,6 +36,8 @@ export const EdgeShader = {
     uEdgeColor: { value: srgbComponents('#1f2933') },
     /** 用户背景色（原始 sRGB 分量；背景像素还原用） */
     uBgColor: { value: srgbComponents('#ffffff') },
+    /** 曝光（与 renderer.toneMappingExposure 同步） */
+    uExposure: { value: 1.05 },
     uNear: { value: 0.5 },
     uFar: { value: 8000 },
     uIsOrtho: { value: 0 },
@@ -55,10 +60,27 @@ export const EdgeShader = {
     uniform float uStrength;
     uniform vec3 uEdgeColor;
     uniform vec3 uBgColor;
+    uniform float uExposure;
     uniform float uNear;
     uniform float uFar;
     uniform float uIsOrtho;
     varying vec2 vUv;
+
+    /** ACES Filmic（three.js OutputShader 同款曲线）——几何体色调映射 */
+    vec3 acesToneMap(vec3 color) {
+      color *= uExposure;
+      return clamp((color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14), 0.0, 1.0);
+    }
+
+    /** sRGB 编码（线性 → 显示空间） */
+    vec3 srgbEncode(vec3 c) {
+      return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+    }
+
+    /** 完整显示变换：ACES + sRGB（背景还原前对几何体应用） */
+    vec3 displayTransform(vec3 linearColor) {
+      return srgbEncode(acesToneMap(linearColor));
+    }
 
     /** 线性化深度（透视：逆投影；正交：本就线性） */
     float getDepth(vec2 uv) {
@@ -73,16 +95,18 @@ export const EdgeShader = {
       return step(0.9995, texture2D(tDepth, uv).x);
     }
 
+    /** 感知亮度（伽马近似：线性 luma 提到显示域，与阈值标定一致） */
     float getLuma(vec2 uv) {
       vec3 c = texture2D(tDiffuse, uv).rgb;
-      return dot(c, vec3(0.299, 0.587, 0.114));
+      return pow(max(dot(c, vec3(0.299, 0.587, 0.114)), 0.0), 1.0 / 2.2);
     }
 
     void main() {
-      // 背景/几何体分离：背景像素还原为用户设定色（OutputPass 的 ACES 只应作用于几何体）
+      // 背景/几何体分离：几何体走完整显示变换（ACES+sRGB），背景像素还原为用户设定色
+      // （直接渲染路径的 glClear 不经色调映射，两条路径背景行为保持一致）
       vec4 base = texture2D(tDiffuse, vUv);
       float bgC = isBg(vUv);
-      vec3 col = mix(base.rgb, uBgColor, bgC);
+      vec3 col = mix(displayTransform(base.rgb), uBgColor, bgC);
 
       if (uOutlineOn < 0.5) {
         gl_FragColor = vec4(col, base.a);
@@ -112,7 +136,7 @@ export const EdgeShader = {
       float dg = length(vec2(dx, dy)) / max(dC, 1e-4);
       float interior = smoothstep(uInteriorThresh, uInteriorThresh * 2.0, dg);
 
-      // ③ 亮度边界（配色区域分界）
+      // ③ 亮度边界（配色区域分界，伽马域）
       float lx = (getLuma(p20) + 2.0 * getLuma(p21) + getLuma(p22)) - (getLuma(p00) + 2.0 * getLuma(p01) + getLuma(p02));
       float ly = (getLuma(p02) + 2.0 * getLuma(p12) + getLuma(p22)) - (getLuma(p00) + 2.0 * getLuma(p10) + getLuma(p20));
       float lg = length(vec2(lx, ly));

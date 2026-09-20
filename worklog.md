@@ -1287,3 +1287,25 @@ Stage Summary:
 - 关键决策：①视觉自查修正命令不再触发二次自查（防 VLM 振荡循环），质量护栏放在提示词层（症状速查+幅度限制）而非代码层钳制 ②截图压缩到 768px JPEG 0.72（VLM 载荷 ~100KB）③增量调整走「上下文注入数值参数 + LLM 算绝对值」而非前端参数记忆（更通用）④协议加固用 recency 原理（尾部注入）解决历史稀释
 - 未解决问题与风险：①视觉自查每轮 +1 次 VLM 调用（~2-5s），追求响应速度的用户可 Eye 关闭 ②LLM 对「恢复正常」类模糊目标偶尔给出过强组合（ssao+outline+quality high 一起上），提示词已限「1-2 条为宜」但非硬约束 ③salvageCommands 打捞的命令未经 LLM 复核直接执行（白名单分级仍在，风险可控）④morph 全链路未在本轮 E2E 重测（白名单打通但执行路径沿用 r28-r30 已验证代码）
 - 下一阶段建议（优先级序）：① 氢键分析面板化（r30 遗留：范围氢键按残基对列表+点击跳转）② Agent 对话流式输出（SSE 打字机效果）③ 快捷动作预设面板（「出版级/科普风格/口袋特写」一键组合）④ 深色主题链色对比度自适应（多轮遗留）⑤ SVG cartoon 增强（按二级结构变宽路径）⑥ 结构列表溢出滚动优化
+
+---
+Task ID: r34
+Agent: main
+Task: 用户反馈渲染 trio 根因修复（composer FBO 完整性 / 灯光过曝褪色 / 架构重构）+ agent 视觉自查前后对比
+
+Work Log:
+- 上下文恢复 + 用户反馈解析：「outline on/ssao on 后彩虹上色未显示（结构呈灰白线稿）」「set ambient/direct 1.2 重复执行无变化」→ agent-browser 全链路复现
+- 【根因 ①——composer FBO 不完整】像素级+GL 级诊断链：engine.capture() 100% 白 → 逐 pass 二分（RP/GTAO/Output/Edge 全开 vs 子集）→ fsQuad 写入 rt1 产生 GL_INVALID_OPERATION 且颜色+深度全灭。终极根因：EffectComposer.setSize 以 w×pr **浮点**尺寸设置 rt1/rt2，WebGL texImage2D 截断颜色纹理（378.6→378），而引擎手工同步的 depthTexture 按四舍五入（379）→ 1px 错位 → GL_FRAMEBUFFER_INCOMPLETE → composer 全部绘制**静默失败**（无报错无警告）→ 屏幕只剩 EdgePass 的背景还原+深度边缘信号 = 用户看到的「灰白线稿」。分数 DPR（1.25/1.5）必现；实测 setPixelRatio(1.25) 后 rt1=[1375,788.75] vs dt=[1375,789] mismatch + brightFrac=0 复现成功
+- 【根因 ②——架构脆弱性】旧链 RenderPass→GTAO→OutputPass→EdgePass：GTAO 开启时 OutputPass 需把 fsQuad 写回挂载 depth-stencil 纹理的 rt1（奇数次 swap 后 writeBuffer=rt1），该写入在特定 GL 状态（前一帧 EdgePass 的 tDepth=rt1.depthTexture 纹理单元残留绑定）下触发反馈环校验失败。capture()/rayRender() 恢复路径还漏调 syncDepthTextureSize → 尺寸错位后 FBO 永久损坏
+- 【修复——架构重构】新链 RenderPass→GTAO→EdgePass（移除 OutputPass）：EdgeShader 吸收 ACES+sRGB 色调映射（three 同款曲线内联）→ RenderPass 之后**任何 pass 不再写 rt1**（GTAO 写 rt2、EdgePass 直写屏幕）→ rt1.depthTexture 场景深度全程完好，反馈环/写坏深度问题从结构上根除
+- 【修复——尺寸同步统一】新增 syncComposerTargets(w,h,pr)：setPixelRatio+setSize 后强制 rt1/rt2 取整 + depthTexture 与 rt1 逐像素对齐（含 dispose 重分配）；替换全部 5 处调用点（渲染循环/ensureComposer/resize/capture 恢复/rayRender 渲染与恢复）；capture 渲染分支尺寸取整
+- 【根因 ③——灯光过曝褪色】新灯光标定：key 1.5→1.1、fill 0.45→0.35、ambient 0.12→0.08、environmentIntensity 1.0×→0.45×（RoomEnvironment 贡献减半）→ 总照度≈1.3，ACES 高光去饱和大幅缓解；spectrum 彩虹从「灰白线稿」变为清晰可辨的蓝→青→绿→黄→红
+- 【agent 视觉自查前后对比】protocol+route+AgentPanel：执行前抓基线截图，VLM 请求带 imageBefore+image 双图 → VLM 可判断「变化是否真实发生」（用户「重复执行还是没有什么变化」痛点的直接对策）；REVIEW_PROMPT 新增「前后几乎无变化→怀疑幅度不足→给更大步长」规则 + 「修正值必须参考数值参数当前值，不得回落到当前值以下」（实测抓到 VLM 把 1.8 盲目降回 1.2 的反向下修）+ 「亮度判断看分子可读性，不要把深色背景占比误判为过暗」
+- 【SYSTEM_PROMPT 命令语义补强】新增规则 11（灯光语义：1→1.2 变化轻微，明显变亮至少 ±0.4，用户说没变化给更大步长）、12（渐变着色与白背景对比度搭配建议 bg black）、13（ssao/outline 独立命令 + 「太脏/太重」先关其一）；context.ts 新增「已烘焙自定义着色（N 原子覆盖）」状态行
+- 【E2E 全链路】①用户原话「加载 4hhb，然后加轮廓线和环境光遮蔽，彩虹渐变上色」→ agent 执行 load/outline on/ssao on/color spectrum 全 ok → 视觉自查（含 before 基线）确认「轮廓线与 SSAO 均已开启，彩虹渐变着色已生效」→ VLM 终审 9/10（彩虹渐变清晰、轮廓线勾勒立体感、SSAO 有质感）②「画面太暗了，明显调亮一些」→ agent 直接给 1.8 大步长（规则 11 生效）③「亮度再高一些」→ 1.2 后视觉自查修正 1.4（单调向上修正 ✓）④ray 1600 完成导出且恢复后 composer 尺寸一致（rt1==dt==[1100,631]）⑤png 2/capture 正常 ⑥DPR 1.25 模拟：integerAligned=true 且渲染正常（用户环境级回归通过）⑦outline-only/ssao-only 两路径颜色均正常 ⑧浏览器 errors 0、lint 0 错、tsc 应用代码 0 错 ⑨移动端 390px 无溢出（VLM 确认布局稳定）
+
+Stage Summary:
+- 项目当前状态：r33 基础上修复了两个长期潜伏的渲染根因 bug——①composer FBO 完整性（分数 DPR 必现的「后处理开启后画面只剩背景+线稿」，架构级重构根除）②灯光过曝褪色（所有配色方案在 ACES 下偏灰白）——用户的「彩虹上色不显示」「灯光调整无变化」反馈至此全部闭环
+- 关键决策：①移除 OutputPass、把 ACES+sRGB 内联进 EdgeShader（RenderPass 后零写 rt1 = 深度纹理永不损坏）②syncComposerTargets 统一 5 处尺寸同步点（取整+dt 对齐）③灯光新标定 env 0.45×/key 1.1（总照度≈1.3）④视觉自查 before/after 双图对比（变化检测能力）⑤VLM 修正命令锚定当前值（防反向下修）
+- 未解决问题与风险：①沙箱 headless DPR=1 无法原生复现分数 DPR，已用 setPixelRatio(1.25) 模拟验证——真实 retina/Windows 缩放环境建议用户侧再回归 ②视觉自查的亮度判断在深色背景下仍可能偏保守（提示词已加「看分子不看背景」，未再实测）③GTAO 自遮挡对卡通表面偏强（分子整体均匀压暗 ~30-40%），观感可接受但可再调 blendIntensity 默认值 ④r33 遗留项未动：氢键分析面板化、深色主题链色对比度自适应、SVG cartoon 增强
+- 下一阶段建议（优先级序）：① GTAO 视觉调优（blendIntensity 默认 0.5-0.7 + screenSpaceRadius 试验）② 氢键分析面板化（r30 遗留）③ Agent 对话流式输出（SSE）④ 快捷动作预设面板 ⑤ 深色主题链色对比度自适应

@@ -66,17 +66,17 @@ function loadVisualPref(): boolean {
   }
 }
 
-/** 调后端 LLM：返回决策或 null（错误已 toast）。带 image 时走 VLM 视觉自查分支 */
+/** 调后端 LLM：返回决策或 null（错误已 toast）。带 image 时走 VLM 视觉自查分支（可选前后对比） */
 async function callAgent(
   apiMessages: { role: 'user' | 'assistant'; content: string }[],
   scene: string,
-  visual?: { image: string; goal: string },
+  visual?: { image: string; goal: string; imageBefore?: string },
 ): Promise<AgentDecision | null> {
   try {
     const res = await fetch('/api/agent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(visual ? { messages: apiMessages, scene, image: visual.image, goal: visual.goal } : { messages: apiMessages, scene }),
+      body: JSON.stringify(visual ? { messages: apiMessages, scene, image: visual.image, goal: visual.goal, imageBefore: visual.imageBefore } : { messages: apiMessages, scene }),
     })
     const data = await res.json() as { ok: boolean; decision?: AgentDecision; error?: string }
     if (!data.ok || !data.decision) {
@@ -181,8 +181,9 @@ export function AgentPanel() {
    * 逐条执行命令（白名单分类；confirm 留给用户；间隔 120ms 给引擎喘息）。
    * depth：自动修正轮次——失败命令反馈 LLM 求修正，最多 1 轮（agentic retry）。
    * allowVisual：本轮完成后是否做视觉自查（自动修正轮 / 视觉修正轮不再触发，防循环）。
+   * imageBefore：命令执行前的视口截图（视觉自查前后对比——让 VLM 判断变化是否真实发生）。
    */
-  const runTurn = useCallback(async (msgId: string, cmds: string[], depth: number, priorMsgs: AgentChatMessage[], allowVisual: boolean) => {
+  const runTurn = useCallback(async (msgId: string, cmds: string[], depth: number, priorMsgs: AgentChatMessage[], allowVisual: boolean, imageBefore?: string) => {
     const records: AgentCmdRecord[] = cmds.map(cmd => ({ cmd, status: 'pending' as const }))
     patchCmds(msgId, records)
     for (let i = 0; i < records.length; i++) {
@@ -227,7 +228,7 @@ export function AgentPanel() {
         try {
           const shot = await shrinkImage(eng.capture({ scale: 1 }), 768)
           const goal = lastGoalText(priorMsgs)
-          const review = await callAgent([], buildSceneContext(), { image: shot, goal })
+          const review = await callAgent([], buildSceneContext(), { image: shot, goal, imageBefore })
           if (review) {
             const revCmds = splitCommands(review.commands)
             const revId = newId()
@@ -274,7 +275,15 @@ export function AgentPanel() {
       setMsgs(m => [...m, aiMsg])
       if (cmds.length) {
         setPhase('exec')
-        await runTurn(aiId, cmds, 0, [...history, aiMsg], true)
+        // 执行前抓基线截图（视觉自查前后对比；结构未加载或截图失败时静默跳过）
+        let before: string | undefined
+        if (visualOn && cmds.some(isVisualCmd)) {
+          try {
+            before = await shrinkImage(engineRef.current?.capture({ scale: 1 }) ?? '', 768)
+          } catch { before = undefined }
+          if (!before) before = undefined
+        }
+        await runTurn(aiId, cmds, 0, [...history, aiMsg], true, before)
       }
     } finally {
       setBusy(false)

@@ -39,6 +39,8 @@ export interface AgentRequestBody {
   scene: string
   /** 视觉自查模式：执行命令后的视口截图（JPEG data URL，宽 ≤768） */
   image?: string
+  /** 视觉自查模式：命令执行前的视口截图（前后对比——让 VLM 能判断「变化是否真的发生」） */
+  imageBefore?: string
   /** 视觉自查模式：本轮用户目标（原始自然语言需求） */
   goal?: string
 }

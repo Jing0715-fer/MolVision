@@ -4,7 +4,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { EdgeShader, srgbComponents } from './edge-shader'
@@ -367,19 +366,21 @@ export class MolEngine {
     this.scene.add(this.contactGroup)
     this.scene.add(this.mapGroup)
 
-    // 环境光照
+    // 环境光照（亮度配平：RoomEnvironment 贡献≈0.45×，叠加主光后总照度≈1.3 —— 过高会经 ACES 把饱和色
+    // 冲成灰白「褪色」（用户反馈彩虹上色不显色的根因）；分数 DPR 下另见 syncComposerTargets）
     const pmrem = new THREE.PMREMGenerator(this.renderer)
     const env = pmrem.fromScene(new RoomEnvironment(), 0.06)
     this.scene.environment = env.texture
+    this.scene.environmentIntensity = 0.45
     pmrem.dispose()
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.5)
+    const key = new THREE.DirectionalLight(0xffffff, 1.1)
     key.position.set(4, 8, 5)
     this.scene.add(key)
-    const fill = new THREE.DirectionalLight(0xffffff, 0.45)
+    const fill = new THREE.DirectionalLight(0xffffff, 0.35)
     fill.position.set(-5, -3, -4)
     this.scene.add(fill)
-    const ambient = new THREE.AmbientLight(0xffffff, 0.12)
+    const ambient = new THREE.AmbientLight(0xffffff, 0.08)
     this.scene.add(ambient)
     this.keyLight = key
     this.fillLight = fill
@@ -430,9 +431,7 @@ export class MolEngine {
     this.camera.updateProjectionMatrix()
     this.updateOrthoFrustum()
     if (this.composer) {
-      this.composer.setPixelRatio(this.renderer.getPixelRatio())
-      this.composer.setSize(w, h)
-      this.syncDepthTextureSize(Math.round(w * this.renderer.getPixelRatio()), Math.round(h * this.renderer.getPixelRatio()))
+      this.syncComposerTargets(w, h, this.renderer.getPixelRatio())
     }
     this.stereoEffect?.setSize(w, h)
     this.pickablesCache = null
@@ -548,9 +547,7 @@ export class MolEngine {
           const w = this.container.clientWidth || 1
           const h = this.container.clientHeight || 1
           const pr = this.renderer.getPixelRatio()
-          this.composer.setPixelRatio(pr)
-          this.composer.setSize(w, h)
-          this.syncDepthTextureSize(Math.round(w * pr), Math.round(h * pr))
+          this.syncComposerTargets(w, h, pr)
           if (this.gtaoPass) {
             // 刷新投影矩阵 uniform（FOV / 正交 zoom / 相机切换后仍正确）
             this.gtaoPass.blendIntensity = this.settings?.ssaoIntensity ?? 1
@@ -1002,7 +999,7 @@ export class MolEngine {
   }
 
   // ---------- GTAO / 轮廓线后处理管线 ----------
-  /** 懒建 EffectComposer（RenderPass → GTAOPass → OutputPass → EdgePass）；相机类型切换时重建；失败时安全降级 */
+  /** 懒建 EffectComposer（RenderPass → GTAOPass → EdgePass，EdgePass 内含色调映射上屏）；相机类型切换时重建；失败时安全降级 */
   private ensureComposer() {
     if (this.composer && this.composerCamera === this.activeCamera) return
     if (this.composer) this.disposeComposer()
@@ -1029,14 +1026,11 @@ export class MolEngine {
       gtao.updatePdMaterial({ radius: 8, radiusExponent: 2, samples: 16, rings: 2 })
       this.gtaoPass = gtao
       this.composer.addPass(gtao)
-      // OutputPass：四边形渲染进 rt1 时不得深度测试/写入（会破坏 rt1.depthTexture 的场景深度，
-      // 且会因场景更近而拒绝片元）——色调映射输出是纯颜色合成，无深度语义
-      const output = new OutputPass()
-      output.material.depthTest = false
-      output.material.depthWrite = false
-      this.composer.addPass(output)
-      // 轮廓线/背景还原 pass（末位上屏）：采样 rt1 的场景深度（RenderPass 固定写入 readBuffer）
-      // ——OutputPass 虽也写 rt1 但已禁用深度，depthTexture 保持场景深度
+      // 架构注：不使用 OutputPass——链条为 RenderPass→GTAO→EdgePass，EdgePass 末位上屏时
+      // 在 shader 内完成 ACES+sRGB（见 edge-shader.ts）。旧架构 OutputPass 需把 fsQuad 写回
+      // 挂载 depth-stencil 纹理的 rt1，会触发 GL 反馈环（INVALID_OPERATION）并破坏颜色+深度，
+      // 且写回后 rt1 双重身份（场景深度源 + 色调映射目标）在任何尺寸变更路径下都极脆弱。
+      // 新架构下 RenderPass 之后任何 pass 都不再写 rt1：GTAO 写 rt2，EdgePass 直写屏幕。
       if (!this.edgeFailed) {
         try {
           const dt = new THREE.DepthTexture(Math.round(w * pr), Math.round(h * pr))
@@ -1060,6 +1054,22 @@ export class MolEngine {
       }
       this.composer.setPixelRatio(pr)
       this.composer.setSize(w, h)
+      // 创建后立即对齐目标尺寸（分数 DPR 下浮点尺寸 → FBO 不完整，见 syncComposerTargets 注释）
+      {
+        const tw = Math.round(this.composer.renderTarget1.width)
+        const th = Math.round(this.composer.renderTarget1.height)
+        if (this.composer.renderTarget1.width !== tw || this.composer.renderTarget1.height !== th) {
+          this.composer.renderTarget1.setSize(tw, th)
+          this.composer.renderTarget2.setSize(tw, th)
+          for (const pass of this.composer.passes) pass.setSize?.(tw, th)
+        }
+        const dt = this.composer.renderTarget1.depthTexture as THREE.DepthTexture | null | undefined
+        if (dt && (dt.image.width !== tw || dt.image.height !== th)) {
+          dt.image.width = tw
+          dt.image.height = th
+          dt.dispose()
+        }
+      }
       this.composerCamera = this.activeCamera
     } catch (e) {
       // 构建失败：清掉半成品，标记禁用并回退直接渲染（避免每帧异常循环）
@@ -1088,7 +1098,34 @@ export class MolEngine {
     }
   }
 
-  /** 同步轮廓线 uniforms（分辨率/粗细/强度/相机深度范围/线色+背景色随背景亮度自适应） */
+  /**
+   * 统一同步 composer 目标尺寸（FBO 完整性关键路径）：
+   * EffectComposer.setSize 以 w×pr 浮点尺寸设置 rt1/rt2 —— WebGL texImage2D 会把颜色纹理截断为整，
+   * 而 depthTexture 若按四舍五入对齐会差 1px → 帧缓冲不完整（GL_FRAMEBUFFER_INCOMPLETE）→
+   * composer 全部绘制静默失败（屏幕只剩背景还原 + 陈旧边缘信号，即用户反馈的「灰白线稿」）。
+   * 分数 DPR（1.25/1.5）或性能降级 0.6× 时必现。此处统一取整并强制 depthTexture 与 rt1 逐像素一致。
+   */
+  private syncComposerTargets(w: number, h: number, pr: number) {
+    const c = this.composer
+    if (!c) return
+    c.setPixelRatio(pr)
+    c.setSize(w, h)
+    const tw = Math.round(c.renderTarget1.width)
+    const th = Math.round(c.renderTarget1.height)
+    if (c.renderTarget1.width !== tw || c.renderTarget1.height !== th) {
+      c.renderTarget1.setSize(tw, th)
+      c.renderTarget2.setSize(tw, th)
+      for (const pass of c.passes) pass.setSize?.(tw, th)
+    }
+    const dt = c.renderTarget1.depthTexture as THREE.DepthTexture | null | undefined
+    if (dt && (dt.image.width !== tw || dt.image.height !== th)) {
+      dt.image.width = tw
+      dt.image.height = th
+      dt.dispose() // 触发 GPU 重新分配（FBO 重建时按新尺寸上传）
+    }
+  }
+
+  /** 同步轮廓线 uniforms（分辨率/粗细/强度/相机深度范围/线色+背景色随背景亮度自适应/曝光） */
   private syncEdgePass(wPx: number, hPx: number) {
     const e = this.edgePass
     const s = this.settings
@@ -1100,6 +1137,7 @@ export class MolEngine {
     u.uStrength.value = s.outlineStrength
     u.tDepth.value = this.composer?.renderTarget1.depthTexture ?? null
     u.uBgColor.value.copy(srgbComponents(s.background))
+    u.uExposure.value = this.renderer.toneMappingExposure
     // 线色：浅背景配深线 / 深背景配浅线（原始 sRGB 分量，pass 内不做色彩空间转换）
     u.uEdgeColor.value.copy(srgbComponents(isLightBackground(s.background) ? '#1f2933' : '#dfe7ee'))
     const cam = this.activeCamera
@@ -3024,11 +3062,11 @@ export class MolEngine {
     if (!changed) return
     // 背景
     this.scene.background = new THREE.Color(settings.background)
-    // 灯光（倍率）
-    this.ambientLight.intensity = 0.12 * settings.lightAmbient
-    this.keyLight.intensity = 1.5 * settings.lightKey
-    this.fillLight.intensity = 0.45 * settings.lightFill
-    this.scene.environmentIntensity = settings.lightAmbient
+    // 灯光（倍率；环境贴图贡献 0.45× —— 满档总照度≈1.6，避免 ACES 高光去饱和褪色）
+    this.ambientLight.intensity = 0.08 * settings.lightAmbient
+    this.keyLight.intensity = 1.1 * settings.lightKey
+    this.fillLight.intensity = 0.35 * settings.lightFill
+    this.scene.environmentIntensity = 0.45 * settings.lightAmbient
     // 高光开关切换 → 遍历已有材质调整（新 rep 构建时也会应用）
     if (prev && prev.specular !== settings.specular) this.applySpecularAll(settings.specular)
     // 雾
@@ -3272,7 +3310,7 @@ export class MolEngine {
     const prevBg = this.scene.background
     const prevFog = this.scene.fog
     this.renderer.setPixelRatio(1)
-    this.renderer.setSize(w * scale, h * scale, false)
+    this.renderer.setSize(Math.round(w * scale), Math.round(h * scale), false)
     if (opts.transparent) {
       // 透明底：绕过 composer 直接渲染（AO 需要不透明底）
       this.scene.background = null
@@ -3280,9 +3318,12 @@ export class MolEngine {
       this.renderer.setClearColor(0x000000, 0)
       this.renderer.render(this.scene, this.activeCamera)
     } else if (this.settings?.ssao && this.composer) {
-      // 开启 AO 时截图也走 composer（保持视觉一致）
+      // 开启 AO 时截图也走 composer（保持视觉一致；尺寸同步防 FBO 不完整）
+      const cw = Math.round(w * scale)
+      const ch = Math.round(h * scale)
       this.composer.setPixelRatio(1)
-      this.composer.setSize(w * scale, h * scale)
+      this.composer.setSize(cw, ch)
+      this.syncDepthTextureSize(cw, ch)
       this.composer.render()
     } else {
       this.renderer.render(this.scene, this.activeCamera)
@@ -3293,8 +3334,8 @@ export class MolEngine {
     this.renderer.setPixelRatio(prevRatio)
     this.renderer.setSize(w, h, false)
     if (this.composer) {
-      this.composer.setPixelRatio(prevRatio)
-      this.composer.setSize(w, h)
+      // 恢复时必须同步 depthTexture（否则目标尺寸/深度尺寸错位 → FBO 不完整 → composer 静默空帧）
+      this.syncComposerTargets(w, h, prevRatio)
     }
     return url
   }
@@ -3414,9 +3455,8 @@ export class MolEngine {
         if (this.composer && (this.gtaoPass || this.edgePass)) {
           const wantSsao = !!this.settings?.ssao && !this.gtaoFailed
           const wantOutline = !!this.settings?.outline && !this.edgeFailed
-          this.composer.setPixelRatio(1)
-          this.composer.setSize(w, h)
-          this.syncDepthTextureSize(w, h)
+          // 尺寸同步：整数化 + depthTexture 对齐（分数尺寸 → FBO 不完整）
+          this.syncComposerTargets(w, h, 1)
           if (this.gtaoPass) {
             this.gtaoPass.enabled = wantSsao
             this.gtaoPass.blendIntensity = this.settings?.ssaoIntensity ?? 1
@@ -3457,8 +3497,8 @@ export class MolEngine {
       this.renderer.setPixelRatio(prevRatio)
       this.renderer.setSize(prevW, prevH, false)
       if (this.composer) {
-        this.composer.setPixelRatio(prevRatio)
-        this.composer.setSize(prevW, prevH)
+        // 恢复时同步目标尺寸（含 depthTexture 对齐，防 FBO 不完整 → composer 静默空帧）
+        this.syncComposerTargets(prevW, prevH, prevRatio)
       }
     }
     return { url, w: targetW, h: targetH, ms: performance.now() - t0 }

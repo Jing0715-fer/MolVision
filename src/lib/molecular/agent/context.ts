@@ -47,6 +47,12 @@ export function buildSceneContext(): string {
     lines.push(`- 命名选择: ${s.namedSelections.map(n => `${n.name}(${n.count}原子)`).join('、')}`)
   }
 
+  // 着色覆盖（color 命令烘焙的逐原子色——告知 agent 上次着色是否已生效）
+  const activeEntry = s.structures.find(x => x.id === s.activeId)
+  if (activeEntry && Object.keys(activeEntry.colorOverrides).length > 0) {
+    lines.push(`- 活动结构已烘焙自定义着色（${Object.keys(activeEntry.colorOverrides).length} 原子覆盖；reset_colors 可还原表示法默认色）`)
+  }
+
   // 关键渲染设置（只列影响视觉决策的）
   const v = s.settings
   const on = (b: boolean) => (b ? '开' : '关')
