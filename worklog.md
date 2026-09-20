@@ -1309,3 +1309,20 @@ Stage Summary:
 - 关键决策：①移除 OutputPass、把 ACES+sRGB 内联进 EdgeShader（RenderPass 后零写 rt1 = 深度纹理永不损坏）②syncComposerTargets 统一 5 处尺寸同步点（取整+dt 对齐）③灯光新标定 env 0.45×/key 1.1（总照度≈1.3）④视觉自查 before/after 双图对比（变化检测能力）⑤VLM 修正命令锚定当前值（防反向下修）
 - 未解决问题与风险：①沙箱 headless DPR=1 无法原生复现分数 DPR，已用 setPixelRatio(1.25) 模拟验证——真实 retina/Windows 缩放环境建议用户侧再回归 ②视觉自查的亮度判断在深色背景下仍可能偏保守（提示词已加「看分子不看背景」，未再实测）③GTAO 自遮挡对卡通表面偏强（分子整体均匀压暗 ~30-40%），观感可接受但可再调 blendIntensity 默认值 ④r33 遗留项未动：氢键分析面板化、深色主题链色对比度自适应、SVG cartoon 增强
 - 下一阶段建议（优先级序）：① GTAO 视觉调优（blendIntensity 默认 0.5-0.7 + screenSpaceRadius 试验）② 氢键分析面板化（r30 遗留）③ Agent 对话流式输出（SSE）④ 快捷动作预设面板 ⑤ 深色主题链色对比度自适应
+
+---
+Task ID: r34b
+Agent: main
+Task: r34 收尾——GTAO 真相核查（更正被污染的结论）+ 最终验收
+
+Work Log:
+- 【重要更正】r34 初版记录中「GTAO 自遮挡整体压暗 30-40%」的结论被证明是测试污染：①早期实验把 gtao.output 设为 6——而 GTAOPass.OUTPUT.Default 实际是 0（枚举：Off:-1/Default:0/Diffuse:1/Depth:2/Normal:3/AO:4/Denoise:5），6 是非法值 → switch 落入 default 分支只 console.warn，copy/blend 从未执行 ②早期「AO 通道 avg=43」测的是 output=2=Depth 模式（深度可视化）而非 AO ③「摘 depthTexture 后混合恢复」实验同样跑在非法 output 上，结论无效——据此撤销了 DepthFormat 改动（回滚到久经验证的 DepthStencilFormat+UnsignedInt248Type）与 ssaoIntensity 0.6 默认值（回到 1）
+- 【GTAO 管线核查（干净状态）】onBeforeRender 间谍确认 Default 输出下完整 draw 序列：ao→own / denoise→own / copy→rt2 / blend→rt2 ✓ 全部执行；Normal 通道含正确分子法线（VLM 确认）✓；**AO 通道实测全白（avg 255）——GTAO 对孤立的凸面卡通管几何（4HHB 四聚体的分离螺旋管）几何上就没有环境遮蔽**：horizon 采样邻域内是空 space 或同一凸面 → AO≈1。大半径/大厚度/高 scale（r15/t15/s3）与屏幕空间模式（r30px）均无差异——结论：管线架构正确、执行无误，GTAO 屏幕空间算法对分子卡通表示的遮蔽贡献天然微小（与 r25 引入以来「AO 从未可见生效」的历史一致；PyMOL 的 AO 暗化来自原子级 vdW 采样，非屏幕空间 GTAO）。作为已知限制记录，不再追
+- 【headless 冻结归因】DepthFormat 纯深度纹理 + SwiftShader 场景渲染会挂起主线程（换回 DepthStencilFormat 后恢复）——撤销该实验性改动的另一原因
+- 【最终验收（干净会话）】localStorage 清空 + 重载 + agent 面板原话「加载 4hhb 加轮廓线 彩虹上色」→ 命令 load/outline on/color spectrum 全 ok → 视觉自查确认「彩虹着色已生效，呈现完整彩虹渐变」→ 像素级 colorfulPct 10.8%（修复前 0.4-0.8%）→ VLM 终审 9/10「彩虹渐变清晰（蓝绿红橙过渡），轮廓线描边增强立体感，完美符合验收要求」→ 浏览器 errors 0
+- lint 0 错 0 警、tsc 应用代码 0 错
+
+Stage Summary:
+- r34 最终状态：①composer FBO 完整性架构重构（RenderPass→GTAO→EdgePass，OutputPass 移除、ACES 内联进 EdgeShader、syncComposerTargets 统一尺寸同步）②灯光过曝褪色重标定（env 0.45×/key 1.1/fill 0.35/ambient 0.08）③agent 视觉自查前后双图对比 + 修正命令锚定当前值 + 命令语义规则 11-13——用户三项反馈（彩虹不显色/灰白线稿/灯光无变化）全部闭环
+- 沙箱教训（r34 全程）：①操纵第三方库内部枚举前先核实真实值（GTAOPass.OUTPUT.Default=0 而非想当然的 6——一天的「blend 失效」调查源于此）②toDataURL/截图测量要警惕 stale frame 与 alpha-0 clear color 污染（早期 setClearColor(0,0) 调试残留让背景读成黑色）③live loop 每帧覆写 gtaoPass.enabled/blendIntensity——外部改内部状态做 A/B 测量会被下一帧冲掉，必须走 store 命令路径 ④SwiftShader 对非常规深度纹理格式（纯 DepthFormat 附件）可能挂起——改 FBO 附件格式要保守
+- 下一阶段建议：①氢键分析面板化（r30 遗留）②Agent 对话流式输出（SSE）③快捷动作预设面板 ④深色主题链色对比度自适应 ⑤SVG cartoon 增强
