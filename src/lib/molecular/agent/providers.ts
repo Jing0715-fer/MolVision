@@ -1,11 +1,15 @@
 // AI 供应商目录 + 凭据存储 + OpenAI 兼容直连适配（服务端专用，零客户端依赖）
-// 架构参考 pdb-tracker-web-v5 的 ProvidersPanel 体系，按 MolVision 规模精简：
+// 架构：
 // - 'zai' = 内置 z-ai-web-dev-sdk（免配置，始终可用）
 // - 其余 = OpenAI 兼容 /chat/completions 直连 fetch（含 Anthropic 特殊 auth 头）
 // - 凭据落盘 .molvision/agent-providers.json（0600），API Key 永不回传前端明文
+// - 目录按 category 分组（builtin/global/cn/aggregator/local/custom），每家带品牌色与官网
+// - discoveredModels：输入 Key 后经 /models 探测到的真实可用模型（存 config，前端合并展示）
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+
+export type ProviderCategory = 'builtin' | 'global' | 'cn' | 'aggregator' | 'local' | 'custom'
 
 export interface ProviderModel {
   id: string
@@ -19,6 +23,10 @@ export interface ProviderProfile {
   displayName: string
   /** 1-2 字符短标签（UI 徽章用） */
   label: string
+  /** 分类：builtin 内置 | global 国际 | cn 国内 | aggregator 聚合 | local 本地 | custom 自定义 */
+  category: ProviderCategory
+  /** 品牌主色（hex，前端 monogram 用） */
+  brand: string
   baseURL: string
   /** 环境变量回退名（存储键缺失时尝试） */
   apiKeyEnv: string
@@ -31,15 +39,29 @@ export interface ProviderProfile {
   /** 附加请求头（如 anthropic-version） */
   extraHeaders?: Record<string, string>
   docsUrl: string
+  /** 官网（设置页品牌链接） */
+  website: string
   /** 额外说明（设置页展示） */
   note?: string
 }
 
+export const CATEGORY_META: Record<ProviderCategory, { name: string; hint: string }> = {
+  builtin: { name: '内置', hint: '沙箱自带，免配置' },
+  global: { name: '国际平台', hint: 'OpenAI / Anthropic / Google 等' },
+  cn: { name: '国内平台', hint: 'DeepSeek / 通义 / Kimi 等' },
+  aggregator: { name: '聚合网关', hint: '一个 Key 通达多家模型' },
+  local: { name: '本地推理', hint: 'Ollama / LM Studio 等' },
+  custom: { name: '自定义端点', hint: '任意 OpenAI 兼容网关' },
+}
+
 export const PROVIDER_CATALOG: ProviderProfile[] = [
+  // ———— 内置 ————
   {
     id: 'zai',
-    displayName: 'Z.ai GLM（内置）',
+    displayName: 'Z.ai GLM',
     label: 'GLM',
+    category: 'builtin',
+    brand: '#0e9f6e',
     baseURL: '',
     apiKeyEnv: 'ZAI_API_KEY',
     defaultModel: 'glm-4.6',
@@ -49,25 +71,16 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
       { id: 'glm-4-flash', name: 'GLM-4 Flash', contextWindow: 128000 },
     ],
     docsUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+    website: 'https://z.ai',
     note: '沙箱内置 SDK 直连，无需 API Key；视觉自查始终走此通道',
   },
-  {
-    id: 'deepseek',
-    displayName: 'DeepSeek',
-    label: 'DS',
-    baseURL: 'https://api.deepseek.com/v1',
-    apiKeyEnv: 'DEEPSEEK_API_KEY',
-    defaultModel: 'deepseek-chat',
-    models: [
-      { id: 'deepseek-chat', name: 'DeepSeek V3 (Chat)', contextWindow: 64000 },
-      { id: 'deepseek-reasoner', name: 'DeepSeek R1 (Reasoner)', contextWindow: 64000 },
-    ],
-    docsUrl: 'https://platform.deepseek.com/api_keys',
-  },
+  // ———— 国际平台 ————
   {
     id: 'openai',
     displayName: 'OpenAI',
-    label: 'AI',
+    label: 'OA',
+    category: 'global',
+    brand: '#0d8069',
     baseURL: 'https://api.openai.com/v1',
     apiKeyEnv: 'OPENAI_API_KEY',
     defaultModel: 'gpt-4o-mini',
@@ -76,31 +89,39 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
       { id: 'gpt-4.1-mini', name: 'GPT-4.1 mini', contextWindow: 1047576 },
       { id: 'gpt-4o', name: 'GPT-4o', contextWindow: 128000 },
       { id: 'gpt-4o-mini', name: 'GPT-4o mini', contextWindow: 128000 },
+      { id: 'o4-mini', name: 'o4-mini', contextWindow: 200000 },
     ],
     docsUrl: 'https://platform.openai.com/api-keys',
+    website: 'https://openai.com',
   },
   {
     id: 'anthropic',
     displayName: 'Anthropic Claude',
-    label: 'AN',
+    label: 'CL',
+    category: 'global',
+    brand: '#c2603d',
     baseURL: 'https://api.anthropic.com/v1',
     apiKeyEnv: 'ANTHROPIC_API_KEY',
     authHeader: 'x-api-key',
     authPrefix: '',
     extraHeaders: { 'anthropic-version': '2023-06-01' },
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-5-20250929',
     models: [
-      { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', contextWindow: 200000 },
-      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', contextWindow: 200000 },
+      { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', contextWindow: 200000 },
+      { id: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1', contextWindow: 200000 },
+      { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', contextWindow: 200000 },
       { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', contextWindow: 200000 },
     ],
     docsUrl: 'https://console.anthropic.com/settings/keys',
-    note: 'OpenAI 兼容端点（/v1/chat/completions）',
+    website: 'https://anthropic.com',
+    note: '原生 /v1/models 列表可自动检测；走 OpenAI 兼容 /chat/completions',
   },
   {
     id: 'google',
     displayName: 'Google Gemini',
-    label: 'GG',
+    label: 'GM',
+    category: 'global',
+    brand: '#3b7ddd',
     baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai',
     apiKeyEnv: 'GOOGLE_API_KEY',
     defaultModel: 'gemini-2.5-flash',
@@ -110,11 +131,230 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
       { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', contextWindow: 1048576 },
     ],
     docsUrl: 'https://aistudio.google.com/apikey',
+    website: 'https://ai.google.dev',
+    note: 'AI Studio 免费额度可观，Flash 系列适合高频调用',
+  },
+  {
+    id: 'xai',
+    displayName: 'xAI Grok',
+    label: 'X',
+    category: 'global',
+    brand: '#2f2f33',
+    baseURL: 'https://api.x.ai/v1',
+    apiKeyEnv: 'XAI_API_KEY',
+    defaultModel: 'grok-4',
+    models: [
+      { id: 'grok-4', name: 'Grok 4', contextWindow: 256000 },
+      { id: 'grok-3', name: 'Grok 3', contextWindow: 131072 },
+      { id: 'grok-3-mini', name: 'Grok 3 mini', contextWindow: 131072 },
+    ],
+    docsUrl: 'https://console.x.ai',
+    website: 'https://x.ai',
+  },
+  {
+    id: 'mistral',
+    displayName: 'Mistral AI',
+    label: 'MI',
+    category: 'global',
+    brand: '#e8650c',
+    baseURL: 'https://api.mistral.ai/v1',
+    apiKeyEnv: 'MISTRAL_API_KEY',
+    defaultModel: 'mistral-large-latest',
+    models: [
+      { id: 'mistral-large-latest', name: 'Mistral Large', contextWindow: 131072 },
+      { id: 'mistral-small-latest', name: 'Mistral Small', contextWindow: 131072 },
+      { id: 'codestral-latest', name: 'Codestral', contextWindow: 262144 },
+      { id: 'magistral-medium-latest', name: 'Magistral（推理）', contextWindow: 40000 },
+    ],
+    docsUrl: 'https://console.mistral.ai/api-keys',
+    website: 'https://mistral.ai',
+  },
+  {
+    id: 'groq',
+    displayName: 'Groq',
+    label: 'GQ',
+    category: 'global',
+    brand: '#e5482b',
+    baseURL: 'https://api.groq.com/openai/v1',
+    apiKeyEnv: 'GROQ_API_KEY',
+    defaultModel: 'llama-3.3-70b-versatile',
+    models: [
+      { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B', contextWindow: 131072 },
+      { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B（即时）', contextWindow: 131072 },
+      { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B', contextWindow: 131072 },
+      { id: 'qwen/qwen3-32b', name: 'Qwen3 32B', contextWindow: 131072 },
+    ],
+    docsUrl: 'https://console.groq.com/keys',
+    website: 'https://groq.com',
+    note: 'LPU 推理芯片——生成速度业界第一梯队，免费额度慷慨',
+  },
+  {
+    id: 'cohere',
+    displayName: 'Cohere',
+    label: 'CO',
+    category: 'global',
+    brand: '#34564e',
+    baseURL: 'https://api.cohere.ai/compatibility/v1',
+    apiKeyEnv: 'COHERE_API_KEY',
+    defaultModel: 'command-a-03-2025',
+    models: [
+      { id: 'command-a-03-2025', name: 'Command A', contextWindow: 256000 },
+      { id: 'command-r-plus-08-2024', name: 'Command R+', contextWindow: 128000 },
+      { id: 'command-r-08-2024', name: 'Command R', contextWindow: 128000 },
+    ],
+    docsUrl: 'https://dashboard.cohere.com/api-keys',
+    website: 'https://cohere.com',
+    note: 'OpenAI 兼容层（/compatibility/v1）',
+  },
+  {
+    id: 'perplexity',
+    displayName: 'Perplexity',
+    label: 'PX',
+    category: 'global',
+    brand: '#1f7a86',
+    baseURL: 'https://api.perplexity.ai',
+    apiKeyEnv: 'PERPLEXITY_API_KEY',
+    defaultModel: 'sonar',
+    models: [
+      { id: 'sonar', name: 'Sonar', contextWindow: 127072 },
+      { id: 'sonar-pro', name: 'Sonar Pro', contextWindow: 200000 },
+      { id: 'sonar-reasoning-pro', name: 'Sonar Reasoning Pro', contextWindow: 127072 },
+      { id: 'sonar-deep-research', name: 'Sonar Deep Research', contextWindow: 127072 },
+    ],
+    docsUrl: 'https://www.perplexity.ai/settings/api',
+    website: 'https://perplexity.ai',
+    note: '带联网检索的在线模型',
+  },
+  {
+    id: 'together',
+    displayName: 'Together AI',
+    label: 'TG',
+    category: 'global',
+    brand: '#2456d6',
+    baseURL: 'https://api.together.xyz/v1',
+    apiKeyEnv: 'TOGETHER_API_KEY',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    models: [
+      { id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', name: 'Llama 3.3 70B Turbo', contextWindow: 131072 },
+      { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3', contextWindow: 131072 },
+      { id: 'Qwen/Qwen2.5-72B-Instruct-Turbo', name: 'Qwen2.5 72B Turbo', contextWindow: 32768 },
+    ],
+    docsUrl: 'https://api.together.ai/settings/api-keys',
+    website: 'https://together.ai',
+  },
+  {
+    id: 'fireworks',
+    displayName: 'Fireworks AI',
+    label: 'FW',
+    category: 'global',
+    brand: '#d9550c',
+    baseURL: 'https://api.fireworks.ai/inference/v1',
+    apiKeyEnv: 'FIREWORKS_API_KEY',
+    defaultModel: 'accounts/fireworks/models/deepseek-v3',
+    models: [
+      { id: 'accounts/fireworks/models/deepseek-v3', name: 'DeepSeek V3', contextWindow: 131072 },
+      { id: 'accounts/fireworks/models/llama-v3p3-70b-instruct', name: 'Llama 3.3 70B', contextWindow: 131072 },
+      { id: 'accounts/fireworks/models/kimi-k2-instruct', name: 'Kimi K2', contextWindow: 131072 },
+    ],
+    docsUrl: 'https://fireworks.ai/account/api-keys',
+    website: 'https://fireworks.ai',
+  },
+  {
+    id: 'deepinfra',
+    displayName: 'DeepInfra',
+    label: 'DI',
+    category: 'global',
+    brand: '#4f5ec9',
+    baseURL: 'https://api.deepinfra.com/v1/openai',
+    apiKeyEnv: 'DEEPINFRA_API_KEY',
+    defaultModel: 'deepseek-ai/DeepSeek-V3-0324',
+    models: [
+      { id: 'deepseek-ai/DeepSeek-V3-0324', name: 'DeepSeek V3', contextWindow: 163840 },
+      { id: 'meta-llama/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B', contextWindow: 131072 },
+      { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen2.5 72B', contextWindow: 32768 },
+    ],
+    docsUrl: 'https://deepinfra.com/dashboard/tokens',
+    website: 'https://deepinfra.com',
+  },
+  {
+    id: 'cerebras',
+    displayName: 'Cerebras',
+    label: 'CB',
+    category: 'global',
+    brand: '#e05c2e',
+    baseURL: 'https://api.cerebras.ai/v1',
+    apiKeyEnv: 'CEREBRAS_API_KEY',
+    defaultModel: 'llama-3.3-70b',
+    models: [
+      { id: 'llama-3.3-70b', name: 'Llama 3.3 70B', contextWindow: 128000 },
+      { id: 'llama3.1-8b', name: 'Llama 3.1 8B', contextWindow: 128000 },
+      { id: 'qwen-3-235b-a22b-instruct', name: 'Qwen3 235B A22B', contextWindow: 131072 },
+    ],
+    docsUrl: 'https://cloud.cerebras.ai',
+    website: 'https://cerebras.ai',
+    note: '晶圆级引擎（WSE）推理，tokens/s 极高',
+  },
+  {
+    id: 'nvidia',
+    displayName: 'NVIDIA NIM',
+    label: 'NV',
+    category: 'global',
+    brand: '#5f8f1f',
+    baseURL: 'https://integrate.api.nvidia.com/v1',
+    apiKeyEnv: 'NVIDIA_API_KEY',
+    defaultModel: 'deepseek-ai/deepseek-r1',
+    models: [
+      { id: 'deepseek-ai/deepseek-r1', name: 'DeepSeek R1', contextWindow: 163840 },
+      { id: 'meta/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', contextWindow: 131072 },
+      { id: 'qwen/qwen2.5-coder-32b-instruct', name: 'Qwen2.5 Coder 32B', contextWindow: 32768 },
+    ],
+    docsUrl: 'https://build.nvidia.com',
+    website: 'https://build.nvidia.com',
+    note: 'build.nvidia.com 每模型每小时有免费额度',
+  },
+  {
+    id: 'githubmodels',
+    displayName: 'GitHub Models',
+    label: 'GH',
+    category: 'global',
+    brand: '#3a3f46',
+    baseURL: 'https://models.github.ai/inference',
+    apiKeyEnv: 'GITHUB_TOKEN',
+    defaultModel: 'openai/gpt-4o-mini',
+    models: [
+      { id: 'openai/gpt-4o-mini', name: 'GPT-4o mini', contextWindow: 128000 },
+      { id: 'openai/gpt-4o', name: 'GPT-4o', contextWindow: 128000 },
+      { id: 'meta/Llama-3.3-70B-Instruct', name: 'Llama 3.3 70B', contextWindow: 128000 },
+      { id: 'deepseek/DeepSeek-V3-0324', name: 'DeepSeek V3', contextWindow: 128000 },
+    ],
+    docsUrl: 'https://github.com/marketplace/models',
+    website: 'https://github.com/marketplace/models',
+    note: 'API Key 填 GitHub PAT（fine-grained，无需任何权限勾选）',
+  },
+  // ———— 国内平台 ————
+  {
+    id: 'deepseek',
+    displayName: 'DeepSeek',
+    label: 'DS',
+    category: 'cn',
+    brand: '#4a6bf0',
+    baseURL: 'https://api.deepseek.com/v1',
+    apiKeyEnv: 'DEEPSEEK_API_KEY',
+    defaultModel: 'deepseek-chat',
+    models: [
+      { id: 'deepseek-chat', name: 'DeepSeek V3（Chat）', contextWindow: 64000 },
+      { id: 'deepseek-reasoner', name: 'DeepSeek R1（Reasoner）', contextWindow: 64000 },
+    ],
+    docsUrl: 'https://platform.deepseek.com/api_keys',
+    website: 'https://deepseek.com',
+    note: '国内性价比标杆，结构生物学知识扎实',
   },
   {
     id: 'qwen',
     displayName: '通义千问 Qwen',
     label: 'QW',
+    category: 'cn',
+    brand: '#6b4fd8',
     baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     apiKeyEnv: 'DASHSCOPE_API_KEY',
     defaultModel: 'qwen-plus',
@@ -122,75 +362,301 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
       { id: 'qwen3-max', name: 'Qwen3 Max', contextWindow: 262144 },
       { id: 'qwen-plus', name: 'Qwen Plus', contextWindow: 131072 },
       { id: 'qwen-turbo', name: 'Qwen Turbo', contextWindow: 1000000 },
+      { id: 'qwen-max', name: 'Qwen Max', contextWindow: 32768 },
     ],
     docsUrl: 'https://dashscope.console.aliyun.com/apiKey',
+    website: 'https://tongyi.aliyun.com',
   },
   {
     id: 'moonshot',
     displayName: '月之暗面 Kimi',
-    label: 'MS',
+    label: 'KI',
+    category: 'cn',
+    brand: '#0e9c8f',
     baseURL: 'https://api.moonshot.cn/v1',
     apiKeyEnv: 'MOONSHOT_API_KEY',
     defaultModel: 'kimi-k2-0905-preview',
     models: [
       { id: 'kimi-k2-0905-preview', name: 'Kimi K2', contextWindow: 131072 },
-      { id: 'moonshot-v1-32k', name: 'Moonshot v1 (32k)', contextWindow: 32000 },
-      { id: 'moonshot-v1-128k', name: 'Moonshot v1 (128k)', contextWindow: 128000 },
+      { id: 'kimi-k2-turbo-preview', name: 'Kimi K2 Turbo', contextWindow: 131072 },
+      { id: 'moonshot-v1-128k', name: 'Moonshot v1（128k）', contextWindow: 128000 },
     ],
     docsUrl: 'https://platform.moonshot.cn/console/api-keys',
+    website: 'https://platform.moonshot.cn',
   },
   {
     id: 'zhipu',
     displayName: '智谱 GLM',
     label: 'ZP',
+    category: 'cn',
+    brand: '#2f56d9',
     baseURL: 'https://open.bigmodel.cn/api/paas/v4',
     apiKeyEnv: 'ZHIPU_API_KEY',
-    defaultModel: 'glm-4-plus',
+    defaultModel: 'glm-4.5',
     models: [
+      { id: 'glm-4.5', name: 'GLM-4.5', contextWindow: 128000 },
+      { id: 'glm-4.5-air', name: 'GLM-4.5 Air', contextWindow: 128000 },
       { id: 'glm-4-plus', name: 'GLM-4 Plus', contextWindow: 128000 },
-      { id: 'glm-4-air', name: 'GLM-4 Air', contextWindow: 128000 },
-      { id: 'glm-4-flash', name: 'GLM-4 Flash', contextWindow: 128000 },
+      { id: 'glm-4-flash', name: 'GLM-4 Flash（免费）', contextWindow: 128000 },
     ],
     docsUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+    website: 'https://bigmodel.cn',
   },
+  {
+    id: 'doubao',
+    displayName: '火山方舟 豆包',
+    label: 'DB',
+    category: 'cn',
+    brand: '#1f6ff0',
+    baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
+    apiKeyEnv: 'ARK_API_KEY',
+    defaultModel: 'doubao-seed-1-6-250615',
+    models: [
+      { id: 'doubao-seed-1-6-250615', name: 'Doubao Seed 1.6', contextWindow: 256000 },
+      { id: 'doubao-1-5-pro-32k-250115', name: 'Doubao 1.5 Pro', contextWindow: 32000 },
+      { id: 'doubao-1-5-lite-32k-250115', name: 'Doubao 1.5 Lite', contextWindow: 32000 },
+    ],
+    docsUrl: 'https://console.volcengine.com/ark',
+    website: 'https://www.volcengine.com/product/doubao',
+    note: '字节系；新用户每模型有免费额度',
+  },
+  {
+    id: 'minimax',
+    displayName: 'MiniMax',
+    label: 'MX',
+    category: 'cn',
+    brand: '#e0425f',
+    baseURL: 'https://api.minimaxi.com/v1',
+    apiKeyEnv: 'MINIMAX_API_KEY',
+    defaultModel: 'MiniMax-M1',
+    models: [
+      { id: 'MiniMax-M1', name: 'MiniMax M1', contextWindow: 1000000 },
+      { id: 'MiniMax-Text-01', name: 'MiniMax Text 01', contextWindow: 1000000 },
+      { id: 'abab6.5s-chat', name: 'abab 6.5s', contextWindow: 245760 },
+    ],
+    docsUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
+    website: 'https://www.minimaxi.com',
+  },
+  {
+    id: 'hunyuan',
+    displayName: '腾讯混元',
+    label: 'HY',
+    category: 'cn',
+    brand: '#1a52c4',
+    baseURL: 'https://api.hunyuan.cloud.tencent.com/v1',
+    apiKeyEnv: 'HUNYUAN_API_KEY',
+    defaultModel: 'hunyuan-turbos-latest',
+    models: [
+      { id: 'hunyuan-turbos-latest', name: 'Hunyuan Turbos', contextWindow: 28000 },
+      { id: 'hunyuan-t1-latest', name: 'Hunyuan T1（推理）', contextWindow: 28000 },
+      { id: 'hunyuan-standard', name: 'Hunyuan Standard', contextWindow: 28000 },
+    ],
+    docsUrl: 'https://console.cloud.tencent.com/hunyuan/api-key',
+    website: 'https://cloud.tencent.com/product/hunyuan',
+  },
+  {
+    id: 'baichuan',
+    displayName: '百川智能',
+    label: 'BC',
+    category: 'cn',
+    brand: '#e5623a',
+    baseURL: 'https://api.baichuan-ai.com/v1',
+    apiKeyEnv: 'BAICHUAN_API_KEY',
+    defaultModel: 'Baichuan4-Turbo',
+    models: [
+      { id: 'Baichuan4-Turbo', name: 'Baichuan4 Turbo', contextWindow: 32768 },
+      { id: 'Baichuan4', name: 'Baichuan4', contextWindow: 32768 },
+      { id: 'Baichuan4-Air', name: 'Baichuan4 Air', contextWindow: 32768 },
+    ],
+    docsUrl: 'https://platform.baichuan-ai.com/console/apikey',
+    website: 'https://www.baichuan-ai.com',
+  },
+  {
+    id: 'stepfun',
+    displayName: '阶跃星辰',
+    label: 'SF',
+    category: 'cn',
+    brand: '#dd4a41',
+    baseURL: 'https://api.stepfun.com/v1',
+    apiKeyEnv: 'STEPFUN_API_KEY',
+    defaultModel: 'step-2-16k',
+    models: [
+      { id: 'step-2-16k', name: 'Step-2 16k', contextWindow: 16384 },
+      { id: 'step-2-mini', name: 'Step-2 Mini', contextWindow: 8192 },
+      { id: 'step-1v-8k', name: 'Step-1V（视觉）', contextWindow: 8192 },
+    ],
+    docsUrl: 'https://platform.stepfun.com/interface-key',
+    website: 'https://www.stepfun.com',
+  },
+  {
+    id: 'lingyi',
+    displayName: '零一万物 Yi',
+    label: 'YI',
+    category: 'cn',
+    brand: '#2c3138',
+    baseURL: 'https://api.lingyiwanwu.com/v1',
+    apiKeyEnv: 'LINGYI_API_KEY',
+    defaultModel: 'yi-lightning',
+    models: [
+      { id: 'yi-lightning', name: 'Yi Lightning', contextWindow: 16384 },
+      { id: 'yi-large', name: 'Yi Large', contextWindow: 32768 },
+      { id: 'yi-medium', name: 'Yi Medium', contextWindow: 16384 },
+    ],
+    docsUrl: 'https://platform.lingyiwanwu.com/apikeys',
+    website: 'https://www.lingyiwanwu.com',
+  },
+  {
+    id: 'baidu',
+    displayName: '百度千帆',
+    label: 'QF',
+    category: 'cn',
+    brand: '#2736c4',
+    baseURL: 'https://qianfan.baidubce.com/v2',
+    apiKeyEnv: 'QIANFAN_API_KEY',
+    defaultModel: 'ernie-4.5-turbo-128k',
+    models: [
+      { id: 'ernie-4.5-turbo-128k', name: 'ERNIE 4.5 Turbo', contextWindow: 128000 },
+      { id: 'ernie-4.0-8k-latest', name: 'ERNIE 4.0', contextWindow: 8000 },
+      { id: 'deepseek-v3', name: 'DeepSeek V3（千帆托管）', contextWindow: 64000 },
+    ],
+    docsUrl: 'https://console.bce.baidu.com/iam/#/iam/apikey/list',
+    website: 'https://cloud.baidu.com/product/wentinxingchen',
+  },
+  {
+    id: 'spark',
+    displayName: '讯飞星火',
+    label: 'SP',
+    category: 'cn',
+    brand: '#1266d8',
+    baseURL: 'https://spark-api-open.xf-yun.com/v1',
+    apiKeyEnv: 'SPARK_API_KEY',
+    defaultModel: '4.0Ultra',
+    models: [
+      { id: '4.0Ultra', name: '星火 4.0 Ultra', contextWindow: 8000 },
+      { id: 'generalv3.5', name: '星火 V3.5', contextWindow: 8000 },
+      { id: 'generalv3', name: '星火 V3', contextWindow: 8000 },
+    ],
+    docsUrl: 'https://console.xfyun.cn/services/bm4',
+    website: 'https://xinghuo.xfyun.cn',
+  },
+  {
+    id: 'modelscope',
+    displayName: '魔搭 ModelScope',
+    label: 'MS',
+    category: 'cn',
+    brand: '#6d4ae0',
+    baseURL: 'https://api-inference.modelscope.cn/v1',
+    apiKeyEnv: 'MODELSCOPE_API_KEY',
+    defaultModel: 'deepseek-ai/DeepSeek-V3',
+    models: [
+      { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3', contextWindow: 64000 },
+      { id: 'Qwen/Qwen2.5-72B-Instruct', name: 'Qwen2.5 72B', contextWindow: 32768 },
+      { id: 'ZhipuAI/glm-4-9b-chat', name: 'GLM-4 9B（免费）', contextWindow: 128000 },
+    ],
+    docsUrl: 'https://modelscope.cn/my/myaccesstoken',
+    website: 'https://modelscope.cn',
+    note: '阿里达摩院开源社区，多数开源模型免费推理额度',
+  },
+  {
+    id: 'gitee',
+    displayName: 'Gitee AI',
+    label: 'GT',
+    category: 'cn',
+    brand: '#c3272b',
+    baseURL: 'https://ai.gitee.com/v1',
+    apiKeyEnv: 'GITEE_API_KEY',
+    defaultModel: 'DeepSeek-R1-Distill-Qwen-32B',
+    models: [
+      { id: 'DeepSeek-R1-Distill-Qwen-32B', name: 'DeepSeek R1 蒸馏 32B', contextWindow: 32768 },
+      { id: 'Qwen2.5-72B-Instruct', name: 'Qwen2.5 72B', contextWindow: 32768 },
+      { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3', contextWindow: 64000 },
+    ],
+    docsUrl: 'https://ai.gitee.com/dashboard/settings/tokens',
+    website: 'https://ai.gitee.com',
+    note: '开源中国出品，大量模型免费调用',
+  },
+  // ———— 聚合网关 ————
   {
     id: 'openrouter',
     displayName: 'OpenRouter',
     label: 'OR',
+    category: 'aggregator',
+    brand: '#6165d8',
     baseURL: 'https://openrouter.ai/api/v1',
     apiKeyEnv: 'OPENROUTER_API_KEY',
     defaultModel: 'deepseek/deepseek-chat',
     models: [
-      { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', contextWindow: 200000 },
+      { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', contextWindow: 1000000 },
       { id: 'openai/gpt-4o-mini', name: 'GPT-4o mini', contextWindow: 128000 },
       { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3', contextWindow: 64000 },
       { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', contextWindow: 1048576 },
+      { id: 'qwen/qwen3-coder', name: 'Qwen3 Coder', contextWindow: 262144 },
     ],
     docsUrl: 'https://openrouter.ai/keys',
-    note: '一个 Key 聚合全主流模型',
+    website: 'https://openrouter.ai',
+    note: '一个 Key 聚合全主流模型（含免费款 :free）',
   },
   {
     id: 'siliconflow',
-    displayName: 'SiliconFlow 硅基流动',
-    label: 'SF',
+    displayName: '硅基流动 SiliconFlow',
+    label: 'SI',
+    category: 'aggregator',
+    brand: '#2749d0',
     baseURL: 'https://api.siliconflow.cn/v1',
     apiKeyEnv: 'SILICONFLOW_API_KEY',
     defaultModel: 'deepseek-ai/DeepSeek-V3',
     models: [
       { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek V3', contextWindow: 64000 },
-      { id: 'Qwen/Qwen3-235B-A22B-Instruct', name: 'Qwen3 235B', contextWindow: 32768 },
+      { id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek R1', contextWindow: 64000 },
+      { id: 'Qwen/Qwen3-235B-A22B-Instruct', name: 'Qwen3 235B A22B', contextWindow: 32768 },
+      { id: 'THUDM/GLM-4-9B-0414-Chat', name: 'GLM-4 9B（免费）', contextWindow: 128000 },
     ],
     docsUrl: 'https://cloud.siliconflow.cn/account/ak',
+    website: 'https://siliconflow.cn',
+    note: '聚合国内主流开源模型，注册送额度',
+  },
+  // ———— 本地推理 ————
+  {
+    id: 'ollama',
+    displayName: 'Ollama（本地）',
+    label: 'OL',
+    category: 'local',
+    brand: '#2b2b2e',
+    baseURL: 'http://localhost:11434/v1',
+    apiKeyEnv: 'OLLAMA_API_KEY',
+    defaultModel: '',
+    models: [],
+    docsUrl: 'https://ollama.com',
+    website: 'https://ollama.com',
+    note: '本机运行 Ollama 后可用；API Key 随意填（如 ollama）。模型列表自动检测',
   },
   {
+    id: 'lmstudio',
+    displayName: 'LM Studio（本地）',
+    label: 'LM',
+    category: 'local',
+    brand: '#0f6f6b',
+    baseURL: 'http://localhost:1234/v1',
+    apiKeyEnv: 'LMSTUDIO_API_KEY',
+    defaultModel: '',
+    models: [],
+    docsUrl: 'https://lmstudio.ai',
+    website: 'https://lmstudio.ai',
+    note: '本地桌面版；API Key 随意填。模型列表自动检测',
+  },
+  // ———— 自定义 ————
+  {
     id: 'custom',
-    displayName: '自定义 OpenAI 兼容端点',
+    displayName: '自定义兼容端点',
     label: '⌘',
+    category: 'custom',
+    brand: '#6f6f76',
     baseURL: '',
     apiKeyEnv: 'CUSTOM_LLM_API_KEY',
     defaultModel: '',
     models: [],
     docsUrl: '',
+    website: '',
     note: '任意兼容 /chat/completions 的网关（vLLM / one-api / 内网代理等）',
   },
 ]
@@ -201,10 +667,20 @@ export function getProviderProfile(id: string): ProviderProfile | undefined {
 
 // ———— 凭据存储（文件落盘 + mtime 失效缓存） ————
 
+/** /models 探测到的模型条目 */
+export interface DiscoveredModel {
+  id: string
+  ownedBy?: string
+  contextLength?: number
+  kind?: 'chat' | 'embedding' | 'image' | 'audio' | 'video' | 'other'
+}
+
 export interface ProviderConfig {
   apiKey?: string
   baseURL?: string
   defaultModel?: string
+  /** 最近一次 /models 探测结果（前端合并目录展示） */
+  discoveredModels?: DiscoveredModel[]
 }
 
 interface StoreShape {
@@ -295,6 +771,7 @@ export function setProviderConfig(id: string, patch: ProviderConfig): boolean {
     apiKey: patch.apiKey === undefined ? prev.apiKey : patch.apiKey.trim() || undefined,
     baseURL: (patch.baseURL ?? prev.baseURL)?.trim() || undefined,
     defaultModel: (patch.defaultModel ?? prev.defaultModel)?.trim() || undefined,
+    discoveredModels: patch.discoveredModels === undefined ? prev.discoveredModels : patch.discoveredModels,
   }
   saveStore({ ...store, configs: { ...store.configs, [id]: next } })
   return true
@@ -312,6 +789,16 @@ export function deleteProviderConfig(id: string): boolean {
 
 // ———— 供应商状态（供 GET 返回；Key 掩码，永不回明文） ————
 
+export interface AvailableModel {
+  id: string
+  name: string
+  contextWindow?: number
+  ownedBy?: string
+  kind?: string
+  /** 来源：catalog 目录静态 | probe /models 探测 */
+  source: 'catalog' | 'probe'
+}
+
 export interface ProviderStatus extends ProviderProfile {
   hasApiKey: boolean
   hasBaseURLOverride: boolean
@@ -319,6 +806,31 @@ export interface ProviderStatus extends ProviderProfile {
   isDefault: boolean
   maskedKey: string | null
   envKeySource: boolean
+  /** 目录模型 + 探测模型（去重合并，探测优先） */
+  availableModels: AvailableModel[]
+}
+
+/** 目录 + 探测合并（同 id 探测版优先，保留目录命名） */
+function mergeAvailableModels(profile: ProviderProfile, discovered?: DiscoveredModel[]): AvailableModel[] {
+  const out: AvailableModel[] = profile.models.map(m => ({
+    id: m.id, name: m.name, contextWindow: m.contextWindow, source: 'catalog',
+  }))
+  if (!discovered?.length) return out
+  const seen = new Set(out.map(m => m.id))
+  for (const d of discovered) {
+    if (!d.id) continue
+    if (seen.has(d.id)) continue
+    seen.add(d.id)
+    out.push({
+      id: d.id,
+      name: d.id,
+      contextWindow: d.contextLength,
+      ownedBy: d.ownedBy,
+      kind: d.kind,
+      source: 'probe',
+    })
+  }
+  return out
 }
 
 export function listProviderStatus(): ProviderStatus[] {
@@ -335,8 +847,59 @@ export function listProviderStatus(): ProviderStatus[] {
       isDefault: store.default === p.id,
       maskedKey: key ? `${key.slice(0, 4)}…${key.slice(-4)}` : null,
       envKeySource: envKey,
+      availableModels: mergeAvailableModels(p, conf?.discoveredModels),
     }
   })
+}
+
+// ———— /models 探测规范化（供 API 路由使用） ————
+
+/** 按模型 id 粗分用途（前端默认只显示 chat 类） */
+export function classifyModelKind(id: string): DiscoveredModel['kind'] {
+  const s = id.toLowerCase()
+  if (/embed|bge-|gte-|jina-|rerank|retriev|conan|text-embedding/.test(s)) return 'embedding'
+  if (/dall-e|image|flux|sdxl|stable-diff|cogview|wanx|seedream|ideogram|recraft/.test(s)) return 'image'
+  if (/tts|whisper|audio|speech|cosyvoice|f5-tts|voice|speech/.test(s)) return 'audio'
+  if (/video|cogvideo|wan2|vidu|kling|seaweed|hailuo|ltx|animatediff/.test(s)) return 'video'
+  if (/moderation|guard|shield|safety/.test(s)) return 'other'
+  return 'chat'
+}
+
+/** 解析各家 /models 响应 → 统一 DiscoveredModel[]（chat 优先、字母序） */
+export function normalizeModelsResponse(raw: unknown): DiscoveredModel[] {
+  const out: DiscoveredModel[] = []
+  const push = (id: unknown, ownedBy?: unknown, ctx?: unknown) => {
+    if (typeof id !== 'string' || !id.trim()) return
+    const contextLength = typeof ctx === 'number' && ctx > 0 ? ctx : undefined
+    out.push({
+      id: id.trim(),
+      ownedBy: typeof ownedBy === 'string' && ownedBy ? ownedBy : undefined,
+      contextLength,
+      kind: classifyModelKind(id),
+    })
+  }
+  // 形态 1（OpenAI 标准）：{ object:"list", data:[{ id, owned_by, context_length? }] }
+  // 形态 2（Anthropic）：{ data:[{ type:"model", id, display_name }] }
+  // 形态 3（Ollama tags）：{ models:[{ name }] }
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>
+    const arr = Array.isArray(obj.data) ? obj.data : Array.isArray(obj.models) ? obj.models : Array.isArray(raw) ? raw : null
+    if (arr) {
+      for (const item of arr) {
+        if (typeof item === 'string') { push(item); continue }
+        if (item && typeof item === 'object') {
+          const m = item as Record<string, unknown>
+          push(m.id ?? m.name ?? m.model, m.owned_by ?? m.ownedBy ?? m.owner, m.context_length ?? m.max_model_len ?? m.max_tokens ?? m.contextWindow)
+        }
+      }
+    }
+  }
+  // 去重
+  const seen = new Set<string>()
+  const uniq = out.filter(m => (seen.has(m.id) ? false : (seen.add(m.id), true)))
+  // chat 优先，其次字母序
+  const order: Record<string, number> = { chat: 0, embedding: 1, image: 2, audio: 3, video: 4, other: 5 }
+  return uniq.sort((a, b) => (order[a.kind ?? 'chat'] - order[b.kind ?? 'chat']) || a.id.localeCompare(b.id))
 }
 
 // ———— OpenAI 兼容直连（对话补全；SSE 流式与整段两种形态） ————

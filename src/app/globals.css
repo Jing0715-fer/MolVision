@@ -247,3 +247,22 @@ canvas {
 .agent-panel-in {
   animation: agent-panel-in 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* 供应商设置：右侧详情切换入场（换供应商时 200ms 上浮淡入） */
+@keyframes provider-detail-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.provider-detail-in {
+  animation: provider-detail-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 供应商设置：检测成功计数徽章弹跳 */
+@keyframes probe-pop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  70%  { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.probe-pop {
+  animation: probe-pop 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}

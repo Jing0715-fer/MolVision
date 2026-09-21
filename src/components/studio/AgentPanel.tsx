@@ -459,13 +459,16 @@ export function AgentPanel() {
           <Bot className="h-3.5 w-3.5" />
         </span>
         <span className="text-xs font-semibold">AI 绘图助手</span>
-        {/* 当前供应商徽章：模型名（点击打开设置） */}
+        {/* 当前供应商徽章：品牌色点 + 模型名（点击打开设置） */}
         <button
           onClick={() => setProviderOpen(true)}
           title={provider ? `${provider.displayName}${provider.effectiveModel ? ` · ${provider.effectiveModel}` : ''}（点击配置供应商）` : 'AI 供应商设置'}
           className="hidden min-w-0 items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2 py-px font-mono text-[9px] font-medium text-muted-foreground transition hover:border-border hover:text-foreground sm:flex"
         >
-          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', provider?.id === 'zai' ? 'bg-emerald-500' : 'bg-primary')} />
+          <span
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: provider?.brand ?? '#0e9f6e' }}
+          />
           <span className="max-w-24 truncate">{provider?.effectiveModel || provider?.label || 'GLM-4.6'}</span>
           <Settings2 className="h-2.5 w-2.5 shrink-0 opacity-60" />
         </button>

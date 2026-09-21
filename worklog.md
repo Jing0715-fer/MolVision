@@ -1445,3 +1445,57 @@ Stage Summary:
 - 证据链：providers API curl 四操作 ✓ → 设置页 DOM 断言 ✓ → 401 诊断内联 ✓ → 保存/列表/掩码 ✓ → 默认切换→徽章 ✓ → DeepSeek 官方错误体路由实证 ✓ → zai 回归（429 外部）✓ → 暖色像素 ✓ → lint/tsc/errors 全绿
 - 未解决与风险：①内置 zai SDK 持续 429 限流（第 2 天）——zai 分支回归验证受阻，但错误传播链完整+DeepSeek 直连全链路通过，代码路径可信；限流恢复后建议补一轮 zai 对话冒烟 ②VLM 终审同样被 429 阻断（连续 3 轮）③自定义端点(OL)未实测真实网关 ④供应商切换不打断进行中的流式请求（下轮生效——低风险）
 - 下一阶段建议（优先级序）：①限流恢复后补 zai/VLM 双冒烟 ②ray 渲染 outline+SSAO 线稿化 bug（多轮遗留，用户上上轮反馈）③agent 快捷预设面板（出版级/科普/口袋特写一键组合）④hide 按选择掩码隐藏（PyMOL 语义遗留）⑤设置页加「连接状态实时监测」徽章（上次测试时间戳）
+
+---
+Task ID: 6-a
+Agent: frontend-styling-expert
+Task: 供应商设置对话框设计评审与实施改进
+
+Work Log:
+- 读 worklog 尾部（r39 供应商体系交付 + 双栏重构背景）+ 通读 ProviderSettingsDialog.tsx(808 行)/globals.css/AgentPanel 集成点
+- 浏览器实测（1440×900，对话框展开，34 家供应商目录）：getComputedStyle + getBoundingClientRect 逐项核对评审清单——排版标度/chips 几何/操作条按钮高度/monogram ring/滚动条 CSS/过渡时长
+- 像素采样（PIL 读 /tmp 截图）：左栏 muted/25 (248,247,244) vs 右栏 background (251,250,247) + 1px 分界 (232,230,225)——三层微差干净；暗色分界 (41,40,39)、激活 chip 反色 (239,237,232) 与 bg-foreground 计算值精确一致
+- Tab 键实测焦点态：原生 outline:auto + 全局 outline-ring/50 → 569 个 emerald 环像素沿胶囊圆角渲染——键盘焦点可见，无需补 focus ring
+- 【发现 Bug①】视口 640-876px 对话框溢出：sm:w-[860px] + max-w-none/sm:max-w-none 解除默认约束 → 720px 实测 x=-70/right=790 两侧各溢 70px → 修复为 sm:max-w-[calc(100vw-2rem)]
+- 【发现 Bug②】移动端详情区完全不可见：主体容器 flex(row) 下移动端供应商条(shrink-0)按 max-content 撑到 3940px，把 section 挤到 x=3957/w=0 → 修复 flex-col sm:flex-row（纵向堆叠后 flex-wrap+max-h-24+overflow-y-auto 的原设计意图才真正生效）
+- 【缺陷③】底部操作条按钮高度不齐：删除/设为默认 h-7(28px) vs 保存 h-7.5(30px)——POST 假 Key 配置 DeepSeek 实测三按钮 y=711/y2=739 对齐后 DELETE 清理复原
+- 【缺陷④】字号脱离 9/10/11/13 标度：左栏隐私脚注 9.5px→10px、note 说明框 10.5px→11px、模型检索输入 14px(text-sm 默认)→text-xs 12px（输入字号大于结果项的倒置层级）
+- 【缺陷⑤】顶栏默认供应商胶囊 21px vs 刷新/关闭图标钮 24px → 胶囊改 h-6 统一右缘 24px 节奏
+- 顺手清理：combobox 徽章渲染条件冗余子句 probe.status !== 'loading'
+- 验证：1440 对话框 860px 无未含纳溢出（全元素 scrollWidth/clientWidth 扫描，仅 sr-only 预期裁剪+左列表正常滚动容器）；720px → 688px 恰好 100vw-2rem；390px → 358px 且 section 可见、横向溢出仅剩顶栏 truncate span（预期省略号行为）；comb popover 宽度=触发器 586px、输入/条目/分组标题统一 12px；bun run lint 退出码 0；agent-browser errors 无新增
+
+Stage Summary:
+- 实施的改进（ProviderSettingsDialog.tsx 共 7 处 className 级修改，零逻辑改动）：
+  ① 视口自适应：max-w-none 双解除 → sm:max-w-[calc(100vw-2rem)]（640-876px 视口从两侧溢出 70px 修复为恰好收边）
+  ② 移动端布局：主体容器加 flex-col sm:flex-row（修复详情区被 3940px 供应商条挤出视口、w=0 不可见的致命布局 bug）
+  ③ 操作条三按钮统一 h-7=28px（实测 y/y2 完全对齐）
+  ④ 字号回归 9/10/11/12/13/14 标度：脚注 10px、note 11px、检索输入 12px
+  ⑤ 顶栏右缘控件统一 24px 节奏（默认胶囊 h-6）
+  ⑥ combobox 徽章条件去冗余
+- 评审确认「已足够好、未为改而改」的项：左栏分类 chips 固定 240px 侧栏下实测 196/219px 永不换行（无高度跳动场景）；详情头部 badge 行 flex-wrap 实测单行充裕（Z.ai GLM+内置+默认≈150px vs 586px 可用）；monogram 24/32px+ring-black/10(浅)/white/10(暗) 克制得当（品牌色仅 monogram+选中条点缀）；左/右/底三层 muted/25-background-muted/25 呼应关系干净；mol-scroll 7px 圆角 30% 透明度 thumb 样式完备（沙箱 hide-scrollbars 无法像素验证，CSS 审查通过）；过渡 100-320ms 区间一致；暗色模式暖炭系+反色激活 chip+ring 对比度全部达标；键盘焦点原生 auto ring 沿圆角渲染可见
+- 验证结果：三视口(1440/720/390)溢出扫描 0 未含纳溢出、操作条三按钮几何对齐实证、lint 0 错 0 警、浏览器 errors 零新增、DeepSeek 假 Key 测试后已 DELETE 复原（目录回到 34 家/已配置 1=zai）
+- 遗留：①左栏搜索框边缘(301px)与列表内容(307px)存在 6px 光学错位——有意为之的边框/内容权重补偿，未动（无 VLM 背书下不动主观光学判断）②移动端顶栏在 390px 略挤（标题+meta+胶囊+两图标钮收缩换行，未破版）③combobox SearchIcon 16px 在 36px 行内偏大 1-2px——影响极微未动
+
+---
+Task ID: 6
+Agent: main
+Task: 供应商体系扩容 + API Key 自动检测模型 + 供应商设置页完全重构（用户需求：缺很多供应商/缺自动检测/整体 UI 颠覆重设计）
+
+Work Log:
+- 重写 src/lib/molecular/agent/providers.ts 目录：11 家 → 34 家（builtin 1 + global 14 + cn 14 + aggregator 2 + local 2 + custom 1），新增字段 category/brand(品牌色 hex)/website；ProviderConfig 增 discoveredModels 持久化字段；新增 normalizeModelsResponse（OpenAI data[]/Anthropic/Ollama tags 三形态归一 + classifyModelKind 按 id 粗分 chat/embedding/image/audio/video）+ mergeAvailableModels（目录+探测去重合并进 GET 状态）
+- 新建 GET 探测路由 /api/agent/providers/models：POST { providerId, apiKey?, baseURL? } 支持临时凭据不落盘（输入 Key 即测）→ 10s 超时 fetch {baseURL}/models → 401/403=Key 错、404=连通无列表、HTML=URL 错；删除旧 /test 路由（功能被吸收）
+- 主路由 POST 支持 discoveredModels（上限 300 条/条目字段白名单清洗）；listProviderStatus 返回 availableModels 合并列表
+- 完全重写 ProviderSettingsDialog.tsx（640→~800 行）：双栏工作台布局——左栏 240px 供应商目录（搜索框按名称/标签/模型 id 过滤 + 全部/国际/国内/聚合/本地分类 chips + 分组列表 + 品牌色 monogram + 已配置绿点 + 默认星标 + 底部隐私脚注），右栏详情（品牌头部 → API Key 输入 → 模型 Command 检索选择器 → Base URL 高级项 → note 说明 → 操作条删除/设为默认/保存）；移动端 flex-col 堆叠 + 横向供应商 chip 条
+- 自动检测交互：Key 输入 blur/paste(500ms 防抖)/回车/手动按钮 → /models 探测；已配置供应商进入详情即静默探测（存储 Key）；成功 → 「已连通 · 检测到 N 个模型」+ combobox 内按用途分组（对话模型/向量检索/图像/语音）+ 上下文窗口徽章 + 检测计数 pop 徽章；失败 → 内联错误 + 重试；模型选择器支持搜索词直接作为自定义 ID（私有部署场景）
+- AgentPanel 供应商徽章改用品牌色圆点（provider.brand）
+- 新增 CSS：provider-detail-in（换供应商 200ms 上浮淡入）/ probe-pop（计数徽章弹跳）
+- QA：agent-browser 全流程实测——搜索过滤（"deepseek" 命中 11 家托管该模型的供应商）、分类过滤（国内 14 家）、DeepSeek 假 Key → 401 认证失败内联反馈 ✓；建 mini-services/mock-llm（3999 端口 OpenAI 兼容 mock）端到端验证：custom + 127.0.0.1:3999 + 假 Key → 检测 6 模型（3 chat + embedding/image/audio 各 1，context_length 正确映射 32k/64k/128k）→ combobox 分组展示 → 选 mock-ultra-128k → 保存 → .molvision/agent-providers.json 落盘 apiKey/baseURL/defaultModel/discoveredModels 全字段 ✓ → 设为默认（顶栏胶囊/星标即时切换）→ DELETE 复原
+- 视口三档回归（1440/720/390）+ 暗色截图 + 主应用回归（canvas 正常、errors 零新增）+ lint 0 错 0 警
+- 委派 Task 6-a frontend-styling-expert 设计评审：修复 2 个布局 bug（640-876px 视口对话框双侧溢出 70px、移动端详情区被挤出 w=0 不可见）+ 4 项细节统一（按钮高度/字号标度/顶栏节奏/条件冗余），三视口溢出扫描 0 未含纳
+
+Stage Summary:
+- 交付三项用户诉求：①34 家供应商（国际 14/国内 14/聚合 2/本地 2/自定义 1）带品牌色 monogram 与分类目录 ②API Key 输入后自动探测 /models 的真实可用模型列表（blur/paste/回车/手动四触发路径，临时凭据不落盘，检测结果持久化，Command 检索选择器按用途分组 + 上下文窗口 + 自定义 ID 兜底）③设置页完全重构为双栏工作台（Linear/Raycast 质感：品牌色仅点缀、等宽技术值、大写字距微标签、100-320ms 过渡）
+- 技术要点：探测端点支持凭据覆盖（不落盘）使"输入即测"成立；discoveredModels 存储合并使重开设置页直接显示已检测列表；normalizeModelsResponse 兼容三种 /models 响应形态
+- 验证证据链：mock-llm 端到端（检测→选择→保存→落盘→默认切换→删除复原）+ DeepSeek 401 + DOM 结构断言（34 项/分组/徽章）+ 像素采样（左栏 248,247,244 / 右栏 251,250,247 / 品牌色块命中）+ 三视口溢出扫描 + lint 全绿
+- 未解决与风险：①z-ai vision 持续 429（连续 5 轮 2-5 分钟退避重试失败，账号级配额耗尽）——本轮设计终审以 DOM/像素/子代理评审三重替代，限流恢复后建议补 VLM 终审 ②34 家 baseURL/model id 为目录快照，个别供应商（doubao/minimax/baidu）可能随官方迭代漂移——自动检测机制本身即是兜底 ③搜索过滤按模型 id 会命中托管该模型的所有聚合商（设计如此，非 bug）
+- 下一阶段建议：①限流恢复后 zai/VLM 双冒烟 ②ray+outline/SSAO 线稿化 bug（多轮遗留）③供应商连接状态实时徽章（上次探测时间戳）④本地 Ollama 探测真实实例验证
