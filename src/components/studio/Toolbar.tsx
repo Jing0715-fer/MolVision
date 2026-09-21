@@ -175,7 +175,7 @@ export function Toolbar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => setUi({ loadOpen: true })}
-              className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground shadow-sm transition hover:opacity-90 sm:px-3"
+              className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground mol-btn-primary transition hover:opacity-90 sm:px-3"
             >
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
               <span className="hidden sm:inline">加载结构</span>

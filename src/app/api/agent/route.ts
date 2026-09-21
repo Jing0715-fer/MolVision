@@ -1,9 +1,11 @@
 // AI 助手后端：自然语言 → MolVision 命令（LLM 决策 + 严格 JSON 协议）
 // 两种模式：① 对话决策（文本）② 视觉自查（截图 → VLM 审视 → 修正命令）
 // 命令参考为独立静态文本（不 import 客户端 commands.ts，服务端零 zustand/three 依赖）
+// 供应商可配（设置页）：默认 zai 内置 SDK；其余 OpenAI 兼容端点直连 fetch
 import { NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
 import type { AgentRequestBody, AgentDecision } from '@/lib/molecular/agent/protocol'
+import { chatCompletionOnce, chatCompletionStream, getDefaultProviderId, type ChatMessage } from '@/lib/molecular/agent/providers'
 
 /** 命令语法速查（对话与视觉自查两份提示词共用——覆盖应用全部功能） */
 const COMMAND_REF = `## 命令速查（全部小写；[sel] 为可选选择表达式，省略时作用于活动结构或当前选择）
@@ -89,6 +91,63 @@ const REVIEW_PROMPT = `你是 MolVision（Web 端 PyMOL 风格分子可视化工
 ${COMMAND_REF}`
 
 interface ZAIMessage { role: 'assistant' | 'user'; content: string }
+
+/**
+ * 供应商无关的补全抽象：内部按当前默认供应商分派
+ * - zai → 内置 SDK（双形态流式/整段）
+ * - 其余 → OpenAI 兼容直连（SSE 流式解析与 SDK 同源 data: 行协议）
+ * 返回值统一为「完整文本」；onDelta 收到增量时透传（流式模式共用）
+ */
+async function completeWithProvider(
+  messages: ZAIMessage[],
+  opts: { onDelta?: (piece: string) => void; signal?: AbortSignal } = {},
+): Promise<string> {
+  const providerId = getDefaultProviderId()
+
+  if (providerId === 'zai') {
+    const zai = await ZAI.create()
+    const raw = await zai.chat.completions.create({ messages, stream: true, thinking: { type: 'disabled' } })
+    if (raw instanceof ReadableStream || (raw && typeof raw.getReader === 'function')) {
+      const reader = (raw as ReadableStream<Uint8Array>).getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      let full = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        // SSE 行协议：空行分隔事件，data: 前缀承载 JSON（与 OpenAI 兼容端点同构）
+        const events = buf.split('\n\n')
+        buf = events.pop() ?? ''
+        for (const ev of events) {
+          for (const line of ev.split('\n')) {
+            if (!line.startsWith('data:')) continue
+            const payload = line.slice(5).trim()
+            if (!payload || payload === '[DONE]') continue
+            try {
+              const j = JSON.parse(payload) as { choices?: { delta?: { content?: string }; message?: { content?: string } }[] }
+              const piece = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ''
+              if (piece) { full += piece; opts.onDelta?.(piece) }
+            } catch { /* 忽略不可解析的分片 */ }
+          }
+        }
+      }
+      return full
+    }
+    // 非流式形态（服务端忽略 stream 参数）：一次性文本，包装为单增量
+    const text = (raw as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content ?? ''
+    if (text) opts.onDelta?.(text)
+    return text
+  }
+
+  // OpenAI 兼容直连：系统提示在首位（SDK 习惯用 assistant 位，直连端点要求 system 位）
+  const converted: ChatMessage[] = messages.map(m => ({ role: m.role, content: m.content }))
+  if (converted.length > 0 && converted[0].role === 'assistant') converted[0].role = 'system'
+  if (opts.onDelta) {
+    return chatCompletionStream(providerId, converted, { onDelta: opts.onDelta, signal: opts.signal })
+  }
+  return chatCompletionOnce(providerId, converted, { signal: opts.signal })
+}
 
 /** 从 LLM 输出提取 JSON（容忍 ```json 围栏与前后杂讯） */
 function extractJson(text: string): { reply?: string; commands?: unknown } | null {
@@ -265,40 +324,10 @@ export async function POST(req: Request) {
         let decision: AgentDecision | null = null
         let lastErr = ''
         try {
-          const zai = await ZAI.create()
           for (let attempt = 0; attempt < 2; attempt++) {
             try {
-              // SDK stream:true 且响应为 event-stream 时返回 ReadableStream，否则返回完整 JSON（双形态）
-              const raw = await zai.chat.completions.create({ messages, stream: true, thinking: { type: 'disabled' } })
-              if (raw instanceof ReadableStream || (raw && typeof raw.getReader === 'function')) {
-                const reader = (raw as ReadableStream<Uint8Array>).getReader()
-                const decoder = new TextDecoder()
-                let buf = ''
-                for (;;) {
-                  const { done, value } = await reader.read()
-                  if (done) break
-                  buf += decoder.decode(value, { stream: true })
-                  // SSE 行协议：空行分隔事件，data: 前缀承载 JSON
-                  const events = buf.split('\n\n')
-                  buf = events.pop() ?? ''
-                  for (const ev of events) {
-                    for (const line of ev.split('\n')) {
-                      if (!line.startsWith('data:')) continue
-                      const payload = line.slice(5).trim()
-                      if (!payload || payload === '[DONE]') continue
-                      try {
-                        const j = JSON.parse(payload) as { choices?: { delta?: { content?: string }; message?: { content?: string } }[] }
-                        const piece = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ''
-                        if (piece) { full += piece; send({ t: 'd', v: piece }) }
-                      } catch { /* 忽略不可解析的分片 */ }
-                    }
-                  }
-                }
-              } else if (raw && typeof raw === 'object') {
-                // 非流式形态（服务端忽略 stream 参数）：一次性文本 + 单条增量
-                const text = (raw as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content ?? ''
-                if (text) { full = text; send({ t: 'd', v: text }) }
-              }
+              // 供应商无关补全（zai SDK / OpenAI 兼容直连统一分派）；增量逐条转发
+              full = await completeWithProvider(messages, { onDelta: piece => send({ t: 'd', v: piece }) })
               decision = sanitizeDecision(extractJson(full))
               if (!decision) {
                 // 降级兜底：全文当 reply + 打捞命令行（可用性优先于严格协议）
@@ -330,17 +359,12 @@ export async function POST(req: Request) {
   }
 
   try {
-    const zai = await ZAI.create()
-    // 瞬时故障重试一次（LLM 服务偶发超时/格式异常）
+    // 瞬时故障重试一次（LLM 服务偶发超时/格式异常）；供应商无关分派
     let decision: AgentDecision | null = null
     let lastErr = ''
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const completion = await zai.chat.completions.create({
-          messages,
-          thinking: { type: 'disabled' },
-        })
-        const text = completion.choices[0]?.message?.content ?? ''
+        const text = await completeWithProvider(messages)
         decision = sanitizeDecision(extractJson(text))
         if (decision) break
         // 降级兜底：LLM 未按 JSON 说话但有实质文本 → 全文当 reply + 打捞命令行（可用性优先于严格协议）

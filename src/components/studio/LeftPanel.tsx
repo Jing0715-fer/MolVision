@@ -135,10 +135,10 @@ export function LeftPanel() {
                   aria-label={p.label}
                   title={p.label}
                   className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-lg transition',
+                    'flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-150',
                     ui.panel === p.key && ui.panelOpen
-                      ? 'bg-primary/15 text-emerald-600 dark:text-emerald-400'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                      ? 'bg-primary/12 text-primary shadow-[inset_0_0_0_1px_rgb(0_0_0/0.04)]'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground active:scale-95',
                   )}
                 >
                   <p.icon className="h-4 w-4" />
@@ -165,7 +165,7 @@ export function LeftPanel() {
               className={cn(
                 'group absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize select-none',
                 'after:absolute after:right-0 after:top-1/2 after:h-10 after:w-[3px] after:-translate-y-1/2 after:rounded-full after:bg-transparent after:transition-colors',
-                'hover:after:bg-emerald-500/60 active:after:bg-emerald-500',
+                'hover:after:bg-primary/60 active:after:bg-primary',
               )}
             />
           </div>

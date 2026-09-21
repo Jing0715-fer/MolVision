@@ -1424,3 +1424,24 @@ Stage Summary:
 - 关键决策：①「单一强调色」原则——primary 承担所有交互态，emerald 仅保留 AI 助手身份识别（Bot 头/发送键/agentOpen），amber 仅保留进行中操作与降级警示；语义色降维成 1.5px 小色点保信息不刷屏 ②坐标轴隐藏判据用 engine.hasContent（与渲染管线同源）而非 UI 层重复维护 ③演示 TourOverlay 保留 6 章节色（引导内容叙事价值）只去渐变
 - 未解决与风险：①VLM 视觉终审因 429 限流未跑成本轮证据链缺口（DOM+像素已覆盖，但「专业感」主观维度无 AI 背书）②agent-browser 无 viewport 命令，390px 移动端未实测（改动全为减法+flex-wrap/overflow 兜底，风险低）③CommandPalette 分类图标仍 5 色（VS Code 补全范式可接受，如需彻底单色可下轮收敛）④LeftPanel/各 Tab 面板内部彩色未深扫（面板多为 muted 基调，如用户仍有 AI 味反馈可继续收敛）
 - 下一阶段建议（优先级序）：① VLM 限流恢复后补跑视觉终审（空态/加载态/移动端三截图）② agent 快捷预设面板（「出版级/科普风格/口袋特写」一键组合——多轮遗留）③ hide 按选择掩码隐藏（PyMOL 语义遗留）④ CommandPalette 图标单色化（可选）⑤ ray 渲染线稿化 bug 仍在排查队列（用户上轮反馈，本轮未动渲染管线）
+
+---
+Task ID: 39
+Agent: main
+Task: 用户双诉求——①AI 助手加 provider 选择与 API Key 配置设置页（参考 github.com/Jing0715-fer/pdb-tracker-web-v5 的 ProvidersPanel 体系）②UI 设计感打磨（r38 中性化后偏朴素）
+
+Work Log:
+- 【参考项目调研】克隆 pdb-tracker-web-v5，精读 ProvidersPanel(660 行)/providers API/test 端点/PROVIDER_CATALOG(17 家供应商)/credentials 文件存储/OpenAICompatAdapter——按 MolVision 规模精简为 11 家 + 单文件存储
+- 【provider 基建 · 4 文件】①src/lib/molecular/agent/providers.ts：PROVIDER_CATALOG（zai 内置 + DeepSeek/OpenAI/Anthropic(特殊 authHeader)/Gemini/Qwen/Kimi/智谱/OpenRouter/SiliconFlow/自定义端点，各含 baseURL/模型表/docsUrl/note）+ 凭据存储（.molvision/agent-providers.json，0600 权限，mtime 失效缓存，env 变量回退）+ resolveApiKey/BaseURL/Model + listProviderStatus（Key 掩码 sk-t…5678 永不回明文）+ chatCompletionOnce/Stream（OpenAI 兼容直连，SSE 解析与 SDK 同构 data: 行协议，Anthropic x-api-key 头支持）②/api/agent/providers/route.ts（GET 列表/POST 保存+setDefault/DELETE，providerId 白名单校验防脏写）③/api/agent/providers/test/route.ts（GET /models 8s 超时；HTML=URL 错/401 403=Key 错/404=端点活着降级成功）④route.ts 改造：completeWithProvider 抽象（zai→SDK 双形态 / 其余→直连；系统提示 assistant 位转 system 位），流式+非流式两分支统一接入，视觉自查分支保持内置 GLM-4.6V 不受供应商切换影响
+- 【ProviderSettingsDialog · 设置页】已配置区（卡片行：短标签徽章+模型+掩码 Key+env 标记，点击设默认，展开编辑/测试/删除）+ 添加区（11 家卡片网格单选→BaseURL 自动填充→模型 datalist 候选→API Key 密码框显隐切换→测试并保存/保存）+ 底部隐私说明（本机存储不回传）；测试结果内联动画反馈（成功 emerald/失败 red，含诊断文案）
+- 【AgentPanel 集成】头部新增：供应商徽章（点击开设置；显示当前模型名+供应商色点：zai=emerald/其他=primary）+ Settings2 齿轮按钮；设置页关闭→置空 provider→effect 重拉→徽章即时反映默认切换
+- 【设计感打磨 · r38 朴素修正】①globals.css 双主题暖色化：浅色背景/边框/卡面带 oklch 0.004-0.008 chroma 85° 琥珀底（纸感），深色背景 0.16 0.005 80°（炭+暖，非蓝黑荧光）；新增 mol-btn-primary（内高光+主色微投影，替代渐变的质感方案）/mol-elevate-lg（对话框级阴影）工具类 ②AgentPanel：消息气泡不对称圆角（user rounded-2xl rounded-br-md + shadow-sm / assistant rounded-bl-md + bg-card/80 + shadow-xs）、欢迎卡 Bot 图标升圆形 primary 底、建议卡 hover 位移动效、忙碌卡同气泡语言、输入区 rounded-xl+底部渐变分层+focus ③Toolbar 主按钮 mol-btn-primary ④LeftPanel 激活 tab bg-primary/12 text-primary+inset ring（去 emerald 残留）、拖拽把手 primary ⑤面板容器 mol-elevate 统一浮层深度体系
+- 【E2E 全链路】①providers API：GET 11 家列表 ✓ POST 保存 fake key ✓ GET 掩码回显 sk-t…5678 ✓ DELETE 清理 ✓ ②设置页 DOM：11 radio 卡片/表单三输入（BaseURL 自动填充/模型 datalist/Key 密码框）✓ ③测试诊断：fake key → 内联「认证失败（HTTP 401）——API Key 无效或无权限」✓ ④保存→已配置区 2 行（模型+掩码 Key 展示）✓ ⑤点击行设默认→Esc 关闭→面板徽章 deepseek-chat ✓ ⑥路由实证：默认切 DeepSeek 后发消息 → toast「AI 助手出错：deepseek HTTP 401：{"error":{"message":"Authentication Fails, Your api key: ****cdef is invalid"…」（DeepSeek 官方错误体+掩码 cdef = 真走了直连端点而非内置 SDK）⑦清理恢复：DELETE deepseek + setDefault zai → 徽章恢复 glm-4.6 ✓ ⑧zai 分支回归：内置 SDK 仍 429 限流（外部因素，与 r38 相同；错误传播链路完整证明代码路径正常）⑨暖色验证：浅色 card rgb(254,254,252) 琥珀底 ✓ 深色 CSS 区 rgb(8,8,8)/(10,10,10) r==b 中性偏暖非蓝黑 ✓ emerald 单点强调 12k px（主按钮+徽章点，非彩色墙）✓ ⑩lint 0 错 0 警/tsc 应用代码 0 错/浏览器 errors 清零
+- 测试方法论：Radix Dialog 不响应合成 window.dispatchEvent(KeyboardEvent)（bubbling 不达 document 层监听）——必须用 agent-browser press Escape 真实按键；textarea 填值后需先 focus 再 Enter（agent-browser press 作用于焦点元素）
+
+Stage Summary:
+- r39 状态：双诉求交付——①AI 供应商设置体系完整落地（11 家目录/文件凭据/测试诊断/默认切换/掩码隐私），agent 后端 completeWithProvider 统一分派（zai SDK ↔ OpenAI 兼容直连无缝切换，流式打字机两种供应商同体验），设置页与面板徽章 UI 闭环 ②设计感系统性提升：暖色纸感双主题（去冷灰塑料感）、气泡不对称圆角+分层阴影、mol-btn-primary 内高光质感、卡片网格选择器、hover 微动效——在 r38 中性纪律内找回层次与温度（emerald 仍为 AI 品牌单点强调）
+- 关键决策：①凭据走服务端文件（.molvision/，0600）而非 localStorage——API Key 永不进浏览器 ②视觉自查固定内置 GLM-4.6V（多数 OpenAI 兼容端点无视觉模型，解耦保证自查永远可用）③默认供应商切换即时生效（无会话缓存，每次请求读存储）④深色背景从 oklch 0.13 提到 0.16——浮层分层余量更大
+- 证据链：providers API curl 四操作 ✓ → 设置页 DOM 断言 ✓ → 401 诊断内联 ✓ → 保存/列表/掩码 ✓ → 默认切换→徽章 ✓ → DeepSeek 官方错误体路由实证 ✓ → zai 回归（429 外部）✓ → 暖色像素 ✓ → lint/tsc/errors 全绿
+- 未解决与风险：①内置 zai SDK 持续 429 限流（第 2 天）——zai 分支回归验证受阻，但错误传播链完整+DeepSeek 直连全链路通过，代码路径可信；限流恢复后建议补一轮 zai 对话冒烟 ②VLM 终审同样被 429 阻断（连续 3 轮）③自定义端点(OL)未实测真实网关 ④供应商切换不打断进行中的流式请求（下轮生效——低风险）
+- 下一阶段建议（优先级序）：①限流恢复后补 zai/VLM 双冒烟 ②ray 渲染 outline+SSAO 线稿化 bug（多轮遗留，用户上上轮反馈）③agent 快捷预设面板（出版级/科普/口袋特写一键组合）④hide 按选择掩码隐藏（PyMOL 语义遗留）⑤设置页加「连接状态实时监测」徽章（上次测试时间戳）

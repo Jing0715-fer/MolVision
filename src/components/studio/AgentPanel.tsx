@@ -6,7 +6,7 @@
 // 修正命令本身还会被再自查一轮（有界双轮：修到效果理想为止，不无限循环）
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Ban, Bot, Check, ChevronDown, Clock, Eye, EyeOff, Loader2, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle,
+  Ban, Bot, Check, ChevronDown, Clock, Eye, EyeOff, Loader2, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
@@ -15,6 +15,7 @@ import { classifyCmd, execAgentCmd, splitCommands } from '@/lib/molecular/agent/
 import {
   AGENT_CHAT_KEY, AGENT_CHAT_MAX, AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentStreamEvent,
 } from '@/lib/molecular/agent/protocol'
+import { ProviderSettingsDialog, type ProviderInfo } from './ProviderSettingsDialog'
 import { cn } from '@/lib/utils'
 
 /** 分类建议（空状态展示——覆盖渲染 / 聚焦 / 分析 / 构象四类工作流） */
@@ -207,10 +208,26 @@ export function AgentPanel() {
   const [phase, setPhase] = useState<BusyPhase>('think')
   const [visualOn, setVisualOn] = useState<boolean>(loadVisualPref)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [providerOpen, setProviderOpen] = useState(false)
+  /** 当前默认供应商（头部徽章 + 设置页保存后刷新） */
+  const [provider, setProvider] = useState<ProviderInfo | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   /** 当前流式请求的中断器（停止生成按钮） */
   const abortRef = useRef<AbortController | null>(null)
+
+  // 面板打开时拉取当前默认供应商（徽章展示模型名；失败静默降级为内置文案）
+  useEffect(() => {
+    if (!open || provider) return
+    void (async () => {
+      try {
+        const res = await fetch('/api/agent/providers')
+        if (!res.ok) return
+        const data = (await res.json()) as { providers: ProviderInfo[] }
+        setProvider(data.providers?.find(p => p.isDefault) ?? data.providers?.[0] ?? null)
+      } catch { /* 静默 */ }
+    })()
+  }, [open, provider])
 
   // 持久化（流式进行中跳过——终值到达时统一落盘，避免逐增量 stringify 开销）
   useEffect(() => {
@@ -432,18 +449,35 @@ export function AgentPanel() {
 
   return (
     <div
-      className="absolute inset-y-3 right-3 z-30 flex w-full flex-col rounded-lg border border-border/80 bg-card/95 shadow-lg backdrop-blur-md sm:w-[356px] agent-panel-in"
+      className="absolute inset-y-3 right-3 z-30 flex w-full flex-col rounded-xl border border-border/70 bg-card/95 mol-elevate backdrop-blur-md sm:w-[356px] agent-panel-in"
       role="complementary"
       aria-label="AI 助手面板"
     >
       {/* 头部 */}
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/70 px-3">
-        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-500/15">
-          <Bot className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/70 bg-gradient-to-b from-muted/40 to-transparent px-3">
+        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Bot className="h-3.5 w-3.5" />
         </span>
         <span className="text-xs font-semibold">AI 绘图助手</span>
-        <span className="hidden rounded-full bg-muted px-1.5 py-px text-[9px] text-muted-foreground sm:inline">全功能 · 自动执行</span>
+        {/* 当前供应商徽章：模型名（点击打开设置） */}
+        <button
+          onClick={() => setProviderOpen(true)}
+          title={provider ? `${provider.displayName}${provider.effectiveModel ? ` · ${provider.effectiveModel}` : ''}（点击配置供应商）` : 'AI 供应商设置'}
+          className="hidden min-w-0 items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2 py-px font-mono text-[9px] font-medium text-muted-foreground transition hover:border-border hover:text-foreground sm:flex"
+        >
+          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', provider?.id === 'zai' ? 'bg-emerald-500' : 'bg-primary')} />
+          <span className="max-w-24 truncate">{provider?.effectiveModel || provider?.label || 'GLM-4.6'}</span>
+          <Settings2 className="h-2.5 w-2.5 shrink-0 opacity-60" />
+        </button>
         <div className="ml-auto flex items-center gap-0.5">
+          <button
+            onClick={() => setProviderOpen(true)}
+            aria-label="AI 供应商设置"
+            title="供应商与 API Key 设置"
+            className="flex h-6 w-6 items-center justify-center rounded transition hover:bg-accent hover:text-foreground text-muted-foreground/70"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
           <button
             onClick={toggleVisual}
             aria-label={visualOn ? '关闭视觉自查' : '开启视觉自查'}
@@ -477,11 +511,13 @@ export function AgentPanel() {
       </div>
 
       {/* 消息区 */}
-      <div ref={scrollRef} className="mol-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
+      <div ref={scrollRef} className="mol-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {msgs.length === 0 && !busy && (
-          <div className="space-y-3 pt-2">
-            <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-3 text-center">
-              <Bot className="mx-auto h-6 w-6 text-emerald-500/70" />
+          <div className="space-y-3.5 pt-2">
+            <div className="rounded-xl border border-dashed border-border/70 bg-muted/25 px-3 py-3.5 text-center">
+              <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Bot className="h-4.5 w-4.5" />
+              </span>
               <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                 用自然语言指挥整个工作台——加载、表示、着色、<br />测量、分析、动画，我会翻译成命令自动执行。
               </p>
@@ -498,7 +534,7 @@ export function AgentPanel() {
                   <button
                     key={s}
                     onClick={() => void send(s)}
-                    className="flex w-full items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition hover:border-border hover:bg-accent/60 hover:text-foreground"
+                    className="flex w-full items-center gap-1.5 rounded-lg border border-border/60 bg-card/70 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-all duration-150 hover:border-border hover:bg-accent/60 hover:text-foreground hover:translate-x-0.5"
                   >
                     <Send className="h-3 w-3 shrink-0 text-muted-foreground/60" />
                     <span className="min-w-0 flex-1">{s}</span>
@@ -518,11 +554,11 @@ export function AgentPanel() {
             )}
             <div
               className={cn(
-                'max-w-[92%] rounded-lg px-3 py-2 text-[11.5px] leading-relaxed whitespace-pre-wrap break-words',
+                'max-w-[92%] px-3 py-2 text-[11.5px] leading-relaxed whitespace-pre-wrap break-words',
                 m.role === 'user'
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-sm'
                   : cn(
-                    'border border-border/70 bg-muted/50 text-foreground',
+                    'rounded-2xl rounded-bl-md border border-border/60 bg-card/80 text-foreground shadow-xs',
                     m.kind === 'visual' && 'border-l-2 border-l-emerald-500/70',
                   ),
               )}
@@ -601,7 +637,7 @@ export function AgentPanel() {
         ))}
 
         {busy && (
-          <div className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/50 px-3 py-2">
+          <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-border/60 bg-card/80 px-3 py-2 shadow-xs">
             {phase === 'visual'
               ? <Sparkles className="h-3 w-3 animate-pulse text-emerald-500" />
               : <Loader2 className={cn('h-3 w-3 animate-spin text-emerald-500')} />}
@@ -617,8 +653,8 @@ export function AgentPanel() {
       </div>
 
       {/* 输入区 */}
-      <div className="shrink-0 border-t border-border/70 p-2.5">
-        <div className="flex items-end gap-1.5 rounded-lg border border-border bg-background/80 px-2 py-1.5 transition focus-within:border-primary/60">
+      <div className="shrink-0 border-t border-border/70 bg-gradient-to-b from-transparent to-muted/25 p-2.5">
+        <div className="flex items-end gap-1.5 rounded-xl border border-border bg-background px-2 py-1.5 shadow-xs transition focus-within:border-primary/50">
           <textarea
             ref={taRef}
             value={input}
@@ -656,6 +692,15 @@ export function AgentPanel() {
           {visualOn ? ' · 视觉自查开（Eye 可关）' : ' · 视觉自查关'}
         </p>
       </div>
+
+      {/* 供应商设置页（保存/切换默认后徽章即时刷新） */}
+      <ProviderSettingsDialog
+        open={providerOpen}
+        onOpenChange={o => {
+          setProviderOpen(o)
+          if (!o) setProvider(null) // 关闭时置空 → 上方 effect 重拉最新默认供应商
+        }}
+      />
     </div>
   )
 }
