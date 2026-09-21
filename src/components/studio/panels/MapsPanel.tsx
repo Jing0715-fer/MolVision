@@ -85,7 +85,7 @@ export function MapsPanel() {
       <SectionTitle>电子密度图</SectionTitle>
       <div className="space-y-2.5 px-3">
         {/* 图类型选择 */}
-        <div className="flex h-8 items-center rounded-md border border-border/70 bg-background/60 p-0.5">
+        <div className="flex h-8 items-center rounded-md border border-border bg-background p-0.5">
           {KINDS.map(k => (
             <button
               key={k.key}
@@ -98,7 +98,7 @@ export function MapsPanel() {
               className={cn(
                 'flex h-7 flex-1 items-center justify-center gap-1 rounded font-mono text-[11px] font-semibold transition',
                 kind === k.key
-                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
             >
@@ -115,13 +115,13 @@ export function MapsPanel() {
             onChange={e => setIdInput(e.target.value.toUpperCase())}
             onKeyDown={e => { if (e.key === 'Enter') doFetch(idInput, kind) }}
             placeholder="PDB 编号（如 3EKJ）"
-            className="h-8 min-w-0 flex-1 rounded-md border border-border/70 bg-background/60 px-2 font-mono text-xs uppercase tracking-wider outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
+            className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 font-mono text-xs uppercase tracking-wider outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
             aria-label="PDB 编号"
           />
           <button
             onClick={() => doFetch(idInput, kind)}
             disabled={computing || (!idInput && !activePdbId)}
-            className="flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground shadow-sm transition hover:opacity-90 disabled:opacity-40"
+            className="mol-btn-primary flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
           >
             {computing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
             <span className="hidden sm:inline">合成</span>
@@ -131,14 +131,14 @@ export function MapsPanel() {
           <button
             onClick={() => doFetch(activePdbId, kind)}
             disabled={computing}
-            className="w-full rounded-md border border-dashed border-border/80 bg-muted/40 px-2 py-1.5 text-left text-[11px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:opacity-50"
+            className="w-full rounded-md border border-dashed border-border bg-muted/50 px-2 py-1.5 text-left text-[11px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:opacity-50"
           >
             用当前结构 <span className="font-mono font-semibold text-foreground">{activePdbId}</span> 的结构因子合成 {kind === 'fofc' ? 'Fo−Fc 差图' : '2Fo−Fc 图'}
           </button>
         )}
         <button
           onClick={() => fileRef.current?.click()}
-          className="w-full rounded-md border border-border/70 bg-background/60 px-2 py-1.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           <Upload className="mr-1.5 inline h-3.5 w-3.5" />
           导入 CCP4 / MRC 地图文件…
@@ -151,7 +151,7 @@ export function MapsPanel() {
           onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
         />
         {computing && (
-          <div className="flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50/70 px-2.5 py-2 text-[11px] text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
+          <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-2.5 py-2 text-[11px] text-amber-600 dark:text-amber-400">
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
             <span className="truncate">{computeMsg || '计算中…'}</span>
           </div>
@@ -160,7 +160,7 @@ export function MapsPanel() {
           <PanelHint>
             从 RCSB 沉积的结构因子（SF mmCIF）实时计算电子密度：原子模型提供相位，观测振幅提供强度，
             3D FFT 合成后以等值面/网格叠加在结构上（对标 PyMOL isomesh / ChimeraX volume）。
-            <span className="mt-1 block">2Fo−Fc 看骨架走向；<span className="font-medium text-emerald-600 dark:text-emerald-400">Fo−Fc 差图</span>诊断模型问题——绿峰=密度有而模型缺（该建而未建），红峰=模型有而密度无（放错位置）。计算在 Web Worker 中进行，页面不卡顿。</span>
+            <span className="mt-1 block">2Fo−Fc 看骨架走向；<span className="font-medium text-primary">Fo−Fc 差图</span>诊断模型问题——绿峰=密度有而模型缺（该建而未建），红峰=模型有而密度无（放错位置）。计算在 Web Worker 中进行，页面不卡顿。</span>
             需要结构有沉积结构因子（3EKJ / 1AKI / 5NIT 等均可）。
           </PanelHint>
         )}
@@ -193,10 +193,10 @@ export function MapsPanel() {
           <div className="space-y-3 px-3">
             {/* 差图图例（正负独立 σ 时显示 +x/−y） */}
             {info.difference && (
-              <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[10px]">
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[10px]">
                 <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: info.color }} />正峰 · 模型缺失</span>
                 <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: info.negColor }} />负峰 · 模型多余</span>
-                <span className="ml-auto font-mono text-muted-foreground">
+                <span className="ml-auto font-mono tabular-nums text-muted-foreground">
                   {Math.abs(info.iso - info.isoNeg) < 1e-6
                     ? `±${info.iso.toFixed(1)}σ`
                     : `+${info.iso.toFixed(1)}/−${info.isoNeg.toFixed(1)}σ`}
@@ -205,7 +205,7 @@ export function MapsPanel() {
             )}
 
             {/* 信息卡 */}
-            <div className="grid grid-cols-2 gap-1 rounded-md border border-border/60 bg-muted/30 p-2 text-[10px] leading-relaxed">
+            <div className="grid grid-cols-2 gap-1 rounded-md border border-border bg-muted/40 p-2 text-[10px] tabular-nums leading-relaxed">
               <div className="text-muted-foreground">来源</div>
               <div className="text-right font-medium">{info.source === 'sf' ? (info.difference ? '结构因子 Fo−Fc' : '结构因子 2Fo−Fc') : 'CCP4 文件'}</div>
               <div className="text-muted-foreground">网格</div>
@@ -229,7 +229,7 @@ export function MapsPanel() {
                       <span className="h-2 w-2 rounded-full" style={{ background: info.color }} />
                       正峰 σ（模型缺失）
                     </span>
-                    <span className="font-mono font-semibold" style={{ color: info.color }}>+{(posIso.drag ?? info.iso).toFixed(2)}</span>
+                    <span className="font-mono font-semibold tabular-nums" style={{ color: info.color }}>+{(posIso.drag ?? info.iso).toFixed(2)}</span>
                   </div>
                   <Slider
                     value={[posIso.drag ?? info.iso]}
@@ -244,7 +244,7 @@ export function MapsPanel() {
                       <span className="h-2 w-2 rounded-full" style={{ background: info.negColor }} />
                       负峰 σ（模型多余）
                     </span>
-                    <span className="font-mono font-semibold" style={{ color: info.negColor }}>−{(negIso.drag ?? info.isoNeg).toFixed(2)}</span>
+                    <span className="font-mono font-semibold tabular-nums" style={{ color: info.negColor }}>−{(negIso.drag ?? info.isoNeg).toFixed(2)}</span>
                   </div>
                   <Slider
                     value={[negIso.drag ?? info.isoNeg]}
@@ -264,7 +264,7 @@ export function MapsPanel() {
               <div>
                 <div className="mb-1.5 flex items-center justify-between text-[11px]">
                   <span className="text-muted-foreground">等值面级别（σ）</span>
-                  <span className="font-mono font-semibold text-sky-600 dark:text-sky-400">{(posIso.drag ?? info.iso).toFixed(2)} σ</span>
+                  <span className="font-mono font-semibold tabular-nums text-foreground">{(posIso.drag ?? info.iso).toFixed(2)} σ</span>
                 </div>
                 <Slider
                   value={[posIso.drag ?? info.iso]}
@@ -279,7 +279,7 @@ export function MapsPanel() {
             )}
 
             {/* 显示模式 */}
-            <div className="flex h-8 items-center rounded-md border border-border/70 bg-background/60 p-0.5">
+            <div className="flex h-8 items-center rounded-md border border-border bg-background p-0.5">
               {MODES.map(m => (
                 <button
                   key={m.key}
@@ -287,7 +287,7 @@ export function MapsPanel() {
                   className={cn(
                     'flex h-7 flex-1 items-center justify-center gap-1 rounded text-xs transition',
                     info.mode === m.key
-                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                   )}
                 >
@@ -303,7 +303,7 @@ export function MapsPanel() {
                 type="color"
                 value={info.color}
                 onChange={e => setMapLook({ color: e.target.value })}
-                className="h-7 w-10 shrink-0 cursor-pointer rounded-md border border-border/60 bg-background/60 p-0.5"
+                className="h-7 w-10 shrink-0 cursor-pointer rounded-md border border-border bg-background p-0.5"
                 title={info.difference ? '正峰颜色（绿）' : '密度图颜色'}
                 aria-label={info.difference ? '正峰颜色' : '密度图颜色'}
               />
@@ -312,14 +312,14 @@ export function MapsPanel() {
                   type="color"
                   value={info.negColor}
                   onChange={e => setMapLook({ negColor: e.target.value })}
-                  className="h-7 w-10 shrink-0 cursor-pointer rounded-md border border-border/60 bg-background/60 p-0.5"
+                  className="h-7 w-10 shrink-0 cursor-pointer rounded-md border border-border bg-background p-0.5"
                   title="负峰颜色（红）"
                   aria-label="负峰颜色"
                 />
               )}
               <div className="flex-1">
                 <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span>不透明度</span><span className="font-mono">{Math.round(info.opacity * 100)}%</span>
+                  <span>不透明度</span><span className="font-mono tabular-nums">{Math.round(info.opacity * 100)}%</span>
                 </div>
                 <Slider
                   value={[info.opacity]}
@@ -330,7 +330,7 @@ export function MapsPanel() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between rounded-md border border-border/60 px-2.5 py-2">
+            <div className="flex items-center justify-between rounded-md border border-border px-2.5 py-2">
               <span className="text-xs text-muted-foreground">可见（map show / hide）</span>
               <Switch checked={info.visible} onCheckedChange={v => setMapLook({ visible: v })} />
             </div>

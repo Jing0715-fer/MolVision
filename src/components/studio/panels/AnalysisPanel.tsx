@@ -339,7 +339,7 @@ export function AnalysisPanel() {
   return (
     <div className="pb-4">
       <SectionTitle right={
-        <span className="text-[10px] font-normal text-muted-foreground">
+        <span className="text-[10px] font-normal font-mono tabular-nums text-muted-foreground">
           {entry ? entry.name : '无活动结构'}
         </span>
       }>
@@ -351,12 +351,12 @@ export function AnalysisPanel() {
       )}
 
       {entry && structures.length >= 2 && (
-        <div className="mx-2 mb-2 mt-1 flex items-center gap-1 rounded-lg border border-border/60 bg-card/40 p-1">
+        <div className="mx-2 mb-2 mt-1 flex items-center gap-1 rounded-lg border border-border bg-card p-1">
           <button
             onClick={() => setXMode(false)}
             className={cn(
               'flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition',
-              !xMode ? 'bg-primary/15 text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground hover:bg-accent',
+              !xMode ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent',
             )}
           >
             <Network className="h-3 w-3" />
@@ -366,7 +366,7 @@ export function AnalysisPanel() {
             onClick={() => setXMode(true)}
             className={cn(
               'flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition',
-              xMode ? 'bg-violet-500/15 text-violet-700 dark:text-violet-300' : 'text-muted-foreground hover:bg-accent',
+              xMode ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent',
             )}
           >
             <ArrowLeftRight className="h-3 w-3" />
@@ -384,7 +384,7 @@ export function AnalysisPanel() {
               const setVal = side === 'A' ? setXSpecA : setXSpecB
               const tone = side === 'A' ? 'text-rose-600 dark:text-rose-400' : 'text-cyan-600 dark:text-cyan-400'
               return (
-                <label key={side} className="rounded-lg border border-border/60 px-2 py-1.5">
+                <label key={side} className="rounded-lg border border-border px-2 py-1.5">
                   <span className={cn('text-[10px] font-semibold', tone)}>结构 {side}</span>
                   <select
                     value={val}
@@ -413,10 +413,10 @@ export function AnalysisPanel() {
             count={xCounts.b}
             placeholder="如 protein / chain A"
           />
-          <div className="rounded-lg border border-border/60 px-2.5 py-2">
+          <div className="rounded-lg border border-border px-2.5 py-2">
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-muted-foreground">距离截断</span>
-              <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{xCutoff.toFixed(1)} Å</span>
+              <span className="font-mono font-semibold tabular-nums text-amber-600 dark:text-amber-400">{xCutoff.toFixed(1)} Å</span>
             </div>
             <Slider
               value={[xCutoff]}
@@ -428,7 +428,7 @@ export function AnalysisPanel() {
           <div className="flex gap-1.5">
             <button
               onClick={runXContacts}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
+              className="mol-btn-primary flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
             >
               <ArrowLeftRight className="h-3.5 w-3.5" />
               检测跨结构接触
@@ -437,7 +437,7 @@ export function AnalysisPanel() {
               <button
                 onClick={() => { clear(); engineRef.current?.updateContacts() }}
                 title="清除跨结构结果与连线"
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition hover:border-destructive/50 hover:text-destructive"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:border-destructive/50 hover:text-destructive"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -449,10 +449,10 @@ export function AnalysisPanel() {
 
           {/* 跨结构结果卡片 */}
           {cross && crossPairs.length > 0 && (
-            <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-2.5">
+            <div className="panel-card p-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">跨结构界面</span>
-                <span className="font-mono text-[10px] text-muted-foreground">{cross.cutoff.toFixed(1)} Å</span>
+                <span className="mol-micro text-muted-foreground">跨结构界面</span>
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{cross.cutoff.toFixed(1)} Å</span>
               </div>
               <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                 <Stat label="接触对" value={crossPairs.length.toLocaleString()} />
@@ -466,7 +466,7 @@ export function AnalysisPanel() {
                   if (!dataA || !dataB) return null
                   const ra = dataA.residues[p.resA], rb = dataB.residues[p.resB]
                   return (
-                    <div key={i} className="flex items-center justify-between rounded border border-border/40 bg-card/60 px-1.5 py-1 font-mono text-[10px]">
+                    <div key={i} className="flex items-center justify-between rounded border border-border bg-card px-1.5 py-1 font-mono text-[10px] tabular-nums">
                       <span className="truncate">
                         <span className="text-rose-600 dark:text-rose-400">{cross.labelA} {ra.chainId.trim()}:{ra.resName}{ra.resSeq}</span>
                         <span className="mx-1 text-muted-foreground">↔</span>
@@ -477,7 +477,7 @@ export function AnalysisPanel() {
                   )
                 })}
                 {crossPairs.length > 5 && (
-                  <p className="text-center text-[10px] text-muted-foreground">… 共 {crossPairs.length} 对（按距离排序）</p>
+                  <p className="text-center text-[10px] tabular-nums text-muted-foreground">… 共 {crossPairs.length} 对（按距离排序）</p>
                 )}
               </div>
             </div>
@@ -490,16 +490,16 @@ export function AnalysisPanel() {
 
           {/* 跨结构 ΔSASA：沿用 xcontacts 的 A/B 掩码与当前位姿 */}
           {cross && crossPairs.length > 0 && (
-            <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 px-2.5 py-2">
+            <div className="panel-card px-2.5 py-2">
               <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-300">
-                  <Droplets className="h-3.5 w-3.5" />
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-foreground">
+                  <Droplets className="h-3.5 w-3.5 text-primary" />
                   跨结构埋藏面积 (xbsa)
                 </span>
                 <button
                   onClick={runXbsa}
                   disabled={!!(buried?.cross && buried.computing)}
-                  className="rounded-md bg-violet-500/80 px-2 py-1 text-[10px] font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
+                  className="mol-btn-primary rounded-md bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                 >
                   {buried?.cross && buried.computing ? '计算中…' : '联合三路 SASA'}
                 </button>
@@ -511,7 +511,7 @@ export function AnalysisPanel() {
                     <Stat label={`${buried.cross.labelB} 埋藏`} value={`${buried.buriedB.toFixed(0)} Å²`} tone="cyan" />
                     <Stat label="合计" value={`${(buried.buriedA + buried.buriedB).toFixed(0)} Å²`} />
                   </div>
-                  <div className="mt-1.5 text-[10px] text-muted-foreground">
+                  <div className="mt-1.5 text-[10px] tabular-nums text-muted-foreground">
                     核心残基（ΔSASA &gt; 1 Å²）：{buried.cross.labelA} {buried.coreA.length} · {buried.cross.labelB} {buried.coreB.length} · {buried.ms.toFixed(0)} ms
                   </div>
                   <div className="mt-1.5 grid grid-cols-2 gap-1.5">
@@ -542,7 +542,7 @@ export function AnalysisPanel() {
                         key={ex.label}
                         onClick={() => { setXExprA(ex.expr); setXExprB(ex.expr) }}
                         title={`两结构同用：${ex.expr}（设置后需重新检测跨结构接触）`}
-                        className="rounded-full border border-violet-500/30 bg-violet-500/5 px-2 py-0.5 font-mono text-[9.5px] text-violet-600 transition hover:bg-violet-500/15 dark:text-violet-300"
+                        className="rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[9px] text-muted-foreground transition hover:border-primary/50 hover:text-primary"
                       >
                         {ex.label}
                       </button>
@@ -570,10 +570,10 @@ export function AnalysisPanel() {
               count={counts.b} error={errors.b}
               placeholder="如 chain B / protein / ligand"
             />
-            <div className="rounded-lg border border-border/60 px-2.5 py-2">
+            <div className="rounded-lg border border-border px-2.5 py-2">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-muted-foreground">距离截断</span>
-                <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{cutoff.toFixed(1)} Å</span>
+                <span className="font-mono font-semibold tabular-nums text-amber-600 dark:text-amber-400">{cutoff.toFixed(1)} Å</span>
               </div>
               <Slider
                 value={[cutoff]}
@@ -585,7 +585,7 @@ export function AnalysisPanel() {
             <div className="flex gap-1.5">
               <button
                 onClick={run}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
+                className="mol-btn-primary flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
               >
                 <Play className="h-3.5 w-3.5" />
                 分析接触
@@ -594,7 +594,7 @@ export function AnalysisPanel() {
                 <button
                   onClick={() => { clear(); engineRef.current?.updateContacts() }}
                   title="清除结果与连线"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition hover:border-destructive/50 hover:text-destructive"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:border-destructive/50 hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -632,7 +632,7 @@ export function AnalysisPanel() {
                   <Stat label="B 侧残基" value={residuesB.length.toLocaleString()} tone="cyan" />
                 </div>
 
-                <div className="mol-scroll relative overflow-x-auto rounded-lg border border-border/60 bg-card/40 p-1.5">
+                <div className="mol-scroll panel-card relative overflow-x-auto p-1.5">
                   <canvas
                     ref={canvasRef}
                     onMouseMove={onMapMove}
@@ -645,7 +645,7 @@ export function AnalysisPanel() {
                   )}
                   {hover && hoverPair && mapData && (
                     <div
-                      className="pointer-events-none absolute z-10 rounded-md border border-border bg-popover px-2 py-1 font-mono text-[10px] text-popover-foreground shadow-lg"
+                      className="mol-elevate pointer-events-none absolute z-10 rounded-md border border-border bg-popover px-2 py-1 font-mono text-[10px] tabular-nums text-popover-foreground"
                       style={{ left: hover.x + 12, top: hover.y - 8 }}
                     >
                       {mapData.data.residues[hoverPair.resA].chainId.trim()}:
@@ -678,7 +678,7 @@ export function AnalysisPanel() {
                   </button>
                   <button
                     onClick={() => selectSide('both')}
-                    className="flex items-center justify-center gap-1 rounded-lg border border-border/60 px-2 py-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent"
+                    className="flex items-center justify-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent"
                   >
                     选全部界面
                   </button>
@@ -701,7 +701,7 @@ export function AnalysisPanel() {
           {hbValid && (
             <>
               <SectionTitle right={
-                <span className="text-[10px] font-normal text-muted-foreground">
+                <span className="text-[10px] font-normal tabular-nums text-muted-foreground">
                   共 {hbCount.toLocaleString()} 键 · 按距离
                 </span>
               }>
@@ -718,17 +718,17 @@ export function AnalysisPanel() {
           )}
 
           <SectionTitle right={
-            <span className="text-[10px] font-normal text-muted-foreground">
+            <span className="text-[10px] font-normal font-mono tabular-nums text-muted-foreground">
               {sasaStructureId === activeId && sasaTotal > 0 ? `${sasaProbe} Å · ${sasaPoints} 点 · ${sasaMs.toFixed(0)} ms` : 'Shrake–Rupley'}
             </span>
           }>
             溶剂可及面积 (SASA)
           </SectionTitle>
           <div className="px-2">
-            <div className="rounded-lg border border-border/60 px-2.5 py-2">
+            <div className="rounded-lg border border-border px-2.5 py-2">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-muted-foreground">水探针半径</span>
-                <span className="font-mono font-semibold text-cyan-600 dark:text-cyan-400">{probe.toFixed(1)} Å</span>
+                <span className="font-mono font-semibold tabular-nums text-cyan-600 dark:text-cyan-400">{probe.toFixed(1)} Å</span>
               </div>
               <Slider
                 value={[probe]}
@@ -744,9 +744,9 @@ export function AnalysisPanel() {
                       key={np}
                       onClick={() => setNPoints(np)}
                       className={cn(
-                        'rounded px-1.5 py-0.5 font-mono text-[10px] transition',
+                        'rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums transition',
                         nPoints === np
-                          ? 'bg-cyan-500/20 font-semibold text-cyan-700 dark:text-cyan-300'
+                          ? 'bg-primary/15 font-semibold text-primary'
                           : 'text-muted-foreground hover:bg-accent',
                       )}
                     >{np}</button>
@@ -758,7 +758,7 @@ export function AnalysisPanel() {
               <button
                 onClick={runSasa}
                 disabled={sasaComputing}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+                className="mol-btn-primary flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
               >
                 {sasaComputing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Droplets className="h-3.5 w-3.5" />}
                 {sasaComputing ? '计算中…' : '计算 SASA'}
@@ -766,7 +766,7 @@ export function AnalysisPanel() {
               <button
                 onClick={() => { applyColor('sasa'); appendLog('out', '已按 SASA 暴露度着色：埋藏蓝紫 → 暴露橙红（需先计算 SASA）') }}
                 title="按暴露度着色（埋藏蓝 → 暴露橙红）"
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition hover:border-cyan-500/50 hover:text-cyan-600 dark:hover:text-cyan-300"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:border-primary/50 hover:text-primary"
               >
                 <Palette className="h-3.5 w-3.5" />
               </button>
@@ -785,8 +785,8 @@ export function AnalysisPanel() {
                   <div className="bg-rose-500/70" style={{ width: `${sasaPolar / sasaTotal * 100}%` }} />
                   <div className="bg-muted" style={{ width: `${sasaHet / sasaTotal * 100}%` }} />
                 </div>
-                <div className="mol-scroll mt-2 max-h-40 overflow-y-auto rounded-lg border border-border/60 bg-card/40">
-                  <p className="sticky top-0 bg-card/95 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">Top 暴露残基（Å²）</p>
+                <div className="mol-scroll panel-card mt-2 max-h-40 overflow-y-auto">
+                  <p className="mol-micro sticky top-0 bg-card px-2 py-1 text-muted-foreground">Top 暴露残基（Å²）</p>
                   {topResidues.map(({ resIdx, area }, i) => {
                     const r = data?.residues[resIdx]
                     if (!r) return null
@@ -802,12 +802,12 @@ export function AnalysisPanel() {
                         }}
                         className="group flex w-full items-center gap-2 px-2 py-1 text-left transition hover:bg-accent/50"
                       >
-                        <span className="w-4 shrink-0 text-right font-mono text-[9px] text-muted-foreground">{i + 1}</span>
+                        <span className="w-4 shrink-0 text-right font-mono text-[9px] tabular-nums text-muted-foreground">{i + 1}</span>
                         <span className="w-20 shrink-0 truncate font-mono text-[10px] font-medium">{r.chainId.trim()}:{r.resName}{r.resSeq}</span>
                         <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                          <span className="block h-full rounded-full bg-gradient-to-r from-cyan-500/60 to-amber-500/80" style={{ width: `${area / max * 100}%` }} />
+                          <span className="block h-full rounded-full bg-cyan-500/60" style={{ width: `${area / max * 100}%` }} />
                         </span>
-                        <span className="w-10 shrink-0 text-right font-mono text-[10px] text-cyan-600 dark:text-cyan-400">{area.toFixed(0)}</span>
+                        <span className="w-10 shrink-0 text-right font-mono text-[10px] tabular-nums text-cyan-600 dark:text-cyan-400">{area.toFixed(0)}</span>
                       </button>
                     )
                   })}
@@ -816,16 +816,16 @@ export function AnalysisPanel() {
             )}
 
             {hasResult && (
-              <div className="mt-2 rounded-lg border border-violet-500/30 bg-violet-500/5 px-2.5 py-2">
+              <div className="panel-card mt-2 px-2.5 py-2">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-300">
-                    <Layers className="h-3.5 w-3.5" />
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-foreground">
+                    <Layers className="h-3.5 w-3.5 text-primary" />
                     界面埋藏面积 (ΔSASA)
                   </span>
                   <button
                     onClick={runBsa}
                     disabled={buried?.computing}
-                    className="rounded-md bg-violet-500/80 px-2 py-1 text-[10px] font-medium text-white transition hover:bg-violet-500 disabled:opacity-60"
+                    className="mol-btn-primary rounded-md bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                   >
                     {buried?.computing ? '计算中…' : buried?.structureId === activeId ? '重算' : '计算'}
                   </button>
@@ -837,7 +837,7 @@ export function AnalysisPanel() {
                       <Stat label="B 侧埋藏" value={`${buried.buriedB.toFixed(0)} Å²`} tone="cyan" />
                       <Stat label="合计" value={`${(buried.buriedA + buried.buriedB).toFixed(0)} Å²`} />
                     </div>
-                    <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                    <div className="mt-1.5 flex items-center justify-between text-[10px] tabular-nums text-muted-foreground">
                       <span>核心界面残基（ΔSASA &gt; 1 Å²）：A {buried.coreA.length} · B {buried.coreB.length} · {buried.ms.toFixed(0)} ms</span>
                     </div>
                     <button
@@ -850,7 +850,7 @@ export function AnalysisPanel() {
                         setSelection(activeId, idx)
                         appendLog('out', `已选择界面核心残基：A ${buried.coreA.length} + B ${buried.coreB.length} 残基（${idx.length} 原子，ΔSASA > 1 Å²）`)
                       }}
-                      className="mt-1.5 w-full rounded-md border border-violet-500/40 px-2 py-1.5 text-[10px] font-medium text-violet-600 transition hover:bg-violet-500/15 dark:text-violet-300"
+                      className="mt-1.5 w-full rounded-md border border-border px-2 py-1.5 text-[10px] font-medium text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                     >
                       选核心界面残基（ΔSASA 判据，比距离截断更准）
                     </button>
@@ -875,7 +875,7 @@ export function AnalysisPanel() {
                 const pct = (v: number) => total > 0 ? (v / total * 100).toFixed(0) : '0'
                 appendLog('out', `DSSP 重算完成：螺旋 ${r.helix}（${pct(r.helix)}%）· 折叠 ${r.strand}（${pct(r.strand)}%）· 环 ${r.loop}（${pct(r.loop)}%）`)
               }}
-              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border/60 px-3 py-2 text-[11px] font-medium text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+              className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-medium text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               DSSP 重算二级结构
@@ -908,12 +908,12 @@ function ExprInput({ label, tone, value, onChange, count, error, placeholder }: 
     ? 'border-rose-500/40 text-rose-600 dark:text-rose-400'
     : 'border-cyan-500/40 text-cyan-600 dark:text-cyan-300'
   return (
-    <div className={cn('rounded-lg border bg-card/40 px-2.5 py-1.5', error ? 'border-destructive/60' : 'border-border/60')}>
+    <div className={cn('rounded-lg border bg-card px-2.5 py-1.5', error ? 'border-destructive/60' : 'border-border')}>
       <div className="flex items-center justify-between gap-2">
         <span className={cn('rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider', toneCls)}>
           {label}
         </span>
-        {count !== undefined && <span className="font-mono text-[10px] text-muted-foreground">{count.toLocaleString()} 原子</span>}
+        {count !== undefined && <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{count.toLocaleString()} 原子</span>}
       </div>
       <input
         value={value}
@@ -930,9 +930,9 @@ function ExprInput({ label, tone, value, onChange, count, error, placeholder }: 
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: 'rose' | 'cyan' }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-card/40 px-2 py-1.5 text-center">
+    <div className="panel-card px-2 py-1.5 text-center">
       <div className={cn(
-        'font-mono text-sm font-bold',
+        'font-mono text-[13px] font-bold tabular-nums',
         tone === 'rose' && 'text-rose-600 dark:text-rose-400',
         tone === 'cyan' && 'text-cyan-600 dark:text-cyan-300',
         !tone && 'text-foreground',
@@ -963,13 +963,13 @@ function SSComposition({ structureId }: { structureId: string | null }) {
   if (!stats) return <p className="px-1 text-[10px] text-muted-foreground">无聚合物残基</p>
   const pct = (v: number) => (v / stats.total * 100).toFixed(0)
   return (
-    <div className="rounded-lg border border-border/60 bg-card/40 px-2.5 py-2">
+    <div className="panel-card px-2.5 py-2">
       <div className="flex h-3 w-full overflow-hidden rounded-full">
         <div className="bg-rose-500/80" style={{ width: `${stats.h / stats.total * 100}%` }} title={`螺旋 ${stats.h}`} />
         <div className="bg-amber-500/80" style={{ width: `${stats.e / stats.total * 100}%` }} title={`折叠 ${stats.e}`} />
         <div className="bg-muted" style={{ width: `${stats.l / stats.total * 100}%` }} title={`环 ${stats.l}`} />
       </div>
-      <div className="mt-1.5 flex justify-between font-mono text-[10px]">
+      <div className="mt-1.5 flex justify-between font-mono text-[10px] tabular-nums">
         <span className="text-rose-600 dark:text-rose-400">螺旋 {stats.h}（{pct(stats.h)}%）</span>
         <span className="text-amber-600 dark:text-amber-400">折叠 {stats.e}（{pct(stats.e)}%）</span>
         <span className="text-muted-foreground">环 {stats.l}（{pct(stats.l)}%）</span>
@@ -993,7 +993,7 @@ function PairTableToolbar({
 }) {
   return (
     <div className="mb-1.5 flex items-center gap-1.5">
-      <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border/60 bg-card/60 px-1.5 py-1">
+      <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border bg-card px-1.5 py-1">
         <Search className="h-3 w-3 shrink-0 text-muted-foreground/70" />
         <input
           value={filter}
@@ -1014,7 +1014,7 @@ function PairTableToolbar({
           </button>
         )}
       </div>
-      <div className="flex shrink-0 overflow-hidden rounded-md border border-border/60" role="group" aria-label="排序方式">
+      <div className="flex shrink-0 overflow-hidden rounded-md border border-border" role="group" aria-label="排序方式">
         <button
           onClick={() => onSortBy('dist')}
           aria-pressed={sortBy === 'dist'}
@@ -1030,7 +1030,7 @@ function PairTableToolbar({
           数量
         </button>
       </div>
-      <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{shown}/{total.toLocaleString()}</span>
+      <span className="shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">{shown}/{total.toLocaleString()}</span>
     </div>
   )
 }
@@ -1060,7 +1060,7 @@ function ContactPairsTable({ data, pairs, cutoff, onPick }: {
   const shown = showAll ? rows : rows.slice(0, LIMIT)
   if (!rows.length) return null
   return (
-    <div className="mt-2 rounded-lg border border-border/60 bg-card/40 p-1.5">
+    <div className="panel-card mt-2 p-1.5">
       <PairTableToolbar filter={filter} onFilter={setFilter} sortBy={sortBy} onSortBy={setSortBy} shown={shown.length} total={rows.length} />
       <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label="接触残基对列表">
         {shown.map(({ p, la, lb }) => {
@@ -1073,17 +1073,17 @@ function ContactPairsTable({ data, pairs, cutoff, onPick }: {
               role="option"
               aria-selected={false}
               onClick={() => onPick(p.resA, p.resB, `${la} ↔ ${lb}（${p.minDist.toFixed(2)} Å）`)}
-              className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] transition hover:bg-accent/60"
+              className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] tabular-nums transition hover:bg-accent/60"
             >
               <span className="min-w-0 flex-1 truncate">
                 <span className="text-rose-600 dark:text-rose-400">{la}</span>
                 <span className="mx-1 text-muted-foreground/60">↔</span>
                 <span className="text-cyan-600 dark:text-cyan-300">{lb}</span>
               </span>
-              <span className="w-14 shrink-0 text-right font-bold" style={{ color: `rgb(${r},${g},${b})` }}>
+              <span className="w-14 shrink-0 text-right font-bold tabular-nums" style={{ color: `rgb(${r},${g},${b})` }}>
                 {p.minDist.toFixed(2)} Å
               </span>
-              <span className="w-8 shrink-0 text-right text-muted-foreground">×{p.count}</span>
+              <span className="w-8 shrink-0 text-right tabular-nums text-muted-foreground">×{p.count}</span>
               <MoveUpRight className="h-3 w-3 shrink-0 text-muted-foreground/40 transition group-hover:text-primary" />
             </button>
           )
@@ -1092,7 +1092,7 @@ function ContactPairsTable({ data, pairs, cutoff, onPick }: {
       {rows.length > LIMIT && (
         <button
           onClick={() => setShowAll(v => !v)}
-          className="mt-1 w-full rounded py-1 text-center text-[9.5px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          className="mt-1 w-full rounded py-1 text-center text-[9px] tabular-nums text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           {showAll ? '收起（仅前 50 行）' : `展开全部 ${rows.length} 行`}
         </button>
@@ -1124,9 +1124,9 @@ function HBondPairsTable({ data, pairs, onPick }: {
   const shown = showAll ? rows : rows.slice(0, LIMIT)
   if (!rows.length) return null
   return (
-    <div className="rounded-lg border border-border/60 bg-card/40 p-1.5">
+    <div className="panel-card p-1.5">
       <div className="mb-1.5 flex items-center gap-1.5">
-        <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border/60 bg-card/60 px-1.5 py-1">
+        <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border bg-card px-1.5 py-1">
           <Search className="h-3 w-3 shrink-0 text-muted-foreground/70" />
           <input
             value={filter}
@@ -1147,7 +1147,7 @@ function HBondPairsTable({ data, pairs, onPick }: {
             </button>
           )}
         </div>
-        <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{shown.length}/{rows.length}</span>
+        <span className="shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">{shown.length}/{rows.length}</span>
       </div>
       <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label="氢键残基对列表">
         {shown.map(({ p, ld, la }) => {
@@ -1158,7 +1158,7 @@ function HBondPairsTable({ data, pairs, onPick }: {
               role="option"
               aria-selected={false}
               onClick={() => onPick(p.donorRes, p.acceptorRes, `${ld} → ${la}（${p.minDist.toFixed(2)} Å）`)}
-              className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] transition hover:bg-accent/60"
+              className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] tabular-nums transition hover:bg-accent/60"
             >
               <span className="min-w-0 flex-1 truncate">
                 <span className="text-emerald-600 dark:text-emerald-400">{ld}</span>
@@ -1166,12 +1166,12 @@ function HBondPairsTable({ data, pairs, onPick }: {
                 <span className="text-cyan-600 dark:text-cyan-300">{la}</span>
               </span>
               <span
-                className="w-14 shrink-0 text-right font-bold"
+                className="w-14 shrink-0 text-right font-bold tabular-nums"
                 style={{ color: `rgb(${Math.round(16 + 220 * t)},${Math.round(185 - 120 * t)},${Math.round(129 - 80 * t)})` }}
               >
                 {p.minDist.toFixed(2)} Å
               </span>
-              <span className="w-8 shrink-0 text-right text-muted-foreground">×{p.count}</span>
+              <span className="w-8 shrink-0 text-right tabular-nums text-muted-foreground">×{p.count}</span>
               <MoveUpRight className="h-3 w-3 shrink-0 text-muted-foreground/40 transition group-hover:text-primary" />
             </button>
           )
@@ -1180,7 +1180,7 @@ function HBondPairsTable({ data, pairs, onPick }: {
       {rows.length > LIMIT && (
         <button
           onClick={() => setShowAll(v => !v)}
-          className="mt-1 w-full rounded py-1 text-center text-[9.5px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          className="mt-1 w-full rounded py-1 text-center text-[9px] tabular-nums text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           {showAll ? '收起（仅前 50 行）' : `展开全部 ${rows.length} 行`}
         </button>

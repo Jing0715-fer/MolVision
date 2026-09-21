@@ -69,7 +69,7 @@ function QuickColorPopover({
           ) : (
             <span className="h-3.5 w-3.5 rounded-full border border-black/10 shadow-xs" style={{ background: effective }} />
           )}
-          <Paintbrush className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-[3px] bg-background/90 text-muted-foreground opacity-0 transition group-hover/dot:opacity-100" />
+          <Paintbrush className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-[3px] bg-background text-muted-foreground opacity-0 transition group-hover/dot:opacity-100" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-48 p-2" align="end" side="left">
@@ -93,7 +93,7 @@ function QuickColorPopover({
             type="color"
             value={custom}
             onChange={e => setCustom(e.target.value)}
-            className="h-6 w-7 cursor-pointer rounded border border-border/60 bg-background p-0.5"
+            className="h-6 w-7 cursor-pointer rounded border border-border bg-background p-0.5"
             aria-label="自定义颜色"
           />
           <button
@@ -107,7 +107,7 @@ function QuickColorPopover({
           onClick={() => { onReset(); setOpen(false) }}
           disabled={!overridden}
           className={cn(
-            'mt-1.5 flex h-6 w-full items-center justify-center gap-1 rounded-md border border-border/60 text-[10px] transition',
+            'mt-1.5 flex h-6 w-full items-center justify-center gap-1 rounded-md border border-border text-[10px] transition',
             overridden ? 'hover:bg-accent hover:text-foreground' : 'opacity-40',
           )}
         >
@@ -249,10 +249,10 @@ export function StructuresPanel() {
           <div
             key={st.id}
             className={cn(
-              'group rounded-lg border p-2.5 transition',
-              st.id === activeId
-                ? 'mol-elevate border-primary/50 bg-primary/[0.04]'
-                : 'border-border/60 hover:border-border hover:bg-accent/40',
+              // `!` 提权：panel-card 为未分层自定义规则，压过 @layer utilities 的状态类
+              'group panel-card p-2.5',
+              st.id === activeId && 'mol-elevate border-primary/60! bg-primary/5!',
+              !st.visible && 'opacity-60 saturate-50',
             )}
           >
             <div className="flex items-center gap-2">
@@ -269,10 +269,10 @@ export function StructuresPanel() {
               </button>
               <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setActive(st.id)}>
                 <span className={cn(
-                  'shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wide shadow-xs',
+                  'shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tabular-nums tracking-wide shadow-xs',
                   st.id === activeId
-                    ? 'bg-primary text-primary-foreground shadow-emerald-500/20'
-                    : 'border border-border/70 bg-background text-foreground/90',
+                    ? 'bg-primary text-primary-foreground'
+                    : 'border border-border bg-background text-foreground/90',
                 )}>
                   {st.name.slice(0, 8)}
                 </span>
@@ -310,7 +310,7 @@ export function StructuresPanel() {
                     if (!r.ok) return toast.error('重置失败', { description: r.message })
                     toast.success(r.message, { description: 'untransform 命令可撤销指定结构的叠合' })
                   }}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-violet-500/70 opacity-0 transition hover:bg-violet-500/10 hover:text-violet-500 group-hover:opacity-100"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
                   title="撤销叠合变换，回到原始位姿（untransform）"
                 >
                   <Undo2 className="h-3.5 w-3.5" />
@@ -333,24 +333,24 @@ export function StructuresPanel() {
             </div>
             {!collapsed.has(st.name) && (
               <div className="mt-1.5 flex flex-wrap gap-1">
-                <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
+                <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums">
                   {st.summary.atoms.toLocaleString()} 原子
                 </Badge>
-                <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal tabular-nums">
+                <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums">
                   {st.summary.residues.toLocaleString()} 残基
                 </Badge>
                 {st.meta.resolution && (
-                  <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
+                  <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums">
                     {st.meta.resolution} Å
                   </Badge>
                 )}
-                <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal">
+                <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums">
                   {st.loadMs < 1 ? '<1' : st.loadMs.toFixed(0)} ms
                 </Badge>
               </div>
             )}
             {collapsed.has(st.name) && st.summary.atoms > 0 && (
-              <div className="mt-0.5 pl-7 text-[9px] tabular-nums text-muted-foreground/60">
+              <div className="mt-0.5 pl-7 font-mono text-[9px] tabular-nums text-muted-foreground/60">
                 {st.summary.atoms.toLocaleString()} at · {st.summary.chains} 链{st.meta.resolution ? ` · ${st.meta.resolution} Å` : ''}
               </div>
             )}
@@ -413,7 +413,7 @@ export function StructuresPanel() {
                           const idx = selectMolecule(m)
                           if (idx?.length) engineRef.current?.fitView([{ structureId: st.id, indices: idx }])
                         }}
-                        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80 hover:shadow-xs"
+                        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80"
                         title={`选择此配体分子 ${m.label}（${m.atoms} 原子）· 双击聚焦${m.residues.length > 1 ? ` · 跨 ${m.residues.length} 个残基` : ''}`}
                       >
                         <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
@@ -422,10 +422,10 @@ export function StructuresPanel() {
                           <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
                         )}
                         <FlaskConical className="h-3 w-3 shrink-0 text-amber-600/80 dark:text-amber-400/80" />
-                        <span className="min-w-0 truncate rounded bg-amber-500/10 px-1.5 font-mono text-[10px] font-semibold text-amber-700 dark:text-amber-400" title={`${m.label}（${m.atoms} 原子）`}>
+                        <span className="min-w-0 truncate rounded border border-border bg-transparent px-1.5 font-mono text-[10px] font-semibold text-amber-700 dark:text-amber-400" title={`${m.label}（${m.atoms} 原子）`}>
                           {m.label}
                         </span>
-                        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">{m.atoms} at</span>
+                        <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/70">{m.atoms} at</span>
                       </button>
                       <QuickColorPopover
                         label={`配体 ${m.label}`}
@@ -473,7 +473,7 @@ export function StructuresPanel() {
                           engineRef.current?.fitView([{ structureId: st.id, indices: useMolStore.getState().selection.indices }])
                         }
                       }}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80 hover:shadow-xs"
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80"
                       title={`选择此链组（${c.residues} 残基 · ${c.atoms} 原子）· 双击聚焦${dupId ? ' · 同链 ID 含多个链组，已按链组精确选择' : ''}`}
                     >
                       <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
@@ -483,7 +483,7 @@ export function StructuresPanel() {
                       )}
                       <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
                       <span className="shrink-0 text-[10px] text-muted-foreground">{CHAIN_TYPE_LABEL[c.type]}</span>
-                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/70">
+                      <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/70">
                         {c.residues > 0 && `${c.residues} res`}
                       </span>
                     </button>
@@ -541,19 +541,19 @@ export function StructuresPanel() {
                   </SectionTitle>
                   <div className="space-y-2 px-2">
                     <div className="flex flex-wrap items-center gap-1">
-                      <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px]" title="空间群（CRYST1）">
+                      <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] tabular-nums" title="空间群（CRYST1）">
                         {crystal.spaceGroup.trim() || 'P 1'}
                       </Badge>
                       {ops != null && (
-                        <Badge variant="secondary" className="px-1.5 py-0 text-[9px] font-normal" title="对称操作数（含晶格心平移）">
+                        <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums" title="对称操作数（含晶格心平移）">
                           {ops} ops
                         </Badge>
                       )}
-                      <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal" title="晶胞（Å / °）">
+                      <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums" title="晶胞（Å / °）">
                         {crystal.a.toFixed(1)}×{crystal.b.toFixed(1)}×{crystal.c.toFixed(1)}Å
                       </Badge>
                       {sym && (
-                        <Badge className="bg-violet-500/15 px-1.5 py-0 text-[9px] font-normal text-violet-600 hover:bg-violet-500/25 dark:text-violet-300">
+                        <Badge className="bg-primary/10 px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums text-primary hover:bg-primary/20">
                           {sym.count} 个伴侣 · {sym.radius} Å
                         </Badge>
                       )}
@@ -562,7 +562,7 @@ export function StructuresPanel() {
                       <div>
                         <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
                           <span>搜索半径</span>
-                          <span className="font-mono">{symRadius} Å</span>
+                          <span className="font-mono tabular-nums">{symRadius} Å</span>
                         </div>
                         <Slider
                           value={[symRadius]}
@@ -576,7 +576,7 @@ export function StructuresPanel() {
                           <button
                             key={r}
                             onClick={() => { setSymRadius(r); apply(r) }}
-                            className="flex-1 rounded-md border border-violet-500/30 bg-violet-500/5 px-1.5 py-1 text-[10px] font-medium text-violet-600/90 transition hover:bg-violet-500/15 dark:text-violet-300"
+                            className="flex-1 rounded-md border border-border px-1.5 py-1 font-mono text-[10px] font-medium tabular-nums text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                           >
                             {r} Å
                           </button>
@@ -594,7 +594,7 @@ export function StructuresPanel() {
             {st.ligands.length > 0 && (
               <>
                 <SectionTitle right={
-                  <span className="text-[10px] text-muted-foreground">{st.ligands.length} 种</span>
+                  <span className="text-[10px] tabular-nums text-muted-foreground">{st.ligands.length} 种</span>
                 }>
                   <span className="flex items-center gap-1">
                     <FlaskConical className="h-3 w-3" /> 配体
@@ -626,7 +626,7 @@ export function StructuresPanel() {
                           useMolStore.getState().setSelection(st.id, idx)
                           toast.success(`已选中首个 ${lg.resName} 分子拷贝`, { description: `${mol.label} · ${mol.atoms} 原子 · 双击聚焦在序列条配体行` })
                         }}
-                        className="rounded-md border border-border/60 bg-background/60 px-1.5 py-0.5 font-mono text-[10px] font-medium transition hover:border-primary/50 hover:bg-primary/5"
+                        className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums transition hover:border-primary/50 hover:bg-primary/5"
                         title={`选择全部 ${lg.resName}（链 ${lg.chainIds}）· 双击仅选首个分子拷贝`}
                       >
                         {lg.resName}
@@ -640,7 +640,7 @@ export function StructuresPanel() {
                           if (res.error) { toast.error(res.error); return }
                           toast.success(`${lg.resName} 结合口袋`, { description: `${res.count.toLocaleString()} 个原子（含周围残基）· 可直接着色/新建表示法` })
                         }}
-                        className="flex h-5 items-center gap-0.5 rounded-md border border-emerald-500/40 bg-emerald-500/5 px-1 text-[9px] font-medium text-emerald-600/80 opacity-80 transition hover:bg-emerald-500/15 hover:opacity-100 dark:text-emerald-400/90"
+                        className="flex h-5 items-center gap-0.5 rounded-md border border-primary/40 bg-primary/5 px-1 text-[9px] font-medium text-primary opacity-80 transition hover:bg-primary/15 hover:opacity-100"
                         title={`选择 ${lg.resName} 周围 4.5Å 结合口袋（含完整残基）`}
                       >
                         <Target className="h-2.5 w-2.5" /> 口袋
@@ -677,7 +677,7 @@ export function StructuresPanel() {
                   <select
                     value={mobile.id}
                     onChange={e => setSpMobile(e.target.value)}
-                    className="min-w-0 flex-1 cursor-pointer rounded-md border border-border/60 bg-card/60 px-1.5 py-1 font-mono text-[10px] text-foreground outline-none"
+                    className="min-w-0 flex-1 cursor-pointer rounded-md border border-border bg-background px-1.5 py-1 font-mono text-[10px] text-foreground outline-none"
                     title="移动结构（被变换）"
                   >
                     {structures.filter(x => x.id !== ref.id).map(x => (
@@ -686,7 +686,7 @@ export function StructuresPanel() {
                   </select>
                   <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                   <span
-                    className="min-w-0 flex-1 truncate rounded-md border border-primary/40 bg-primary/5 px-1.5 py-1 font-mono text-[10px] text-primary"
+                    className="min-w-0 flex-1 truncate rounded-md border border-primary/40 bg-primary/5 px-1.5 py-1 font-mono text-[10px] tabular-nums text-primary"
                     title={`参考结构（不动）：${ref.name}`}
                   >
                     {ref.name.slice(0, 8)}
@@ -696,7 +696,7 @@ export function StructuresPanel() {
                   <select
                     value={spMobChain}
                     onChange={e => setSpMobChain(e.target.value)}
-                    className="cursor-pointer rounded-md border border-border/60 bg-card/60 px-1.5 py-1 text-[10px] text-foreground outline-none"
+                    className="cursor-pointer rounded-md border border-border bg-background px-1.5 py-1 text-[10px] text-foreground outline-none"
                     title="移动链（空 = 自动选最长蛋白链）"
                   >
                     <option value="">移动链：自动</option>
@@ -707,7 +707,7 @@ export function StructuresPanel() {
                   <select
                     value={spRefChain}
                     onChange={e => setSpRefChain(e.target.value)}
-                    className="cursor-pointer rounded-md border border-border/60 bg-card/60 px-1.5 py-1 text-[10px] text-foreground outline-none"
+                    className="cursor-pointer rounded-md border border-border bg-background px-1.5 py-1 text-[10px] text-foreground outline-none"
                     title="参考链（空 = 自动最佳比对）"
                   >
                     <option value="">参考链：自动</option>
@@ -729,7 +729,7 @@ export function StructuresPanel() {
                       description: `链 ${res.mobileChain} ↔ 链 ${res.refChain} · 匹配 ${res.matched} 对 CA · RMSD ${res.rmsd.toFixed(2)} Å`,
                     })
                   }}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
+                  className="mol-btn-primary flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
                 >
                   <Combine className="h-3.5 w-3.5" />
                   开始叠合

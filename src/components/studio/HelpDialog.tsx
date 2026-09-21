@@ -1,12 +1,26 @@
 'use client'
 
 // 帮助对话框：快捷键、鼠标操作、快速上手
+import type { ReactNode } from 'react'
 import { MousePointer2, Keyboard, Lightbulb, FlaskConical, Wand2, GraduationCap, FolderOpen } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
+import { cn } from '@/lib/utils'
+
+/** 快捷键胶囊统一规格（border-border bg-muted px-1.5 mono 10px，最小宽度保证短键不塌陷） */
+function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <kbd className={cn(
+      'inline-flex min-w-[28px] shrink-0 items-center justify-center rounded border border-border bg-muted px-1.5 py-0.5 text-center font-mono text-[10px]',
+      className,
+    )}>
+      {children}
+    </kbd>
+  )
+}
 
 const SHORTCUTS: [string, string][] = [
   ['1 – 9', '快速切换风格预设（6 = 结合口袋，7 = 出版级互作，9 = Putty B 因子管）'],
@@ -46,27 +60,30 @@ export function HelpDialog() {
 
   return (
     <Dialog open={ui.helpOpen} onOpenChange={open => setUi({ helpOpen: open })}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>使用帮助</DialogTitle>
-          <DialogDescription>MolVision — 基于 Three.js 的专业分子可视化工作台</DialogDescription>
+      <DialogContent className="mol-elevate-lg flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="gap-1.5 border-b border-border px-4 pb-2.5 pt-3.5">
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            使用帮助
+            <span className="mol-micro ml-auto mr-9 text-muted-foreground">SHORTCUTS</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs">MolVision — 基于 Three.js 的专业分子可视化工作台</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="mol-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
           <section>
-            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
-              <Lightbulb className="h-3.5 w-3.5 text-amber-500" /> 快速上手
+            <h3 className="mol-micro mb-2 flex items-center gap-1.5 text-muted-foreground">
+              <Lightbulb className="h-3 w-3" /> 快速上手
             </h3>
             <ol className="ml-4 list-decimal space-y-1 text-xs leading-relaxed text-muted-foreground">
-              <li>顶部输入 PDB 编号（如 <code className="rounded bg-muted px-1 font-mono">4HHB</code>）加载结构，或拖入本地文件；空状态下也可点击一键示例</li>
+              <li>顶部输入 PDB 编号（如 <code className="rounded bg-muted px-1 font-mono text-[10px]">4HHB</code>）加载结构，或拖入本地文件；空状态下也可点击一键示例</li>
               <li>用「风格预设」一键切换 Cartoon / 球棍 / 空间填充 / 表面 / 出版级互作（7）</li>
               <li>点击 3D 视图中的残基进行选择，在左侧面板调颜色与表示法</li>
               <li>工具栏切换测量模式，点击原子测量距离 / 角度 / 二面角</li>
-              <li>按 <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">`</kbd> 打开命令行，像 PyMOL 一样工作；<span className="font-semibold text-foreground">Tab 智能补全</span>——命令名/子命令/结构名/表示法/颜色/选择关键字全部可补全，↑↓ 切换候选，输入时实时显示参数用法提示</li>
-              <li>按 <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px]">Ctrl+K</kbd> 打开命令面板——搜索即执行：全部命令（带示例）、最近使用、置顶常用、多结构切换一键直达，无需记命令</li>
+              <li>按 <Kbd>{'`'}</Kbd> 打开命令行，像 PyMOL 一样工作；<span className="font-semibold text-foreground">Tab 智能补全</span>——命令名/子命令/结构名/表示法/颜色/选择关键字全部可补全，↑↓ 切换候选，输入时实时显示参数用法提示</li>
+              <li>按 <Kbd>Ctrl+K</Kbd> 打开命令面板——搜索即执行：全部命令（带示例）、最近使用、置顶常用、多结构切换一键直达，无需记命令</li>
             </ol>
-            <p className="mt-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-2 text-[11px] leading-relaxed text-violet-700 dark:text-violet-300">
-              <GraduationCap className="mr-1 inline h-3.5 w-3.5 -translate-y-px" />
+            <p className="mt-2 rounded-lg border border-border bg-muted/40 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              <GraduationCap className="mr-1 inline h-3.5 w-3.5 -translate-y-px text-muted-foreground" />
               初次使用？工具栏「演示」菜单提供 6 个引导式场景（快速上手 / 药物靶点 / 晶体学验证 / NMR 动力学 / 抗体-抗原 / 核酸），逐步自动操作并讲解，或命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">tour quickstart</code>。
             </p>
           </section>
@@ -74,13 +91,13 @@ export function HelpDialog() {
           <Separator />
 
           <section>
-            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
-              <MousePointer2 className="h-3.5 w-3.5 text-emerald-500" /> 鼠标操作
+            <h3 className="mol-micro mb-2 flex items-center gap-1.5 text-muted-foreground">
+              <MousePointer2 className="h-3 w-3" /> 鼠标操作
             </h3>
             <div className="grid gap-1">
               {MOUSE.map(([k, v]) => (
                 <div key={k} className="flex items-center gap-3 text-xs">
-                  <span className="w-24 shrink-0 rounded border border-border/60 bg-muted/60 px-1.5 py-0.5 text-center font-mono text-[10px]">{k}</span>
+                  <span className="inline-flex w-24 shrink-0 items-center justify-center rounded border border-border bg-muted px-1.5 py-0.5 text-center font-mono text-[10px]">{k}</span>
                   <span className="text-muted-foreground">{v}</span>
                 </div>
               ))}
@@ -90,13 +107,13 @@ export function HelpDialog() {
           <Separator />
 
           <section>
-            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
-              <Keyboard className="h-3.5 w-3.5 text-primary" /> 键盘快捷键
+            <h3 className="mol-micro mb-2 flex items-center gap-1.5 text-muted-foreground">
+              <Keyboard className="h-3 w-3" /> 键盘快捷键
             </h3>
             <div className="grid gap-1">
               {SHORTCUTS.map(([k, v]) => (
                 <div key={k} className="flex items-center gap-3 text-xs">
-                  <kbd className="w-16 shrink-0 rounded border border-border/60 bg-muted/60 px-1.5 py-0.5 text-center font-mono text-[10px]">{k}</kbd>
+                  <Kbd className="w-16">{k}</Kbd>
                   <span className="text-muted-foreground">{v}</span>
                 </div>
               ))}
@@ -106,8 +123,8 @@ export function HelpDialog() {
           <Separator />
 
           <section>
-            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
-              <FlaskConical className="h-3.5 w-3.5 text-violet-500" /> 结构分析与晶体学
+            <h3 className="mol-micro mb-2 flex items-center gap-1.5 text-muted-foreground">
+              <FlaskConical className="h-3 w-3" /> 结构分析与晶体学
             </h3>
             <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
               <p><span className="font-semibold text-foreground">视角书签</span>：快捷键 <code className="rounded bg-muted px-1 font-mono text-[10px]">V</code> 或视口右缘「保存视角」把当前相机状态存为书签（带视口缩略图），<code className="rounded bg-muted px-1 font-mono text-[10px]">Shift+数字</code> / 点击缩略图平滑过渡跳转；命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">view save 口袋</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view 2</code>、<code className="rounded bg-muted px-1 font-mono text-[10px]">view del 2</code>；书签独立持久化（清空结构不清空，刷新后仍在），双击名称可重命名，导出 .molvision 会话文件时随文件携带（导入自动还原）。</p>
@@ -127,8 +144,8 @@ export function HelpDialog() {
           <Separator />
 
           <section>
-            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
-              <Wand2 className="h-3.5 w-3.5 text-sky-500" /> 渲染与视图
+            <h3 className="mol-micro mb-2 flex items-center gap-1.5 text-muted-foreground">
+              <Wand2 className="h-3 w-3" /> 渲染与视图
             </h3>
             <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
               <p><span className="font-semibold text-foreground">灯光</span>：场景面板「灯光与渲染」或 <code className="rounded bg-muted px-1 font-mono text-[10px]">set ambient 0.5 / set direct 2 / set specular off</code>（哑光论文图风格）。</p>
@@ -165,8 +182,8 @@ export function HelpDialog() {
           <Separator />
 
           <section>
-            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
-              <FolderOpen className="h-3.5 w-3.5 text-teal-500" /> 会话与文件
+            <h3 className="mol-micro mb-2 flex items-center gap-1.5 text-muted-foreground">
+              <FolderOpen className="h-3 w-3" /> 会话与文件
             </h3>
             <div className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
               <p><span className="font-semibold text-foreground">关闭结构</span>：结构卡片右侧 <span className="font-semibold text-foreground">X 按钮</span>（常显）关闭单个结构，toast 内 8 秒可撤销（表示法/着色/叠合变换/对称伴侣一并还原）；「全部关闭」批量清空（书签与时间轴保留）；命令行 <code className="rounded bg-muted px-1 font-mono text-[10px]">close</code>（活动结构）/ <code className="rounded bg-muted px-1 font-mono text-[10px]">close 4HHB</code> / <code className="rounded bg-muted px-1 font-mono text-[10px]">close all</code>。</p>
@@ -181,14 +198,14 @@ export function HelpDialog() {
           <Separator />
 
           <section>
-            <h3 className="mb-2 text-xs font-semibold">选择表达式语法</h3>
+            <h3 className="mol-micro mb-2 text-muted-foreground">选择表达式语法</h3>
             <div className="space-y-1 rounded-lg bg-muted/40 p-2.5 font-mono text-[10px] leading-relaxed">
-              <div><span className="text-emerald-600 dark:text-emerald-400">chain A</span> and <span className="text-emerald-600 dark:text-emerald-400">resi 40-80</span></div>
-              <div><span className="text-emerald-600 dark:text-emerald-400">chainidx 4</span>  <span className="text-muted-foreground">{'// 第 5 个链组（同链 ID 的蛋白/配体/水互不波及）'}</span></div>
-              <div><span className="text-emerald-600 dark:text-emerald-400">molecule 2</span>  <span className="text-muted-foreground">{'// 第 3 个配体分子（多残基配体整体，别名 mol）'}</span></div>
-              <div><span className="text-emerald-600 dark:text-emerald-400">within 5 of</span> (resn HEM)  <span className="text-muted-foreground">{'// HEM 周围 5 Å'}</span></div>
-              <div><span className="text-emerald-600 dark:text-emerald-400">byres</span>(within 4 of ligand)  <span className="text-muted-foreground">{'// 扩展到整个残基'}</span></div>
-              <div>(protein or nucleic) and <span className="text-emerald-600 dark:text-emerald-400">not helix</span></div>
+              <div><span className="text-primary">chain A</span> and <span className="text-primary">resi 40-80</span></div>
+              <div><span className="text-primary">chainidx 4</span>  <span className="text-muted-foreground">{'// 第 5 个链组（同链 ID 的蛋白/配体/水互不波及）'}</span></div>
+              <div><span className="text-primary">molecule 2</span>  <span className="text-muted-foreground">{'// 第 3 个配体分子（多残基配体整体，别名 mol）'}</span></div>
+              <div><span className="text-primary">within 5 of</span> (resn HEM)  <span className="text-muted-foreground">{'// HEM 周围 5 Å'}</span></div>
+              <div><span className="text-primary">byres</span>(within 4 of ligand)  <span className="text-muted-foreground">{'// 扩展到整个残基'}</span></div>
+              <div>(protein or nucleic) and <span className="text-primary">not helix</span></div>
               <div>name CA+CB · elem Fe · bfactor &gt; 40 · backbone · metal</div>
             </div>
           </section>

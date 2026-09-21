@@ -65,7 +65,7 @@ export function ViewBar() {
         <button
           onClick={save}
           title="保存当前视角为书签 (V)"
-          className="flex h-7 items-center gap-1.5 rounded-full border border-border/60 bg-popover/90 px-2.5 text-[11px] font-medium shadow-md backdrop-blur transition hover:bg-popover hover:border-border"
+          className="mol-elevate flex h-7 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11px] font-medium transition hover:border-primary/40 hover:text-primary active:scale-[0.97]"
         >
           <BookmarkPlus className="h-3 w-3" />
           保存视角
@@ -75,7 +75,7 @@ export function ViewBar() {
             onClick={() => setUserCollapsed(!collapsed)}
             title={collapsed ? '展开书签列表' : '折叠书签列表'}
             aria-label={collapsed ? '展开书签列表' : '折叠书签列表'}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-border/60 bg-popover/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-popover hover:text-foreground"
+            className="mol-elevate flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition hover:text-foreground active:scale-[0.97]"
           >
             <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', collapsed ? '' : 'rotate-180')} />
           </button>
@@ -87,17 +87,17 @@ export function ViewBar() {
         <button
           onClick={() => setUserCollapsed(false)}
           title={`视角书签 × ${bookmarks.length}`}
-          className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-popover/90 text-muted-foreground shadow-lg backdrop-blur transition hover:text-foreground"
+          className="mol-elevate relative flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition hover:text-foreground"
         >
           <Bookmark className="h-4 w-4" />
-          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground shadow">
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[9px] font-bold text-primary-foreground">
             {bookmarks.length}
           </span>
         </button>
       ) : (
         <div className={cn('mol-scroll flex max-h-[min(56vh,520px)] flex-col items-end gap-1.5 overflow-y-auto pb-0.5 pr-0.5', isMobile && 'max-h-[46vh]')}>
           {bookmarks.length === 0 && (
-            <div className="w-28 rounded-lg border border-dashed border-border/70 bg-popover/70 px-2.5 py-3 text-center shadow-lg backdrop-blur">
+            <div className="mol-elevate w-28 rounded-lg border border-dashed border-border bg-card px-2.5 py-3 text-center">
               <Camera className="mx-auto mb-1.5 h-4 w-4 text-muted-foreground/70" />
               <p className="text-[10px] leading-relaxed text-muted-foreground">
                 暂无书签<br />保存常用视角<br />
@@ -152,18 +152,18 @@ function BookmarkCard({
   return (
     <div
       className={cn(
-        'group relative shrink-0 overflow-hidden rounded-lg border bg-popover/90 shadow-lg backdrop-blur transition-all duration-200',
+        'group relative shrink-0 overflow-hidden rounded-lg border bg-card mol-elevate transition-all duration-200',
         compact ? 'w-20' : 'w-28',
         active
-          ? 'border-primary ring-2 ring-primary/50'
-          : 'border-border/60 hover:border-border',
+          ? 'border-primary/70 ring-1 ring-primary/40'
+          : 'border-border hover:border-foreground/25',
       )}
     >
       <button onClick={onJump} className="block w-full" title={`跳转到「${b.name}」（${time} 保存）`}>
         {b.thumb ? (
           <img src={b.thumb} alt={`视角书签「${b.name}」缩略图`} className="block aspect-[8/5] w-full bg-black/10 object-cover" draggable={false} />
         ) : (
-          <div className="flex aspect-[8/5] w-full items-center justify-center bg-gradient-to-br from-muted/80 to-muted">
+          <div className="flex aspect-[8/5] w-full items-center justify-center bg-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground/60" />
           </div>
         )}
@@ -171,7 +171,7 @@ function BookmarkCard({
 
       {/* 序号徽章（快捷键提示，仅 1-9） */}
       {idx < 9 && (
-        <span className="pointer-events-none absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded bg-black/65 font-mono text-[9px] font-bold text-white shadow">
+        <span className="pointer-events-none absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded bg-black/65 font-mono text-[9px] font-bold text-white">
           {idx + 1}
         </span>
       )}
@@ -187,7 +187,7 @@ function BookmarkCard({
       </button>
 
       {/* 名称（双击重命名） */}
-      <div className="border-t border-border/50 bg-popover/80 px-1.5 py-1">
+      <div className="border-t border-border/70 bg-muted/50 px-1.5 py-1">
         {renaming ? (
           <input
             ref={renameRef}
@@ -206,7 +206,7 @@ function BookmarkCard({
           <button
             onDoubleClick={() => { setDraft(b.name); onRenameStart() }}
             title="双击重命名"
-            className="w-full truncate text-left text-[10px] font-medium leading-tight text-popover-foreground/90"
+            className="w-full truncate text-left font-mono text-[10px] font-medium leading-tight text-foreground/90"
           >
             {b.name}
             <span className="ml-1 font-mono text-[8px] text-muted-foreground/70">{time}</span>

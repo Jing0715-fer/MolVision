@@ -9,8 +9,11 @@ import {
   Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
   FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot, Sparkles,
+  Award, Target, Minimize2,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
+import { SCENE_PRESETS, applyScenePreset } from '@/lib/molecular/scenes'
+import { runCommand } from '@/lib/molecular/commands'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
 import { exportSessionFile, importSessionFile, mergeSessionFile, newSession, sessionInfo } from '@/lib/molecular/session'
 import { buildSvgExport, downloadSvg } from '@/lib/molecular/svg-export'
@@ -85,6 +88,11 @@ function DropTrigger({ icon: Icon, label, show = 'lg', disabled, hint }: {
       </button>
     </DropdownMenuTrigger>
   )
+}
+
+/** 场景预设图标映射 */
+const SCENE_ICON: Record<string, typeof Award> = {
+  award: Award, sparkles: Sparkles, target: Target, minimize: Minimize2,
 }
 
 export function Toolbar() {
@@ -312,15 +320,41 @@ export function Toolbar() {
 
         {/* ── 风格组 ── */}
         <DropdownMenu>
-          <DropTrigger icon={Sparkles} label="风格预设" show="lg" disabled={!activeId} hint="一键切换展示风格" />
-          <DropdownMenuContent align="start" className="w-52">
-            <DropdownMenuLabel className="text-xs">一键切换展示风格</DropdownMenuLabel>
+          <DropTrigger icon={Sparkles} label="风格预设" show="lg" disabled={!activeId} hint="一键切换展示风格与场景组合" />
+          <DropdownMenuContent align="start" className="w-64">
+            <DropdownMenuLabel className="mol-micro">场景组合 · 一键工作流</DropdownMenuLabel>
+            {Object.values(SCENE_PRESETS).map(sp => {
+              const Icon = SCENE_ICON[sp.icon] ?? Sparkles
+              return (
+                <DropdownMenuItem
+                  key={sp.key}
+                  onClick={() => {
+                    const r = applyScenePreset(sp.key, runCommand)
+                    if (r.ok) toast.success(`已应用场景：${r.applied}`, { description: sp.after })
+                    else toast.error(r.error ?? '场景应用失败')
+                  }}
+                  className="scene-item gap-2.5"
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="flex-1">
+                    <span className="block text-xs font-medium">{sp.label}</span>
+                    <span className="block text-[10px] leading-snug text-muted-foreground">{sp.desc}</span>
+                  </span>
+                  <kbd className="shrink-0 rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">{sp.commands.length} cmd</kbd>
+                </DropdownMenuItem>
+              )
+            })}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="mol-micro">表示法 · 单项切换</DropdownMenuLabel>
             {Object.entries(PRESETS).map(([key, p], i) => (
               <DropdownMenuItem key={key} onClick={() => applyPreset(key)} className="gap-2 text-xs">
                 <span className="w-4 text-center font-mono text-[10px] text-muted-foreground">{i + 1}</span>
                 {p.label}
               </DropdownMenuItem>
             ))}
+            <p className="px-2 pb-1.5 pt-1 text-[9px] leading-relaxed text-muted-foreground/70">
+              命令行同样可用：<code className="rounded bg-muted px-1 font-mono">preset publication</code> · <code className="rounded bg-muted px-1 font-mono">scene pocket</code>
+            </p>
           </DropdownMenuContent>
         </DropdownMenu>
 

@@ -48,11 +48,11 @@ export function ColorsPanel() {
           <button
             key={sc.key}
             onClick={() => { applyColor(sc.key); toast.success(`已应用配色：${COLOR_SCHEME_LABELS[sc.key]}`) }}
-            className="flex w-full items-center gap-2.5 rounded-lg border border-border/60 px-2.5 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5"
+            className="panel-card flex w-full items-center gap-2.5 px-2.5 py-2 text-left"
           >
             <div className="flex -space-x-1">
               {sc.swatches.map((c, i) => (
-                <span key={i} className="h-4 w-4 rounded-full border border-background shadow-sm" style={{ background: c }} />
+                <span key={i} className="h-4 w-4 rounded-full border border-background shadow-xs" style={{ background: c }} />
               ))}
             </div>
             <span className="min-w-0 flex-1 truncate text-xs font-medium" title={COLOR_SCHEME_LABELS[sc.key]}>{COLOR_SCHEME_LABELS[sc.key]}</span>
@@ -67,17 +67,17 @@ export function ColorsPanel() {
           type="color"
           value={custom}
           onChange={e => setCustom(e.target.value)}
-          className="h-8 w-10 cursor-pointer rounded-md border border-border/60 bg-background/60 p-0.5"
+          className="h-8 w-10 cursor-pointer rounded-md border border-border bg-background p-0.5"
         />
         <Input
           value={custom}
           onChange={e => setCustom(e.target.value)}
-          className="h-8 min-w-0 flex-1 font-mono text-xs"
+          className="h-8 min-w-0 flex-1 border-border bg-background font-mono text-xs"
           placeholder="#hex"
         />
         <button
           onClick={() => { applyColor(custom); toast.success(`已上色 ${custom}`) }}
-          className="flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:opacity-90"
+          className="mol-btn-primary flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:opacity-90"
         >
           <Paintbrush className="h-3 w-3" /> 上色
         </button>
@@ -89,7 +89,7 @@ export function ColorsPanel() {
           <button
             key={name}
             onClick={() => { applyColor(hex); toast.success(`已上色 ${name}`) }}
-            className="group relative flex items-center gap-1.5 rounded-md border border-border/60 py-1 pl-1 pr-2 transition hover:border-primary/40"
+            className="group relative flex items-center gap-1.5 rounded-md border border-border py-1 pl-1 pr-2 transition hover:border-primary/40"
             title={`上色 ${name}`}
           >
             <span className="h-3.5 w-3.5 rounded-sm border border-black/10" style={{ background: hex }} />
@@ -104,7 +104,7 @@ export function ColorsPanel() {
           onClick={() => resetColors('selection')}
           disabled={!hasSelection}
           className={cn(
-            'flex h-7 items-center gap-1 rounded-md border border-border/60 px-2.5 text-[11px] transition',
+            'flex h-7 items-center gap-1 rounded-md border border-border px-2.5 text-[11px] transition',
             hasSelection ? 'hover:bg-accent' : 'opacity-40',
           )}
         >
@@ -114,11 +114,11 @@ export function ColorsPanel() {
           onClick={() => resetColors('structure')}
           disabled={overrideCount === 0}
           className={cn(
-            'flex h-7 items-center gap-1 rounded-md border border-border/60 px-2.5 text-[11px] transition',
+            'flex h-7 items-center gap-1 rounded-md border border-border px-2.5 text-[11px] transition',
             overrideCount > 0 ? 'hover:bg-accent' : 'opacity-40',
           )}
         >
-          <RotateCcw className="h-3 w-3" /> 重置全部 ({overrideCount.toLocaleString()})
+          <RotateCcw className="h-3 w-3" /> 重置全部 (<span className="font-mono tabular-nums">{overrideCount.toLocaleString()}</span>)
         </button>
       </div>
 

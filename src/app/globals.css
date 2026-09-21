@@ -398,3 +398,42 @@ canvas {
   transform: scale(0.94);
 }
 
+/* 面板内容卡（左面板内部条目卡）：hairline + 悬停浮起 + 左缘刻线锚
+   注意：本规则未分层（Tailwind v4 会把用户自定义 CSS 展平输出，压过 @layer utilities 的工具类），
+   因此条目态覆盖（激活 border-primary/60 / 错误 border-destructive/60）需在调用处用 `!` 后缀提权 */
+.panel-card {
+  border: 1px solid color-mix(in oklab, var(--foreground) 8%, transparent);
+  border-radius: 8px;
+  background: var(--card);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.panel-card:hover {
+  border-color: color-mix(in oklab, var(--foreground) 16%, transparent);
+  box-shadow: 0 1px 3px oklch(0.25 0.01 80 / 0.05);
+}
+.dark .panel-card:hover {
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
+}
+
+/* 场景预设卡（工具栏下拉内）：强调型条目 */
+.scene-item {
+  position: relative;
+}
+.scene-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.scene-item[data-highlighted]::before {
+  opacity: 1;
+}
+
+

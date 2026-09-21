@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import {
-  Boxes, ChevronRight, Command as CommandIcon, CornerDownLeft, HelpCircle,
+  Boxes, ChevronRight, Command as CommandIcon, HelpCircle,
   FolderOpen, History, Palette, Sparkles, Star, Terminal, Triangle,
   Maximize, RotateCcw, Zap, Camera, Download, Save, FilePlus2,
 } from 'lucide-react'
@@ -40,21 +40,21 @@ interface PaletteItem {
 /** 取示例命令的可执行首段（「·」分隔的多示例取第一段） */
 const firstExample = (ex: string) => ex.split('·')[0].trim()
 
-/** 命令分类图标与配色（与 ConsoleBar 补全弹层的分类语义一致） */
+/** 命令分类图标与配色（与 ConsoleBar 补全弹层同构：primary=结构域 · amber=选择语义 · 其余 muted） */
 function commandIcon(cmd: string): { icon: React.ComponentType<{ className?: string }>; cls: string } {
   const c = cmd.split(/[\s|=]/)[0].toLowerCase()
   if (['load', 'activate', 'close', 'clear', 'split_chains', 'create', 'save', 'session', 'untransform'].includes(c))
-    return { icon: Boxes, cls: 'text-emerald-500' }
+    return { icon: Boxes, cls: 'text-primary' }
   if (['select', 'delete', 'count_atoms', 'label', 'preset'].includes(c))
-    return { icon: Triangle, cls: 'text-amber-500' }
+    return { icon: Triangle, cls: 'text-amber-600 dark:text-amber-400' }
   if (['show', 'hide', 'set', 'bg', 'color', 'util', 'slab', 'axes', 'outline', 'stereo', 'ssao', 'fps', 'perf', 'hbonds'].includes(c))
-    return { icon: Palette, cls: 'text-violet-500' }
+    return { icon: Palette, cls: 'text-muted-foreground' }
   if (['zoom', 'orient', 'get_view', 'set_view', 'view', 'spin', 'rock', 'tour'].includes(c))
-    return { icon: Sparkles, cls: 'text-teal-500' }
+    return { icon: Sparkles, cls: 'text-muted-foreground' }
   if (['superpose', 'morph', 'movie', 'ensemble', 'record', 'symmetry'].includes(c))
-    return { icon: ChevronRight, cls: 'text-rose-500' }
+    return { icon: ChevronRight, cls: 'text-muted-foreground' }
   if (['map', 'contacts', 'interface', 'xcontacts', 'sasa', 'bsa', 'xbsa', 'dssp'].includes(c))
-    return { icon: CommandIcon, cls: 'text-sky-500' }
+    return { icon: CommandIcon, cls: 'text-muted-foreground' }
   return { icon: Terminal, cls: 'text-muted-foreground' }
 }
 
@@ -63,17 +63,17 @@ const QUICK_ACTIONS_STATIC: PaletteItem[] = [
   {
     id: 'qa-load', label: '加载结构…', desc: '打开加载对话框（PDB ID / 文件 / 示例）',
     run: '', fill: '',
-    icon: FolderOpen, iconCls: 'text-emerald-500',
+    icon: FolderOpen, iconCls: 'text-primary',
   },
   {
     id: 'qa-help', label: '帮助与快捷键', desc: '打开帮助文档',
     run: '', fill: '',
-    icon: HelpCircle, iconCls: 'text-sky-500',
+    icon: HelpCircle, iconCls: 'text-muted-foreground',
   },
   {
     id: 'qa-history', label: '命令历史面板', desc: '全量历史 · 搜索 · 置顶管理',
     run: 'history', fill: 'history',
-    icon: History, iconCls: 'text-amber-500',
+    icon: History, iconCls: 'text-muted-foreground',
   },
 ]
 
@@ -108,7 +108,7 @@ export function CommandPalette() {
     {
       id: 'qa-fit', label: '适配视图', desc: '缩放到整个分子 · 快捷键 F',
       run: '', fill: 'zoom ',
-      icon: Maximize, iconCls: 'text-emerald-500',
+      icon: Maximize, iconCls: 'text-muted-foreground',
     },
     {
       id: 'qa-reset', label: '复位视角', desc: '回到默认正视图',
@@ -119,12 +119,12 @@ export function CommandPalette() {
       id: 'qa-hbond', label: settings.showHBonds ? '隐藏氢键网络' : '显示氢键网络',
       desc: settings.showHBonds ? '青色虚线叠加 · 快捷键 B' : '青色虚线叠加 · 快捷键 B · 默认仅选集相关',
       run: '', fill: 'hbonds ',
-      icon: Zap, iconCls: 'text-teal-500',
+      icon: Zap, iconCls: 'text-muted-foreground',
     },
     {
       id: 'qa-shot', label: '导出截图 PNG', desc: '当前视口 · 2× 分辨率 · 透明可后接 bg',
       run: '', fill: 'png ',
-      icon: Camera, iconCls: 'text-amber-500',
+      icon: Camera, iconCls: 'text-muted-foreground',
     },
     {
       id: 'qa-session-save', label: '保存会话', desc: '结构/表示法/设置入档（刷新恢复）',
@@ -177,7 +177,7 @@ export function CommandPalette() {
       run: `activate ${st.name}`,
       fill: 'activate ',
       icon: Boxes,
-      iconCls: st.id === activeId ? 'text-primary' : 'text-emerald-500',
+      iconCls: st.id === activeId ? 'text-primary' : 'text-muted-foreground',
     }))
   }, [structures, activeId])
 
@@ -261,9 +261,9 @@ export function CommandPalette() {
       <item.icon className={cn('h-4 w-4 shrink-0', item.iconCls)} />
       <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{item.label}</span>
       <span className="hidden max-w-[45%] shrink-0 truncate text-[11px] text-muted-foreground/70 sm:inline">{item.desc}</span>
-      <span className="ml-1 hidden shrink-0 items-center gap-1 text-[9px] text-muted-foreground/50 md:flex">
-        <CornerDownLeft className="h-3 w-3" />执行
-        <kbd className="rounded border border-border bg-muted px-1 font-mono">Tab</kbd>编辑
+      <span className="ml-1 hidden shrink-0 items-center gap-1.5 md:flex">
+        <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground" title="执行">↵</kbd>
+        <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground" title="填入命令行编辑">Tab</kbd>
       </span>
     </CommandItem>
   )
@@ -287,14 +287,20 @@ export function CommandPalette() {
       onOpenChange={setOpen}
       title="命令面板"
       description="搜索并执行命令，或填入命令行编辑"
-      className="sm:max-w-xl"
+      className="mol-elevate-lg sm:max-w-xl"
     >
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <span className="text-xs font-semibold">命令面板</span>
+        <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">Ctrl+K</kbd>
+        <span className="mol-micro ml-auto mr-9 text-muted-foreground">COMMAND PALETTE</span>
+      </div>
       <CommandInput
         placeholder="搜索命令、最近使用或结构…（Enter 执行 · Tab 填入编辑）"
         onKeyDown={onInputKeyDown}
+        className="font-mono text-[13px]"
       />
-      <CommandList>
-        <CommandEmpty>没有匹配的命令</CommandEmpty>
+      <CommandList className="mol-scroll max-h-[380px]">
+        <CommandEmpty className="py-6 text-center text-xs text-muted-foreground">没有匹配的命令</CommandEmpty>
         {pinnedItems.length > 0 && (
           <CommandGroup heading="置顶（常用工作流）">
             {pinnedItems.map(renderItem)}
@@ -315,14 +321,16 @@ export function CommandPalette() {
           {allItems.map(renderItem)}
         </CommandGroup>
       </CommandList>
-      <div className="flex items-center justify-between border-t border-border/60 px-3 py-2 text-[10px] text-muted-foreground/60">
-        <span className="flex items-center gap-1">
-          <Star className="h-3 w-3 text-amber-500/70" />
+      <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[10px] text-muted-foreground/70">
+        <span className="flex min-w-0 items-center gap-1 truncate">
+          <Star className="h-3 w-3 shrink-0 text-amber-500/70" />
           在命令历史面板可置顶常用命令（命令行 `` 或 history）
         </span>
-        <span className="flex items-center gap-1">
-          <kbd className="rounded border border-border bg-muted px-1 font-mono">↑↓</kbd>导航
-          <kbd className="rounded border border-border bg-muted px-1 font-mono">Esc</kbd>关闭
+        <span className="flex shrink-0 items-center gap-1">
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↑↓</kbd>导航
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↵</kbd>执行
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Tab</kbd>编辑
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Esc</kbd>关闭
         </span>
       </div>
     </CommandDialog>

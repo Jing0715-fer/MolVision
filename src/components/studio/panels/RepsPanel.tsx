@@ -24,20 +24,20 @@ import {
 const REP_TYPES: RepType[] = ['cartoon', 'putty', 'ballstick', 'sticks', 'spacefill', 'lines', 'surface']
 const SCHEMES: ColorScheme[] = ['element', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'uniform']
 
-/** 表示法类型 → lucide 图标 + 语义色（取代早期 emoji） */
-const TYPE_ICON: Record<RepType, { icon: typeof Ribbon; className: string }> = {
-  cartoon: { icon: Ribbon, className: 'text-emerald-500' },
-  putty: { icon: Worm, className: 'text-amber-500' },
-  ballstick: { icon: CircleDot, className: 'text-rose-500' },
-  sticks: { icon: Minus, className: 'text-teal-500' },
-  spacefill: { icon: Circle, className: 'text-violet-500' },
-  lines: { icon: Spline, className: 'text-fuchsia-500' },
-  surface: { icon: Shell, className: 'text-orange-500' },
+/** 表示法类型 → lucide 图标（中性色：单一强调色纪律，类型识别靠图标形状不靠彩虹色） */
+const TYPE_ICON: Record<RepType, { icon: typeof Ribbon; className?: string }> = {
+  cartoon: { icon: Ribbon },
+  putty: { icon: Worm },
+  ballstick: { icon: CircleDot },
+  sticks: { icon: Minus },
+  spacefill: { icon: Circle },
+  lines: { icon: Spline },
+  surface: { icon: Shell },
 }
 
 function TypeIcon({ type, className }: { type: RepType; className?: string }) {
-  const t = TYPE_ICON[type] ?? { icon: Shapes, className: 'text-muted-foreground' }
-  return <t.icon className={cn('h-3.5 w-3.5 shrink-0', t.className, className)} />
+  const t = TYPE_ICON[type] ?? { icon: Shapes }
+  return <t.icon className={cn('h-3.5 w-3.5 shrink-0 text-primary', t.className, className)} />
 }
 
 export function RepsPanel() {
@@ -105,15 +105,16 @@ function RepCard({
 }) {
   return (
     <div className={cn(
-      'rounded-lg border p-2 transition',
-      rep.error ? 'border-destructive/60 bg-destructive/5' : 'border-border/60',
-      !rep.visible && 'opacity-60',
+      // `!` 提权：panel-card 为未分层自定义规则，压过 @layer utilities 的状态类
+      'panel-card p-2',
+      rep.error && 'border-destructive/60! bg-destructive/5!',
+      !rep.visible && 'opacity-60 saturate-50',
     )}>
       {/* 行 1：类型 + 参数/可见/删除 */}
       <div className="flex items-center gap-1.5">
         <TypeIcon type={rep.type} className="h-4 w-4 shrink-0" />
         <Select value={rep.type} onValueChange={v => onUpdate(structureId, rep.id, { type: v as RepType })}>
-          <SelectTrigger className="h-7 min-w-0 flex-1 border-border/60 bg-background/60 text-[11px] font-medium">
+          <SelectTrigger className="h-7 min-w-0 flex-1 border-border bg-background text-[11px] font-medium">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -130,7 +131,7 @@ function RepCard({
         {/* 参数 */}
         <Popover>
           <PopoverTrigger asChild>
-            <button className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:bg-accent hover:text-foreground" title="参数">
+            <button className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:bg-accent hover:text-foreground active:scale-95" title="参数">
               <SlidersHorizontal className="h-3 w-3" />
             </button>
           </PopoverTrigger>
@@ -235,7 +236,7 @@ function RepCard({
           onChange={e => onUpdate(structureId, rep.id, { selection: e.target.value })}
           placeholder="选择表达式"
           className={cn(
-            'h-7 min-w-[96px] flex-1 basis-[96px] grow border-border/60 bg-background/60 font-mono text-[10px]',
+            'h-7 min-w-[96px] flex-1 basis-[96px] grow border-border bg-background font-mono text-[10px]',
             rep.error && 'border-destructive focus-visible:ring-destructive/30',
           )}
         />
@@ -243,7 +244,7 @@ function RepCard({
           value={PRESET_SELECTIONS.some(p => p.value === rep.selection) ? rep.selection : undefined}
           onValueChange={v => onUpdate(structureId, rep.id, { selection: v })}
         >
-          <SelectTrigger className="h-7 w-7 shrink-0 border-border/60 bg-background/60 px-1 text-[10px] [&_svg]:hidden" title="预设选择">
+          <SelectTrigger className="h-7 w-7 shrink-0 border-border bg-background px-1 text-[10px] [&_svg]:hidden" title="预设选择">
             <span className="text-muted-foreground" aria-hidden>≡</span>
             <span className="sr-only">预设选择</span>
           </SelectTrigger>
@@ -254,7 +255,7 @@ function RepCard({
           </SelectContent>
         </Select>
         <Select value={rep.colorScheme} onValueChange={v => onUpdate(structureId, rep.id, { colorScheme: v as ColorScheme })}>
-          <SelectTrigger className="h-7 w-[92px] shrink-0 border-border/60 bg-background/60 text-[10px]" title="配色方案">
+          <SelectTrigger className="h-7 w-[92px] shrink-0 border-border bg-background text-[10px]" title="配色方案">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -268,7 +269,7 @@ function RepCard({
             type="color"
             value={rep.uniformColor}
             onChange={e => onUpdate(structureId, rep.id, { uniformColor: e.target.value })}
-            className="h-7 w-8 shrink-0 cursor-pointer rounded border border-border/60 bg-background/60 p-0.5"
+            className="h-7 w-8 shrink-0 cursor-pointer rounded border border-border bg-background p-0.5"
             title="统一颜色"
           />
         )}

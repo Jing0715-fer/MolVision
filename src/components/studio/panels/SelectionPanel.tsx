@@ -72,11 +72,11 @@ export function SelectionPanel() {
           value={expr}
           onChange={e => setExpr(e.target.value)}
           placeholder="如 chain A and resi 40-80"
-          className="h-8 flex-1 border-border/60 font-mono text-[11px]"
+          className="h-8 flex-1 border-border bg-background font-mono text-[11px]"
         />
         <button
           type="submit"
-          className="flex h-8 items-center gap-1 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition hover:opacity-90"
+          className="mol-btn-primary flex h-8 items-center gap-1 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition hover:opacity-90"
         >
           <Target className="h-3.5 w-3.5" />
         </button>
@@ -90,7 +90,7 @@ export function SelectionPanel() {
               const res = selectFromExpr(q.expr)
               if (res.error) toast.error(res.error)
             }}
-            className="rounded-full border border-border/60 bg-background/60 px-2.5 py-1 text-[10px] font-medium transition hover:border-primary/40 hover:bg-primary/5"
+            className="rounded-md border border-border bg-background px-2.5 py-1 text-[10px] font-medium transition hover:border-primary/40 hover:bg-primary/5"
           >
             {q.label}
           </button>
@@ -100,8 +100,8 @@ export function SelectionPanel() {
       {/* 当前选择 */}
       <SectionTitle>当前选择</SectionTitle>
       {stats ? (
-        <div className="mx-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
-          <div className="grid grid-cols-2 gap-y-1.5 text-[11px]">
+        <div className="mx-2 rounded-lg border border-primary/60 bg-primary/5 p-3">
+          <div className="grid grid-cols-2 gap-y-1.5 text-[11px] tabular-nums">
             <span className="text-muted-foreground">原子</span>
             <span className="text-right font-mono font-semibold">{stats.atoms.toLocaleString()}</span>
             <span className="text-muted-foreground">残基</span>
@@ -121,25 +121,25 @@ export function SelectionPanel() {
                 if (!selection.structureId) return
                 engineRef.current?.fitView([{ structureId: selection.structureId, indices: selection.indices }])
               }}
-              className="flex h-6.5 items-center gap-1 rounded-md border border-border/60 bg-background/70 px-2 py-1 text-[10px] font-medium transition hover:bg-accent"
+              className="flex h-6.5 items-center gap-1 rounded-md border border-border bg-background px-2 text-[10px] font-medium transition hover:bg-accent"
             >
               <Crosshair className="h-3 w-3" /> 聚焦
             </button>
             <button
               onClick={() => invertSelection()}
-              className="flex items-center gap-1 rounded-md border border-border/60 bg-background/70 px-2 py-1 text-[10px] font-medium transition hover:bg-accent"
+              className="flex h-6.5 items-center gap-1 rounded-md border border-border bg-background px-2 text-[10px] font-medium transition hover:bg-accent"
             >
               反选
             </button>
             <button
               onClick={() => addLabelsForSelection()}
-              className="flex items-center gap-1 rounded-md border border-border/60 bg-background/70 px-2 py-1 text-[10px] font-medium transition hover:bg-accent"
+              className="flex h-6.5 items-center gap-1 rounded-md border border-border bg-background px-2 text-[10px] font-medium transition hover:bg-accent"
             >
               <Tag className="h-3 w-3" /> 标注 (L)
             </button>
             <button
               onClick={() => setSelection(null, [])}
-              className="flex items-center gap-1 rounded-md border border-border/60 bg-background/70 px-2 py-1 text-[10px] font-medium transition hover:bg-accent"
+              className="flex h-6.5 items-center gap-1 rounded-md border border-border bg-background px-2 text-[10px] font-medium transition hover:bg-accent"
             >
               <X className="h-3 w-3" /> 清除
             </button>
@@ -151,7 +151,7 @@ export function SelectionPanel() {
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="命名保存…"
-              className="h-7 flex-1 border-border/60 text-[11px]"
+              className="h-7 flex-1 border-border bg-background text-[11px]"
             />
             <button
               onClick={() => {
@@ -160,7 +160,7 @@ export function SelectionPanel() {
                 toast.success(`已保存命名选择 "${name.trim()}"`)
                 setName('')
               }}
-              className="flex h-7 items-center gap-1 rounded-md border border-border/60 px-2 text-[10px] font-medium transition hover:bg-accent"
+              className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[10px] font-medium transition hover:bg-accent"
             >
               <BookmarkPlus className="h-3 w-3" /> 保存
             </button>
@@ -180,7 +180,7 @@ export function SelectionPanel() {
             {namedSelections.map(ns => (
               <div key={ns.name} className="group flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-accent">
                 <span className="flex-1 truncate font-mono text-[11px] font-medium">{ns.name}</span>
-                <span className="shrink-0 text-[10px] text-muted-foreground">{ns.count.toLocaleString()} at</span>
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{ns.count.toLocaleString()} at</span>
                 <button
                   onClick={() => {
                     if (!data) return
@@ -196,7 +196,7 @@ export function SelectionPanel() {
                 </button>
                 <button
                   onClick={() => deleteNamedSelection(ns.name)}
-                  className="text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
+                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>

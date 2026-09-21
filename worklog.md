@@ -1540,3 +1540,71 @@ Stage Summary:
 - 证据链：双主题截图（/tmp/ui-final-light.png、/tmp/ui-final-dark.png）+ 像素采样（5 关键区域）+ 功能冒烟（测量/加载/AI 面板）+ lint 0/0 + errors 0
 - 未解决与风险：①VLM 审美终审连续 7 轮 429（DOM+像素替代，限流恢复建议补跑）②390px 移动端未实测（无 viewport 命令）③CommandPalette/HistoryDialog/HelpDialog/LoadDialog 弹窗体系未纳入本轮仪器化（下轮候选）④ray+outline/SSAO 线稿化 bug 仍在队列
 - 下一阶段建议：①弹窗体系（CommandPalette/History/Help/Load）仪器化收敛 ②VLM 恢复后补审美终审 ③ray 线稿化 bug 排查 ④agent 快捷预设面板（出版级/科普/口袋特写）
+
+---
+Task ID: 8-a
+Agent: frontend-styling-expert
+Task: 7 面板视觉层统一（仪器语言推广）
+
+Work Log:
+- 读 worklog 尾部（r40 + 7-a）+ globals.css 工具类（mol-micro/panel-card/mol-elevate/mol-btn-primary）+ LeftPanel 共享基元（SectionTitle/PanelHint）+ RepsPanel 参考实现，建立审计基准；发现工作树中 7 面板已有一轮未入账的仪器化改动（含 4 张 task8a-*.png 前序截图、无 worklog 段落），本任务以「逐面板 checklist 审计 + 补齐缺口 + 全量验证」方式收口
+- 【审计】7 面板逐项过清单：彩虹色残留 grep（rose/cyan/emerald/violet/teal/sky…）、半透明底（bg-background/60、bg-card/40、border-border/60）、shadow-xl/2xl、渐变、rounded-xl+、越界字号——除 ScenePanel（本轮跳过）外已基本清零
+- 【语义色保全判定】AnalysisPanel 界面 A/B 侧 rose/cyan（两侧区分=数据语义，类比链色）、SASA 疏水/极性 cyan/rose、DSSP 螺旋/折叠 rose/amber、氢键供体→受体 emerald/cyan、距离热力值 amber（近红远琥珀同族）、距离截断 amber（前序已保留的活跃参数强调）、StructuresPanel 配体行 amber、MapsPanel 正/负峰 inline 色——全部原样保留；仅「装饰性」用法（模式切换 violet、nPoints 按钮 cyan、SASA 调色钮 cyan hover、Fo−Fc 文案 emerald）已被前序收敛为 primary
+- 【本轮补齐 · StructuresPanel】统计徽章（原子/残基/分辨率/耗时）+ 对称伴侣 ops/伴侣数徽章补 font-mono（保留 tabular-nums）；空间群徽章补 tabular-nums；折叠卡摘要行 + 链/配体行 res·at 计数补 font-mono（与 InfoPanel 链行、StatusBar .status-val 同规格）
+- 【本轮补齐 · ColorsPanel】色板 swatch shadow-sm→shadow-xs（与 StructuresPanel/Toolbar swatch 家族统一）；自定义色 hex 输入框补 border-border bg-background 实底（RepsPanel 参考规格）
+- 【本轮补齐 · InfoPanel】CPK 元素点 shadow-sm→shadow-xs
+- 【本轮补齐 · SelectionPanel】表达式输入框 + 命名保存输入框补 bg-background 实底（命名框原为 transparent 透出 bg-primary/5 底色）
+- 【本轮补齐 · MeasurePanel】模式按钮去冗余 hover:border-border（border 已同值的无效悬空类）
+- 【本轮补齐 · AnalysisPanel】SASA「Top 暴露残基」粘性表头 text-[9px] font-semibold uppercase tracking-wide → .mol-micro（与全局面板微标签同规格）
+- 【验证】①bun run lint 0 错 0 警（exit 0）②agent-browser（4HHB 会话已加载，实为 2×4HHB 双结构）：逐面板切换 结构→颜色→选择→测量→分析→密度图→信息 全渲染；截图 /tmp/task8a-colors/structures/analysis/maps/info.png + 深色 /tmp/task8a-dark.png ③交互抽查：结构卡悬停（非激活卡 border 8%→16% + 0 1px 3px 浮起，matches(':hover') 实证）；分析工具运行——「分析接触」→ 84 接触对/36 A 侧/28 B 侧 Stat 卡 + 2D 接触图谱 canvas + 残基对表（50/84 分页），「计算 SASA」→ 粘性 mol-micro 表头（9px/1.26px 字距实测）+ Top 暴露残基条形列表；选择面板表达式 `chain A and resi 1-60` 提交→统计卡+聚焦钮出现 ④agent-browser errors 零新增 ⑤语义色像素级复核：配体 chip amber 文字 + 中性 hairline 边框 + 透明底（lab(47.3 42.9 69.3)）、链色点 rgb(235,142,142)、A/B 标签 rose lab(49.2 81.6 36.1)/cyan lab(55.2 -26.7 -30.5) 全保留
+- 沙箱经验：React 重渲会替换 DOM 节点，eval 缓存的 window.__x 引用变为 detached 导致 computedStyle 读到陈旧值（hover 检查首次误报 border 未变）——复查需每次重新 querySelector 取新鲜节点
+
+Stage Summary:
+- 交付：7 面板（结构/颜色/选择/测量/分析/密度图/信息）仪器语言统一收口。面板层此前已大体换装（panel-card 条目卡 + 激活态 border-primary/60+bg-primary/5+mol-elevate + 隐藏态 opacity-60 saturate-50 + 实底输入 + SectionTitle/PanelHint 基元 + 空态图标 /40 + destructive 悬停），本轮完成剩余缺口：数字读数全量补 font-mono tabular-nums（统计徽章/链行计数/折叠摘要/空间群-ops-晶胞-伴侣徽章）、swatch 微投影家族统一 shadow-xs、裸输入框实底化（Colors hex + Selection 两处）、粘性表头升级 mol-micro、冗余悬空类清理
+- 关键决策：①语义色与装饰色边界判定——A/B 侧、SASA 疏水/极性、DSSP、氢键供受体、距离热力、配体 amber 全部保色（数据可视化语义），装饰性 violet/cyan/emerald 已由前序收敛 primary，本轮无新增回退 ②截断值 amber 读数沿用前序决策（活跃参数强调，amber 属设计系统许可色）③prose 句中嵌入计数的 meta 行维持 tabular-nums-only（不套 font-mono），数字主导的读数行/徽章才升 mono——避免中文正文字面被打断
+- 证据链：lint 0/0 ✓ → 7 面板全切换渲染 ✓ → 3+ 面板截图（colors/structures/analysis/maps/info + 深色帧）✓ → 双交互回归（结构卡 hover border 16% 实证 + 分析接触/SASA 全流程出数）✓ → 选择表达式功能回归 ✓ → errors 零新增 ✓ → 语义色计算样式三例复核 ✓
+- 发现的问题：①工作树存在本轮任务的前序未入账改动与 4 张 task8a-*.png 截图（疑似同任务早前尝试中断），已并入本轮收口与入账 ②SelectionPanel 存在一处历史遗留死代码（隐藏空 div + 仅被它引用的 st 变量，HEAD 即有）——零逻辑改动纪律下未动 ③ScenePanel 仍有 bg-background/60 半透明家族（本轮明确跳过，下轮候选）④会话中双 4HHB 结构为前序测试残留（未清理，不影响功能）
+
+---
+Task ID: 8-b
+Agent: frontend-styling-expert
+Task: 4 弹窗仪器化收敛（CommandPalette / HistoryDialog / HelpDialog / LoadDialog）
+
+Work Log:
+- 读 worklog 尾部（r40 + 7-a + 8-a）+ globals.css 工具类（mol-micro/mol-elevate-lg/mol-sep/panel-card/mol-scroll）+ 4 弹窗源码 + ui/command.tsx + ui/dialog.tsx，建立审计基准；发现工作树中 4 弹窗 + command.tsx 已有一轮未入账的仪器化改动（与 8-a 同型情况：含 7 张 task8b-*.png 前序截图、无 worklog 段落，疑似同任务早前尝试中断），本任务以「逐弹窗 checklist 审计 + 补齐缺口 + 全量验证 + 入账」方式收口
+- 【审计基准】DialogContent 基类自带 rounded-lg（4 弹窗均直接继承，无需覆写）；globals.css @layer base 有 `* { @apply border-border }`，裸 border-b 即发丝线色
+- 【审计 · CommandPalette】①容器 mol-elevate-lg + sm:max-w-xl ✓ ②自绘标题行（命令面板 + Ctrl+K kbd 胶囊 + 右缘 mol-micro「COMMAND PALETTE」，mr-9 让位关闭钮）+ 底 hairline ✓ ③检索行无框化 + 底 hairline（command.tsx 输入 wrapper border-b，h-12 Raycast 行高经 `**:data-[slot=…]` 覆写生效，实测 wrapper/input 同高 45.6px 无裁切）④分组标题在 command.tsx 以 arbitrary variant 落 mol-micro 同规格（实测 9px/700/1.26px 字距/uppercase/muted）——共享 ui 原语沿上游 shadcn 模式保留 variant 写法 ⑤选中态 bg-accent + 左缘 2px primary 刻线（command.tsx data-[selected=true]:shadow-[inset_2px_0_0_0_var(--primary)]，计算样式实证 lab(55.05 -49.92 15.93) 2px 0 0 0 inset）⑥命令行 kbd 列 font-mono text-[9px]（↵/Tab 双键）⑦底部提示条 hairline 上边 + ↑↓/↵/Tab/Esc 四 kbd 统一规格 ✓ ⑧图标墙已从 emerald/violet/teal/rose/sky 彩虹收敛为 primary(结构域)+amber(选择语义)+muted（与 ConsoleBar 补全弹层同构）
+- 【审计 · HistoryDialog】容器 mol-elevate-lg + 标题/搜索/列表/页脚四段 hairline 分层 + mol-micro「HISTORY」✓；命令条目 Geist Mono 11px + tabular-nums（计算样式实证）✓；操作三钮（置顶/填入/复制）h-7 w-7 统一（实测 28px）✓；搜索输入实底（bg-background 容器 + border-border）✓；置顶行 amber 星标语义保留 ✓。时间戳项 N/A——cmd-history 模型只存命令字符串无时间数据，零逻辑改动纪律下不引入（条目已带 tabular-nums，命令中数字按表格数字渲染）
+- 【审计 · HelpDialog】Kbd 胶囊组件规格与任务书逐字一致（border-border bg-muted px-1.5 rounded font-mono text-[10px] min-w-[28px] text-center，计算样式实证 min-width 28px/10px/Geist Mono）✓；分组标题全部 mol-micro ✓；图标墙（Lightbulb/MousePointer2/Keyboard/FlaskConical/Wand2/FolderOpen）全部收敛 text-muted-foreground（计算样式=标题同色）✓；前序已把 violet 提示横幅→hairline muted 卡、emerald-600 选择语法→text-primary
+- 【审计 · LoadDialog】容器 mol-elevate-lg + mol-micro「LOAD」+ 三区段 mol-micro 小标（PDB 编号/本地文件/经典示例）✓；PDB 输入 Geist Mono 13px uppercase（计算样式实证）✓；示例结构卡 panel-card 化（radius 8px；悬停 border 8%→16% + 0 1px 3px 浮起，真实鼠标 hover 实证）✓；获取按钮 mol-btn-primary 质感族 ✓
+- 【本轮补齐 · HelpDialog】「快速上手」第 1 条内联 code 胶囊（4HHB 示例）缺 text-[10px]（其余全部内联 code 均有）——补齐统一规格（本轮唯一代码改动，1 处）
+- 【横向核查】4 弹窗 grep 违禁项（bg-background/60 半透明输入、shadow-xl/2xl、渐变、rounded-xl+、彩虹色残留）：零命中；唯一残留命中在 ProviderSettingsDialog（rounded-xl + bg-background/70 家族）——r40 已重构过的弹窗、明确不在 8-b 四弹窗范围，记录为下轮候选
+- 【验证】①bun run lint 0 错 0 警（exit 0，补齐改动后复跑）②agent-browser（存活会话）：Ctrl+K 开面板（73 条目全渲染）截图 /tmp/task8b-palette.png → 输入过滤词「hbond」列表 73→1（唯一命中 hbonds on|off [n]）→ Esc 关闭 ✓ ③命令执行冒烟：面板内输入 count_atoms + Enter → 面板自动关闭 + localStorage 历史条目 2→3（末条 count_atoms chain A）✓；HelpDialog 经面板快捷动作「帮助与快捷键」打开（顺带验证快捷动作执行路径）截图 /tmp/task8b-help.png → Esc 关闭 ✓ ④HistoryDialog：` 键开控制台（合成 KeyboardEvent）→ 点控制台头部历史图标打开 → 截图 /tmp/task8b-history.png（3 条历史 + HISTORY 微标签 + mono/tabular-nums/h-7 实证）→ Esc 关闭 ✓ ⑤LoadDialog：工具栏「加载结构」打开 → 截图 /tmp/task8b-load.png（mono 输入 + 7 张 panel-card 示例卡 + hover 浮起像素实证）→ Esc 关闭 ✓ ⑥深色帧：真实主题切换（localStorage theme=light 使 set media dark 失效，改点 Sun/Moon 钮）重截 /tmp/task8b-palette-dark.png，对话框条带均值 RGB(41,39,36) 炭黑 ✓ + 选中项左缘检出 187 个翡翠像素（x≈362-366 纵向刻线）✓ ⑦agent-browser errors 零新增（开场清零后全程为空）
+- 沙箱经验：①bash 双引号内裸反引号触发命令替换导致 agent-browser eval 挂死——含 ` 的 JS 需整体单引号包裹 ②Radix 对话框 Esc 关闭后 DOM 移除滞后约 1s（fade-out-200 + 清理调度），0.3-0.8s 内 querySelector 误报「未关闭」，复查需 ≥1s 或二次确认 ③`set media dark` 对显式 localStorage 主题偏好（light）无效，深色验证须走真实主题切换钮
+
+Stage Summary:
+- 交付：4 弹窗仪器化收敛收口。主体改动来自工作树前序未入账尝试（本段一并入账）：CommandPalette（mol-elevate-lg 容器 + 自绘标题行/COMMAND PALETTE 微标签 + Raycast 式无框检索行 + 选中态 bg-accent+左缘 2px primary 刻线 + 分组标题 mol-micro 规格 + kbd 双列 mono + 底部提示条统一 kbd + 图标墙 primary/amber/muted 三色纪律）、HistoryDialog（四段 hairline 分层 + HISTORY 微标签 + 条目 mono tabular-nums + h-7 操作钮 + 实底搜索框）、HelpDialog（Kbd 胶囊组件统一规格 + 分组标题 mol-micro + 图标墙全 muted + violet 横幅→hairline 卡）、LoadDialog（mol-elevate-lg + 三段 mol-micro + PDB 输入 mono uppercase + 示例卡 panel-card 化 + 获取钮 mol-btn-primary）；本轮补齐最后缺口：HelpDialog 内联 code 胶囊 text-[10px] 统一
+- 关键决策：①选中态语言复用 ui/command.tsx 原语层（data-[selected=true] inset 2px primary）而非在业务层覆写——一处改动同时覆盖全部 cmdk 消费者 ②分组标题以 arbitrary variant 落 mol-micro 同规格而非引入自定义类——与上游 shadcn 命令组件结构兼容 ③时间戳项按数据模型现状记 N/A（零逻辑改动红线优先于清单字面）④ProviderSettingsDialog 违禁项不越界处理（任务范围=4 弹窗），记录移交
+- 证据链：lint 0/0 ✓ → 4 弹窗开/关/截图全通过 ✓ → 面板过滤 73→1 ✓ → 命令执行冒烟（历史 2→3）✓ → 计算样式五点实证（选中刻线/分组标题/kbd 胶囊/条目 mono/操作钮 28px）✓ → 真实 hover 浮起实证（border 8%→16%）✓ → 深色帧像素采样（炭黑底 + 翡翠刻线 187px）✓ → errors 零新增 ✓
+- 发现的问题：①工作树存在本任务前序未入账改动与 7 张 task8b-*.png 截图（与 8-a 同型，已并入本段收口与入账，陈旧 2 张已清理、5 张本轮重截覆盖）②ProviderSettingsDialog 仍有 rounded-xl + bg-background/70 半透明家族（下轮候选）③HistoryDialog 无时间戳数据（模型仅存命令字符串；如需时间轴展示需先扩 cmd-history 模型——逻辑改动，另行立项）④agent-browser press Backquote 未能触发应用级 ` 快捷键（合成 KeyboardEvent 可用），疑似 CDP 键事件与 window 级监听的焦点路径差异，不影响真实用户
+---
+Task ID: 8
+Agent: main
+Task: 用户指令「继续优化整体 UI，打磨 UI 质感和设计感，美观度和实用性并存」——r41 双主线：场景组合预设（实用性）+ 面板/弹窗体系仪器化推广（美学）
+
+Work Log:
+- 【场景组合预设系统（实用性核心，多轮遗留清账）】①新建 src/lib/molecular/scenes.ts：SCENE_PRESETS 四场景——publication 出版级渲染（preset cartoon + bg white + outline on 1.1 1.8 + set fog off + orient，论文图直出）/ popular 科普风格（preset surface + bg white + ssao on 2 + orient）/ pocket 口袋特写（preset bindingsite + orient + zoom within 5 of (ligand), 8）/ clean 极简展示（preset cartoon + bg white + set fog off + orient）；实现为命令链逐条 runCommand，复用命令系统全部能力 ②commands.ts：preset/style/scene 命令统一入口——PRESETS 未命中自动回落 SCENE_PRESETS，错误信息同时列出两类可用键 ③Toolbar 风格预设下拉重构为双区：上半「场景组合 · 一键工作流」（4 场景卡：primary 图标 + 描述行 + N cmd 徽章 + scene-item 左缘刻线 hover）+ 分隔线 + 下半「表示法 · 单项切换」（原 5 项）+ 底部命令行用法提示
+- 【共享基元升级】①SectionTitle：大写字距标题 + primary 2px 刻线锚点（与 rail-notch/补全选中刻线同语言）②PanelHint：从裸文本升级为 inset 提示框（hairline + bg-muted/40）③globals.css 新增 .panel-card（hairline 卡 + hover 边框加深 + 微浮起阴影）与 .scene-item（下拉场景条目左缘刻线）
+- 【ViewBar 仪器化】保存/折叠/徽章/书签卡全部从 bg-popover/90 + backdrop-blur + shadow-lg 塑料半透明 → bg-card 实底 + mol-elevate 分层阴影 + hairline 边框；缩略图占位去渐变（from-muted/80 to-muted → bg-muted 纯色）；书签名 font-mono；激活态 ring-2 → border-primary/70 + ring-1（更克制）
+- 【RepsPanel 质感】TYPE_ICON 彩虹七色（emerald/amber/rose/teal/violet/fuchsia/orange）→ 统一 text-primary（单一强调色纪律最后一块拼图）；rep 卡改 panel-card；全部输入/Select 实底化
+- 【子代理 8-a】7 面板（Structures/Colors/Selection/Measure/Analysis/Maps/Info）视觉层统一：统计徽章 font-mono 补齐、swatch shadow-xs 家族统一、输入实底、SASA 表头 mol-micro；语义色（链色/残基色/元素色/差图正负峰）全保留；交互抽查（结构卡 hover、分析展开、选择表达式）全过
+- 【子代理 8-b】4 弹窗（CommandPalette/History/Help/Load）仪器化：mol-elevate-lg + mol-micro 上下文标签 + hairline 分层；CommandPalette Raycast 化（无框检索行 h-12 + 选中项左缘 primary 刻线 + 底部提示条 kbd 统一规格）；command.tsx 组件库级升级（CommandItem 选中刻线 + CommandGroup heading mol-micro 全局生效）；HelpDialog kbd 胶囊统一 28px min-width；LoadDialog 示例卡 panel-card 化
+- 【E2E 验证】①scene pocket 命令行链：preset bindingsite → orient → zoom（缓冲 +8 Å）→「已应用场景: 口袋特写（3 条命令）」日志全链 ✓ ②工具栏下拉「出版级」点击：cartoon 预设 → bg white → outline on（Sobel 描述）→ fog off → orient 五命令依序执行 ✓ ③双主题截图（bg white 生效 255,255,255 / 墨色仪表条恒在）④lint 0/0 + tsc 应用代码 0 错 + 浏览器 errors 0
+- 测试方法论：React 受控输入必须用 HTMLInputElement.prototype value setter + input 事件（直接 .value= 赋值不进 React state）；Radix DropdownMenu 合成 click 需 pointerdown 前置且菜单条目查询要等 1.5s portal 挂载
+
+Stage Summary:
+- r41 交付：①实用性——场景组合预设系统落地（4 场景 × 命令链 × 双入口[下拉+命令行]），「出版级一键出图」从多轮 backlog 变为 3 秒操作 ②美学——r40 仪器语言从主框架推广到全部次级 surface：9 面板 + 4 弹窗 + ViewBar + 共享基元（SectionTitle 刻线锚/PanelHint 提示框/panel-card 卡片类）；TYPE_ICON 彩虹收敛后单一强调色纪律覆盖全应用
+- 关键决策：①场景预设实现为命令链而非新状态机——零新代码路径、自动获得日志/错误处理/命令行入口 ②preset 命令与 scene 命令统一入口（PRESETS 回落 SCENE_PRESETS）③CommandItem 选中刻线升级在 shadcn 组件库层（command.tsx）完成——所有未来用 Command 的弹窗自动继承
+- 证据链：命令链日志逐条 ✓ → 下拉场景执行 ✓ → 双主题像素 ✓ → lint/tsc/errors 全绿 → 7 面板+4 弹窗截图存档（/tmp/task8a-*、/tmp/task8b-*）
+- 未解决与风险：①ProviderSettingsDialog 仍有 rounded-xl + bg-background/70 半透明家族（8-b 发现，下轮候选）②ScenePanel bg-background/60 未处理（8-a 有意跳过）③VLM 主观终审持续 429（连续 8 轮，DOM+像素证据替代）④ray+outline/SSAO 线稿化 bug 仍在队列（publication 场景用保守 outline 参数 1.1/1.8 规避）
+- 下一阶段建议：①ProviderSettingsDialog 仪器化收尾 ②ScenePanel 实底化 ③ray 线稿化根因排查（用户上上上轮反馈）④VLM 恢复后补审美终审

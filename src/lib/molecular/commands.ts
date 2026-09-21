@@ -1,5 +1,6 @@
 // PyMOL 风格命令行：select / show / hide / color / bg / zoom / spin / slab / label / create / map / symmetry / stereo ...
 import { PRESETS, useMolStore, engineRef, dataRegistry, buildNamedMasks } from './store'
+import { SCENE_PRESETS } from './scenes'
 import { saveSession, clearSession, sessionInfo, exportSessionFile, newSession } from './session'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
@@ -456,12 +457,20 @@ export function runCommand(raw: string): void {
     return ok(`已添加 ${s.selection.indices.length} 个标签`)
   }
 
-  if (cmd === 'preset' || cmd === 'style') {
+  if (cmd === 'preset' || cmd === 'style' || cmd === 'scene') {
     const name = (parts[1] ?? '').toLowerCase()
     const p = PRESETS[name]
-    if (!p) return err(`未知预设 "${parts[1]}"。可用: ${Object.keys(PRESETS).join(', ')}`)
-    useMolStore.getState().applyPreset(name)
-    return ok(`已应用预设: ${p.label}`)
+    if (p) {
+      useMolStore.getState().applyPreset(name)
+      return ok(`已应用预设: ${p.label}`)
+    }
+    // 场景组合预设（多命令链：表示法 + 环境 + 相机）
+    const scene = SCENE_PRESETS[name]
+    if (scene) {
+      for (const c of scene.commands) runCommand(c)
+      return ok(`已应用场景: ${scene.label}（${scene.commands.length} 条命令）`)
+    }
+    return err(`未知预设 "${parts[1]}"。表示法: ${Object.keys(PRESETS).join(', ')} · 场景: ${Object.keys(SCENE_PRESETS).join(', ')}`)
   }
 
   if (cmd === 'delete') {

@@ -39,9 +39,9 @@ export function InfoPanel() {
   return (
     <div className="pb-4">
       <SectionTitle>结构信息</SectionTitle>
-      <div className="mx-2 rounded-lg border border-border/60 bg-gradient-to-b from-background/80 to-transparent p-3">
+      <div className="panel-card mx-2 p-3">
         <h4 className="text-xs font-semibold leading-snug">{st.meta.title || st.name}</h4>
-        <div className="mt-2.5 space-y-1">
+        <div className="mt-2.5 space-y-1 tabular-nums">
           {rows.map(r => (
             <div key={r.label} className="flex items-baseline justify-between gap-3 text-[11px]">
               <span className="shrink-0 text-muted-foreground">{r.label}</span>
@@ -55,8 +55,8 @@ export function InfoPanel() {
       <SectionTitle>元素配色（CPK）</SectionTitle>
       <div className="grid grid-cols-3 gap-1.5 px-3">
         {[['C', '#909090'], ['N', '#3050f8'], ['O', '#ff0d0d'], ['S', '#ffff30'], ['P', '#ff8000'], ['H', '#f0f0f0'], ['Fe', '#e06633'], ['Zn', '#7d80b0'], ['Mg', '#8aff00']].map(([el, c]) => (
-          <div key={el} className="flex items-center gap-1.5 rounded-md border border-border/50 px-1.5 py-1">
-            <span className="h-3 w-3 rounded-full border border-black/10 shadow-sm" style={{ background: c }} />
+          <div key={el} className="flex items-center gap-1.5 rounded-md border border-border px-1.5 py-1">
+            <span className="h-3 w-3 rounded-full border border-black/10 shadow-xs" style={{ background: c }} />
             <span className="font-mono text-[10px] font-semibold">{el}</span>
           </div>
         ))}
@@ -75,11 +75,11 @@ export function InfoPanel() {
               {c.type === 'nucleic' && <Dna className="h-3 w-3" />}
               {c.type === 'protein' ? '蛋白质' : c.type === 'nucleic' ? '核酸' : c.type === 'water' ? '水' : '配体'}
             </span>
-            <span className="ml-auto font-mono text-[10px] text-muted-foreground/70">{c.residues} res · {c.atoms} at</span>
+            <span className="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground/70">{c.residues} res · {c.atoms} at</span>
           </div>
         ))}
         {st.chains.length > 12 && (
-          <p className="text-[10px] text-muted-foreground">…共 {st.chains.length} 条链</p>
+          <p className="text-[10px] tabular-nums text-muted-foreground">…共 {st.chains.length} 条链</p>
         )}
       </div>
 

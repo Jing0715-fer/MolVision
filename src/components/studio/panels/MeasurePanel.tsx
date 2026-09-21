@@ -47,7 +47,7 @@ export function MeasurePanel() {
               'flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-[11px] font-medium transition',
               measureMode === m.mode
                 ? 'border-primary/60 bg-primary/10 text-primary'
-                : 'border-border/60 hover:border-border hover:bg-accent/60 text-muted-foreground',
+                : 'border-border text-muted-foreground hover:bg-accent',
             )}
           >
             <m.icon className="h-3.5 w-3.5" />
@@ -65,7 +65,7 @@ export function MeasurePanel() {
           {pickInfo && (
             <div className="mt-1.5 space-y-0.5">
               {pickInfo.map((p, i) => (
-                <div key={i} className="flex items-center gap-2 font-mono text-[10px]">
+                <div key={i} className="flex items-center gap-2 font-mono text-[10px] tabular-nums">
                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-600 dark:text-amber-400">{i + 1}</span>
                   <span className="text-foreground/80">{p}</span>
                 </div>
@@ -96,20 +96,20 @@ export function MeasurePanel() {
           const color = m.type === 'distance' ? '#ffd166' : m.type === 'angle' ? '#4fd1c5' : '#c39bd3'
           const atomNames = data ? m.atoms.map(i => `${data.atoms.chainIds[i].trim()}:${data.atoms.resNames[i]}${data.atoms.resSeqs[i]}.${data.atoms.names[i]}`).join(' → ') : ''
           return (
-            <div key={m.id} className="group flex items-center gap-2 rounded-lg border border-border/60 px-2.5 py-2">
+            <div key={m.id} className="panel-card group flex items-center gap-2 px-2.5 py-2">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[10px] text-muted-foreground">{label}</span>
-                  <span className="font-mono text-xs font-bold">
+                  <span className="font-mono text-xs font-bold tabular-nums">
                     {m.type === 'distance' ? `${m.value.toFixed(2)} Å` : `${m.value.toFixed(1)}°`}
                   </span>
                 </div>
-                <div className="truncate font-mono text-[9px] text-muted-foreground/70" title={atomNames}>{atomNames}</div>
+                <div className="truncate font-mono text-[9px] tabular-nums text-muted-foreground/70" title={atomNames}>{atomNames}</div>
               </div>
               <button
                 onClick={() => removeMeasurement(m.id)}
-                className="text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
+                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
               >
                 <Trash2 className="h-3 w-3" />
               </button>

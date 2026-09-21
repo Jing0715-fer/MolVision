@@ -203,13 +203,21 @@ export function LeftPanel() {
 }
 
 export function PanelHint({ children }: { children: React.ReactNode }) {
-  return <p className="px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">{children}</p>
+  return (
+    <p className="mx-3 mb-2 rounded-md border border-border/50 bg-muted/40 px-2.5 py-2 text-[10.5px] leading-relaxed text-muted-foreground">
+      {children}
+    </p>
+  )
 }
 
+/** 分区标题：primary 刻线锚点 + 大写微标签（与工具栏/仪表条同一仪器语言） */
 export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between px-3 pt-3 pb-1.5">
-      <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">{children}</h3>
+      <h3 className="mol-micro flex items-center gap-1.5 text-muted-foreground/85">
+        <span className="h-2.5 w-[2px] rounded-full bg-primary/70" aria-hidden />
+        {children}
+      </h3>
       {right}
     </div>
   )
