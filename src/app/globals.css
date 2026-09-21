@@ -46,12 +46,12 @@
 :root {
   --radius: 0.625rem;
   /* 暖色中性系（纸感）：边框/背景带轻微琥珀底色，避免冷灰塑料感 */
-  --background: oklch(0.984 0.004 85);
-  --foreground: oklch(0.17 0.008 80);
+  --background: oklch(0.982 0.004 85);
+  --foreground: oklch(0.155 0.012 80);
   --card: oklch(0.996 0.002 85);
-  --card-foreground: oklch(0.17 0.008 80);
+  --card-foreground: oklch(0.155 0.012 80);
   --popover: oklch(0.996 0.002 85);
-  --popover-foreground: oklch(0.17 0.008 80);
+  --popover-foreground: oklch(0.155 0.012 80);
   --primary: oklch(0.596 0.145 163.225);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.955 0.006 85);
@@ -61,9 +61,15 @@
   --accent: oklch(0.945 0.008 85);
   --accent-foreground: oklch(0.24 0.008 80);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.902 0.008 83);
-  --input: oklch(0.902 0.008 83);
+  --border: oklch(0.893 0.01 83);
+  --input: oklch(0.893 0.01 83);
   --ring: oklch(0.696 0.17 162.48);
+  /* 墨色仪表状态条（浅色模式：墨底 + 米白读数） */
+  --status-bg: oklch(0.235 0.012 80);
+  --status-fg: oklch(0.9 0.012 85);
+  --status-dim: oklch(0.9 0.012 85 / 58%);
+  --status-line: oklch(0.9 0.012 85 / 14%);
+  --status-hot: oklch(0.92 0.008 85);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -81,12 +87,12 @@
 
 .dark {
   /* 暖色深色系（炭+琥珀底）——避免蓝黑冷调荧光感 */
-  --background: oklch(0.16 0.005 80);
-  --foreground: oklch(0.945 0.006 85);
-  --card: oklch(0.196 0.005 80);
-  --card-foreground: oklch(0.945 0.006 85);
-  --popover: oklch(0.196 0.005 80);
-  --popover-foreground: oklch(0.945 0.006 85);
+  --background: oklch(0.15 0.005 80);
+  --foreground: oklch(0.93 0.008 85);
+  --card: oklch(0.19 0.005 80);
+  --card-foreground: oklch(0.93 0.008 85);
+  --popover: oklch(0.19 0.005 80);
+  --popover-foreground: oklch(0.93 0.008 85);
   --primary: oklch(0.696 0.17 162.48);
   --primary-foreground: oklch(0.14 0.005 80);
   --secondary: oklch(0.248 0.005 80);
@@ -96,9 +102,15 @@
   --accent: oklch(0.248 0.006 80);
   --accent-foreground: oklch(0.945 0.006 85);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.945 0.006 85 / 15%);
-  --input: oklch(0.945 0.006 85 / 17%);
+  --border: oklch(0.93 0.006 85 / 16%);
+  --input: oklch(0.93 0.006 85 / 18%);
   --ring: oklch(0.696 0.17 162.48);
+  /* 墨色仪表状态条（深色模式：更深一档的炭底 + 暖白读数） */
+  --status-bg: oklch(0.115 0.005 80);
+  --status-fg: oklch(0.87 0.01 85);
+  --status-dim: oklch(0.87 0.01 85 / 55%);
+  --status-line: oklch(0.87 0.01 85 / 13%);
+  --status-hot: oklch(0.9 0.008 85);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -266,3 +278,123 @@ canvas {
 .probe-pop {
   animation: probe-pop 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
 }
+
+/* ============================================================
+   精密仪器设计语言（Precision Instrument）
+   ============================================================ */
+
+/* 微标签：大写字距（分组标题/仪表条分区名） */
+.mol-micro {
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* 工具栏功能分组发丝线（1px，比 Separator 更克制） */
+.mol-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 3px;
+  background: color-mix(in oklab, var(--foreground) 9%, transparent);
+}
+
+/* 墨色仪表条（底部状态栏专用） */
+.instrument-bar {
+  background: var(--status-bg);
+  color: var(--status-fg);
+}
+
+/* 仪表条分区发丝线 */
+.status-sep {
+  width: 1px;
+  height: 12px;
+  flex-shrink: 0;
+  background: var(--status-line);
+}
+
+/* 仪表条微标签 */
+.status-micro {
+  font-size: 8.5px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--status-dim);
+}
+
+/* 仪表条读数（等宽数字） */
+.status-val {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* 视口四角刻度线（仪器取景框签名细节） */
+.corner-tick {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  opacity: 0.35;
+}
+.corner-tick::before,
+.corner-tick::after {
+  content: '';
+  position: absolute;
+  background: var(--foreground);
+}
+.corner-tick::before {
+  width: 100%;
+  height: 1px;
+}
+.corner-tick::after {
+  width: 1px;
+  height: 100%;
+}
+.corner-tick.tl { top: 10px; left: 10px; }
+.corner-tick.tl::before { top: 0; left: 0; }
+.corner-tick.tl::after { top: 0; left: 0; }
+.corner-tick.tr { top: 10px; right: 10px; }
+.corner-tick.tr::before { top: 0; right: 0; }
+.corner-tick.tr::after { top: 0; right: 0; }
+.corner-tick.bl { bottom: 10px; left: 10px; }
+.corner-tick.bl::before { bottom: 0; left: 0; }
+.corner-tick.bl::after { bottom: 0; left: 0; }
+.corner-tick.br { bottom: 10px; right: 10px; }
+.corner-tick.br::before { bottom: 0; right: 0; }
+.corner-tick.br::after { bottom: 0; right: 0; }
+
+/* 图标栏激活态侧缘缺口（notch） */
+.rail-notch {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 16px;
+  transform: translateY(-50%);
+  border-radius: 0 2px 2px 0;
+  background: var(--primary);
+}
+
+/* 工具栏图标按钮统一规格 */
+.tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.tool-btn:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.tool-btn:active {
+  transform: scale(0.94);
+}
+

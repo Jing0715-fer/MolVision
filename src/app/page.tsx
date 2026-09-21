@@ -1,6 +1,6 @@
 'use client'
 
-// MolVision 主页面：工具栏 + 左面板 + 3D 视图 + 序列条 + 状态栏
+// MolVision 主页面：工具栏 + 左面板 + 3D 视口（取景框刻度线）+ 序列条 + 墨色仪表状态栏
 import dynamic from 'next/dynamic'
 import { Toolbar } from '@/components/studio/Toolbar'
 import { LeftPanel } from '@/components/studio/LeftPanel'
@@ -33,6 +33,13 @@ export default function Home() {
         <LeftPanel />
         <main className="relative min-w-0 flex-1" aria-label="3D 分子视图">
           <MolViewer />
+          {/* 仪器取景框：四角刻度线（签名细节，不拦截交互） */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 z-10">
+            <span className="corner-tick tl" />
+            <span className="corner-tick tr" />
+            <span className="corner-tick bl" />
+            <span className="corner-tick br" />
+          </div>
           <ConsoleBar />
           <AgentPanel />
         </main>

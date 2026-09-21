@@ -1,13 +1,14 @@
 'use client'
 
-// 顶部工具栏
+// 顶部工具栏 —— 精密仪器设计语言
+// 结构：品牌区（六角原子 monogram + 字标）｜功能分组发丝线分隔｜分段测量控件｜右侧 AI/⌘K/主题集群
 import { useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  Atom, Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
-  Home, Loader2, MousePointer2, RotateCw, Ruler, Sparkles, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
-  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot,
+  Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
+  Home, Loader2, MousePointer2, RotateCw, Ruler, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
+  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot, Sparkles,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
@@ -26,7 +27,6 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Separator } from '@/components/ui/separator'
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from '@/components/ui/tooltip'
@@ -46,6 +46,45 @@ const TOUR_DOT: Record<string, string> = {
 
 function TourDot({ accent }: { accent: string }) {
   return <span className={cn('mt-0.5 h-2 w-2 shrink-0 rounded-full', TOUR_DOT[accent] ?? 'bg-muted-foreground')} />
+}
+
+/** 品牌标识：六角晶格芯片 + 原子轨道线稿（MolVision monogram） */
+function BrandMark() {
+  return (
+    <div className="relative flex h-7 w-7 shrink-0 items-center justify-center" aria-hidden>
+      <svg viewBox="0 0 28 28" className="absolute inset-0 h-full w-full">
+        <polygon points="14,1 25.1,7.25 25.1,20.75 14,27 2.9,20.75 2.9,7.25" className="fill-primary" />
+      </svg>
+      <svg viewBox="0 0 20 20" className="relative h-[17px] w-[17px] text-primary-foreground" fill="none" stroke="currentColor" strokeWidth="1.3">
+        <ellipse cx="10" cy="10" rx="8.2" ry="3.1" />
+        <ellipse cx="10" cy="10" rx="8.2" ry="3.1" transform="rotate(60 10 10)" />
+        <ellipse cx="10" cy="10" rx="8.2" ry="3.1" transform="rotate(120 10 10)" />
+        <circle cx="10" cy="10" r="1.3" fill="currentColor" stroke="none" />
+      </svg>
+    </div>
+  )
+}
+
+/** 工具栏下拉触发器（幽灵样式：无边框，悬停浮起） */
+function DropTrigger({ icon: Icon, label, show = 'lg', disabled, hint }: {
+  icon: typeof Save; label: string; show?: 'md' | 'lg'; disabled?: boolean; hint: string
+}) {
+  return (
+    <DropdownMenuTrigger asChild>
+      <button
+        disabled={disabled}
+        aria-label={hint}
+        className={cn(
+          'flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40',
+          show === 'lg' ? 'hidden lg:flex' : 'hidden md:flex',
+        )}
+      >
+        <Icon className="h-3.5 w-3.5" />
+        <span>{label}</span>
+        <ChevronDown className="h-3 w-3 opacity-50" />
+      </button>
+    </DropdownMenuTrigger>
+  )
 }
 
 export function Toolbar() {
@@ -153,29 +192,27 @@ export function Toolbar() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border/70 bg-card/60 px-2 backdrop-blur-sm sm:px-3">
-        {/* Logo（固定左端） */}
-        <div className="mr-1 flex shrink-0 items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Atom className="h-4.5 w-4.5" strokeWidth={1.8} />
-          </div>
-          <div className="hidden leading-tight md:block">
-            <div className="text-sm font-bold tracking-tight">MolVision</div>
-            <div className="text-[9px] text-muted-foreground">3D 分子可视化工作台</div>
+      <header className="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-background px-2 sm:px-2.5">
+        {/* ── 品牌区 ── */}
+        <div className="mr-1.5 flex shrink-0 items-center gap-2.5">
+          <BrandMark />
+          <div className="hidden leading-none md:block">
+            <div className="text-[13px] font-bold tracking-tight">MolVision</div>
+            <div className="mol-micro mt-[3px] text-muted-foreground">Molecular Studio</div>
           </div>
         </div>
 
-        <Separator orientation="vertical" className="mx-1 !h-6 shrink-0" />
+        <div className="mol-sep" />
 
-        {/* 中间工具区：窄屏可横向滑动（隐藏滚动条），宽屏自然展开 */}
-        <div className="mol-toolbar-scroll flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+        {/* 中间工具区：分组发丝线分隔；窄屏可横向滑动 */}
+        <div className="mol-toolbar-scroll flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
 
-        {/* 加载 */}
+        {/* ── 文件组 ── */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={() => setUi({ loadOpen: true })}
-              className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground mol-btn-primary transition hover:opacity-90 sm:px-3"
+              className="mol-btn-primary flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-semibold text-primary-foreground transition hover:opacity-90 active:scale-[0.97] sm:px-3"
             >
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
               <span className="hidden sm:inline">加载结构</span>
@@ -184,15 +221,8 @@ export function Toolbar() {
           <TooltipContent>PDB 编号 / 本地文件 / .molvision 会话</TooltipContent>
         </Tooltip>
 
-        {/* 会话 */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 text-xs font-medium transition hover:bg-accent">
-              <Save className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="hidden md:inline">会话</span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
+          <DropTrigger icon={Save} label="会话" show="md" hint="会话文件与场景管理" />
           <DropdownMenuContent align="start" className="w-72">
             <DropdownMenuLabel className="text-xs">会话文件（.molvision）与场景管理</DropdownMenuLabel>
             <DropdownMenuItem
@@ -262,15 +292,8 @@ export function Toolbar() {
           }}
         />
 
-        {/* 示例 */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 text-xs font-medium transition hover:bg-accent">
-              <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="hidden lg:inline">示例</span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
+          <DropTrigger icon={FlaskConical} label="示例" show="lg" hint="从 RCSB 一键加载示例结构" />
           <DropdownMenuContent align="start" className="w-64">
             <DropdownMenuLabel className="text-xs">从 RCSB 一键加载</DropdownMenuLabel>
             {EXAMPLE_STRUCTURES.map(ex => (
@@ -285,15 +308,24 @@ export function Toolbar() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* 引导演示 */}
+        <div className="mol-sep" />
+
+        {/* ── 风格组 ── */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 text-xs font-medium transition hover:bg-accent">
-              <GraduationCap className="h-3.5 w-3.5 text-violet-500" />
-              <span className="hidden lg:inline">演示</span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
+          <DropTrigger icon={Sparkles} label="风格预设" show="lg" disabled={!activeId} hint="一键切换展示风格" />
+          <DropdownMenuContent align="start" className="w-52">
+            <DropdownMenuLabel className="text-xs">一键切换展示风格</DropdownMenuLabel>
+            {Object.entries(PRESETS).map(([key, p], i) => (
+              <DropdownMenuItem key={key} onClick={() => applyPreset(key)} className="gap-2 text-xs">
+                <span className="w-4 text-center font-mono text-[10px] text-muted-foreground">{i + 1}</span>
+                {p.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropTrigger icon={GraduationCap} label="演示" show="lg" hint="引导式演示场景" />
           <DropdownMenuContent align="start" className="w-72">
             <DropdownMenuLabel className="text-xs">引导式演示场景（逐步自动操作）</DropdownMenuLabel>
             {TOURS.map(t => (
@@ -315,39 +347,80 @@ export function Toolbar() {
                   <span className="block text-xs font-medium">{t.title}</span>
                   <span className="block text-[10px] text-muted-foreground">{t.tagline}</span>
                 </span>
-                <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">{t.steps.length} 步 · ≈{t.minutes} 分</span>
+                <span className="shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">{t.steps.length} 步 · ≈{t.minutes} 分</span>
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* 预设 */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <div className="mol-sep" />
+
+        {/* ── 视角组（图标按钮） ── */}
+        <Tooltip>
+          <TooltipTrigger asChild>
             <button
-              disabled={!activeId}
-              className="flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 text-xs font-medium transition hover:bg-accent disabled:opacity-40"
+              onClick={() => engineRef.current?.fitView()}
+              aria-label="适配视图"
+              className="tool-btn shrink-0"
             >
-              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-              <span className="hidden lg:inline">风格预设</span>
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              <Crosshair className="h-4 w-4" />
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-52">
-            <DropdownMenuLabel className="text-xs">一键切换展示风格</DropdownMenuLabel>
-            {Object.entries(PRESETS).map(([key, p], i) => (
-              <DropdownMenuItem key={key} onClick={() => applyPreset(key)} className="gap-2 text-xs">
-                <span className="w-4 text-center text-[10px] text-muted-foreground">{i + 1}</span>
-                {p.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </TooltipTrigger>
+          <TooltipContent>适配视图 (F)</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => engineRef.current?.resetView()}
+              aria-label="复位视角"
+              className="tool-btn shrink-0"
+            >
+              <Home className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>复位视角</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => updateSettings({ spin: !settings.spin })}
+              aria-label="自动旋转"
+              className={cn('tool-btn shrink-0', settings.spin && 'bg-accent !text-foreground')}
+            >
+              <RotateCw className={cn('h-4 w-4', settings.spin && 'animate-[spin_3s_linear_infinite]')} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>自动旋转 (S)</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => engineRef.current?.orient()}
+              aria-label="主轴对齐视角"
+              className="tool-btn shrink-0"
+            >
+              <Compass className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>主轴对齐视角 (PyMOL orient)</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => updateSettings({ stereo: !settings.stereo })}
+              aria-label="红蓝立体视图"
+              className={cn('tool-btn shrink-0', settings.stereo && 'bg-rose-500/15 !text-rose-500')}
+            >
+              <Glasses className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>红蓝立体（stereo）</TooltipContent>
+        </Tooltip>
 
-        <Separator orientation="vertical" className="mx-1 !h-6" />
+        <div className="mol-sep" />
 
-        {/* 测量模式 */}
-        <div className="flex h-8 items-center rounded-md border border-border/70 bg-background/60 p-0.5">
+        {/* ── 测量组：分段控件（仪器范式） ── */}
+        <div className="flex h-7 shrink-0 items-center gap-[2px] rounded-lg border border-border bg-card p-[2px]">
           {MEASURE_MODES.map(m => (
             <Tooltip key={m.mode}>
               <TooltipTrigger asChild>
@@ -355,7 +428,7 @@ export function Toolbar() {
                   onClick={() => { setMeasureMode(m.mode); if (m.mode !== 'off') toast.info(`${m.hint}`) }}
                   aria-label={m.hint}
                   className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded transition',
+                    'flex h-[22px] w-[27px] items-center justify-center rounded-[5px] transition-all duration-150',
                     measureMode === m.mode
                       ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
@@ -369,76 +442,9 @@ export function Toolbar() {
           ))}
         </div>
 
-        {/* 视角 */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => engineRef.current?.fitView()}
-              aria-label="适配视图"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-            >
-              <Crosshair className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>适配视图 (F)</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => engineRef.current?.resetView()}
-              aria-label="复位视角"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-            >
-              <Home className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>复位视角</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => updateSettings({ spin: !settings.spin })}
-              aria-label="自动旋转"
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
-                settings.spin ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <RotateCw className={cn('h-4 w-4', settings.spin && 'animate-[spin_3s_linear_infinite]')} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>自动旋转 (S)</TooltipContent>
-        </Tooltip>
+        <div className="mol-sep" />
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => engineRef.current?.orient()}
-              aria-label="主轴对齐视角"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-            >
-              <Compass className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>主轴对齐视角 (PyMOL orient)</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => updateSettings({ stereo: !settings.stereo })}
-              aria-label="红蓝立体视图"
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
-                settings.stereo ? 'bg-rose-500/15 text-rose-500' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <Glasses className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>红蓝立体（stereo）</TooltipContent>
-        </Tooltip>
-
-        {/* 录制动画（WebM） */}
+        {/* ── 媒体组 ── */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -456,10 +462,7 @@ export function Toolbar() {
                   toast.error('当前浏览器不支持画布录制（MediaRecorder）')
                 }
               }}
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
-                recording ? 'bg-red-500/15 text-red-500' : 'text-muted-foreground hover:text-foreground',
-              )}
+              className={cn('tool-btn shrink-0', recording && 'bg-red-500/15 !text-red-500')}
               aria-label={recording ? '录制中（REC 徽章停止）' : '录制动画为 WebM 视频'}
             >
               {recording ? <CircleStop className="h-4 w-4" /> : <Video className="h-4 w-4" />}
@@ -468,7 +471,6 @@ export function Toolbar() {
           <TooltipContent>{recording ? '停止录制（点击 REC 徽章下载）' : '录制动画为 WebM 视频'}</TooltipContent>
         </Tooltip>
 
-        {/* movie：时间轴编排与关键帧巡航 */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -483,8 +485,8 @@ export function Toolbar() {
                 }
               }}
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
-                moviePlaying ? 'bg-teal-500/15 text-teal-500' : timelineOpen ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400' : 'text-muted-foreground hover:text-foreground',
+                'tool-btn shrink-0',
+                moviePlaying ? 'bg-teal-500/15 !text-teal-500' : timelineOpen && 'bg-teal-500/10 !text-teal-600 dark:!text-teal-400',
               )}
               aria-label={moviePlaying ? '停止 movie 序列播放' : 'movie 时间轴编排与巡航播放'}
             >
@@ -494,12 +496,11 @@ export function Toolbar() {
           <TooltipContent>{moviePlaying ? '停止 movie 序列播放' : 'movie 时间轴：关键帧编排与巡航播放（拖拽排序、逐段时长）'}</TooltipContent>
         </Tooltip>
 
-        {/* 截图 */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               aria-label="导出图像（PNG / Ray / SVG）"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              className="tool-btn shrink-0"
             >
               <Camera className="h-4 w-4" />
             </button>
@@ -512,11 +513,11 @@ export function Toolbar() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => capture(2, true)} className="text-xs">2× 透明背景 PNG</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={rayCapture} className="gap-1.5 text-xs">
+            <DropdownMenuItem onClick={() => rayCapture()} className="gap-1.5 text-xs">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
               Ray 级渲染（软阴影 + 超采样）
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={svgCapture} className="gap-1.5 text-xs">
+            <DropdownMenuItem onClick={() => svgCapture()} className="gap-1.5 text-xs">
               <PenLine className="h-3.5 w-3.5 text-violet-500" />
               SVG 矢量图（可入稿，无限缩放）
             </DropdownMenuItem>
@@ -524,17 +525,22 @@ export function Toolbar() {
         </DropdownMenu>
         </div>
 
-        {/* 右侧工具（固定右端） */}
+        <div className="mol-sep" />
+
+        {/* ── 右侧集群 ── */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={() => setUi({ agentOpen: !ui.agentOpen })}
               aria-label="AI 绘图助手"
               className={cn(
-                'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition hover:bg-accent',
-                ui.agentOpen ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
+                'flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all duration-150 active:scale-[0.97]',
+                ui.agentOpen
+                  ? 'border-primary/35 bg-primary/10 text-primary shadow-[inset_0_1px_0_rgb(255_255_255/0.08)]'
+                  : 'border-border/70 bg-card text-muted-foreground hover:border-primary/30 hover:text-primary',
               )}
             >
+              <span className={cn('h-1.5 w-1.5 rounded-full', ui.agentOpen ? 'bg-primary' : 'bg-primary/50')} />
               <Bot className="h-3.5 w-3.5" />
               <span className="hidden xl:inline">AI 助手</span>
             </button>
@@ -547,11 +553,11 @@ export function Toolbar() {
             <button
               onClick={() => setUi({ paletteOpen: true })}
               aria-label="命令面板（Ctrl+K）"
-              className="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              className="tool-btn shrink-0 gap-1.5 !px-2"
             >
               <CommandIcon className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">命令面板</span>
-              <kbd className="hidden rounded border border-border bg-muted px-1 font-mono text-[9px] md:inline">Ctrl K</kbd>
+              <span className="hidden xl:inline text-xs font-medium">命令面板</span>
+              <kbd className="hidden rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground md:inline">Ctrl K</kbd>
             </button>
           </TooltipTrigger>
           <TooltipContent>命令面板：搜索并执行命令（Ctrl+K）</TooltipContent>
@@ -561,14 +567,12 @@ export function Toolbar() {
           <TooltipTrigger asChild>
             <button
               onClick={() => setUi({ consoleOpen: !ui.consoleOpen })}
-              className={cn(
-                'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition hover:bg-accent',
-                ui.consoleOpen ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
-              )}
+              aria-label="PyMOL 风格命令行"
+              className={cn('tool-btn shrink-0 gap-1.5 !px-2', ui.consoleOpen && 'bg-accent !text-foreground')}
             >
               <Terminal className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">命令行</span>
-              <kbd className="hidden rounded border border-border bg-muted px-1 font-mono text-[9px] xl:inline">`</kbd>
+              <span className="hidden xl:inline text-xs font-medium">命令行</span>
+              <kbd className="hidden rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground xl:inline">`</kbd>
             </button>
           </TooltipTrigger>
           <TooltipContent>PyMOL 风格命令行</TooltipContent>
@@ -580,7 +584,7 @@ export function Toolbar() {
               onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
               suppressHydrationWarning
               aria-label="切换深浅主题"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              className="tool-btn shrink-0"
             >
               <Sun className="h-4 w-4 hidden dark:block" />
               <Moon className="h-4 w-4 dark:hidden" />
@@ -594,7 +598,7 @@ export function Toolbar() {
             <button
               onClick={() => setUi({ helpOpen: true })}
               aria-label="帮助与快捷键"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              className="tool-btn shrink-0"
             >
               <HelpCircle className="h-4 w-4" />
             </button>
@@ -606,7 +610,7 @@ export function Toolbar() {
           href="https://github.com/Jing0715-fer/MolVision"
           target="_blank"
           rel="noreferrer"
-          className="hidden h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground sm:flex"
+          className="tool-btn hidden shrink-0 sm:flex"
           title="GitHub 仓库"
           aria-label="GitHub 仓库（新窗口打开）"
         >

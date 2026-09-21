@@ -1499,3 +1499,44 @@ Stage Summary:
 - 验证证据链：mock-llm 端到端（检测→选择→保存→落盘→默认切换→删除复原）+ DeepSeek 401 + DOM 结构断言（34 项/分组/徽章）+ 像素采样（左栏 248,247,244 / 右栏 251,250,247 / 品牌色块命中）+ 三视口溢出扫描 + lint 全绿
 - 未解决与风险：①z-ai vision 持续 429（连续 5 轮 2-5 分钟退避重试失败，账号级配额耗尽）——本轮设计终审以 DOM/像素/子代理评审三重替代，限流恢复后建议补 VLM 终审 ②34 家 baseURL/model id 为目录快照，个别供应商（doubao/minimax/baidu）可能随官方迭代漂移——自动检测机制本身即是兜底 ③搜索过滤按模型 id 会命中托管该模型的所有聚合商（设计如此，非 bug）
 - 下一阶段建议：①限流恢复后 zai/VLM 双冒烟 ②ray+outline/SSAO 线稿化 bug（多轮遗留）③供应商连接状态实时徽章（上次探测时间戳）④本地 Ollama 探测真实实例验证
+
+---
+Task ID: 7-a
+Agent: frontend-styling-expert
+Task: ConsoleBar + SequenceBar 仪器化重构（与主界面「精密仪器」设计语言对齐）
+
+Work Log:
+- 读 worklog 尾部（r39/r40 + Task 6-a 评审）+ 通读 Task 7 未提交改动（Toolbar/StatusBar/LeftPanel/page.tsx/globals.css 的 mol-micro·mol-sep·instrument-bar·tool-btn·corner-tick·rail-notch 工具类）建立设计语言基准；通读 ConsoleBar.tsx(459 行)/SequenceBar.tsx(380 行)
+- 【ConsoleBar · 终端仪器化】①容器：bg-popover/95 + backdrop-blur-md + shadow-lg 半透明塑料感 → 实底 bg-card + hairline border-t + mol-elevate（浮层深度体系）②头部：命令行标签 → .mol-micro text-foreground/75（与 LeftPanel 面板标题同规格）；历史/高度/关闭三按钮从带边框胶囊（h-5 border bg-background/60）→ h-6 rounded-md 幽灵按钮（Toolbar DropTrigger 同款：muted → hover:bg-accent）③输入行：ChevronRight 图标 → `mv ›` mono 粗体 primary 提示符（rSearch 激活时转 amber，进行中操作语义保留）；底色 bg-muted/40 → 实底 bg-background；focus-within 中性 border-foreground/25 保留（r38 纪律）④日志区：命令回显 `» ` 前缀 → `mv › ` primary 粗体（终端回显惯例）；系统消息 foreground/70 → muted-foreground 收敛；err 保持 destructive ⑤最近命令徽章：去 bg-muted/40 塑料底 → 透明底 + hairline border-border + mono，hover 全套 primary（border/bg/text）⑥参数提示条 border/50+muted/30 → border-border+bg-muted/40 ⑦补全弹层：shadow-xl → mol-elevate-lg（对话框级）；头行「N 个候选」+ kbd 提示 → .mol-micro（tabular-nums 计数）；选中项 bg-accent/80 → bg-accent + inset 2px primary 左缘刻线（shadow-[inset_2px_0_0_0_var(--primary)]，呼应 rail-notch）；detail 列加 tabular-nums ⑧kbd 全族统一：border-border/70 + bg-muted + text-[9px] ⑨KIND_META：cmd emerald-600 → text-primary（token 化）、tour violet → muted（强调色收敛），sel amber / color rose 语义保留
+- 【SequenceBar · 轨道图谱化】①容器：bg-card/40 + backdrop-blur-sm → 实底 bg-background + border-y 双 hairline（上界画布下界仪表条）②头部：「序列」→ .mol-micro（继承 muted→hover 提亮，行为不变）；meta 行加 tabular-nums；视野徽章从 rounded-full 胶囊（bg-primary/10）→ 无底读数 + 1px 语义点 + mono tabular-nums（全可见=primary/部分=muted 两态语义保留）③定位/聚焦/高度三控件从带边框胶囊 → h-6 幽灵按钮；聚焦激活态 border-primary/50+ring → 纯 bg-primary/10 text-primary ④配体行：标签从 amber 加粗文字 → 中性 mol-micro + amber 图标（语义色降维成点）；配体 chip rounded-full → rounded-md、amber 底色边框（amber-500/30 底 + /5 填充）→ 中性 hairline border-border + 透明底 + amber 文字（领域色保留在文字），选中态去 ring 化简为 border-primary/60+bg-primary/10 ⑤链行：sticky 标签 bg-card/40 → 实底 bg-background（遮蔽滚动内容）；链字母 11px mono 粗体/色标/计数保留，计数 8px → 9px + tabular-nums ⑥残基单元：hover 缩放/选中 ring/视野下划线/二级结构轨道全部保留；ring-offset-card → ring-offset-background（跟新底色）；Jalview 刻度数字 8.5px → 9px + tabular-nums ⑦残基类型色/链色/SS 色全部原样（inline style 域不动）⑧搜索弹层输入框焦点 primary/60 → 中性 foreground/30
+- 零逻辑改动审计：onKeyDown 全键位（Enter/↑↓/Tab/Esc/Ctrl+R）/onChange/acceptItem/submitCmd/事件订阅（FILL_CMD_EVENT/subscribeCmdHistory）/Popover 开合/滚动手势全部原样；仅 2 处 JSX 视觉层重排（输入行图标→文字提示符、视野徽章加语义点）+ className 改写；ChevronRight 仍被 KIND_META.value 引用（import 无孤儿）
+- 【验证】①bun run lint 0 错 0 警（exit 0）②agent-browser 全链路：开控制台 → `load 4hhb` 回车 → 4779 原子/801 残基/12 链加载成功；`bg white` 回车 → 日志「mv › bg white / 背景色 → #ffffff」；输入 col → 补全弹层「2 个候选」mol-micro 头行 + 选中项 inset primary 刻线（getComputedStyle boxShadow 实证 lab(55.05 -49.92 15.93) 2px 0 0 0 inset）；最近徽章点击再执行 ✓；高度循环 144→224px ✓；Ctrl+R 反向搜索条出现（reverse-i-search · bg white · 1/2）✓；Esc 两段级联（退搜索→关控制台）✓ ③几何扫描：头部 h-32、三按钮 24px 同高同 y 对齐、命令行 mol-micro 实算 9px/700/1.26px 字距、输入行 34px、console/sequence/document 三层 overflow 全 false ④像素采样：浅色 console(254,254,252)=bg-card 纸白实底 / seq(250,249,246)=bg-background；深色 console(21,20,17)/seq(12,11,9)；`mv ›` 提示符 emerald 62px（浅色 82,184,149 / 深色 4,132,88）——backdropFilter 实测 none（半透明塑料感清零）⑤序列条 DOM：574 个残基格渲染、配体 chip 中性边框+amber 文字+透明底实算、链字母 11px/计数 9px tabular-nums/链色 swatch rgb(235,142,142) 保留、刻度「10」9px mono extrabold ⑥响应式：lg:inline/lg:flex/sm:inline 断点原样保留 ⑦浏览器 errors 0 新增；tsc 应用代码 0 错（仅 mini-services Bun 类型，历史遗留）⑧VLM 终审第 6 轮 429（zai vision 账号级限流持续），以 DOM 计算样式 + PIL 像素采样双重证据链替代 ⑨agent-browser 无 viewport 命令，390px 未实测（改动无新增 fixed 宽度，overflow 扫描兜底）
+- 沙箱经验：sonner toast 的 ol>li 常驻右上角会遮挡 Toolbar 主题切换/控制台按钮的 agent-browser 点击（click 拦截报 covered by <li>）——用 JS eval btn.click() 绕过；同步双击「高度循环」会被 React 批处理合并（闭包同读旧值），需要点击间留渲染间隔
+
+Stage Summary:
+- 交付：两大底栏 surface 完成仪器化对齐——ConsoleBar「终端仪器」（实底纸面 + mv › primary 提示符 + 日志回显同款提示符 + mol-micro 头部 + 幽灵按钮工具行 + 补全弹层 mol-elevate-lg/微标签/选中项 primary 左缘刻线 + 徽章 hairline 化）+ SequenceBar「轨道图谱」（实底 + 上下 hairline + mol-micro 标签 + 无底读数化视野徽章 + 幽灵控件 + 配体/链刻度 mono 微缩化 + 领域色全保留）
+- 关键设计决策：①强调色唯一化——输入提示符 `mv ›` 与日志回显前缀共用 primary 签名，KIND_META cmd 色从裸 emerald-600 token 化为 text-primary，tour violet 收敛 muted ②语义色降维到「点/文字」而非「底色填充」——视野徽章/配体行标签/配体 chip 的 amber 与链色保留在 1px 点、图标与文字层，容器边框底色全部中性 hairline ③选中态语言统一——补全选中项 inset 2px primary 左缘刻线呼应 LeftPanel rail-notch，配体选中 border-primary/60+bg-primary/10 去 ring 化 ④字号标度归位——8/8.5px 孤儿全部升 9px，数字全量补 tabular-nums ⑤浮层深度体系——console= mol-elevate、补全弹层= mol-elevate-lg，shadow-xl/lg 全部退役
+- 证据链：lint 0/0 ✓ → load 4hhb + bg white + 补全 + Ctrl+R + 徽章 + 高度循环 + Esc 级联全功能回归 ✓ → 几何对齐（三按钮 24px 同 y）✓ → 双主题像素采样（实底/无 blur/emerald 提示符）✓ → 三层 overflow false ✓ → errors 0 ✓
+- 截图：/tmp/task7a-light.png（浅色·compact 高度）/tmp/task7a-dark.png（深色·compact）+ 更早 normal 高度两帧
+- 遗留与风险：①VLM 主观审美终审连续 6 轮 429 未执行（DOM+像素证据替代，限流恢复后可补）②390px 移动端未实测（agent-browser 无 viewport 命令；无新增 fixed 宽度，风险低）③搜索弹层输入框焦点从中性建议（ConsoleBar 同款）——若全局输入焦点规范另定（如统一 primary），此处需跟随 ④console 头部快捷键提示文案常驻（原样保留，极窄视口下靠 truncate 兜底）
+---
+Task ID: 7
+Agent: main
+Task: 用户反馈「没看到 UI 有什么变化」——上轮颠覆性重构只落在供应商设置弹窗（隐藏入口），主界面未动。本轮对主界面执行真正的「精密仪器（Precision Instrument）」整体重构。
+
+Work Log:
+- 【设计语言确立】参考 Blender/DaVinci/Figma/科学仪器范式：墨色仪表状态条 + 分组发丝线工具栏 + 定制 monogram + 等宽技术读数 + 视口取景框刻度线。所有改动遵循「单一强调色（primary=emerald）+ amber 警示 + 语义点」纪律，禁止 indigo/blue、渐变、shadow-2xl
+- 【globals.css】①令牌微调：浅色 foreground 加深至 0.155（墨感更强）、border 加重至 0.893、深色背景下沉至 0.15 ②新增墨色仪表条变量组 --status-bg/fg/dim/line/hot（浅色墨底 0.235/深色更深炭底 0.115）③新增工具类：.mol-micro（9px 大写字距微标签）、.mol-sep（工具栏分组发丝线）、.instrument-bar + .status-sep/.status-micro/.status-val（仪表条三件套）、.corner-tick（视口四角取景框刻度线）、.rail-notch（图标栏侧缘缺口）、.tool-btn（统一 28px 图标按钮含 active 缩放）
+- 【Toolbar 彻底重构】（654 行重写，逻辑零改动）①品牌区：六角晶格芯片 + 三轨道原子线稿 SVG monogram（fill-primary）+ 「MolVision」粗字标 + MOLCULAR STUDIO 微标签 ②容器从 bg-card/60 backdrop-blur 塑料感 → bg-background 实底 + h-11 ③功能分组发丝线：品牌｜文件（加载+会话+示例）｜风格（预设+演示）｜视角（5 图标钮）｜测量｜媒体（录制+movie+导出）｜右侧集群 ④测量 4 模式改标准分段控件（border pill + h-[22px] 段 + primary 激活段）⑤下拉触发器统一幽灵样式（DropTrigger 组件）⑥AI 助手按钮改圆形 pill（primary 描边+状态点，激活 bg-primary/10）⑦图标按钮全部 .tool-btn ⑧rayCapture/svgCapture 调用改箭头包裹（防事件对象泄漏）
+- 【StatusBar 重写为墨色仪表读数条】（232 行重写，逻辑零改动）①instrument-bar 墨底（浅色模式也为墨底——状态条双主题恒墨，形成「仪器底座」视觉锚）②等宽读数 .status-val：结构名 mono 粗体 + atoms/res/ch 统计 ③微标签分区 STRUCTURE/SELECTION/STATUS（.status-micro）④悬停读数居中 flex truncate ⑤语义点全部升 400 级亮度适配墨底（teal-400/cyan-400/violet-400 等）⑥FPS 分级色 emerald/amber/red-400 ⑦Readout 小组件抽象
+- 【LeftPanel】①图标栏 w-12→w-11，bg-card/40 模糊→bg-background 实底 ②9 面板分 3 组（结构域/分析域/环境域）组间发丝线 ③激活态：bg-primary/10 + text-primary + rail-notch 左缘 2px 缺口 ④栏底新增 MV 微字标 ⑤面板标题 text-xs→mol-micro ⑥面板容器去 backdrop-blur
+- 【page.tsx】main 内新增四角取景框刻度线层（pointer-events-none + z-10，不拦截交互）
+- 【验证】①像素级：浅色工具栏纸底 (250,249,246)/状态栏墨底 avg (36,33,27)/monogram 翡翠 (0,153,102)/刻度线精确出现在 y=54（工具栏 44+10）/分段控件 452 primary 像素 ②功能冒烟：测量分段切换→仪表条琥珀「测距 0/2」徽章 ✓ Esc 复位 ✓ 加载对话框打开 ✓ AI 面板开关 ✓ ③双主题截图对比 ④lint 0 错 0 警 ⑤浏览器 errors 零新增 ⑥VLM 终审连续 429（第 7 轮），以 DOM+像素证据链替代
+- 【子代理 7-a】ConsoleBar + SequenceBar 仪器化对齐（mv › mono 提示符/实底/补全弹层左缘刻线/序列条轨道图谱化），全功能回归通过，详见 7-a 段落
+
+Stage Summary:
+- r40 交付：主界面五大人机面全部换装——Toolbar（monogram 品牌+分组发丝线+分段控件）、StatusBar（墨色仪表读数条）、LeftPanel（分组图标栏+notch 激活）、视口（四角取景框刻度）、ConsoleBar/SequenceBar（终端仪器+轨道图谱）。用户「看不到变化」的诉求被像素级可见的差异化回应：状态条从浅色胶囊墙变为恒墨仪表底座、工具栏从混合按钮流变为分组仪器面板、品牌区从通用 Atom 图标变为六角原子 monogram
+- 关键决策：①状态条双主题恒墨（浅色模式下的深色底座=仪器脚垫，打破「全白页面」塑料感）②全部逻辑零改动（重构纯视觉层，功能回归全绿）③强调色纪律延续 r38/r39 体系
+- 证据链：双主题截图（/tmp/ui-final-light.png、/tmp/ui-final-dark.png）+ 像素采样（5 关键区域）+ 功能冒烟（测量/加载/AI 面板）+ lint 0/0 + errors 0
+- 未解决与风险：①VLM 审美终审连续 7 轮 429（DOM+像素替代，限流恢复建议补跑）②390px 移动端未实测（无 viewport 命令）③CommandPalette/HistoryDialog/HelpDialog/LoadDialog 弹窗体系未纳入本轮仪器化（下轮候选）④ray+outline/SSAO 线稿化 bug 仍在队列
+- 下一阶段建议：①弹窗体系（CommandPalette/History/Help/Load）仪器化收敛 ②VLM 恢复后补审美终审 ③ray 线稿化 bug 排查 ④agent 快捷预设面板（出版级/科普/口袋特写）

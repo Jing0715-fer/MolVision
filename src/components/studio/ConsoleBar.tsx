@@ -28,7 +28,7 @@ const LOG_HEIGHT_LABEL: Record<string, string> = {
 }
 
 const KIND_META: Record<CompletionKind, { icon: typeof Terminal; cls: string; label: string }> = {
-  cmd: { icon: TerminalSquare, cls: 'text-emerald-600 dark:text-emerald-400', label: '命令' },
+  cmd: { icon: TerminalSquare, cls: 'text-primary', label: '命令' },
   sub: { icon: CornerDownRight, cls: 'text-muted-foreground', label: '子命令' },
   struct: { icon: Boxes, cls: 'text-muted-foreground', label: '结构' },
   sel: { icon: Filter, cls: 'text-amber-600 dark:text-amber-400', label: '选择' },
@@ -36,7 +36,7 @@ const KIND_META: Record<CompletionKind, { icon: typeof Terminal; cls: string; la
   color: { icon: Palette, cls: 'text-rose-600 dark:text-rose-400', label: '颜色' },
   value: { icon: ChevronRight, cls: 'text-muted-foreground', label: '值' },
   preset: { icon: Sparkles, cls: 'text-muted-foreground', label: '预设' },
-  tour: { icon: Wand2, cls: 'text-violet-600 dark:text-violet-400', label: '演示' },
+  tour: { icon: Wand2, cls: 'text-muted-foreground', label: '演示' },
 }
 
 function KindBadge({ kind }: { kind: CompletionKind }) {
@@ -293,14 +293,14 @@ export function ConsoleBar() {
   const hint = completions?.hint ?? null
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border/70 bg-popover/95 shadow-lg backdrop-blur-md">
-      <div className="flex h-8 items-center gap-2 border-b border-border/50 px-3">
+    <div className="mol-elevate absolute inset-x-0 bottom-0 z-30 border-t border-border bg-card">
+      <div className="flex h-8 items-center gap-2 border-b border-border/60 px-3">
         <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">命令行</span>
+        <span className="mol-micro shrink-0 text-foreground/75">命令行</span>
         <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">Tab 补全 · ↑↓ 历史 · Ctrl+R 搜索 · 徽章快跑 · help 查看命令</span>
         <button
           onClick={() => setUi({ historyOpen: true })}
-          className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-border hover:text-foreground"
+          className="ml-auto flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
           title={`命令历史面板（全量列表 + 搜索 + 置顶，${HISTORY_MAX} 条上限）`}
         >
           <ScrollText className="h-3 w-3" />
@@ -308,7 +308,7 @@ export function ConsoleBar() {
         </button>
         <button
           onClick={cycleHeight}
-          className="flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+          className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
           title={`控制台高度：${LOG_HEIGHT_LABEL[consoleHeight] ?? '标准'}（点击切换）`}
         >
           <ChevronsUpDown className="h-3 w-3" />
@@ -316,18 +316,18 @@ export function ConsoleBar() {
         </button>
         <button
           onClick={() => setUi({ consoleOpen: false })}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
       <div ref={logRef} className={cn('mol-scroll overflow-y-auto px-3 py-1.5 font-mono text-[11px] leading-relaxed transition-[height] duration-200', LOG_HEIGHT_CLASS[consoleHeight] ?? 'h-36')}>
         {consoleLog.map((l, i) => (
           <div key={i} className={cn(
             'whitespace-pre-wrap break-all',
-            l.type === 'in' ? 'text-foreground/90 font-medium' : l.type === 'err' ? 'text-destructive' : 'text-foreground/70',
+            l.type === 'in' ? 'text-foreground' : l.type === 'err' ? 'text-destructive' : 'text-muted-foreground',
           )}>
-            {l.type === 'in' && <span className="text-muted-foreground/50">» </span>}
+            {l.type === 'in' && <span className="font-bold text-primary">mv › </span>}
             {l.text}
           </div>
         ))}
@@ -336,7 +336,7 @@ export function ConsoleBar() {
       {/* 最近命令徽章：点击执行 · 右键填入编辑（历史去重前 6 条） */}
       {recentChips.length > 0 && (
         <div className="flex items-center gap-1.5 px-2 pt-1">
-          <span className="flex shrink-0 items-center gap-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50" title="最近命令（点击执行 · 右键填入编辑）">
+          <span className="flex shrink-0 items-center gap-1 text-muted-foreground/60" title="最近命令（点击执行 · 右键填入编辑）">
             <History className="h-3 w-3" />
           </span>
           <FadeEdge className="gap-1">
@@ -353,7 +353,7 @@ export function ConsoleBar() {
                   recompute(h)
                   inputRef.current?.focus()
                 }}
-                className="max-w-[220px] shrink-0 truncate rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-foreground"
+                className="max-w-[220px] shrink-0 truncate rounded-md border border-border bg-transparent px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
                 title={`${h}\n左键执行 · 右键填入输入行编辑`}
               >
                 {h.length > 26 ? `${h.slice(0, 24)}…` : h}
@@ -362,7 +362,7 @@ export function ConsoleBar() {
           </FadeEdge>
           <button
             onClick={clearHistory}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/50 transition hover:bg-destructive/10 hover:text-destructive"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition hover:bg-destructive/10 hover:text-destructive"
             title="清空命令历史（最近徽章 + Ctrl+R 搜索记录）"
           >
             <Trash2 className="h-3 w-3" />
@@ -372,7 +372,7 @@ export function ConsoleBar() {
 
       {/* 参数提示条（识别到命令时展示用法） */}
       {hint && (
-        <div className="mx-2 mb-0.5 flex items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-2.5 py-1 text-[10px] text-muted-foreground">
+        <div className="mx-2 mb-0.5 flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-[10px] text-muted-foreground">
           <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 font-mono font-bold text-primary">{hint.cmd}</span>
           <span className="min-w-0 truncate">{hint.desc}</span>
           <span className="ml-auto hidden shrink-0 font-mono text-muted-foreground/60 lg:inline">{hint.example}</span>
@@ -382,13 +382,13 @@ export function ConsoleBar() {
       {/* 补全弹层（锚定输入行上方） */}
       {completions && completions.items.length > 0 && (
         <div className="relative mx-2">
-          <div className="absolute inset-x-0 bottom-full mb-1 overflow-hidden rounded-lg border border-border/80 bg-popover shadow-xl">
-            <div className="flex items-center justify-between border-b border-border/50 bg-muted/40 px-2.5 py-1 text-[9px] uppercase tracking-wider text-muted-foreground/80">
-              <span>{completions.items.length} 个候选</span>
-              <span className="flex items-center gap-1">
-                <kbd className="rounded border border-border/60 bg-background px-1 font-mono">Tab</kbd>补全
-                <kbd className="rounded border border-border/60 bg-background px-1 font-mono">↑↓</kbd>切换
-                <kbd className="rounded border border-border/60 bg-background px-1 font-mono">Esc</kbd>关闭
+          <div className="mol-elevate-lg absolute inset-x-0 bottom-full mb-1 overflow-hidden rounded-lg border border-border bg-popover">
+            <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-2.5 py-1.5">
+              <span className="mol-micro tabular-nums text-muted-foreground">{completions.items.length} 个候选</span>
+              <span className="mol-micro flex items-center gap-1 text-muted-foreground/70">
+                <kbd className="rounded border border-border/70 bg-background px-1 font-mono text-[9px]">Tab</kbd>补全
+                <kbd className="rounded border border-border/70 bg-background px-1 font-mono text-[9px]">↑↓</kbd>切换
+                <kbd className="rounded border border-border/70 bg-background px-1 font-mono text-[9px]">Esc</kbd>关闭
               </span>
             </div>
             <div ref={listRef} className="mol-scroll max-h-44 overflow-y-auto py-1">
@@ -399,14 +399,14 @@ export function ConsoleBar() {
                   onMouseEnter={() => setSelIdx(i)}
                   className={cn(
                     'flex w-full items-center gap-2 px-2.5 py-1.5 text-left font-mono text-[11px] transition',
-                    i === selIdx ? 'bg-accent/80' : 'hover:bg-accent/40',
+                    i === selIdx ? 'bg-accent shadow-[inset_2px_0_0_0_var(--primary)]' : 'hover:bg-accent/40',
                   )}
                 >
                   <KindBadge kind={item.kind} />
                   <span className="min-w-0 flex-1 truncate">
                     <MatchedText text={item.insert} frag={frag} />
                   </span>
-                  {item.detail && <span className="ml-auto shrink-0 text-[9px] text-muted-foreground/70">{item.detail}</span>}
+                  {item.detail && <span className="ml-auto shrink-0 text-[9px] tabular-nums text-muted-foreground/70">{item.detail}</span>}
                 </button>
               ))}
             </div>
@@ -425,20 +425,20 @@ export function ConsoleBar() {
           </span>
           <span className="shrink-0 tabular-nums text-muted-foreground/70">{rMatches.length ? `${Math.min(rSearch.idx + 1, rMatches.length)}/${rMatches.length}` : '0'}</span>
           <span className="hidden shrink-0 items-center gap-1 text-muted-foreground/60 lg:flex">
-            <kbd className="rounded border border-border/60 bg-background px-1 font-mono">Ctrl+R</kbd>下一条
-            <kbd className="rounded border border-border/60 bg-background px-1 font-mono">↵</kbd>执行
-            <kbd className="rounded border border-border/60 bg-background px-1 font-mono">Esc</kbd>编辑
+            <kbd className="rounded border border-border/70 bg-muted px-1 font-mono text-[9px]">Ctrl+R</kbd>下一条
+            <kbd className="rounded border border-border/70 bg-muted px-1 font-mono text-[9px]">↵</kbd>执行
+            <kbd className="rounded border border-border/70 bg-muted px-1 font-mono text-[9px]">Esc</kbd>编辑
           </span>
         </div>
       )}
 
       <div className={cn(
-        'mx-2 mb-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 transition-colors duration-200 focus-within:border-foreground/25',
+        'mx-2 mb-2 flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2 transition-colors duration-200 focus-within:border-foreground/25',
         rSearch.active
           ? 'border-amber-500/50 bg-amber-500/[0.05] focus-within:bg-amber-500/[0.07]'
           : '',
       )}>
-        <ChevronRight className={cn('h-3.5 w-3.5 shrink-0', rSearch.active ? 'text-amber-600' : 'text-muted-foreground/70')} />
+        <span className={cn('shrink-0 select-none font-mono text-xs font-bold', rSearch.active ? 'text-amber-600 dark:text-amber-400' : 'text-primary')}>mv ›</span>
         <input
           ref={inputRef}
           value={input}
@@ -451,7 +451,7 @@ export function ConsoleBar() {
           spellCheck={false}
           autoComplete="off"
         />
-        <kbd className="hidden shrink-0 rounded border border-border/60 bg-muted/60 px-1 font-mono text-[9px] text-muted-foreground/70 sm:inline">{rSearch.active ? 'Ctrl+R' : '↵'}</kbd>
+        <kbd className="hidden shrink-0 rounded border border-border/70 bg-muted px-1 font-mono text-[9px] text-muted-foreground sm:inline">{rSearch.active ? 'Ctrl+R' : '↵'}</kbd>
       </div>
     </div>
   )

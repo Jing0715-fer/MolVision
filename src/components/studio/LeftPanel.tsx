@@ -21,15 +21,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 
 const PANELS = [
-  { key: 'structures', label: '结构', icon: Boxes },
-  { key: 'reps', label: '表示法', icon: Shapes },
-  { key: 'colors', label: '颜色', icon: Palette },
-  { key: 'selection', label: '选择', icon: Target },
-  { key: 'measure', label: '测量', icon: Ruler },
-  { key: 'analysis', label: '分析', icon: FlaskConical },
-  { key: 'maps', label: '密度图', icon: Grid3x3 },
-  { key: 'scene', label: '场景', icon: Settings2 },
-  { key: 'info', label: '信息', icon: Info },
+  { key: 'structures', label: '结构', icon: Boxes, group: 0 },
+  { key: 'reps', label: '表示法', icon: Shapes, group: 0 },
+  { key: 'colors', label: '颜色', icon: Palette, group: 0 },
+  { key: 'selection', label: '选择', icon: Target, group: 1 },
+  { key: 'measure', label: '测量', icon: Ruler, group: 1 },
+  { key: 'analysis', label: '分析', icon: FlaskConical, group: 1 },
+  { key: 'maps', label: '密度图', icon: Grid3x3, group: 1 },
+  { key: 'scene', label: '场景', icon: Settings2, group: 2 },
+  { key: 'info', label: '信息', icon: Info, group: 2 },
 ] as const
 
 // —— 面板宽度拖拽（持久化） ——
@@ -95,7 +95,7 @@ export function LeftPanel() {
   const content = (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
-        <span className="text-xs font-semibold tracking-wide text-foreground/90">
+        <span className="mol-micro text-foreground/75">
           {PANELS.find(p => p.key === ui.panel)?.label}
         </span>
         <button
@@ -125,32 +125,44 @@ export function LeftPanel() {
     <>
       {/* 桌面端 */}
       <aside className="hidden md:flex">
-        {/* 图标栏 */}
-        <nav className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border/70 bg-card/40 py-2">
-          {PANELS.map(p => (
-            <Tooltip key={p.key}>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => setUi({ panel: p.key, panelOpen: ui.panel === p.key ? !ui.panelOpen : true })}
-                  aria-label={p.label}
-                  title={p.label}
-                  className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-150',
-                    ui.panel === p.key && ui.panelOpen
-                      ? 'bg-primary/12 text-primary shadow-[inset_0_0_0_1px_rgb(0_0_0/0.04)]'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground active:scale-95',
-                  )}
-                >
-                  <p.icon className="h-4 w-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">{p.label}</TooltipContent>
-            </Tooltip>
-          ))}
+        {/* 图标栏：分组发丝线 + 侧缘缺口激活态 */}
+        <nav className="flex w-11 shrink-0 flex-col items-center gap-0.5 border-r border-border bg-background py-2">
+          {PANELS.map((p, i) => {
+            const showSep = i > 0 && p.group !== PANELS[i - 1].group
+            const active = ui.panel === p.key && ui.panelOpen
+            return (
+              <div key={p.key} className="flex w-full flex-col items-center">
+                {showSep && <div className="my-1.5 h-px w-5 bg-border" />}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setUi({ panel: p.key, panelOpen: ui.panel === p.key ? !ui.panelOpen : true })}
+                      aria-label={p.label}
+                      title={p.label}
+                      className={cn(
+                        'relative flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 active:scale-95',
+                        active
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                      )}
+                    >
+                      {active && <span className="rail-notch" />}
+                      <p.icon className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{p.label}</TooltipContent>
+                </Tooltip>
+              </div>
+            )
+          })}
+          <div className="mt-auto flex flex-col items-center gap-1 pt-2">
+            <div className="h-px w-5 bg-border" />
+            <span className="mol-micro select-none text-muted-foreground/40">MV</span>
+          </div>
         </nav>
         {/* 面板内容（宽度可拖拽） */}
         {ui.panelOpen && (
-          <div className="relative shrink-0 border-r border-border/70 bg-background/80 backdrop-blur-sm" style={{ width: panelW }}>
+          <div className="relative shrink-0 border-r border-border bg-background" style={{ width: panelW }}>
             {content}
             {/* 拖拽把手：悬停/拖拽时高亮 */}
             <div

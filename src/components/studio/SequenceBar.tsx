@@ -129,28 +129,27 @@ export function SequenceBar() {
   }
 
   return (
-    <div className="shrink-0 border-t border-border/70 bg-card/40 backdrop-blur-sm">
+    <div className="shrink-0 border-y border-border bg-background">
       {/* 头部：标题 + 结构摘要 + 视野徽章 | 搜索定位 / 聚焦 / 高度 */}
       <div className="flex h-8 items-center gap-1 pr-2">
         <button
           onClick={() => setUi({ sequenceOpen: !ui.sequenceOpen })}
-          className="flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground transition hover:text-foreground"
+          className="flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-left text-muted-foreground transition hover:text-foreground"
         >
           <Dna className="h-3 w-3 shrink-0 text-muted-foreground/70" />
-          序列
-          <span className="min-w-0 truncate font-mono text-[9px] normal-case tracking-normal text-muted-foreground/60">
+          <span className="mol-micro shrink-0">序列</span>
+          <span className="min-w-0 truncate font-mono text-[9px] tabular-nums text-muted-foreground/60">
             {st.name} · {polymerChains.length} 条链 · {(data.residues.length).toLocaleString()} 残基
           </span>
           {visArr && polymerTotal > 0 && (
             <span
               className={cn(
-                'ml-1 shrink-0 rounded-full px-1.5 py-px font-mono text-[9px] font-medium normal-case tracking-normal',
-                polymerInView === polymerTotal
-                  ? 'bg-primary/10 text-primary'
-                  : 'bg-muted text-muted-foreground',
+                'ml-1 flex shrink-0 items-center gap-1 font-mono text-[9px] font-medium tabular-nums',
+                polymerInView === polymerTotal ? 'text-primary' : 'text-muted-foreground',
               )}
               title={`视野内 ${polymerInView} / 共 ${polymerTotal} 个聚合物残基（相机移动实时更新）`}
             >
+              <span className={cn('h-1 w-1 shrink-0 rounded-full', polymerInView === polymerTotal ? 'bg-primary' : 'bg-muted-foreground/50')} />
               {polymerInView}/{polymerTotal} 视野
             </span>
           )}
@@ -162,7 +161,7 @@ export function SequenceBar() {
             <Popover open={searchOpen} onOpenChange={setSearchOpen}>
               <PopoverTrigger asChild>
                 <button
-                  className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+                  className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
                   title="搜索定位残基：残基号（57）、链+号（A57）或配体名（HEM）"
                   aria-label="搜索定位残基"
                 >
@@ -178,7 +177,7 @@ export function SequenceBar() {
                   placeholder="57 · A57 · HEM…"
                   autoFocus
                   aria-label="残基搜索词"
-                  className="h-7 w-full rounded-md border border-border bg-background px-2 font-mono text-[11px] outline-none transition focus:border-primary/60"
+                  className="h-7 w-full rounded-md border border-border bg-background px-2 font-mono text-[11px] outline-none transition focus:border-foreground/30"
                 />
                 <p className="mt-1.5 px-0.5 text-[9px] leading-relaxed text-muted-foreground">
                   Enter 定位：残基号（任意链同号并选）、链字母+号（精确到链）、配体名（如 HEM）。选中后自动滚动到可见位置。
@@ -188,10 +187,10 @@ export function SequenceBar() {
             <button
               onClick={() => updateSettings({ seqFocus: !seqFocus })}
               className={cn(
-                'flex h-6 shrink-0 items-center gap-1 rounded-md border px-1.5 text-[9px] font-medium transition',
+                'flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium transition',
                 seqFocus
-                  ? 'border-primary/50 bg-primary/10 text-primary'
-                  : 'border-border/60 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground',
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
               title={`视口聚焦指示：${seqFocus ? '开（下划线 = 残基在当前相机视野内，切层裁剪同步感知）' : '关（set seq_focus on 开启）'}`}
               aria-pressed={seqFocus}
@@ -201,7 +200,7 @@ export function SequenceBar() {
             </button>
             <button
               onClick={cycleHeight}
-              className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+              className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
               title={`序列条高度：${SEQ_HEIGHT_LABEL[sequenceHeight] ?? '标准'}（点击切换）`}
             >
               <ChevronsUpDown className="h-3 w-3" />
@@ -215,9 +214,10 @@ export function SequenceBar() {
         <div ref={bodyRef} className={cn('mol-scroll overflow-y-auto px-3 pb-2 transition-[max-height] duration-200', SEQ_HEIGHT_CLASS[sequenceHeight] ?? 'max-h-40')}>
           {/* 配体行（置顶免滚动）：每个 chip = 一个完整分子，点击选择、双击聚焦 */}
           {ligandMolecules.length > 0 && (
-            <div className="mb-1 flex items-center gap-2 border-b border-dashed border-border/50 pb-2.5 pt-1">
-              <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-card/40 pr-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                <FlaskConical className="h-3 w-3" /> 配体
+            <div className="mb-1 flex items-center gap-2 border-b border-dashed border-border/60 pb-2.5 pt-1">
+              <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1.5 bg-background pr-1">
+                <FlaskConical className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                <span className="mol-micro text-muted-foreground">配体</span>
               </span>
               <FadeEdge className="gap-1 pb-0.5">
                 {ligandMolecules.map(m => {
@@ -242,16 +242,16 @@ export function SequenceBar() {
                         engineRef.current?.fitView([{ structureId: activeId!, indices: molIndices }])
                       }}
                       className={cn(
-                        'shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold transition',
+                        'shrink-0 rounded-md border px-2 py-0.5 font-mono text-[10px] font-semibold transition',
                         isSel
-                          ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/50'
-                          : 'border-amber-500/30 bg-amber-500/5 text-amber-700 hover:-translate-y-px hover:border-amber-500/60 hover:bg-amber-500/15 dark:text-amber-400',
+                          ? 'border-primary/60 bg-primary/10 text-primary'
+                          : 'border-border bg-transparent text-amber-700 hover:-translate-y-px hover:border-amber-500/50 hover:bg-amber-500/10 dark:text-amber-400',
                         visArr && !molInView && 'opacity-45',
                       )}
                       title={`${m.label}（链 ${m.chainIds.map(c => c.trim() || '?').join('/')}）· ${m.atoms} 原子${m.residues.length > 1 ? ` · ${m.residues.length} 个残基` : ''}${visArr ? (molInView ? ' · 在视野内' : ' · 视野外') : ''} · 点击选择 · 双击聚焦`}
                     >
                       {m.resNames.length > 1 ? m.label : m.resNames[0]}
-                      <span className="ml-0.5 text-[8px] font-normal opacity-60">{r0.chainId.trim()}{r0.resSeq}{m.residues.length > 1 && m.resNames.length === 1 ? '+' : ''}</span>
+                      <span className="ml-0.5 text-[9px] font-normal tabular-nums opacity-60">{r0.chainId.trim()}{r0.resSeq}{m.residues.length > 1 && m.resNames.length === 1 ? '+' : ''}</span>
                     </button>
                   )
                 })}
@@ -266,7 +266,7 @@ export function SequenceBar() {
             }
             return (
               <div key={`${chain.id}-${ci}`} className="flex items-center gap-2 pb-2.5 pt-0.5">
-                <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-card/40 pr-1.5">
+                <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-background pr-1.5">
                   <button
                     onClick={selectChain}
                     onDoubleClick={() => {
@@ -278,7 +278,7 @@ export function SequenceBar() {
                   >
                     <span className="h-3.5 w-1 rounded-full transition group-hover:h-4" style={{ background: color }} />
                     <span className="font-mono text-[11px] font-bold leading-none">{chain.id === ' ' ? '—' : chain.id}</span>
-                    <span className="font-mono text-[8px] leading-none text-muted-foreground/70">{(chain.residueIdx || []).length}</span>
+                    <span className="font-mono text-[9px] tabular-nums leading-none text-muted-foreground/70">{(chain.residueIdx || []).length}</span>
                   </button>
                 </span>
                 <FadeEdge className="pb-1">
@@ -352,7 +352,7 @@ const ResidueCell = memo(function ResidueCell({
       className={cn(
         'group relative flex h-7 w-[26px] shrink-0 flex-col items-center justify-end rounded-[4px] outline-none transition-all duration-100',
         selected
-          ? 'z-10 ring-2 ring-primary ring-offset-1 ring-offset-card'
+          ? 'z-10 ring-2 ring-primary ring-offset-1 ring-offset-background'
           : 'hover:-translate-y-0.5 hover:z-10 hover:scale-[1.08] hover:shadow-md',
       )}
       style={{ background: color }}
@@ -366,7 +366,7 @@ const ResidueCell = memo(function ResidueCell({
       <span
         className={cn(
           'text-[10px] font-bold leading-none',
-          isMarker ? 'font-mono text-[8.5px] font-extrabold text-black/75' : 'text-black/90 [text-shadow:0_0_1px_rgba(255,255,255,0.35)]',
+          isMarker ? 'font-mono text-[9px] font-extrabold tabular-nums text-black/75' : 'text-black/90 [text-shadow:0_0_1px_rgba(255,255,255,0.35)]',
         )}
       >
         {isMarker ? position : letter}
