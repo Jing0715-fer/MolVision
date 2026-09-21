@@ -8,6 +8,7 @@ import { applyRigidTransform } from './superpose'
 import { useMapStore } from './map-store'
 import { fetchAndComputeMap, removeMap } from './map-load'
 import { useViewsStore, type ViewBookmark } from './views-store'
+import { whenEngineReady } from './engine-ready'
 import { stopMovie, useMovieStore } from './movie'
 import { useEnsembleStore } from './ensemble-store'
 import { useRecordStore } from './record-store'
@@ -191,8 +192,9 @@ export function restoreSession(): number {
           : x),
       }))
       // 重放对称伴侣（引擎视图就绪后由 sync 构建；此处仅写入设置）
-      if (ss.symmetry?.radius && ss.symmetry.radius > 0) {
-        engineRef.current?.updateSymmetry(id, ss.symmetry.radius)
+      const symR = ss.symmetry?.radius ?? 0
+      if (symR > 0) {
+        whenEngineReady(() => { engineRef.current?.updateSymmetry(id, symR) })
       }
       restored++
     } catch { /* 单结构失败不阻断 */ }
@@ -220,17 +222,19 @@ export function restoreSession(): number {
     })
     .filter((x): x is NonNullable<typeof x> => !!x)
   if (named.length) useMolStore.setState({ namedSelections: named })
-  // 恢复相机（下一帧，等引擎 sync 完成后覆盖 fitView）
+  // 恢复相机（引擎挂载并 sync 完成后覆盖 fitView——欢迎页首发时引擎晚于结构就位）
   if (data.camera) {
     const { pos, target } = data.camera
-    requestAnimationFrame(() => {
+    whenEngineReady(() => {
       requestAnimationFrame(() => {
-        const eng = engineRef.current
-        if (!eng) return
-        eng.camera.position.set(pos[0], pos[1], pos[2])
-        eng.controls.target.set(target[0], target[1], target[2])
-        eng.controls.update()
-        useMolStore.getState().bumpVisual()
+        requestAnimationFrame(() => {
+          const eng = engineRef.current
+          if (!eng) return
+          eng.camera.position.set(pos[0], pos[1], pos[2])
+          eng.controls.target.set(target[0], target[1], target[2])
+          eng.controls.update()
+          useMolStore.getState().bumpVisual()
+        })
       })
     })
   }
@@ -488,5 +492,23 @@ export function sessionInfo(): string {
     return `存档时间 ${age < 60 ? age + ' 秒前' : Math.round(age / 60) + ' 分钟前'}，${d.structures.length} 个结构${d.camera ? '，含相机' : ''}`
   } catch {
     return '会话存档损坏'
+  }
+}
+
+/** 欢迎页会话摘要：结构数 / 名称（前 3 个）/ 存档时间；无存档或损坏返回 null（SSR 安全） */
+export function sessionSnapshot(): { count: number; names: string[]; savedAt: number } | null {
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return null
+    const d = JSON.parse(raw) as SessionData
+    if (!Array.isArray(d.structures) || d.structures.length === 0) return null
+    if (!Number.isFinite(d.savedAt)) return null
+    return {
+      count: d.structures.length,
+      names: d.structures.slice(0, 3).map(s => s.name).filter(Boolean),
+      savedAt: d.savedAt,
+    }
+  } catch {
+    return null
   }
 }

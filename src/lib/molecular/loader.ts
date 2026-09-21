@@ -5,6 +5,7 @@ import { useMolStore, engineRef } from './store'
 import { textRegistry } from './text-registry'
 import { saveSession, importSessionFile } from './session'
 import { loadMapBuffer } from './map-load'
+import { whenEngineReady } from './engine-ready'
 
 export const EXAMPLE_STRUCTURES: { id: string; title: string; desc: string }[] = [
   { id: '1CRN', title: 'Crambin', desc: '小蛋白 · 327 原子 · 高分辨率' },
@@ -59,9 +60,11 @@ export function loadStructureText(text: string, name: string, format?: 'pdb' | '
       textRegistry.set(id, text)
       setTimeout(() => saveSession(), 600)
       useMolStore.setState({ loading: false, loadingMsg: '' })
-      // 视角适配
-      requestAnimationFrame(() => {
-        engineRef.current?.fitView()
+      // 视角适配（欢迎页首发时引擎晚于结构就位——入队，引擎挂载后冲刷）
+      whenEngineReady(() => {
+        requestAnimationFrame(() => {
+          engineRef.current?.fitView()
+        })
       })
       toast.success(`已加载 ${displayName}`, {
         description: `${data.atoms.count.toLocaleString()} 原子 · ${data.residues.length.toLocaleString()} 残基 · ${data.chains.length} 条链 · 解析 ${ms < 1 ? '<1' : ms.toFixed(0)} ms${id ? '' : ''}`,

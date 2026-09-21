@@ -7,7 +7,8 @@ import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { loadFiles, fetchPdbId } from '@/lib/molecular/loader'
 import { PRESETS } from '@/lib/molecular/store'
-import { hasSession, restoreSession, saveSession } from '@/lib/molecular/session'
+import { saveSession } from '@/lib/molecular/session'
+import { flushEngineReady } from '@/lib/molecular/engine-ready'
 import { useMapStore } from '@/lib/molecular/map-store'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
@@ -130,13 +131,8 @@ export default function MolViewer() {
     engineRef.current = eng
     engine.current = eng
     eng.sync(useMolStore.getState())
-    // 恢复上次会话（结构/表示法/设置/相机）
-    if (hasSession() && useMolStore.getState().structures.length === 0) {
-      const n = restoreSession()
-      if (n > 0) {
-        toast.success(`已恢复上次会话`, { description: `${n} 个结构 · 表示法与相机视角已还原` })
-      }
-    }
+    // 欢迎页首发：结构先于引擎就位时，冲刷排队的取景/相机/对称操作
+    flushEngineReady()
     // 会话自动保存（debounced）：结构/reps/设置/命名选择/密度图设置变化时
     let saveTimer: ReturnType<typeof setTimeout> | null = null
     let lastSig = ''

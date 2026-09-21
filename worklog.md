@@ -1608,3 +1608,24 @@ Stage Summary:
 - 证据链：命令链日志逐条 ✓ → 下拉场景执行 ✓ → 双主题像素 ✓ → lint/tsc/errors 全绿 → 7 面板+4 弹窗截图存档（/tmp/task8a-*、/tmp/task8b-*）
 - 未解决与风险：①ProviderSettingsDialog 仍有 rounded-xl + bg-background/70 半透明家族（8-b 发现，下轮候选）②ScenePanel bg-background/60 未处理（8-a 有意跳过）③VLM 主观终审持续 429（连续 8 轮，DOM+像素证据替代）④ray+outline/SSAO 线稿化 bug 仍在队列（publication 场景用保守 outline 参数 1.1/1.8 规避）
 - 下一阶段建议：①ProviderSettingsDialog 仪器化收尾 ②ScenePanel 实底化 ③ray 线稿化根因排查（用户上上上轮反馈）④VLM 恢复后补审美终审
+
+---
+Task ID: 10
+Agent: main
+Task: 用户需求「在未加载结构时单独做一个欢迎页，简洁大气、有设计感，只显示加载结构或会话等必要功能」——r42 欢迎页（仪器待机大屏）
+
+Work Log:
+- 【架构】page.tsx 条件渲染：structures.length === 0 → WelcomeScreen 整屏接管（工作台五件套 Toolbar/LeftPanel/视口/SequenceBar/StatusBar 全部隐藏）；LoadDialog/HelpDialog/HistoryDialog/CommandPalette 保留全局挂载（Ctrl+K 面板及其快速动作在欢迎页可用，closed 态零视觉足迹）
+- 【会话语义变更】MolViewer 挂载时的静默自动恢复移除，改为欢迎页显式「继续上次会话」动作（Blender/VS Code 启动页范式）——用户明确要求会话作为欢迎页必要入口；无存档时该卡片不渲染
+- 【引擎竞态修复】新建 src/lib/molecular/engine-ready.ts（whenEngineReady 入队 / flushEngineReady 冲刷）：欢迎页首发加载时结构先于 MolViewer 挂载就位（dynamic chunk 异步），engineRef 依赖操作全部改走队列——loader.ts 的 fitView、session.ts 的相机恢复（双 rAF 语义保留）与对称伴侣 updateSymmetry；MolViewer 挂载 sync 完成后冲刷；引擎已挂载时退化为立即执行（与原路径等价）。对称伴侣本身存于 store entry（engine.sync L1401 读取重建），恢复链路完整
+- 【session.ts】新增 sessionSnapshot()：结构数/前 3 名称/savedAt 摘要（try-catch 包裹 localStorage，SSR 安全），供欢迎页恢复卡展示「N 个结构 · 名称 · 相对时间」
+- 【WelcomeScreen.tsx 全新 340 行】仪器待机大屏——①品牌 hero：76px 六角晶格+三轨道原子 monogram（fill-primary）+ 32px MolVision 字标 + 0.34em 字距 MOLECULAR VISUALIZATION STUDIO 微标签 + 一行功能简述 ②背景：三轨道原子线稿（96s 缓转，text-foreground/5.5）+ 六角晶格虚线外框 + 轨道电子翡翠点，呼应 monogram；四角取景框刻度线（corner-tick 复用）③「继续上次会话」panel-card（HardDriveDownload 翡翠图标 + mono 摘要行 + 箭头 hover 平移；恢复失败卡片消失 + toast）④fieldset 图例式分隔（hairline—菱形—「加载结构」—菱形—hairline）⑤PDB 输入：h-11 居中 mono 15px 0.28em 字距 uppercase + mol-btn-primary「获取结构」（4 位才可点）⑥状态行固定高度：loading 时翡翠 mono 读数 + 旋转器，空闲时 RCSB 提示 ⑦「打开本地文件…」ghost 按钮（含 PDB/CIF/CCP4/.molvision mono 微标）⑧6 枚经典示例 chip（1CRN/4HHB/1UBQ/1AKI/1BNA/6LU7，mono ID + 中文名，hover 翡翠描边）⑨墨色仪表底座（instrument-bar）：待机 LED 翡翠点 + STANDBY 读数 + 拖放/Ctrl+K 提示（md+ 显示）+ 主题切换 + GitHub ⑩整页拖放（dragover 遮罩：松开提示 + inset 翡翠 ring）⑪welcome-in 460ms 上浮入场错峰编排（60-420ms）+ prefers-reduced-motion 关停
+- 【细节】pointer:fine 才 autofocus（触屏不弹键盘）；输入过滤 [^0-9A-Z]；恢复按钮 restoring ref 防双击重放；主内容 m-auto 居中 + overflow-y-auto（矮视口滚动不裁切）；h1 语义 + aria-label + suppressHydrationWarning（主题按钮既有模式）
+- 【验证】lint 0/0；E2E 全链路：首发欢迎页（无恢复卡）→ React setter 输入 1CRN + submit → 工作台出现 + 视口中心 1334 unique colors（结构渲染且 fitView 生效——engine-ready 队列实证）→ reload → 恢复卡「1 个结构 · 1CRN · 刚刚」→ 点击恢复 → 工作台 + 中心 6860 非白像素（相机恢复实证）→ 会话菜单新建会话（AlertDialog 确认）→ 欢迎页回归且恢复卡消失（存档已清）→ 4HHB 示例 chip → 4,779 原子；拖放遮罩 show/hide 实证（早期"missing"为同步检查测试 bug——React setState 异步 commit，分离 eval 后 visible）；Ctrl+K 面板在欢迎页开/关（Escape 需 dispatch 到焦点元素——window 级合成事件不达 React 焦点处理器，真实用户无此问题）；双主题截图 + 像素采样：墨底座浅 (42,33,28)/深 (16,10,9)、LED 翡翠 22px、轨道线稿双主题可辨（dark 55,54,51 vs bg 12,11,9）、monogram 翡翠 412px、禁用态按钮 40% 洗翠 y346-389；doc/body/main 三层零横向溢出；errors 零新增；VLM 第 9 轮 429（DOM+像素证据链替代）
+
+Stage Summary:
+- r42 交付：未加载结构时的专属欢迎页——「仪器待机」设计语言首次完整落地为大屏体验：品牌 hero + 缓转轨道线稿背景 + 取景框刻度 + 墨色仪表底座 + STANDBY 待机读数；入口严格收敛为用户指定的必要功能（继续上次会话/PDB 编号/本地文件含会话/6 经典示例），全部功能按钮隐藏但 Ctrl+K 命令面板仍全局可用（实用性彩蛋）
+- 关键架构决策：①欢迎页与工作台互斥整屏切换（非遮罩叠加）——彻底满足「不展示那么多功能按钮」②会话从静默自动恢复改为显式恢复动作（启动页范式；beforeunload/自动保存订阅均随 MolViewer 卸载而失效，欢迎页期间存档天然安全）③engine-ready 队列根治 dynamic 懒挂载与 engineRef 时序竞态（fitView/相机/对称三条路径），引擎在场时零行为差异
+- 证据链：5 张过渡截图（首发/恢复/加载后/新建会话回归/拖放遮罩）+ 双主题终帧 + 像素采样 7 项 + lint 0/0 + errors 0；截图标签勘误：welcome-final-light 实为深色（主题状态跨截图残留），已重命名 -r 后缀对调
+- 未解决与风险：①VLM 审美终审连续 9 轮 429（限流恢复后建议补跑欢迎页双主题终审）②390px 移动端未实测（无 viewport 命令；布局审查通过：max-w-[420px]+px-6=358px 可用、chip flex-wrap、轨道 92vw 收缩、footer 提示 md+ 隐藏）③矮视口（577px）下内容滚动属预期（m-auto+overflow-y-auto）但滚动条样式未专项检查
+- 下一阶段建议：①VLM 恢复后补欢迎页审美终审 ②移动端实测（真机或可调视口工具）③ProviderSettingsDialog 仪器化收尾（r41 遗留）④ray+outline/SSAO 线稿化 bug（多轮遗留）
