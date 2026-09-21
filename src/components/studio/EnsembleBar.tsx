@@ -86,20 +86,15 @@ export function EnsembleBar() {
       className={cn(
         'absolute left-1/2 z-10 -translate-x-1/2 transition-all duration-300',
         timelineOpen ? 'bottom-[196px]' : 'bottom-3',
-        'flex items-center gap-2.5 rounded-2xl border border-border/60 bg-popover/90 px-3 py-2 shadow-xl backdrop-blur-md',
+        'flex items-center gap-2.5 rounded-lg border border-border/60 bg-popover/95 px-3 py-2 shadow-lg backdrop-blur-md',
       )}
       onPointerDown={e => e.stopPropagation()}
     >
       {/* 结构标识 */}
       <div className="hidden items-center gap-1.5 sm:flex">
-        <Layers className="h-3.5 w-3.5 text-violet-400" />
+        <Layers className="h-3.5 w-3.5 text-muted-foreground/70" />
         <span className="max-w-28 truncate text-[11px] font-semibold text-popover-foreground">{entry?.name ?? sid}</span>
-        <span className={cn(
-          'rounded-full px-1.5 py-0.5 text-[9px] font-bold',
-          isMorph
-            ? 'bg-teal-500/15 text-teal-600 dark:text-teal-300'
-            : 'bg-violet-500/15 text-violet-500 dark:text-violet-300',
-        )}>
+        <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
           {isMorph ? (ensKind === 'multimorph' ? `多态 morph · ${knots} 态 · ` : 'morph · ') : 'NMR · '}{total}{isMorph ? ' 帧' : ' 构象'}
         </span>
       </div>
@@ -109,9 +104,9 @@ export function EnsembleBar() {
         onClick={togglePlay}
         aria-label={playing ? '暂停构象动画' : '播放构象动画'}
         className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white shadow-md transition',
-          'bg-gradient-to-br from-violet-500 to-fuchsia-600 hover:brightness-110 active:scale-95',
-          playing && 'from-amber-500 to-orange-600',
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary-foreground shadow-md transition',
+          'bg-primary hover:opacity-90 active:scale-95',
+          playing && 'bg-amber-600 hover:opacity-90',
         )}
       >
         {playing ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
@@ -126,7 +121,7 @@ export function EnsembleBar() {
           step={1}
           value={shown}
           aria-label="构象帧"
-          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-violet-500 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-violet-500 [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:transition hover:[&::-webkit-slider-thumb]:scale-110"
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:transition hover:[&::-webkit-slider-thumb]:scale-110"
           onPointerDown={() => { prevPlaying.current = playing; if (playing) engineRef.current?.pauseEnsemble(); setDragging(true); setDragVal(frame) }}
           onChange={e => {
             const v = Number(e.target.value)
@@ -147,15 +142,15 @@ export function EnsembleBar() {
       </div>
 
       {/* FPS 选择 */}
-      <div className="hidden items-center gap-0.5 rounded-full bg-muted/70 p-0.5 md:flex">
+      <div className="hidden items-center gap-0.5 rounded-md bg-muted/70 p-0.5 md:flex">
         {FPS_CHOICES.map(f => (
           <button
             key={f}
             onClick={() => useEnsembleStore.getState().setFps(f)}
             aria-label={`播放速度 ${f} 帧/秒`}
             className={cn(
-              'rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums transition',
-              fps === f ? 'bg-violet-500 text-white shadow' : 'text-muted-foreground hover:text-foreground',
+              'rounded px-2 py-0.5 text-[10px] font-bold tabular-nums transition',
+              fps === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {f}
@@ -170,7 +165,7 @@ export function EnsembleBar() {
         title={interp ? '插值：开（平滑过渡）' : '插值：关（逐帧跳变）'}
         className={cn(
           'flex h-7 w-7 items-center justify-center rounded-md transition',
-          interp ? 'bg-violet-500/20 text-violet-500 dark:text-violet-300' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+          interp ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
         )}
       >
         <Spline className="h-3.5 w-3.5" />
@@ -183,7 +178,7 @@ export function EnsembleBar() {
         title={loop ? '循环：开' : '循环：关'}
         className={cn(
           'flex h-7 w-7 items-center justify-center rounded-md transition',
-          loop ? 'bg-violet-500/20 text-violet-500 dark:text-violet-300' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+          loop ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
         )}
       >
         <Repeat className="h-3.5 w-3.5" />

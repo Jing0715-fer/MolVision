@@ -156,8 +156,8 @@ export function Toolbar() {
       <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border/70 bg-card/60 px-2 backdrop-blur-sm sm:px-3">
         {/* Logo（固定左端） */}
         <div className="mr-1 flex shrink-0 items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 shadow-sm shadow-emerald-500/25">
-            <Atom className="h-4.5 w-4.5 text-white" strokeWidth={1.8} />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Atom className="h-4.5 w-4.5" strokeWidth={1.8} />
           </div>
           <div className="hidden leading-tight md:block">
             <div className="text-sm font-bold tracking-tight">MolVision</div>
@@ -188,7 +188,7 @@ export function Toolbar() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 text-xs font-medium transition hover:bg-accent">
-              <Save className="h-3.5 w-3.5 text-emerald-500" />
+              <Save className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="hidden md:inline">会话</span>
               <ChevronDown className="h-3 w-3 text-muted-foreground" />
             </button>
@@ -204,7 +204,7 @@ export function Toolbar() {
               disabled={!structures.length}
               className="gap-2"
             >
-              <FileDown className="h-3.5 w-3.5 text-emerald-500" />
+              <FileDown className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="flex-1">
                 <span className="block text-xs">保存会话文件…</span>
                 <span className="block text-[10px] text-muted-foreground">导出 .molvision，可跨设备分享</span>
@@ -266,7 +266,7 @@ export function Toolbar() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 text-xs font-medium transition hover:bg-accent">
-              <FlaskConical className="h-3.5 w-3.5 text-emerald-500" />
+              <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="hidden lg:inline">示例</span>
               <ChevronDown className="h-3 w-3 text-muted-foreground" />
             </button>
@@ -401,7 +401,7 @@ export function Toolbar() {
               aria-label="自动旋转"
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-accent',
-                settings.spin ? 'bg-primary/15 text-emerald-500' : 'text-muted-foreground hover:text-foreground',
+                settings.spin ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <RotateCw className={cn('h-4 w-4', settings.spin && 'animate-[spin_3s_linear_infinite]')} />
@@ -563,7 +563,7 @@ export function Toolbar() {
               onClick={() => setUi({ consoleOpen: !ui.consoleOpen })}
               className={cn(
                 'flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition hover:bg-accent',
-                ui.consoleOpen ? 'bg-primary/15 text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
+                ui.consoleOpen ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <Terminal className="h-3.5 w-3.5" />

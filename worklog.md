@@ -1397,3 +1397,30 @@ Stage Summary:
 - 证据链：流式 curl 逐 token ✓ → 打字机渐进 54→88 ✓ → 停止+恢复 ✓ → 逗号语法 21 对 ✓ → 表格渲染/筛选/排序/点击跳转 ✓ → VLM 8.2/10 生产级 ✓ → 移动端零越界 ✓ → lint/tsc/errors 全绿
 - 未解决与风险：①视觉自查（VLM 分支）仍为非流式（机器检查场景流式价值低，保持稳定）②PairTableToolbar 的「距离/数量」排序仅接触表有（氢键表按距离固定——氢键 count 语义弱）③contacts 尾逗号防御覆盖 A/B 两侧但 xcontacts 未同步（跨结构路径用户手输为主，低风险）④流式期间 localStorage 不落盘（中断关页丢当轮部分文本——秒级窗口可接受）
 - 下一阶段建议（优先级序）：① Agent 快捷预设面板（「出版级/科普风格/口袋特写」一键组合——r33 遗留）② hide 按选择掩码隐藏（PyMOL 语义，r35 遗留）③ 深色主题链色对比度自适应（多轮遗留）④ SVG cartoon 按二级结构变宽路径 ⑤ VLM 视觉自查结果也走流式（一致性）
+
+---
+Task ID: 38
+Agent: main
+Task: 用户反馈 UI 三连优化——空状态引导去独立卡片框改为画布直排、无结构时坐标轴隐藏、全局去「AI 生成味」（渐变/大圆角/玻璃拟态/彩色徽章墙收敛为专业科学工具风格）
+
+Work Log:
+- 【坐标轴空态隐藏·三处同步】engine.ts renderGizmo 与 gizmoAxisFromPoint 均加 `!this.hasContent` 判断（hasContent 在 sync() 末尾由 views.size 统一更新，增删结构均覆盖）；MolViewer.tsx 点击层改 `{showAxes && hasStructures && ...}`（新增 structures.length 布尔订阅）——渲染层/拾取层/DOM 层同步隐藏
+- 【EmptyHint 重做·画布直排】删除 rounded-2xl 卡片容器 + emerald→teal 渐变图标 + shadow-2xl + backdrop-blur-md 玻璃拟态 + violet 边框按钮；改为直接绘制在画布上：中性色 24px 原子线稿标记 +「未加载结构」直白文案 + 输入提示行；快捷示例按钮降为无框文字按钮（hover 仅 bg-accent/70 微亮）；「加载结构/跟随演示」降为文字链接式（primary 下划线 + muted 文字）；底部快捷键速查行吸附视口底缘（sm:flex 小屏隐藏）；新增 loading 态（中性 spinner +「正在获取结构…」，原来无 loading 反馈）
+- 【StatusBar 徽章墙中性化】8 色彩虹胶囊（emerald/amber/teal/orange/violet/cyan/rose/sky/fuchsia）→ VS Code 状态栏风格：无背景胶囊 + `text-muted-foreground` 中性文字 + 1.5px 语义色小圆点（Dot 组件，色语义保留在点上）；「已选 N 原子」改 bg-accent+text-foreground（核心状态）；真警示保留色：性能降级（amber）、FPS 分级（绿/黄/红仪表语义）、测量模式进行中（amber）
+- 【ConsoleBar】shadow-2xl→shadow-lg；输入框 emerald 焦点环/插入符→中性 border-foreground/25（Ctrl+R 搜索态 amber 保留——进行中操作语义）；日志输入行 emerald→foreground/90；KIND_META 补全图标 8 色收敛为 3 色（cmd=emerald/sel=amber/color=rose，其余 muted）
+- 【AgentPanel】容器 rounded-xl+shadow-2xl→rounded-lg+shadow-lg；建议卡 hover emerald 边框→中性 bg-accent/60；输入焦点 emerald→primary；发送按钮 emerald-600 保留（AI 品牌单点强调色，与头部 Bot 图标一致）
+- 【Toolbar】Logo emerald→teal 渐变方块改 bg-primary 纯色；会话/示例菜单彩色图标→muted；spin/consoleOpen 激活态 emerald→bg-accent 中性（agentOpen 激活态保留 emerald——AI 品牌识别）
+- 【ViewBar】保存按钮/书签卡 hover emerald 边框→中性；激活 ring-emerald→ring-primary；计数徽章 emerald-500→bg-primary
+- 【QuickPresets/拖放遮罩/page loading】rounded-full 胶囊→rounded-md；emerald spinner/边框/文字→中性/primary
+- 【EnsembleBar】rounded-2xl→rounded-lg；violet→fuchsia 渐变播放按钮→bg-primary 纯色（播放中 amber）；帧滑块/FPS 选中/插值/循环开关 violet 全家→primary/accent 中性；NMR/morph 徽章彩色→bg-muted
+- 【MovieBadge】teal 渐变进度条→bg-primary 纯色；teal 边框/图标→border-border/bg-muted；停止按钮 teal→primary
+- 【SequenceBar】Dna 图标/视野徽章/聚焦按钮 emerald→primary/muted；视口聚焦下划线 emerald 发光→bg-primary（title 文案同步去「绿色」字样）
+- 【TourOverlay】演示卡 shadow-2xl→shadow-lg、rounded-xl→rounded-lg；6 章节顶条双渐变（from-x-400/90 to-y-500/90）→章节单色（bg-x-500），保留章节色叙事去渐变
+- 【验证链】①lint 0 错 0 警 ②tsc 应用代码 0 错（报错均在 examples/skills 非应用目录）③浏览器 errors 清零 ④坐标轴像素级闭环：clear 命令清空结构后 gizmo 区域（右上 84px）vivid 彩色像素 0 + DOM 点击层不存在；重新加载 4HHB 后同区域 32 彩色像素 + 点击层回归（与旧版渲染量一致）⑤空状态中央区域 vivid 像素 3775（3.1%，渐变图标+violet 按钮）→0 ⑥AgentPanel/ConsoleBar 开关正常、输入框聚焦正常 ⑦4HHB 全链路加载正常（GET /api/pdb/4HHB 200）⑧VLM 终审因服务持续 429 限流未执行（DOM+像素双重证据链已充分覆盖验证点）
+- 测试方法论沉淀：localStorage.clear() 后导航无法清空会话——beforeunload 的 saveSession 会写回；清空结构的正确途径是控制台 `clear` 命令（close all 同义）
+
+Stage Summary:
+- r38 状态：UI 三连诉求全部交付——①空状态从「弹窗式玻璃卡片」变为「画布直排文字」（PyMOL/ChimeraX 空视口范式，含 loading 反馈）②坐标轴 gizmo 无结构时渲染层+拾取层+DOM 层三处同步隐藏（像素级验证 0 彩色像素）③全局「AI 味」清除：渐变全部清零（Logo/EnsembleBar 播放键/MovieBadge 进度条/TourOverlay 顶条）、shadow-2xl→shadow-lg、rounded-xl/2xl→rounded-lg、彩虹徽章墙→中性文字+语义色点、emerald 滥用收敛为「primary 全局 + AI 品牌单点 emerald + 真警示 amber」三层强调色体系
+- 关键决策：①「单一强调色」原则——primary 承担所有交互态，emerald 仅保留 AI 助手身份识别（Bot 头/发送键/agentOpen），amber 仅保留进行中操作与降级警示；语义色降维成 1.5px 小色点保信息不刷屏 ②坐标轴隐藏判据用 engine.hasContent（与渲染管线同源）而非 UI 层重复维护 ③演示 TourOverlay 保留 6 章节色（引导内容叙事价值）只去渐变
+- 未解决与风险：①VLM 视觉终审因 429 限流未跑成本轮证据链缺口（DOM+像素已覆盖，但「专业感」主观维度无 AI 背书）②agent-browser 无 viewport 命令，390px 移动端未实测（改动全为减法+flex-wrap/overflow 兜底，风险低）③CommandPalette 分类图标仍 5 色（VS Code 补全范式可接受，如需彻底单色可下轮收敛）④LeftPanel/各 Tab 面板内部彩色未深扫（面板多为 muted 基调，如用户仍有 AI 味反馈可继续收敛）
+- 下一阶段建议（优先级序）：① VLM 限流恢复后补跑视觉终审（空态/加载态/移动端三截图）② agent 快捷预设面板（「出版级/科普风格/口袋特写」一键组合——多轮遗留）③ hide 按选择掩码隐藏（PyMOL 语义遗留）④ CommandPalette 图标单色化（可选）⑤ ray 渲染线稿化 bug 仍在排查队列（用户上轮反馈，本轮未动渲染管线）

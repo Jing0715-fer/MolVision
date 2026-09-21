@@ -18,7 +18,7 @@ const MolViewer = dynamic(() => import('@/components/molecular/MolViewer'), {
   loading: () => (
     <div className="flex h-full w-full items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-foreground/70" />
         <span className="text-xs text-muted-foreground">正在初始化渲染引擎…</span>
       </div>
     </div>

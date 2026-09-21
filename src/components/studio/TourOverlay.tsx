@@ -24,37 +24,37 @@ const ACCENT: Record<TourAccent, { icon: string; chip: string; bar: string; ring
     icon: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/15',
     chip: 'text-emerald-700 dark:text-emerald-300 border-emerald-500/40 bg-emerald-500/10',
     bar: 'bg-emerald-500',
-    ring: 'from-emerald-400/90 to-teal-500/90',
+    ring: 'bg-emerald-500',
   },
   rose: {
     icon: 'text-rose-600 dark:text-rose-400 bg-rose-500/15',
     chip: 'text-rose-700 dark:text-rose-300 border-rose-500/40 bg-rose-500/10',
     bar: 'bg-rose-500',
-    ring: 'from-rose-400/90 to-red-500/90',
+    ring: 'bg-rose-500',
   },
   amber: {
     icon: 'text-amber-600 dark:text-amber-400 bg-amber-500/15',
     chip: 'text-amber-700 dark:text-amber-300 border-amber-500/40 bg-amber-500/10',
     bar: 'bg-amber-500',
-    ring: 'from-amber-400/90 to-orange-500/90',
+    ring: 'bg-amber-500',
   },
   teal: {
     icon: 'text-teal-600 dark:text-teal-400 bg-teal-500/15',
     chip: 'text-teal-700 dark:text-teal-300 border-teal-500/40 bg-teal-500/10',
     bar: 'bg-teal-500',
-    ring: 'from-teal-400/90 to-cyan-500/90',
+    ring: 'bg-teal-500',
   },
   violet: {
     icon: 'text-violet-600 dark:text-violet-400 bg-violet-500/15',
     chip: 'text-violet-700 dark:text-violet-300 border-violet-500/40 bg-violet-500/10',
     bar: 'bg-violet-500',
-    ring: 'from-violet-400/90 to-purple-500/90',
+    ring: 'bg-violet-500',
   },
   fuchsia: {
     icon: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-500/15',
     chip: 'text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-500/40 bg-fuchsia-500/10',
     bar: 'bg-fuchsia-500',
-    ring: 'from-fuchsia-400/90 to-pink-500/90',
+    ring: 'bg-fuchsia-500',
   },
 }
 
@@ -109,9 +109,9 @@ export function TourOverlay() {
       aria-label={`演示引导：${tour.title}`}
       className="tour-in absolute left-1/2 top-3 z-40 w-[min(30rem,calc(100%-1.5rem))] -translate-x-1/2"
     >
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-card/95 shadow-2xl shadow-black/10 backdrop-blur-md">
-        {/* 顶条渐变 */}
-        <div className={cn('h-1 w-full bg-gradient-to-r', accent.ring)} />
+      <div className="overflow-hidden rounded-lg border border-border/70 bg-card/95 shadow-lg backdrop-blur-md">
+        {/* 章节顶条（单色） */}
+        <div className={cn('h-1 w-full', accent.ring)} />
 
         {/* 头部 */}
         <div className="flex items-center gap-2.5 border-b border-border/60 px-3.5 py-2.5">

@@ -65,7 +65,7 @@ export function ViewBar() {
         <button
           onClick={save}
           title="保存当前视角为书签 (V)"
-          className="flex h-7 items-center gap-1.5 rounded-full border border-border/60 bg-popover/90 px-2.5 text-[11px] font-medium shadow-lg backdrop-blur transition hover:bg-popover hover:border-emerald-400/50 hover:text-emerald-600 dark:hover:text-emerald-400"
+          className="flex h-7 items-center gap-1.5 rounded-full border border-border/60 bg-popover/90 px-2.5 text-[11px] font-medium shadow-md backdrop-blur transition hover:bg-popover hover:border-border"
         >
           <BookmarkPlus className="h-3 w-3" />
           保存视角
@@ -90,7 +90,7 @@ export function ViewBar() {
           className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-popover/90 text-muted-foreground shadow-lg backdrop-blur transition hover:text-foreground"
         >
           <Bookmark className="h-4 w-4" />
-          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white shadow">
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground shadow">
             {bookmarks.length}
           </span>
         </button>
@@ -155,8 +155,8 @@ function BookmarkCard({
         'group relative shrink-0 overflow-hidden rounded-lg border bg-popover/90 shadow-lg backdrop-blur transition-all duration-200',
         compact ? 'w-20' : 'w-28',
         active
-          ? 'border-emerald-400 ring-2 ring-emerald-400/60'
-          : 'border-border/60 hover:border-emerald-400/50 hover:shadow-emerald-500/10',
+          ? 'border-primary ring-2 ring-primary/50'
+          : 'border-border/60 hover:border-border',
       )}
     >
       <button onClick={onJump} className="block w-full" title={`跳转到「${b.name}」（${time} 保存）`}>
@@ -200,7 +200,7 @@ function BookmarkCard({
               e.stopPropagation()
             }}
             maxLength={40}
-            className="w-full rounded border border-emerald-400/60 bg-background px-1 py-0.5 text-[10px] outline-none"
+            className="w-full rounded border border-primary/50 bg-background px-1 py-0.5 text-[10px] outline-none"
           />
         ) : (
           <button

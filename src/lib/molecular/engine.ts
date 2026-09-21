@@ -886,9 +886,9 @@ export class MolEngine {
     this.gizmoCamera = new THREE.OrthographicCamera(-1.55, 1.55, 1.55, -1.55, 0.1, 12)
   }
 
-  /** 每帧叠加渲染：四元数与主相机同步 → 罗盘实时反映视角朝向；scissor 裁剪到右上角小视口 */
+  /** 每帧叠加渲染：四元数与主相机同步 → 罗盘实时反映视角朝向；scissor 裁剪到右上角小视口；未加载结构时不渲染（空视口保持干净） */
   private renderGizmo(cam: THREE.PerspectiveCamera | THREE.OrthographicCamera) {
-    if (!this.settings?.showAxes || this.settings.stereo) return
+    if (!this.settings?.showAxes || this.settings.stereo || !this.hasContent) return
     if (!this.gizmoScene) this.buildGizmo()
     const gs = this.gizmoScene
     const gc = this.gizmoCamera
@@ -952,7 +952,7 @@ export class MolEngine {
 
   /** 指示器点击拾取：容器内坐标 → 最近的 ±X/±Y/±Z 轴（屏幕投影距离阈值内）；UI 覆盖层调用 */
   gizmoAxisFromPoint(clientX: number, clientY: number): THREE.Vector3 | null {
-    if (!this.settings?.showAxes) return null
+    if (!this.settings?.showAxes || !this.hasContent) return null
     const rect = this.container.getBoundingClientRect()
     const gx = clientX - rect.left
     const gy = clientY - rect.top

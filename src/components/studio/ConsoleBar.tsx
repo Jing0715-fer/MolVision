@@ -29,14 +29,14 @@ const LOG_HEIGHT_LABEL: Record<string, string> = {
 
 const KIND_META: Record<CompletionKind, { icon: typeof Terminal; cls: string; label: string }> = {
   cmd: { icon: TerminalSquare, cls: 'text-emerald-600 dark:text-emerald-400', label: '命令' },
-  sub: { icon: CornerDownRight, cls: 'text-sky-600 dark:text-sky-400', label: '子命令' },
-  struct: { icon: Boxes, cls: 'text-violet-600 dark:text-violet-400', label: '结构' },
+  sub: { icon: CornerDownRight, cls: 'text-muted-foreground', label: '子命令' },
+  struct: { icon: Boxes, cls: 'text-muted-foreground', label: '结构' },
   sel: { icon: Filter, cls: 'text-amber-600 dark:text-amber-400', label: '选择' },
-  rep: { icon: Shapes, cls: 'text-teal-600 dark:text-teal-400', label: '表示法' },
+  rep: { icon: Shapes, cls: 'text-muted-foreground', label: '表示法' },
   color: { icon: Palette, cls: 'text-rose-600 dark:text-rose-400', label: '颜色' },
   value: { icon: ChevronRight, cls: 'text-muted-foreground', label: '值' },
-  preset: { icon: Sparkles, cls: 'text-fuchsia-600 dark:text-fuchsia-400', label: '预设' },
-  tour: { icon: Wand2, cls: 'text-purple-600 dark:text-purple-400', label: '演示' },
+  preset: { icon: Sparkles, cls: 'text-muted-foreground', label: '预设' },
+  tour: { icon: Wand2, cls: 'text-violet-600 dark:text-violet-400', label: '演示' },
 }
 
 function KindBadge({ kind }: { kind: CompletionKind }) {
@@ -293,14 +293,14 @@ export function ConsoleBar() {
   const hint = completions?.hint ?? null
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border/70 bg-popover/95 shadow-2xl backdrop-blur-md">
+    <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border/70 bg-popover/95 shadow-lg backdrop-blur-md">
       <div className="flex h-8 items-center gap-2 border-b border-border/50 px-3">
-        <Terminal className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+        <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
         <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">命令行</span>
         <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">Tab 补全 · ↑↓ 历史 · Ctrl+R 搜索 · 徽章快跑 · help 查看命令</span>
         <button
           onClick={() => setUi({ historyOpen: true })}
-          className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-emerald-500/40 hover:text-foreground"
+          className="ml-auto flex h-5 shrink-0 items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 text-[9px] font-medium text-muted-foreground transition hover:border-border hover:text-foreground"
           title={`命令历史面板（全量列表 + 搜索 + 置顶，${HISTORY_MAX} 条上限）`}
         >
           <ScrollText className="h-3 w-3" />
@@ -325,7 +325,7 @@ export function ConsoleBar() {
         {consoleLog.map((l, i) => (
           <div key={i} className={cn(
             'whitespace-pre-wrap break-all',
-            l.type === 'in' ? 'text-emerald-600 dark:text-emerald-400' : l.type === 'err' ? 'text-destructive' : 'text-foreground/80',
+            l.type === 'in' ? 'text-foreground/90 font-medium' : l.type === 'err' ? 'text-destructive' : 'text-foreground/70',
           )}>
             {l.type === 'in' && <span className="text-muted-foreground/50">» </span>}
             {l.text}
@@ -433,12 +433,12 @@ export function ConsoleBar() {
       )}
 
       <div className={cn(
-        'mx-2 mb-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 transition-colors duration-200 focus-within:shadow-[inset_0_0_0_1px_rgba(16,185,129,0.25)]',
+        'mx-2 mb-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 transition-colors duration-200 focus-within:border-foreground/25',
         rSearch.active
-          ? 'border-amber-500/60 bg-amber-500/[0.05] focus-within:bg-amber-500/[0.07] focus-within:shadow-[inset_0_0_0_1px_rgba(245,158,11,0.3)]'
-          : 'focus-within:border-emerald-500/60 focus-within:bg-emerald-500/[0.05]',
+          ? 'border-amber-500/50 bg-amber-500/[0.05] focus-within:bg-amber-500/[0.07]'
+          : '',
       )}>
-        <ChevronRight className={cn('h-3.5 w-3.5 shrink-0', rSearch.active ? 'text-amber-500' : 'text-emerald-500')} />
+        <ChevronRight className={cn('h-3.5 w-3.5 shrink-0', rSearch.active ? 'text-amber-600' : 'text-muted-foreground/70')} />
         <input
           ref={inputRef}
           value={input}
@@ -447,7 +447,6 @@ export function ConsoleBar() {
           placeholder={rSearch.active ? '输入关键词过滤历史…' : 'load 4hhb · select site = within 5 of resn HEM · color red site · show cartoon …'}
           className={cn(
             'min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted-foreground/40',
-            rSearch.active ? 'caret-amber-600 dark:caret-amber-400' : 'caret-emerald-600 dark:caret-emerald-400',
           )}
           spellCheck={false}
           autoComplete="off"

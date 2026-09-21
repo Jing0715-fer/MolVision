@@ -432,7 +432,7 @@ export function AgentPanel() {
 
   return (
     <div
-      className="absolute inset-y-3 right-3 z-30 flex w-full flex-col rounded-xl border border-border/80 bg-card/95 shadow-2xl backdrop-blur-md sm:w-[356px] agent-panel-in"
+      className="absolute inset-y-3 right-3 z-30 flex w-full flex-col rounded-lg border border-border/80 bg-card/95 shadow-lg backdrop-blur-md sm:w-[356px] agent-panel-in"
       role="complementary"
       aria-label="AI 助手面板"
     >
@@ -498,9 +498,9 @@ export function AgentPanel() {
                   <button
                     key={s}
                     onClick={() => void send(s)}
-                    className="flex w-full items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition hover:border-emerald-500/50 hover:bg-emerald-500/5 hover:text-foreground"
+                    className="flex w-full items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition hover:border-border hover:bg-accent/60 hover:text-foreground"
                   >
-                    <Send className="h-3 w-3 shrink-0 text-emerald-500/70" />
+                    <Send className="h-3 w-3 shrink-0 text-muted-foreground/60" />
                     <span className="min-w-0 flex-1">{s}</span>
                   </button>
                 ))}
@@ -618,7 +618,7 @@ export function AgentPanel() {
 
       {/* 输入区 */}
       <div className="shrink-0 border-t border-border/70 p-2.5">
-        <div className="flex items-end gap-1.5 rounded-lg border border-border bg-background/80 px-2 py-1.5 transition focus-within:border-emerald-500/50">
+        <div className="flex items-end gap-1.5 rounded-lg border border-border bg-background/80 px-2 py-1.5 transition focus-within:border-primary/60">
           <textarea
             ref={taRef}
             value={input}

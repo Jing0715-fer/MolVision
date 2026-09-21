@@ -40,6 +40,7 @@ export default function MolViewer() {
   const visualRev = useMolStore(s => s.visualRev)
   const timelineOpen = useMovieStore(s => s.timelineOpen)
   const showAxes = useMolStore(s => s.settings.showAxes)
+  const hasStructures = useMolStore(s => s.structures.length > 0)
   const { theme, setTheme, resolvedTheme } = useTheme()
 
   // 原子点击处理（先声明，供引擎回调引用）
@@ -501,15 +502,15 @@ export default function MolViewer() {
 
       {/* 拖放遮罩 */}
       {dragOver && (
-        <div className="pointer-events-none absolute inset-0 z-50 m-3 flex items-center justify-center rounded-xl border-2 border-dashed border-emerald-500/70 bg-emerald-500/10 backdrop-blur-[2px]">
-          <div className="rounded-lg bg-background/90 px-4 py-3 text-sm font-medium text-emerald-600 dark:text-emerald-400 shadow-lg">
+        <div className="pointer-events-none absolute inset-0 z-50 m-3 flex items-center justify-center rounded-xl border-2 border-dashed border-primary/50 bg-primary/[0.06] backdrop-blur-[2px]">
+          <div className="rounded-lg bg-background/90 px-4 py-3 text-sm font-medium text-foreground/80 shadow-lg">
             释放以加载 PDB / mmCIF 文件
           </div>
         </div>
       )}
 
-      {/* 坐标轴指示器点击层（与引擎 AXIS_GIZMO 视口对齐；hover 轴端发光反馈，点击平滑对齐视角） */}
-      {showAxes && (
+      {/* 坐标轴指示器点击层（与引擎 AXIS_GIZMO 视口对齐；未加载结构时不显示，与渲染侧同步隐藏） */}
+      {showAxes && hasStructures && (
         <div
           className="absolute right-3 top-3 z-10 cursor-pointer rounded-full transition hover:bg-foreground/[0.04] active:bg-foreground/[0.08]"
           style={{ width: AXIS_GIZMO.size, height: AXIS_GIZMO.size }}
@@ -576,76 +577,79 @@ function EmptyHint() {
   const QUICK: { id: string; label: string; hint: string }[] = [
     { id: '4HHB', label: '4HHB', hint: '血红蛋白' },
     { id: '1BNA', label: '1BNA', hint: 'B-DNA' },
-    { id: '6LU7', label: '6LU7', hint: 'Mpro 药靶' },
-    { id: '1D3Z', label: '1D3Z', hint: 'NMR 系综' },
+    { id: '6LU7', label: '6LU7', hint: 'Mpro' },
+    { id: '1D3Z', label: '1D3Z', hint: 'NMR' },
   ]
+  // 空状态：直接绘制在画布上（无卡片容器/渐变/阴影），PyMOL 空视口风格
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 overflow-y-auto py-6 text-center">
-      <div className="pointer-events-auto my-auto max-w-md rounded-2xl border border-border/60 bg-card/70 p-8 shadow-2xl backdrop-blur-md">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg shadow-emerald-500/20">
-          <svg viewBox="0 0 24 24" className="h-8 w-8 text-white" fill="none" stroke="currentColor" strokeWidth="1.7">
-            <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
-            <circle cx="12" cy="12" r="4.2" />
-            <circle cx="12" cy="12" r="8" opacity="0.5" />
-            <line x1="12" y1="4" x2="12" y2="8" opacity="0.5" />
-            <line x1="12" y1="16" x2="12" y2="20" opacity="0.5" />
-            <line x1="4" y1="12" x2="8" y2="12" opacity="0.5" />
-            <line x1="16" y1="12" x2="20" y2="12" opacity="0.5" />
-          </svg>
+    <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-5 overflow-y-auto px-6 py-6 text-center">
+      {loading ? (
+        <div className="flex flex-col items-center gap-2.5">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-foreground/70" />
+          <p className="text-xs text-muted-foreground">正在获取结构…</p>
         </div>
-        <h2 className="text-lg font-semibold tracking-tight">开始探索分子世界</h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          输入 PDB 编号从 RCSB 加载结构，或拖放本地 .pdb / .cif 文件到此处。
-        </p>
+      ) : (
+        <>
+          {/* 标题：中性色小标记 + 直白文案，无卡片背景 */}
+          <div className="flex flex-col items-center gap-1">
+            <svg viewBox="0 0 24 24" className="h-6 w-6 text-muted-foreground/45" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+              <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+              <circle cx="12" cy="12" r="4.2" />
+              <circle cx="12" cy="12" r="8" opacity="0.5" />
+            </svg>
+            <h2 className="text-sm font-medium text-foreground/85">未加载结构</h2>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              输入 PDB 编号，或拖放 .pdb / .cif 文件到画布任意位置
+            </p>
+          </div>
 
-        {/* 一键示例 */}
-        <div className="mt-4 flex flex-wrap items-stretch justify-center gap-1.5">
-          {QUICK.map(q => (
+          {/* 快捷示例：低调文字按钮（无彩色描边，hover 仅背景微亮） */}
+          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-0.5">
+            {QUICK.map(q => (
+              <button
+                key={q.id}
+                onClick={() => void fetchPdbId(q.id)}
+                className="flex items-baseline gap-1.5 rounded-md px-2.5 py-1.5 transition hover:bg-accent/70"
+                title={`加载 ${q.hint}`}
+              >
+                <span className="font-mono text-xs font-semibold tracking-wide text-foreground/75">{q.label}</span>
+                <span className="text-[10px] text-muted-foreground/70">{q.hint}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* 次要动作：文字链接式（去彩色按钮） */}
+          <div className="pointer-events-auto flex items-center gap-3 text-xs">
             <button
-              key={q.id}
-              onClick={() => void fetchPdbId(q.id)}
-              className="group flex min-w-[4.6rem] flex-col items-center rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 transition hover:border-emerald-500/50 hover:bg-emerald-500/10"
-              title={`加载 ${q.hint}`}
+              onClick={() => setUi({ loadOpen: true })}
+              className="font-medium text-primary/90 underline-offset-4 transition hover:text-primary hover:underline"
             >
-              <span className="font-mono text-[11px] font-semibold tracking-wide group-hover:text-emerald-600 dark:group-hover:text-emerald-400">{q.label}</span>
-              <span className="text-[9px] text-muted-foreground">{q.hint}</span>
+              加载结构
             </button>
-          ))}
-        </div>
+            <span className="h-3 w-px bg-border" aria-hidden />
+            <button
+              onClick={() => void startTour('quickstart')}
+              className="inline-flex items-center gap-1 text-muted-foreground transition hover:text-foreground"
+            >
+              <GraduationCap className="h-3.5 w-3.5" aria-hidden />
+              跟随演示上手
+            </button>
+          </div>
+        </>
+      )}
 
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-          <button
-            onClick={() => setUi({ loadOpen: true })}
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow transition hover:opacity-90"
-          >
-            加载结构
-          </button>
-          <button
-            onClick={() => void startTour('quickstart')}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/10 px-3.5 text-sm font-medium text-violet-600 shadow-sm transition hover:bg-violet-500/20 dark:text-violet-400"
-          >
-            <GraduationCap className="h-4 w-4" />
-            跟随演示上手
-          </button>
-        </div>
-        <p className="mt-3 text-[10px] text-muted-foreground/70">
-          演示场景会自动加载结构并逐步讲解操作 —— 也可从工具栏「演示」菜单选择 5 个主题场景
-        </p>
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-t border-border/50 pt-3 text-[10px] text-muted-foreground/80">
-          <span className="flex items-center gap-1">
-            <kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">Ctrl</kbd>+<kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">K</kbd> 命令面板
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">8</kbd> 表示法预设
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">`</kbd> 命令行
-          </span>
-          <span className="flex items-center gap-1">
-            <kbd className="rounded border border-border/70 bg-muted/70 px-1 font-mono text-[9px]">V</kbd> 存视角
-          </span>
-          <span className="flex items-center gap-1">右键 · 原子级操作</span>
-        </div>
+      {/* 快捷键速查：吸附视口底部，极小字 */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-9 hidden flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground/55 sm:flex">
+        <span className="flex items-center gap-1">
+          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">Ctrl K</kbd> 命令面板
+        </span>
+        <span className="flex items-center gap-1">
+          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">`</kbd> 命令行
+        </span>
+        <span className="flex items-center gap-1">
+          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">8</kbd> 表示法预设
+        </span>
+        <span className="flex items-center gap-1">右键 · 原子级操作</span>
       </div>
     </div>
   )
@@ -660,16 +664,16 @@ function QuickPresets() {
   const timelineOpen = useMovieStore(s => s.timelineOpen)
   if (!structures.length || !activeId) return null
   return (
-    <div className={cn('absolute right-3 z-10 flex items-center gap-1 transition-all duration-300', timelineOpen ? 'bottom-[196px]' : 'bottom-3')}>
+    <div className={cn('absolute right-3 z-10 flex items-center gap-1.5 transition-all duration-300', timelineOpen ? 'bottom-[196px]' : 'bottom-3')}>
       {loading && (
-        <div className="mr-1 flex items-center gap-2 rounded-full border border-border/60 bg-popover/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur">
-          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+        <div className="mr-0.5 flex items-center gap-2 rounded-md border border-border/60 bg-popover/95 px-2.5 py-1.5 text-xs shadow-md backdrop-blur">
+          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/50 border-t-foreground" />
           处理中…
         </div>
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex h-8 items-center gap-1.5 rounded-full border border-border/60 bg-popover/85 px-3 text-xs font-medium shadow-lg backdrop-blur transition hover:bg-popover">
+          <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-popover/95 px-2.5 text-xs font-medium shadow-sm backdrop-blur transition hover:bg-popover hover:border-border">
             快速风格
             <span className="text-[10px] text-muted-foreground">1-8</span>
           </button>

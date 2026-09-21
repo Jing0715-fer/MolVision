@@ -136,7 +136,7 @@ export function SequenceBar() {
           onClick={() => setUi({ sequenceOpen: !ui.sequenceOpen })}
           className="flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground transition hover:text-foreground"
         >
-          <Dna className="h-3 w-3 shrink-0 text-emerald-500" />
+          <Dna className="h-3 w-3 shrink-0 text-muted-foreground/70" />
           序列
           <span className="min-w-0 truncate font-mono text-[9px] normal-case tracking-normal text-muted-foreground/60">
             {st.name} · {polymerChains.length} 条链 · {(data.residues.length).toLocaleString()} 残基
@@ -146,8 +146,8 @@ export function SequenceBar() {
               className={cn(
                 'ml-1 shrink-0 rounded-full px-1.5 py-px font-mono text-[9px] font-medium normal-case tracking-normal',
                 polymerInView === polymerTotal
-                  ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-primary/10 text-primary',
+                  ? 'bg-primary/10 text-primary'
+                  : 'bg-muted text-muted-foreground',
               )}
               title={`视野内 ${polymerInView} / 共 ${polymerTotal} 个聚合物残基（相机移动实时更新）`}
             >
@@ -190,10 +190,10 @@ export function SequenceBar() {
               className={cn(
                 'flex h-6 shrink-0 items-center gap-1 rounded-md border px-1.5 text-[9px] font-medium transition',
                 seqFocus
-                  ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                  : 'border-border/60 bg-background/60 text-muted-foreground hover:border-primary/40 hover:text-foreground',
+                  ? 'border-primary/50 bg-primary/10 text-primary'
+                  : 'border-border/60 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground',
               )}
-              title={`视口聚焦指示：${seqFocus ? '开（绿色下划线 = 残基在当前相机视野内，切层裁剪同步感知）' : '关（set seq_focus on 开启）'}`}
+              title={`视口聚焦指示：${seqFocus ? '开（下划线 = 残基在当前相机视野内，切层裁剪同步感知）' : '关（set seq_focus on 开启）'}`}
               aria-pressed={seqFocus}
             >
               {seqFocus ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
@@ -373,7 +373,7 @@ const ResidueCell = memo(function ResidueCell({
       </span>
       {/* 视口聚焦下划线：残基在当前相机视野内（切层同步感知） */}
       {showInView && inView && (
-        <span className="absolute inset-x-0.5 bottom-0 h-[2px] rounded-full bg-emerald-500 shadow-[0_0_2px_rgba(16,185,129,0.8)]" />
+        <span className="absolute inset-x-0.5 bottom-0 h-[2px] rounded-full bg-primary" />
       )}
     </button>
   )

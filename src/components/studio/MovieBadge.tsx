@@ -21,8 +21,8 @@ export function MovieBadge() {
 
   return (
     <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 flex-col items-center">
-      <div className="flex items-center gap-2.5 rounded-full border border-teal-500/40 bg-popover/95 py-1.5 pl-3 pr-1.5 shadow-xl backdrop-blur">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400">
+      <div className="flex items-center gap-2.5 rounded-full border border-border/60 bg-popover/95 py-1.5 pl-3 pr-1.5 shadow-lg backdrop-blur">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground">
           <Film className="h-3 w-3" />
         </span>
         <div className="flex flex-col leading-tight">
@@ -35,16 +35,16 @@ export function MovieBadge() {
         </div>
         <button
           onClick={stopMovie}
-          className="flex h-6 items-center gap-1 rounded-full bg-teal-500/90 px-2 text-[10px] font-semibold text-white transition hover:bg-teal-600"
+          className="flex h-6 items-center gap-1 rounded-full bg-primary px-2 text-[10px] font-semibold text-primary-foreground transition hover:opacity-90"
           title="停止序列播放（Esc）"
         >
           <Square className="h-3 w-3 fill-current" /> 停止
         </button>
       </div>
       {/* 段进度条 */}
-      <div className="mx-auto mt-1 h-1 w-[80%] overflow-hidden rounded-full bg-teal-500/15">
+      <div className="mx-auto mt-1 h-1 w-[80%] overflow-hidden rounded-full bg-muted">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-teal-400 to-emerald-500 transition-all duration-500 ease-linear"
+          className="h-full rounded-full bg-primary transition-all duration-500 ease-linear"
           style={{ width: `${pct}%` }}
         />
       </div>
