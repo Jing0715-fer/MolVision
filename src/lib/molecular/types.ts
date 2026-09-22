@@ -76,6 +76,9 @@ export interface StructureEntry {
   name: string
   format: 'pdb' | 'cif'
   visible: boolean
+  /** 链组级隔离（isolate / chains hide / 面板眼睛开关）：被隐藏的链组索引列表。
+   *  空/undefined = 全部可见（默认态）；引擎构建 rep 时过滤这些链组的原子 */
+  hiddenChains?: number[]
   /** 重建版本号（reps / overrides 变化时递增） */
   rev: number
   reps: RepConfig[]

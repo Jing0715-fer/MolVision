@@ -86,8 +86,8 @@ function persist(bookmarks: ViewBookmark[]) {
   try { localStorage.setItem(KEY, JSON.stringify(bookmarks)) } catch { /* 容量满：静默（书签仍在本会话可用） */ }
 }
 
-/** 视口截图 → 小尺寸 JPEG dataURL（Image 解码异步） */
-function makeThumb(full: string): Promise<string | null> {
+/** 视口截图 → 小尺寸 JPEG dataURL（Image 解码异步）；scene-store 场景缩略图共用 */
+export function makeThumb(full: string): Promise<string | null> {
   return new Promise(resolve => {
     const img = new Image()
     img.onload = () => {

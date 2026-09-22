@@ -136,6 +136,21 @@ function isLightBackground(css: string): boolean {
   return c.r * 0.299 + c.g * 0.587 + c.b * 0.114 > 0.5
 }
 
+/** 原子 → 链组索引查找表缓存（isolate/chains hide 链隔离的引擎侧过滤用）。
+ *  链组 = data.chains 的连续区间（同链 ID 可拆多组：蛋白链 A + 配体链 A + 水链 A） */
+const atomChainGroupCache = new WeakMap<StructureData, Uint16Array>()
+function atomChainGroups(data: StructureData): Uint16Array {
+  let cg = atomChainGroupCache.get(data)
+  if (!cg) {
+    cg = new Uint16Array(data.atoms.count)
+    data.chains.forEach((c, ci) => {
+      for (let i = c.start; i < c.end; i++) cg![i] = ci
+    })
+    atomChainGroupCache.set(data, cg)
+  }
+  return cg
+}
+
 /**
  * 克隆 rep 组（几何/材质共享）：THREE 的 Object3D.copy 会 JSON 深拷贝 userData，
  * 而 enginePick 存在循环引用（pick.object → mesh）会抛异常——克隆前暂存清空、克隆后恢复。
@@ -1540,6 +1555,12 @@ export class MolEngine {
         hbonds = hbonds.filter(hb => sel.has(hb.donor) || sel.has(hb.acceptor))
         scoped = true
       }
+      // 链隔离（isolate / chains hide）：端点落在隐藏链组的氢键不渲染——虚线不得悬空指向已隐藏原子
+      if (entry.hiddenChains?.length && hbonds.length) {
+        const hiddenGroups = new Set(entry.hiddenChains)
+        const cg = atomChainGroups(data)
+        hbonds = hbonds.filter(hb => !hiddenGroups.has(cg[hb.donor]) && !hiddenGroups.has(cg[hb.acceptor]))
+      }
       if (!hbonds.length) continue
       // 上限保护
       const CAP = 8000
@@ -2859,11 +2880,14 @@ export class MolEngine {
           : x),
       }))
     }
-    // 过滤氢 / 水
+    // 过滤氢 / 水 / 隐藏链组（isolate / chains hide 链隔离：隐藏链组原子不进几何）
     const mask = res.mask
-    if (settings.hideHydrogens || settings.hideWater) {
+    const hiddenGroups = entry.hiddenChains?.length ? new Set(entry.hiddenChains) : null
+    if (settings.hideHydrogens || settings.hideWater || hiddenGroups) {
+      const cg = hiddenGroups ? atomChainGroups(data) : null
       for (let i = 0; i < mask.length; i++) {
         if (!mask[i]) continue
+        if (cg && hiddenGroups!.has(cg[i])) { mask[i] = 0; continue }
         if (settings.hideHydrogens) {
           const e = data.atoms.elements[i]
           if (e === 'H' || e === 'D') { mask[i] = 0; continue }
@@ -2995,6 +3019,9 @@ export class MolEngine {
       const data = dataRegistry.get(label.structureId)
       const view = this.views.get(label.structureId)
       if (!data || !view || !view.group.visible) continue
+      // 链隔离：隐藏链组上的标签同步隐藏（否则悬浮文字指向空白处）
+      const entry = useMolStore.getState().structures.find(x => x.id === label.structureId)
+      if (entry?.hiddenChains?.length && entry.hiddenChains.includes(atomChainGroups(data)[label.atomIdx])) continue
       const h = Math.max(1.4, Math.min(5, data.bbox.radius * 0.055))
       const sprite = makeTextSprite(label.text, h, { color: '#f5f7fa', outline: 'rgba(10,12,16,0.85)' })
       sprite.position.set(

@@ -59,6 +59,10 @@ export interface MolState {
   addStructure: (data: StructureData, name: string, loadMs: number) => string
   removeStructure: (id: string) => void
   setStructureVisible: (id: string, visible: boolean) => void
+  /** 链组级隔离：设置被隐藏的链组索引（null/[] = 全部可见）；bump entry.rev 触发 rep 重建 */
+  setChainHidden: (structureId: string, hiddenGroups: number[] | null) => void
+  /** 切换单个链组可见性（面板眼睛开关）；返回切换后的隐藏列表 */
+  toggleChainHidden: (structureId: string, groupIdx: number) => number[] | null
   setActive: (id: string) => void
   addRep: (structureId: string, rep: Partial<RepConfig> & { type: RepType }) => void
   updateRep: (structureId: string, repId: string, patch: Partial<RepConfig>) => void
@@ -296,6 +300,24 @@ export const useMolStore = create<MolState>()((set, get) => ({
       structures: s.structures.map(x => x.id === id ? { ...x, visible } : x),
       visualRev: s.visualRev + 1,
     }))
+  },
+
+  setChainHidden: (id, hiddenGroups) => {
+    const hidden = hiddenGroups && hiddenGroups.length ? [...new Set(hiddenGroups)].sort((a, b) => a - b) : null
+    set(s => ({
+      structures: s.structures.map(x => x.id === id ? { ...x, hiddenChains: hidden ?? undefined, rev: x.rev + 1 } : x),
+      visualRev: s.visualRev + 1,
+    }))
+  },
+
+  toggleChainHidden: (id, groupIdx) => {
+    const s = get()
+    const entry = s.structures.find(x => x.id === id)
+    if (!entry) return null
+    const cur = entry.hiddenChains ?? []
+    const hidden = cur.includes(groupIdx) ? cur.filter(g => g !== groupIdx) : [...cur, groupIdx]
+    get().setChainHidden(id, hidden)
+    return hidden.length ? hidden : null
   },
 
   setActive: (id) => set(s => ({ activeId: id })),
