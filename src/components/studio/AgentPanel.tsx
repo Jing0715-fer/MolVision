@@ -176,8 +176,18 @@ function loadChats(): AgentChatMessage[] {
     const raw = localStorage.getItem(AGENT_CHAT_KEY)
     if (!raw) return []
     const arr = JSON.parse(raw) as AgentChatMessage[]
-    // streaming 标志与视觉截图缩略图不持久化（体积；重载后视觉消息降级为纯文字评估）
-    return Array.isArray(arr) ? arr.slice(-AGENT_CHAT_MAX).map(m => ({ ...m, streaming: undefined, image: undefined })) : []
+    // streaming 标志与视觉截图缩略图不持久化（体积；重载后视觉消息降级为纯文字评估）；
+    // 面板卸载（欢迎页↔工作台切换 / 刷新）时被中断的命令 → error 态（带重试按钮，用户可一键重跑）
+    return Array.isArray(arr) ? arr.slice(-AGENT_CHAT_MAX).map(m => ({
+      ...m,
+      streaming: undefined,
+      image: undefined,
+      commands: m.commands?.map(c =>
+        c.status === 'running' || c.status === 'pending'
+          ? { ...c, status: 'error' as const, output: '被界面切换中断，可重新执行' }
+          : c,
+      ),
+    })) : []
   } catch {
     return []
   }
@@ -200,7 +210,12 @@ function CmdStatusIcon({ status }: { status: AgentCmdRecord['status'] }) {
 /** 忙碌阶段（思考 → 流式生成 → 执行 → 视觉自查） */
 type BusyPhase = 'think' | 'stream' | 'exec' | 'visual'
 
-export function AgentPanel() {
+/**
+ * AI 助手面板
+ * @param float 悬浮变体（欢迎页）：四边离锚（64px 顶部 / 底部脱离仪表底座），
+ *              呈「浮动对话框」而非「停靠工具」——与右下 AI 入口胶囊同一悬浮语言
+ */
+export function AgentPanel({ float = false }: { float?: boolean }) {
   const open = useMolStore(s => s.ui.agentOpen)
   const setUi = useMolStore(s => s.setUi)
   const [msgs, setMsgs] = useState<AgentChatMessage[]>(loadChats)
@@ -216,6 +231,18 @@ export function AgentPanel() {
   const taRef = useRef<HTMLTextAreaElement>(null)
   /** 当前流式请求的中断器（停止生成按钮） */
   const abortRef = useRef<AbortController | null>(null)
+
+  // Ctrl/Cmd+J 全局开关（欢迎页与工作台通用——与 Ctrl+K 命令面板同族的互斥修饰键规范）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault()
+        setUi({ agentOpen: !useMolStore.getState().ui.agentOpen })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [setUi])
 
   // 面板打开时拉取当前默认供应商（徽章展示模型名；失败静默降级为内置文案）
   useEffect(() => {
@@ -479,7 +506,12 @@ export function AgentPanel() {
 
   return (
     <div
-      className="absolute inset-y-3 left-3 right-3 z-30 flex flex-col rounded-lg border border-border bg-card mol-elevate sm:left-auto sm:w-[356px] agent-panel-in"
+      className={cn(
+        'agent-panel-in absolute z-30 flex flex-col rounded-lg border border-border bg-card mol-elevate',
+        float
+          ? 'inset-y-16 left-4 right-4 sm:left-auto sm:right-6 sm:w-[356px] sm:shadow-[0_8px_32px_oklch(0.25_0.01_80/0.14)] dark:sm:shadow-[0_8px_32px_oklch(0_0_0/0.45)]'
+          : 'inset-y-3 left-3 right-3 sm:left-auto sm:w-[356px]',
+      )}
       role="complementary"
       aria-label="AI 助手面板"
     >

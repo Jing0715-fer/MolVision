@@ -1739,3 +1739,27 @@ Stage Summary:
 - 设计纪律保持：emerald 唯一强调色、无渐变、圆角 ≤ rounded-md、字号标度内（9~34px）、全部动效 prefers-reduced-motion 停用
 - 截图存档：shots/welcome-{dark,light}-r45.png、welcome-{dark,light}-final.png、welcome-mobile-390.png
 - 遗留：VLM 提示的「点击涟漪」未做（与仪器语言不符，刻意取舍）；弹窗体系（CommandPalette/LoadDialog 等）仍为 r41 仪器化水平，可作下轮 VLM 审计对象
+
+---
+Task ID: r46
+Agent: main
+Task: 欢迎页接入 AI 助手 + UI 融合度打磨（用户：「欢迎页需要能调出ai助手，继续打磨ui界面的美观度」）
+
+Work Log:
+- 调研：agentOpen 在 mol store、AgentPanel 空场景安全（context.ts 已含「未加载结构→引导 load」分支、视觉自查 if(eng) 守卫）、runner 'load' 命令完整支持 → 欢迎页可直接复用整套 agent 能力
+- WelcomeScreen：主体区重构为 relative wrapper（内含 mol-scroll 滚动层）以锚定浮层；挂载 <AgentPanel float />
+- FAB 悬浮入口：仪器胶囊（Bot 图标圆徽 + 「AI 助手」+ ⌘J kbd + LED 脉冲），bottom-5 right-5、主色描边/柔光、hover 浮起、agentOpen 时隐藏、aria-keyshortcuts
+- AgentPanel 新增 float 变体（欢迎页专属）：inset-y-16 + right-6 + 增强投影（8px 32px 大模糊浅偏移），呈「浮动对话框」语言；工作台保持 inset-y-3 停靠式
+- AgentPanel 新增全局 Ctrl/Cmd+J 快捷键（欢迎页/工作台通用）；loadChats 恢复时把 running/pending 命令规范化为 error 态 +「被界面切换中断，可重新执行」（带重试按钮）
+- CommandPalette 新增「AI 助手」快速动作（置顶第一位，primary Bot 图标）
+- 欢迎页 footer 提示更新：⌘K 命令面板 · ⌘J AI 助手
+- 面板打开时背景聚焦遮罩：bg-background/35 + opacity 过渡（不拦截交互、motion-reduce 免动画）
+- 踩坑修复：JSX 注释漏写闭合 } 导致整文件解析失败（tsc 报错位置远离真实行——用 node typescript API 逐行 bisect 定位）
+- VLM 评审迭代：面板初版融合 7.2（侵入感过强/贴边/无聚焦引导）→ 悬浮变体 + 遮罩后 dark 9.2（融合 9.5）/ light 9.2（S 级）；FAB 单独评审 8.5（黄金位置）
+
+Stage Summary:
+- 功能链路全绿（agent-browser 实测）：FAB 点击→面板开→关闭→FAB 回归 ✓；Ctrl+J 双向开关 ✓；Ctrl+K palette→AI 助手快速动作 ✓；对话「加载 1CRN」→ LLM→load 命令→工作台接管（canvas + 327 atoms）✓；空场景命令错误优雅呈现（「没有活动结构」）✓；中断命令恢复带重试 ✓；390px 面板 358px 无溢出 ✓；工作台非 float 变体几何回归 ✓；lint 0/0 ✓；dev.log 零新增错误 ✓
+- 评分：欢迎页 AI 集成态 dark 7.2→9.2 / light 9.2（S 级）；FAB 8.5
+- 设计纪律：emerald 唯一强调色、遮罩用语义 background token（非纯黑）、无渐变、圆角 ≤ rounded-lg
+- 截图存档：shots/welcome-fab-v2-dark.png、welcome-agentpanel-v2-{dark,light}.png、welcome-agentpanel-390.png
+- 遗留：浅色遮罩 bg-background/35 为白雾效果（与深色黑压暗语义一致）；建议下轮对 AgentPanel 内部建议卡做 VLM 细审（本轮融合度已 9.5 但卡片排版本审）

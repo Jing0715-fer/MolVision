@@ -11,11 +11,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  FileUp, FolderOpen, Github, Loader2, Moon, Sun,
+  Bot, FileUp, FolderOpen, Github, Loader2, Moon, Sun,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId, loadFiles } from '@/lib/molecular/loader'
 import { SessionResumeSlot } from './SessionResumeCard'
+import { AgentPanel } from './AgentPanel'
 
 /** 欢迎页示例精选（6 个均衡覆盖小蛋白/酶/四聚体/DNA/药物靶点；完整列表在加载对话框） */
 const WELCOME_EXAMPLES = EXAMPLE_STRUCTURES.filter(ex => ex.id !== '1D3Z')
@@ -30,6 +31,8 @@ export function WelcomeScreen() {
   const { resolvedTheme, setTheme } = useTheme()
   const loading = useMolStore(s => s.loading)
   const loadingMsg = useMolStore(s => s.loadingMsg)
+  const agentOpen = useMolStore(s => s.ui.agentOpen)
+  const setUi = useMolStore(s => s.setUi)
   const [id, setId] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -96,8 +99,9 @@ export function WelcomeScreen() {
         <span className="corner-tick br" />
       </div>
 
-      {/* 主体（m-auto 居中，视口过矮时滚动不裁切） */}
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-10">
+      {/* 主体（m-auto 居中，视口过矮时滚动不裁切）；外层 relative 锚定 AI 助手面板与悬浮入口 */}
+      <div className="relative z-10 flex min-h-0 flex-1">
+        <div className="mol-scroll flex w-full flex-col overflow-y-auto px-6 py-10">
         <div className="m-auto flex w-full max-w-[448px] flex-col items-center [&:has(.panel-card)_.load-sep]:mt-7">
 
           {/* —— 品牌 hero（六角芯片：弹性入场 + halo 呼吸 + 双电子巡航 + 原子核呼吸） —— */}
@@ -248,6 +252,35 @@ export function WelcomeScreen() {
             ))}
           </div>
         </div>
+        </div>
+
+        {/* AI 助手悬浮入口（仪器胶囊：LED 待机 + ⌘J 快捷键；面板打开时让位隐藏） */}
+        {!agentOpen && (
+          <button
+            onClick={() => setUi({ agentOpen: true })}
+            className="welcome-in group absolute bottom-5 right-5 z-20 flex h-10 select-none items-center gap-2.5 rounded-full border border-primary/30 bg-card/92 pl-3 pr-3.5 shadow-[0_2px_14px_color-mix(in_oklab,var(--primary)_22%,transparent)] backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/55 hover:shadow-[0_5px_20px_color-mix(in_oklab,var(--primary)_36%,transparent)] active:translate-y-0 active:scale-[0.97]"
+            style={{ animationDelay: '460ms' }}
+            aria-keyshortcuts="Control+J"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/12 text-primary transition-transform duration-200 group-hover:scale-105">
+              <Bot className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-xs font-semibold tracking-wide">AI 助手</span>
+            <span className="hidden items-center gap-0.5 font-mono text-[9px] font-medium text-muted-foreground/80 sm:flex">
+              <kbd className="rounded border border-border bg-background px-1 py-px leading-none">⌘</kbd>J
+            </span>
+            <span className="led-dot led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+          </button>
+        )}
+
+        {/* 面板打开时背景聚焦遮罩（极淡压暗：视觉重心让位 AI 对话；不拦截交互） */}
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute inset-0 z-10 bg-background/35 opacity-0 transition-opacity duration-300 motion-reduce:transition-none ${agentOpen ? 'opacity-100' : ''}`}
+        />
+
+        {/* AI 助手面板（悬浮变体：与右下胶囊同一悬浮语言；加载结构后随工作台重挂载并还原历史） */}
+        <AgentPanel float />
       </div>
 
       {/* 墨色仪表底座（待机遥测读数 + 版本/版权 + 主题/GitHub） */}
@@ -266,7 +299,7 @@ export function WelcomeScreen() {
         <span className="status-val hidden lg:block">© 2026</span>
         <span className="status-sep hidden lg:block" />
         <span className="status-val hidden truncate text-[color:var(--status-dim)] xl:block">
-          拖放 PDB / CIF / .molvision 文件即可加载 · Ctrl+K 打开命令面板
+          拖放 PDB / CIF / .molvision 文件即可加载 · ⌘K 命令面板 · ⌘J AI 助手
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           <button

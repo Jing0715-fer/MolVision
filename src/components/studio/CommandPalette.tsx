@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import {
-  Boxes, ChevronRight, Command as CommandIcon, HelpCircle,
+  Boxes, Bot, ChevronRight, Command as CommandIcon, HelpCircle,
   FolderOpen, History, Palette, Sparkles, Star, Terminal, Triangle,
   Maximize, RotateCcw, Zap, Camera, Download, Save, FilePlus2,
 } from 'lucide-react'
@@ -60,6 +60,11 @@ function commandIcon(cmd: string): { icon: React.ComponentType<{ className?: str
 
 /** 静态快速动作（对话框/面板入口） */
 const QUICK_ACTIONS_STATIC: PaletteItem[] = [
+  {
+    id: 'qa-agent', label: 'AI 助手', desc: '自然语言指挥工作台 · Ctrl+J',
+    run: '', fill: '',
+    icon: Bot, iconCls: 'text-primary',
+  },
   {
     id: 'qa-load', label: '加载结构…', desc: '打开加载对话框（PDB ID / 文件 / 示例）',
     run: '', fill: '',
@@ -184,6 +189,7 @@ export function CommandPalette() {
   // ---------- 行为 ----------
   const execute = (item: PaletteItem) => {
     setOpen(false)
+    if (item.id === 'qa-agent') { setUi({ agentOpen: true }); return }
     if (item.id === 'qa-load') { setUi({ loadOpen: true }); return }
     if (item.id === 'qa-help') { setUi({ helpOpen: true }); return }
     // 视觉/会话快捷动作（引擎/会话层直接调用，不走命令解析）
