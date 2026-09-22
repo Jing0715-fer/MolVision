@@ -167,6 +167,17 @@ export function ScenePanel() {
             摇摆模式：相机绕目标 ±26° 往复摆动，适合观察凹槽与结合口袋的深度。拖动视角后以新视角为基准。
           </p>
         )}
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Axis3d className="h-3.5 w-3.5 text-teal-500" /> 俯仰限位
+          </span>
+          <Switch aria-label="俯仰限位" checked={settings.orbitClamp} onCheckedChange={v => updateSettings({ orbitClamp: v })} />
+        </div>
+        <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+          {settings.orbitClamp
+            ? '开启：拖拽旋转限制在 ±78° 仰角内——不过顶/不过底，防止无限制翻滚导致方向迷失；view top/bottom 轴视角不受影响。'
+            : '关闭：自由全向翻转（PyMOL 行为）——可越过顶/底极点连续翻滚。'}
+        </p>
       </div>
 
       <SectionTitle>灯光与渲染</SectionTitle>

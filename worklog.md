@@ -1913,3 +1913,31 @@ Stage Summary:
 - 架构决策：事件委托挂容器保持 ResidueCell 纯展示 memo（大链性能）；浮动提示走 JS transform 零渲染路径；Esc 拖拽取消用 capture 阶段拦截避免与全局 deselect 快捷键互踩；保存走 indices 快照语义（框选那一刻的状态，与后续操作解耦）
 - 未解决与风险：①拖到 FadeEdge 边缘无自动滚动（PyMOL 有；长链拖选需分段，可后续加边缘速度滚动）②超大蛋白（>3000 残基）双行 DOM 数量翻倍（空刻度格轻量 div，实测 574 格流畅；compact mode 仍是 backlog）③VLM 视觉终审待配额恢复
 - 下一阶段建议：①拖拽边缘自动滚动 ②序列条 compact mode（超大蛋白）③口袋图例与 hbond 面板联动教育 ④弹窗体系 VLM 审计（r46 遗留）
+
+---
+Task ID: r53
+Agent: main
+Task: 用户反馈两点：结构不能无限制旋转 + 选择后要在序列上有标识（含重大隐藏 bug 发现：自动旋转实际从未生效）
+
+Work Log:
+- 【用户原话】「结构不能无限制旋转。选择后的要在序列上也有一定标识。」
+- 【探索定位】①序列标记并非缺失——select resi 23-33 命令后 11 格有 ring-2 ring-primary，但仅 2px 细描边、且与视野下划线同用 primary 绿，像素级统计仅 ~2500 散点，几乎不可辨（用户「要有一定标识」= 标记太弱）②OrbitControls 无任何极角限位（可过顶过底无限翻滚）③**重大发现：controls.update() 从未在渲染循环逐帧调用**——仅一次性方法（fitView/setCameraState 等 8 处）调用，导致 autoRotate（S 自动旋转）完全不动、拖拽无阻尼惯性。实证：E.applySettings({spin:true}) 后 1.2s 相机位移 0.00；「结构不能无限制旋转」双读法（"不能持续旋转"的 bug 报告 + "不得无限翻滚"的约束诉求）双双成立
+- 【修复 1：逐帧 controls.update()】engine tick 内 updateEnsemble 后新增 updateOrbitClampDynamic + controls.update()——autoRotate/damping 惯性获得持续驱动；无输入时 update 近似 no-op（change 事件仅位移超 EPS 派发，无监听风暴）；camAnim 块保持在其后（外部动画覆盖位置的安全语义不变，原作者注释「放在 controls.update 之后」的假设终成真）
+- 【修复 2：俯仰限位 orbitClamp】Settings 新增 orbitClamp（默认 true，session 恢复经 defaultSettings 展开自动兼容）；动态限位 updateOrbitClampDynamic 每帧在 update 前评估：相机极角在 [12°,168°] 内则收紧（拖拽撞墙不翻滚）；
+  - 【关键坑 1：up 换轴不免疫】view top/bottom 靠 up 向量换轴落位，但 OrbitControls._quat 在构造时缓存（identity），换 up 不更新——控制系极角仍是世界系 phi=0/π，静态 clamp 会把轴视角吸到 12° 边界（实测 11.91° 偏差）
+  - 【关键坑 2：边界浮点噪声漏墙】初版「出界即豁免」的推断式限位在 12.0000°±ε 处翻转开合——从界内猛拖可滑过墙到极点
+  - 【最终设计：显式豁免状态机】orbitExempt 标志 + maybeExemptOrbit 登记（目标位姿距极点 <10° 才豁免：view top/bottom/极点书签/场景/会话恢复/orient 主轴竖直）+ 每帧「豁免中且相机回界内且非飞行中（camAnim 为 null 且距登记 >900ms）→ 重新武装」——墙对拖拽绝对刚性（浮点噪声不再开闸），极点轴视角精确落位（view top 实测 phi=0.00、view bottom=180.00），从极点拖回界内无缝重新武装（从下方抵达 12° 不回跳）
+  - setCameraState/orient 内先登记豁免再 updateOrbitClampDynamic 再 update（免被旧限位先吸走）；animateCameraTo 在动画启动前登记（飞行全程豁免，任意时长动画含 movie 播放都安全）
+- 【修复 3：S/R 反馈可发现性】MolViewer S/R 快捷键 toast（「自动旋转已开启 · 结构持续水平旋转 · 再按 S 停止」——此前 S 无任何反馈，用户开了转不起来也找不到关）；ViewportHUD 新增 SPIN/ROCK 状态徽标（primary 色带旋转图标 + 「S 停止」键提示）
+- 【修复 4：ScenePanel 俯仰限位开关】交互与动画区新增 Switch（Axis3d 图标）+ 双态说明（开启=±78° 仰角防翻滚/view top/bottom 不受影响；关闭=自由全向翻转 PyMOL 行为）
+- 【序列选中标记强化（Jalview 式蒙层）】ResidueCell：选中格 bg-primary/45 全格蒙层 + ring-2 ring-inset + 字母白字+深色 textShadow（浮于蒙层之上 z-[1]，SS 轨道同步 z-[1] 保可见）；aria-pressed；配体 chip 选中态 border-primary + bg-primary/20 + shadow-sm 升级；头部新增「已选 N」primary 徽章（title 说明任何来源选择+Esc 取消）；底部提示行教育「任何来源的选择（3D 点击/命令行/AI）都会在序列上以绿色蒙层标识」
+- 【E2E（DOM+像素+引擎探针三层）】①S 键真实路径：autoRotate true→相机 theta 单调连续旋转（500ms 采样 -0.67/-1.15/-1.19/-1.28°）→toast+HUD「SPIN · S 停止」→再按 S 停止+徽标消失 ②rotateUp 猛拖模拟（40×0.35rad 向下）：phi 67.4°→**168.0° 精确撞墙**；反向 60 次→**12.0° 撞墙**（wallHeld:true）③view top/bottom：phi=0.00/180.00 精确（豁免生效）④ScenePanel 开关关闭→同样猛拖 phi 达 180（自由过极点）⑤命令 select resi 23-33：11 格 ring+11 格 overlay+白字 textShadow+「已选 11」徽章（computed style 实证）⑥像素级：选中区 227px 连续 blend 跨度（amber→(133,177,106) 等混合色符合 45% 混合数学），y726 白字母像素 ⑦Esc 取消：0 ring 0 overlay 徽章消失 ⑧4HHB select resn HEM：4 个 HEM chip 全部 border-primary/bg-primary/20 选中态+「已选 4」⑨R 键 rock：摆动 5.4°（正弦中段采样）+HUD「ROCK · R 停止」+关闭 ⑩lint 0/0 + tsc src 零错 + console 无运行时错误（仅 HMR 重建日志）
+- 【沙箱经验】①agent-browser eval 直改 engine.settings 与 store 驱动的 sync 存在竞态（autoPerf 降级走 updateSettings→visualRev→sync→applySettings(store) 会回滚 eval 注入）——测旋转类必须走真实 UI 路径（window dispatch keydown）②agent-browser errors 输出该版本仅 ✗ 空标记不可读，用 console 命令+dev.log 替代③VLM 持续 429（cron webDevReview 竞争配额），DOM computed style + 数值断言 + 像素统计三层替代终审④device 仿真仅 macOS 可用，响应式走 CSS 类静态审查（flex-wrap/truncate/mol-scroll 模式 r52 已实测）
+- 【踩坑】OrbitControls 0.186 update() 源码精读三关键：_quat 构造时缓存不随 object.up 更新；phi clamp 每帧对「任意来源」的位置生效（重导出球坐标）；autoRotate 仅 state===NONE 时驱动——三者共同决定了限位必须动态豁免+逐帧 update
+
+Stage Summary:
+- 用户两点反馈根因全部账清：「结构不能无限制旋转」实为双 bug/诉求复合——①自动旋转（S）从未真正转过（controls.update 不在渲染循环，autoRotate 死功能）②拖拽可过极点无限翻滚（无俯仰限位）。修复后 S 键真实持续旋转（toast+HUD 徽标可发现可停止）+ 俯仰限位 [12°,168°] 拖拽撞墙（浮点噪声免疫的显式豁免状态机保 view top/bottom 精确轴视角）
+- 「序列上要有标识」：选中标记从 2px 隐形 ring 升级为 Jalview 式 primary/45 全格蒙层+白字描边+ring+「已选 N」徽章——任何来源选择（拖拽/3D 点击/命令行/AI）统一显式标识，像素级+DOM 双验证
+- 架构决策：orbitExempt 显式豁免（登记制）优于推断式（位置出界即豁免）——墙的刚性不再受浮点噪声侵蚀；逐帧 controls.update 使 damping 惯性/autoRotate 从「设计存在」变为「实际生效」，顺带修复拖拽手感（有惯性尾巴）
+- 未解决与风险：①VLM 视觉终审持续 429（配额竞争），以 DOM/像素/引擎探针三层替代——真实预览效果待用户侧确认 ②旋转速度默认 2（~9°/s@60fps）偏温和，用户可调（0.5-12 滑杆）③拖拽边缘自动滚动仍是 r52 backlog ④弹窗体系 VLM 审计（r46 遗留）
+- 下一阶段建议：①VLM 配额恢复后补真实预览终审 ②序列条 compact mode（超大蛋白）③拖拽边缘自动滚动 ④agent 记忆可视化面板

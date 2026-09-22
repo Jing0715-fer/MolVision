@@ -116,6 +116,10 @@ interface MapLayerState {
 
 const AMBER = 0xfbbf24
 const UP_VECTOR = new THREE.Vector3(0, 1, 0)
+/** 俯仰限位边界（距极点 12°）：拖拽旋转限制在极角 [12°, 168°]（±78° 仰角） */
+const ORBIT_CLAMP_RAD = THREE.MathUtils.degToRad(12)
+/** 俯仰限位动态评估复用向量（每帧分配避免） */
+const TMP_ORBIT_V = new THREE.Vector3()
 /** superpose 空结果常量（失败时展开用） */
 const NULL_RESULT: SuperposeResult = {
   ok: false, error: '', mobileChain: '?', refChain: '?', matched: 0,
@@ -487,6 +491,12 @@ export class MolEngine {
     }
     this.renderer.info.reset()
     this.updateEnsemble()
+    // OrbitControls 逐帧 update：damping 惯性与 autoRotate 自动旋转需要持续驱动
+    // （此前仅在一次性方法中调用——自动旋转(S)实际不动、拖拽无惯性尾巴）；
+    // 无输入时 update 近似 no-op（change 事件仅在相机位移超 EPS 时派发）。
+    // 俯仰限位动态生效后紧接 update；camAnim 块在其后覆盖位置，外部动画安全。
+    this.updateOrbitClampDynamic()
+    this.controls.update()
     // 视角书签平滑过渡：easeInOutCubic 插值 pos/target/fov（放在 controls.update 之后，
     // 无用户输入时 OrbitControls 每帧以当前位置重算球坐标，外部修改可安全生效）
     if (this.camAnim) {
@@ -3242,6 +3252,55 @@ export class MolEngine {
     this.pickablesCache = null
   }
 
+  /** 俯仰限位（动态，每帧在 controls.update 前评估）：相机极角在范围内时收紧 [12°,168°]——
+  * 拖拽不能过顶/过底（防无限制翻滚与过极点后的方位反转错觉）；
+  * 极点位姿（view top/bottom 轴视角、极点视角恢复）由 orbitExempt 显式豁免（保持精确轴视角，
+  * 不被吸到 12° 边界），拖回范围内后限位自动重新武装（无缝不回跳）；
+  * orbitClamp=false 时全开（自由全向翻转，PyMOL 行为） */
+  private orbitExempt = false
+  /** 豁免登记时间：动画飞行途中（≤900ms，覆盖 650ms 过渡+落位）不因短暂入界而解除；之后回到范围内才重新武装 */
+  private orbitExemptT = 0
+  private updateOrbitClampDynamic() {
+    const c = this.controls
+    if (this.settings?.orbitClamp === false) {
+      if (c.minPolarAngle !== 0 || c.maxPolarAngle !== Math.PI) {
+        c.minPolarAngle = 0
+        c.maxPolarAngle = Math.PI
+      }
+      this.orbitExempt = false
+      return
+    }
+    const off = TMP_ORBIT_V.subVectors(this.activeCamera.position, c.target)
+    const r = off.length()
+    if (r < 1e-6) return
+    const phi = Math.acos(THREE.MathUtils.clamp(off.y / r, -1, 1))
+    const inRange = phi >= ORBIT_CLAMP_RAD && phi <= Math.PI - ORBIT_CLAMP_RAD
+    if (this.orbitExempt && inRange && !this.camAnim && performance.now() - this.orbitExemptT > 900) {
+      // 豁免中且相机已回到限位范围内（非飞行途中、非刚落位）→ 重新武装（从极点方向抵达 12° 边界，不回跳）
+      this.orbitExempt = false
+    }
+    const open = this.orbitExempt
+    const wantMin = open ? 0 : ORBIT_CLAMP_RAD
+    const wantMax = open ? Math.PI : Math.PI - ORBIT_CLAMP_RAD
+    if (Math.abs(c.minPolarAngle - wantMin) > 1e-9 || Math.abs(c.maxPolarAngle - wantMax) > 1e-9) {
+      c.minPolarAngle = wantMin
+      c.maxPolarAngle = wantMax
+    }
+  }
+
+  /** 极点位姿豁免登记：目标位置距极点 <10° 时显式豁免（view top/bottom、极点视角书签/场景/会话恢复）。
+  * 豁免在相机回到限位范围内后自动解除（updateOrbitClampDynamic 每帧评估） */
+  private maybeExemptOrbit(px: number, py: number, pz: number, tx: number, ty: number, tz: number) {
+    const dy = py - ty
+    const r = Math.hypot(px - tx, dy, pz - tz)
+    if (r < 1e-6) return
+    const phi = Math.acos(THREE.MathUtils.clamp(dy / r, -1, 1))
+    if (phi < THREE.MathUtils.degToRad(10) || phi > Math.PI - THREE.MathUtils.degToRad(10)) {
+      this.orbitExempt = true
+      this.orbitExemptT = performance.now()
+    }
+  }
+
   /** 高光开关：遍历场景材质（粗糙度→1 且环境贴图贡献→0 消除镜面高光） */
   private applySpecularAll(specular: boolean) {
     this.scene.traverse(o => {
@@ -3410,7 +3469,13 @@ export class MolEngine {
     this.activeCamera.up.copy(v2)
     this.orthoCamera.up.copy(v2)
     this.activeCamera.position.copy(center).addScaledVector(v3, dist)
+    // 主轴竖直时相机落在极点附近 → 豁免俯仰限位（保持 PCA 对齐精确性；先登记再 update）
+    this.maybeExemptOrbit(
+      this.activeCamera.position.x, this.activeCamera.position.y, this.activeCamera.position.z,
+      center.x, center.y, center.z,
+    )
     if (this.activeCamera === this.orthoCamera) this.updateOrthoFrustum()
+    this.updateOrbitClampDynamic()
     this.controls.update()
     this.fitView(refs)
     return true
@@ -3445,6 +3510,11 @@ export class MolEngine {
       this.camera.fov = s.fov
       this.camera.updateProjectionMatrix()
     }
+    // 极点位姿（轴视角/极点书签恢复）显式豁免俯仰限位，保持精确落位（先登记豁免再 update，免被旧限位吸走）
+    if (Array.isArray(s.pos) && Array.isArray(s.target)) {
+      this.maybeExemptOrbit(s.pos[0], s.pos[1], s.pos[2], s.target[0], s.target[1], s.target[2])
+    }
+    this.updateOrbitClampDynamic()
     this.controls.update()
     if (typeof s.ortho === 'boolean' && this.settings && s.ortho !== this.settings.ortho) {
       useMolStore.getState().updateSettings({ ortho: s.ortho })
@@ -3538,6 +3608,11 @@ export class MolEngine {
     const up1 = Array.isArray(s.up) && s.up.length === 3
       ? new THREE.Vector3().fromArray(s.up).normalize()
       : this.camera.up.clone()
+    // 目标极点位姿（view top/bottom / 极点书签）→ 豁免俯仰限位（动画全程啠开，精确落位）
+    if (Array.isArray(s.pos) && Array.isArray(s.target)) {
+      this.maybeExemptOrbit((s.pos as number[])[0], (s.pos as number[])[1], (s.pos as number[])[2],
+        (s.target as number[])[0], (s.target as number[])[1], (s.target as number[])[2])
+    }
     this.camAnim = {
       t0: performance.now(),
       dur: Math.max(120, dur),

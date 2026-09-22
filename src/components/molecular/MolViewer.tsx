@@ -239,9 +239,15 @@ export default function MolViewer() {
           break
         case 's': case 'S':
           store.updateSettings({ spin: !store.settings.spin, ...(store.settings.spin ? {} : { rock: false }) })
+          toast.info(store.settings.spin ? '自动旋转已停止' : '自动旋转已开启', {
+            description: store.settings.spin ? '快捷键 S · 场景面板可再切换' : '结构持续水平旋转 · 再按 S 停止（场景面板有速度滑杆）',
+          })
           break
         case 'r': case 'R':
           store.updateSettings({ rock: !store.settings.rock, ...(store.settings.rock ? {} : { spin: false }) })
+          toast.info(store.settings.rock ? '相机摇摆已停止' : '相机摇摆已开启', {
+            description: store.settings.rock ? '快捷键 R · 场景面板可再切换' : '±26° 往复摆动观察口袋深度 · 再按 R 停止',
+          })
           break
         case 'h': case 'H': {
           const on = !store.settings.hideHydrogens

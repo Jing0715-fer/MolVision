@@ -1,13 +1,16 @@
 'use client'
 
-// 视口取景器 OSD 读数（相机取景框风格）：活动结构 · 原子数 · 主表示法
+// 视口取景器 OSD 读数（相机取景框风格）：活动结构 · 原子数 · 主表示法 · 旋转状态徽标
 // 悬浮层不参与 ray 导出（DOM 覆盖层）；pointer-events-none 不拦截交互
+import { RotateCw, Waves } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { REP_LABELS } from '@/lib/molecular/types'
 
 export function ViewportHUD() {
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
+  const spin = useMolStore(s => s.settings.spin)
+  const rock = useMolStore(s => s.settings.rock)
   const st = structures.find(x => x.id === activeId)
   if (!st) return null
   const rep = st.reps.find(r => r.visible) ?? st.reps[0]
@@ -24,6 +27,16 @@ export function ViewportHUD() {
         <>
           <span aria-hidden className="h-2 w-px bg-foreground/15" />
           <span>{REP_LABELS[rep.type] ?? rep.type}</span>
+        </>
+      )}
+      {(spin || rock) && (
+        <>
+          <span aria-hidden className="h-2 w-px bg-foreground/15" />
+          <span className="flex items-center gap-1 font-bold text-primary">
+            {spin
+              ? <><RotateCw className="h-2.5 w-2.5 animate-spin [animation-duration:2.5s]" /> SPIN · S 停止</>
+              : <><Waves className="h-2.5 w-2.5" /> ROCK · R 停止</>}
+          </span>
         </>
       )}
     </div>

@@ -375,6 +375,15 @@ export function SequenceBar() {
           <span className="min-w-0 truncate font-mono text-[9px] tabular-nums text-muted-foreground/60">
             {st.name} · {polymerChains.length} 条链 · {(data.residues.length).toLocaleString()} 残基
           </span>
+          {selectedResidues.size > 0 && (
+            <span
+              className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-primary/15 px-1.5 font-mono text-[9px] font-bold tabular-nums text-primary"
+              title={`当前选择覆盖 ${selectedResidues.size} 个残基（任何来源：拖拽/3D 点击/命令行/AI；Esc 取消选择）`}
+            >
+              <span className="h-1 w-1 rounded-full bg-primary" />
+              已选 {selectedResidues.size}
+            </span>
+          )}
           {visArr && polymerTotal > 0 && (
             <span
               className={cn(
@@ -621,7 +630,7 @@ export function SequenceBar() {
                       className={cn(
                         'shrink-0 rounded-md border px-2 py-0.5 font-mono text-[10px] font-semibold transition',
                         isSel
-                          ? 'border-primary/60 bg-primary/10 text-primary'
+                          ? 'border-primary bg-primary/20 text-primary shadow-sm'
                           : 'border-border bg-transparent text-amber-700 hover:-translate-y-px hover:border-amber-500/50 hover:bg-amber-500/10 dark:text-amber-400',
                         visArr && !molInView && 'opacity-45',
                       )}
@@ -708,7 +717,7 @@ export function SequenceBar() {
             <p className="py-2 text-[11px] text-muted-foreground">该结构不含聚合物链（仅配体/小分子）。</p>
           )}
           <p className="pb-0.5 pt-1 text-[9px] leading-relaxed text-muted-foreground/70">
-            拖拽字母格批量选取（Shift 追加 / Alt 移除 / Esc 取消）· 点击选残基 · 双击聚焦 · 框选后可命名保存进选择库
+            拖拽字母格批量选取（Shift 追加 / Alt 移除 / Esc 取消）· 点击选残基 · 双击聚焦 · 框选后可命名保存进选择库；任何来源的选择（3D 点击 / 命令行 / AI）都会在序列上以绿色蒙层标识
           </p>
         </div>
       )}
@@ -778,6 +787,7 @@ const ResidueCell = memo(function ResidueCell({
       data-chain={chainIdx}
       data-k={pos}
       aria-label={title}
+      aria-pressed={selected}
       className={cn(
         'relative flex h-6 shrink-0 items-center justify-center rounded-[3px] outline-none transition-[transform,box-shadow] duration-100',
         !noHover && 'hover:z-10 hover:scale-[1.18] hover:shadow-md',
@@ -785,15 +795,24 @@ const ResidueCell = memo(function ResidueCell({
       )}
       style={{ width: CELL_W, background: color }}
     >
-      {/* 二级结构轨道（hover 时提亮） */}
+      {/* 二级结构轨道（hover 时提亮；z-[1] 保持浮于选中/预览蒙层之上） */}
       <span
-        className="absolute inset-x-[2px] top-0 h-[2px] rounded-full"
+        className="absolute inset-x-[2px] top-0 z-[1] h-[2px] rounded-full"
         style={{ background: ssCssColor(ss), opacity: ss === 'L' ? 0.3 : 0.85 }}
       />
-      {/* 氨基酸缩写：永远显示（刻度移至独立行），水平垂直居中 */}
-      <span className="text-[10px] font-bold leading-none" style={{ color: ink }}>
+      {/* 氨基酸缩写：永远显示（刻度移至独立行），水平垂直居中；选中时白字+描边浮于蒙层之上 */}
+      <span
+        className="relative z-[1] text-[10px] font-bold leading-none"
+        style={selected
+          ? { color: '#ffffff', textShadow: '0 0 2px rgba(0,0,0,0.65), 0 1px 2px rgba(0,0,0,0.45)' }
+          : { color: ink }}
+      >
         {letter}
       </span>
+      {/* 选中蒙层（Jalview 式）：任何来源的选择（拖拽/3D 点击/命令行/AI）均以此显式标识 */}
+      {selected && (
+        <span className="pointer-events-none absolute inset-0 rounded-[3px] bg-primary/45" />
+      )}
       {/* 拖拽框选预览蒙层 */}
       {preview && (
         <span className={cn('pointer-events-none absolute inset-0 rounded-[3px]', previewRemove ? 'bg-destructive/55' : 'bg-primary/55')} />

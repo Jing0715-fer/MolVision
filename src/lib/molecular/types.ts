@@ -144,6 +144,8 @@ export interface Settings {
   spinSpeed: number
   /** 相机摇摆（ChimeraX rock）：左右正弦摆动 ±25° */
   rock: boolean
+  /** 俯仰限位：拖拽旋转限制在 ±78° 仰角内（不过顶/不过底，防无限制翻滚；view top/bottom 轴视角不受影响） */
+  orbitClamp: boolean
   slab: boolean
   slabThickness: number
   /** 切层中心沿视线的偏移（Å；0 = 环绕目标处，正 = 远离相机） */
@@ -207,6 +209,7 @@ export function defaultSettings(): Settings {
     spin: false,
     spinSpeed: 2,
     rock: false,
+    orbitClamp: true,
     slab: false,
     slabThickness: 18,
     slabOffset: 0,
