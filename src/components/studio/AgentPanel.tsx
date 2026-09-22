@@ -68,17 +68,18 @@ function loadVisualPref(): boolean {
   }
 }
 
-/** 调后端 LLM：返回决策或 null（错误已 toast）。带 image 时走 VLM 视觉自查分支（可选前后对比） */
+/** 调后端 LLM：返回决策或 null（错误已 toast）。带 image 时走 VLM 视觉自查分支（可选前后对比）；memory 为长期对话记忆摘要 */
 async function callAgent(
   apiMessages: { role: 'user' | 'assistant'; content: string }[],
   scene: string,
   visual?: { image: string; goal: string; imageBefore?: string },
+  memory?: string,
 ): Promise<AgentDecision | null> {
   try {
     const res = await fetch('/api/agent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(visual ? { messages: apiMessages, scene, image: visual.image, goal: visual.goal, imageBefore: visual.imageBefore } : { messages: apiMessages, scene }),
+      body: JSON.stringify(visual ? { messages: apiMessages, scene, memory, image: visual.image, goal: visual.goal, imageBefore: visual.imageBefore } : { messages: apiMessages, scene, memory }),
     })
     const data = await res.json() as { ok: boolean; decision?: AgentDecision; error?: string }
     if (!data.ok || !data.decision) {
@@ -102,14 +103,14 @@ type StreamResult =
 async function callAgentStream(
   apiMessages: { role: 'user' | 'assistant'; content: string }[],
   scene: string,
-  opts: { signal?: AbortSignal; onFirstDelta?: () => void; onDelta?: (acc: string) => void },
+  opts: { signal?: AbortSignal; onFirstDelta?: () => void; onDelta?: (acc: string) => void; memory?: string },
 ): Promise<StreamResult> {
   let acc = ''
   try {
     const res = await fetch('/api/agent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: apiMessages, scene, stream: true }),
+      body: JSON.stringify({ messages: apiMessages, scene, memory: opts.memory, stream: true }),
       signal: opts.signal,
     })
     if (!res.ok || !res.body) {
@@ -272,6 +273,31 @@ export function AgentPanel() {
   })), [])
 
   /**
+   * 长期对话记忆：最近 12 条之前的早期消息压缩为结构化摘要（用户意图 + 已执行命令 + 自查结论）。
+   * 服务端注入场景上下文尾部——超出滚动窗口的对话仍被「记得」：用户引用早期轮次、
+   * 避免重复已完成的工作、多步工作流跨窗口衔接（如「再加点之前那个效果」）。
+   * 摘要是启发式压缩（无额外 LLM 调用）：用户消息取意图片段，助手消息取成功命令。
+   */
+  const buildMemoryDigest = useCallback((list: AgentChatMessage[]): string => {
+    const early = list.slice(0, -12)
+    if (!early.length) return ''
+    const lines: string[] = []
+    for (const m of early) {
+      if (m.role === 'user') {
+        const t = m.content.replace(/\s+/g, ' ').trim()
+        if (t) lines.push(`- 用户：「${t.slice(0, 48)}」`)
+      } else if (m.kind === 'visual') {
+        const t = m.content.replace(/\s+/g, ' ').trim()
+        if (t) lines.push(`- 视觉自查：${t.slice(0, 36)}`)
+      } else {
+        const okCmds = (m.commands ?? []).filter(c => c.status === 'ok').map(c => c.cmd)
+        if (okCmds.length) lines.push(`- 助手执行：${okCmds.slice(0, 5).join('；')}${okCmds.length > 5 ? ` 等 ${okCmds.length} 条` : ''}`)
+      }
+    }
+    return lines.slice(-30).join('\n').slice(0, 1400)
+  }, [])
+
+  /**
    * 逐条执行命令（白名单分类；confirm 留给用户；间隔 120ms 给引擎喘息）。
    * depth：命令报错自动修正轮次（失败反馈 LLM 求修正，最多 1 轮 agentic retry）。
    * visualBudget：剩余视觉自查次数（主轮 2 → 修正后再自查 1 次 → 二次修正不再查：
@@ -302,7 +328,7 @@ export function AgentPanel() {
     if (fails.length && depth < 1) {
       setPhase('think')
       const fixPrompt = `刚才这些命令执行失败了，请修正（换正确的选择表达式 / 命令写法）后重新给出命令：\n${fails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n只给出修正后需要执行的命令，不要重复已成功的命令。`
-      const fix = await callAgent([...buildApiHistory(priorMsgs), { role: 'user', content: fixPrompt }], buildSceneContext())
+      const fix = await callAgent([...buildApiHistory(priorMsgs), { role: 'user', content: fixPrompt }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs))
       if (fix) {
         const fixCmds = splitCommands(fix.commands)
         const fixId = newId()
@@ -349,7 +375,7 @@ export function AgentPanel() {
         } catch { /* 截图/VLM 失败不影响主流程 */ }
       }
     }
-  }, [patchCmds, buildApiHistory, visualOn])
+  }, [patchCmds, buildApiHistory, buildMemoryDigest, visualOn])
 
   const send = useCallback(async (text: string) => {
     const q = text.trim()
@@ -376,6 +402,7 @@ export function AgentPanel() {
     try {
       const r = await callAgentStream(buildApiHistory(history), buildSceneContext(), {
         signal: ctrl.signal,
+        memory: buildMemoryDigest(history),
         onFirstDelta: () => { ensureMsg(); setPhase('stream') },
         // 增量原文 → 渐进提取 reply 字段（JSON 半截/散文降级两态都安全）
         onDelta: acc => patchAi({ content: extractPartialReply(acc) }),
@@ -415,7 +442,7 @@ export function AgentPanel() {
       setPhase('think')
       if (abortRef.current === ctrl) abortRef.current = null
     }
-  }, [msgs, busy, runTurn, buildApiHistory, visualOn])
+  }, [msgs, busy, runTurn, buildApiHistory, buildMemoryDigest, visualOn])
 
   /** confirm 卡片的「执行 / 跳过」与「重跑」 */
   const act = useCallback(async (msgId: string, idx: number, mode: 'confirm-run' | 'confirm-skip' | 'rerun') => {
@@ -476,6 +503,16 @@ export function AgentPanel() {
           <span className="max-w-24 truncate">{provider?.effectiveModel || provider?.label || 'GLM-4.6'}</span>
           <Settings2 className="h-2.5 w-2.5 shrink-0 opacity-60" />
         </button>
+        {/* 长期记忆徽章：对话超出滚动窗口（12 条）后亮起——早期轮次已压缩为记忆摘要随每轮请求携带 */}
+        {msgs.length > 12 && (
+          <span
+            title={`长期记忆已激活：更早的 ${msgs.length - 12} 条消息压缩为摘要随每轮请求携带（引用早期轮次 / 避免重复已完成的工作）`}
+            className="hidden min-w-0 items-center gap-1 rounded-full border border-border bg-background px-2 py-px font-mono text-[9px] font-medium tabular-nums text-muted-foreground lg:flex"
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70 led-dot" />
+            记忆 {msgs.length - 12}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-0.5">
           <button
             onClick={() => setProviderOpen(true)}

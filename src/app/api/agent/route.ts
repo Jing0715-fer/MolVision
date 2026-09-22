@@ -55,7 +55,8 @@ ${COMMAND_REF}
    ③ view from ligand（口袋正对相机的标准视角，自适应特写距离；多配体结构自动挑选离相机最近的配体实例聚焦，无需手动指定；用户点名特定配体时用 view from (resn XXX and chain A)）
    ④ bg white → outline on 0.5 1（出版描边最优值：强度 0.5 · 粗细 1px——实测 VLM 终审 9/10「非常克制、层次分离好」；强度 ≥1 会线稿化、≥2 严重）
    ⑤ ray 2400（Ray 级静帧渲染导出 PNG，必须是最后一条命令；用户未指定宽度时 2400）
-   灯光保持默认 1（已按 ACES 标定，不要动）；ssao 对 cartoon 表示贡献极小，出版图可不加；用户要求额外效果（渐变/表面/雾）时在 ②③ 之间插入对应命令`
+   灯光保持默认 1（已按 ACES 标定，不要动）；ssao 对 cartoon 表示贡献极小，出版图可不加；用户要求额外效果（渐变/表面/雾）时在 ②③ 之间插入对应命令
+17. 场景信息末尾可能附「## 早期对话记忆」（最近窗口之外的早期轮次压缩摘要）。用户说「之前那个/上次的效果/再加点/回到刚才」等指代早期内容时从记忆摘要中找依据；记忆里已成功执行过的操作不要无脑重复——用户要求叠加/增强时，基于场景信息中的「数值参数」当前值做增量调整`
 
 /** 视觉自查提示词（VLM 分支）：审视执行后截图（可选前后对比），判断目标达成度 */
 const REVIEW_PROMPT = `你是 MolVision（Web 端 PyMOL 风格分子可视化工作台）的视觉自查模块。用户提出绘图目标，助手已执行若干命令。随消息可能附两张截图：第一张是命令执行【前】、第二张是执行【后】（只附一张时即为执行后状态）。请对比前后并审视，判断目标是否达成并给出结论。
@@ -223,6 +224,15 @@ function sanitizeDecision(raw: unknown): AgentDecision | null {
   return { reply: obj.reply.trim().slice(0, 800), commands: normalizeCommands(obj.commands) }
 }
 
+/** 场景上下文 + 长期记忆拼接：客户端把滚动窗口（最近 12 条）之外的早期对话压缩为摘要随请求携带。
+ *  注入在场景尾部——LLM 能引用早期轮次、避免重复已完成的工作（多步工作流跨窗口衔接）。 */
+function sceneWithMemory(scene: string, memory?: string): string {
+  const mem = memory?.trim().slice(0, 1500)
+  return mem
+    ? `${scene}\n\n## 早期对话记忆（最近 12 条之前的压缩摘要；用户可能引用这些早期轮次——已做过的操作不要重复执行）\n${mem}`
+    : scene
+}
+
 export async function POST(req: Request) {
   let body: AgentRequestBody
   try {
@@ -246,7 +256,7 @@ export async function POST(req: Request) {
           const imageParts: ContentPart[] = [
             {
               type: 'text',
-              text: `用户目标：${body.goal.slice(0, 500)}\n\n【自动注入的当前场景信息】\n${body.scene.slice(0, 3000)}`,
+              text: `用户目标：${body.goal.slice(0, 500)}\n\n【自动注入的当前场景信息】\n${sceneWithMemory(body.scene, body.memory).slice(0, 3600)}`,
             },
           ]
           if (body.imageBefore) imageParts.push({ type: 'image_url', image_url: { url: body.imageBefore } })
@@ -302,8 +312,8 @@ export async function POST(req: Request) {
 
   const messages: ZAIMessage[] = [
     { role: 'assistant', content: SYSTEM_PROMPT },
-    // 场景上下文以首条 user 消息注入（每次请求都是最新快照）
-    { role: 'user', content: `【自动注入的当前场景信息，非用户发言】\n${body.scene}` },
+    // 场景上下文（含长期记忆）以首条 user 消息注入（每次请求都是最新快照）
+    { role: 'user', content: `【自动注入的当前场景信息，非用户发言】\n${sceneWithMemory(body.scene, body.memory)}` },
     { role: 'assistant', content: '已了解当前场景。请讲。' },
     ...history.map((m, i) => ({
       role: m.role,

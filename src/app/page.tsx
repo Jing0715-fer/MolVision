@@ -14,6 +14,7 @@ import { HelpDialog } from '@/components/studio/HelpDialog'
 import { HistoryDialog } from '@/components/studio/HistoryDialog'
 import { CommandPalette } from '@/components/studio/CommandPalette'
 import { AgentPanel } from '@/components/studio/AgentPanel'
+import { ViewportHUD } from '@/components/studio/ViewportHUD'
 import { useMolStore } from '@/lib/molecular/store'
 
 const MolViewer = dynamic(() => import('@/components/molecular/MolViewer'), {
@@ -42,6 +43,8 @@ export default function Home() {
             <LeftPanel />
             <main className="relative min-w-0 flex-1" aria-label="3D 分子视图">
               <MolViewer />
+              {/* 取景器 OSD 读数：活动结构 · 原子数 · 主表示法（相机取景框信息条，不拦截交互） */}
+              <ViewportHUD />
               {/* 仪器取景框：四角刻度线（签名细节，不拦截交互） */}
               <div aria-hidden className="pointer-events-none absolute inset-0 z-10">
                 <span className="corner-tick tl" />

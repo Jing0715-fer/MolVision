@@ -1676,3 +1676,46 @@ Stage Summary:
 - 截图：/tmp/r43-{baseline-welcome,baseline-main,main-dark,welcome-dark,final-agentview,final-dark,final-light2,agent-e2e,mobile-welcome,mobile-main,mobile-agent-fixed}.png
 - 未解决与风险：①VLM 终审连续 4 轮 429（下轮窗口恢复后补跑 light/double 终帧）②ray+outline/SSAO 线稿化 bug 仍在队列（多轮遗留，本轮 agent 用保守参数 0.5/1 规避）③AgentPanel 深色下 mol-micro AGENT 标签与供应商徽章在极窄宽度可能竞争空间（truncate 兜底）
 - 下一阶段建议：①VLM 恢复后补终审 + 审美迭代 ②ray 线稿化根因排查 ③agent 对话记忆增强（当前 slice(-12) 截断）/多轮修正预算可视化 ④ScenePanel 剩余 bg-background/60 家族清零（8-a 有意跳过项）
+
+---
+Task ID: r44-a
+Agent: general-purpose
+Task: VLM 审计驱动的主工作台设计感强化（残基自适应墨色/活动卡左轨/链选中态/发丝线徽章/分区计数器/焦点环/浅色对比 token/视口 OSD HUD）
+
+Work Log:
+- 【globals.css】浅色对比 token 收紧：--muted-foreground 0.525→0.47（VLM「次要文字太淡」）、--border/--input 0.893→0.878（浅色发丝线增强；.dark 与 --status-* 未动）。@layer base 新增 :where(button,[role=button],input,select,textarea,a[href]):focus-visible 键盘焦点环（primary 60% 2px + offset 1px，仅键盘路径不扰鼠标）。新增 .panel-sections 计数器复位 + .mol-sec-idx::before（counter decimal-leading-zero 自动 01/02/03…，Geist Mono tabular-nums，foreground 38%）
+- 【colors.ts】新增 readableInk(color)：WCAG 相对亮度 → 近黑 #16191d / 近白 #ffffff。比规格多做一步：兼容 rgb(r,g,b) 输入（naBaseColor 走 THREE getStyle() 输出 rgb() 串，规格版纯正则只认 hex 会令核酸碱基恒走白色兜底）——判定阈值 L>0.45
+- 【SequenceBar.tsx】ResidueCell 新增 ink prop（父级 cellColor=residueCssColor() 一次计算，color+ink 双传）；字母 span 由 text-black/90+[text-shadow] 改为 style color=ink，刻度格（第 10 位）同 ink + opacity .7，text-shadow 全部移除；链头色条 + opacity-80（饱和链色退后，3D 模型为主角）
+- 【StructuresPanel.tsx】①活动卡：border-primary/60!/bg-primary/5! → border-primary/45!/bg-primary/[0.04]! + 卡内绝对定位翡翠左轨 span（-left-px top-2 bottom-2 w-[2px] bg-primary/85 rounded-r-full，仪器锚点替代任意感绿边）②链/分子行选中态：订阅 selection，resChain 旁构建 selChainIdx/selRes（原子索引经 data.atomResidue 映射到残基再查 resChain——规格原码 resChain[ai] 直接用原子索引查残基表是错位 bug，已修正）；isChainSelected=选择全落同一链组时该行 bg-primary/[0.07]+inset 2px primary tick，非选中分支保留 hover:bg-accent/80；分子行用 selRes.has(ri) 精确到分子（规格按 row.i 会使同链组多分子行全部点亮，PO4+HEM 同组场景失真）③4 枚统计 Badge → 发丝线 mono chip（rounded-[3px] border-border/80 透明底 9px tabular-nums；对称伴侣区仍有 5 处 Badge 使用故 import 保留）④链/分子行色条 + opacity-80
+- 【LeftPanel.tsx】滚动容器 + panel-sections 类（桌面与移动 Sheet 共用同一 content DOM，计数器双端生效）；SectionTitle h3 内 tick 前插入 <span aria-hidden className="mol-sec-idx" />（空 span，::before 出号）
+- 【ViewportHUD.tsx 新建 + page.tsx 挂载】相机取景器 OSD：left-7 top-7（避开 (10,10)→(24,24) 四角刻度）pointer-events-none，bg-background/60 + backdrop-blur-[2px] + border-foreground/10，9px mono uppercase tracking-[0.1em]，读数 = 翡翠点 + 结构名(≤8) + 原子数 AT + 主表示法（REP_LABELS，首个可见 rep）；hidden sm:flex（移动端隐藏）；挂在 main 内 MolViewer 之后
+- 【沙箱坑再现】Turbopack CSS watcher 又漏看 globals.css 写入（TSX 热更正常、served CSS 无新规则、::before content=none）——bash 追加注释触发重编译后恢复（与 r43-a 同症，规律：本轮全部 4 笔 CSS 编辑合并在一次 MultiEdit 单写仍被漏，必须事后核验 served stylesheet）
+
+Stage Summary:
+- 交付：VLM 双主题 7.5/10 审计的 7 项收敛批评全部落地（8 文件：1 新建 + 7 修改，零逻辑改动，未触碰并行任务 owned 文件与 store/engine）——①残基格自适应墨色（黑/白按底色亮度切换）②活动结构卡翡翠左轨仪器锚点③链/分子行选中 tick 反馈④统计徽章发丝线化⑤浅色次要文字加深 + 发丝线增强⑥键盘焦点环⑦链色条去饱和⑧视口 OSD 读数 + 面板分区 01/02/03 仪器簇编号
+- 规格偏差 3 处（均为修正性）：readableInk 增 rgb() 解析（核酸碱基正确性）；selChainIdx 原子→残基索引映射修正（规格原码查表错位）；分子行选中判定用残基交集而非链组号（同组多分子不误亮）
+- 证据链（全部实测值）：lint 0/0 + tsc src 零错 ✓；4HHB E2E：HUD textContent="4HHB4,779 ATCartoon 带状"、display=flex ✓；焦点环规则 served（含 @supports color-mix 降级层）✓；分区计数器 4 枚 span 渲染盒 13×9px（两位 9px mono 数字）+ VLM 双主题目视确认 01/02 ✓（注意：本 Chromium getComputedStyle(::before).content 返回未替换的 counter() 串而非 "01"，需以渲染盒/VLM 佐证）；残基墨色 60 格 = 37×rgb(22,25,29) + 23×rgb(255,255,255)（混合成立，刻度格带 @.7）✓；链行点击后 bg=oklab(0.696…/0.07) + inset 2px primary tick（boxShadow 序列化末层 lab(66.98 -58.27 19.54) inset）✓；分子行点击 6 行中仅 1 行亮（精确选中）✓；活动卡左轨 2px bg-primary/85 ✓；链/序列条色条 opacity=0.8 ✓；浅色 token 实测 --muted-foreground=lab(38.55%…)=oklch(0.47…)、--border/--input=lab(85.89%…)=oklch(0.878…) ✓；VLM 复审 dark 9/10 + light 9/10（5 项设计问询全过、无重叠/不可读）✓；errors 仅 6 条预存 WelcomeScreen 水合错配（与 r43-a 同数，零新增）✓
+- 截图存档：/tmp/r44a-dark.png、/tmp/r44a-light.png
+- 风险与遗留：①HUD 原子数 VLM 小字号读数有 1-2 位误读（4,779 读作 4,778/4,770，DOM 实值正确，非缺陷）②agent-browser 本 Chromium 对 counter() 不做 getComputedStyle 替换、对 oklch 色序列化为 lab——验证需换取证手法（渲染盒/末层 shadow/VLM）③r43-a 遗留「深色+白底时标定层近隐形」未在本任务范围
+
+---
+Task ID: r44
+Agent: main
+Task: VLM 评分专项提升（四审计驱动）+ ray+outline 线稿化根因修复 + Agent 长期对话记忆 + 新功能（视口 OSD HUD）
+
+Work Log:
+- 【基线审计】VLM 恢复后首轮四截图审计：light main 7.5 / dark main 7.5 / welcome light 6.5 / welcome dark 7.5。收敛要点：①序列条残基文字对比度 ②侧栏层级与呼吸 ③活动结构卡「任意绿边」④徽章通用感 ⑤浅色次要文字过淡 ⑥链行无选中态 ⑦链色指示条过饱和 ⑧欢迎页输入域对比/排版层级/垂直节奏/恢复卡可点击性
+- 【r44-a 子代理（general-purpose）】主工作台六面强化：a) globals.css 浅色 token（muted-foreground 0.525→0.47、border 0.893→0.878）+ 全局键盘焦点环（primary 60% 2px）+ 分区计数器（.panel-sections/.mol-sec-idx CSS counter 自动 01/02/03）b) colors.ts 新增 readableInk()（WCAG 相对亮度→近黑/近白自适应墨色；实测 rgb() 解析支持）c) SequenceBar 残基格自适应墨色（60 格 = 37 深墨 + 23 白）+ 链色条 opacity-80 d) StructuresPanel 活动卡重设计（border-primary/45 + bg-primary/[0.04] + 2px 翡翠左轨 + relative）+ 链/配体行选中态（bg-primary/[0.07] + inset 2px 左 tick；配体行按残基集合交集精确判定 1/6）+ 统计徽章 Badge→发丝线 mono chip e) LeftPanel panel-sections + SectionTitle 序号 f) 新组件 ViewportHUD（取景器 OSD：翡翠点·结构名·原子数·主表示法，left-7/top-7 避让角刻度，pointer-events-none 不入 ray 导出）
+- 【r44-b ray+outline 线稿化根因修复】（多轮遗留 bug 关账）：根因是轮廓线粗细用固定 px——3600px 超采样导出里 1px 线缩回视口后近不可见，用户为补偿调大参数又让视口变线稿感。修复：syncEdgePass 增 thicknessScale 参数，rayRender 按 w/(cw×prevRatio) 等比补偿（上限 4×）——WYSIWYG 语义。探针实测：ray 1200（实际 1800×593）→ syncEdgePass scale=1.907（=1800/944 精确）✓ 导出 PNG 1.26MB 正常
+- 【r44-c Agent 长期对话记忆】新能力：滚动窗口（12 条）之外的早期对话压缩为结构化摘要（用户意图 48 字 + 成功命令 + 自查结论，≤30 行/1400 字符），随每轮请求携带。protocol.ts 增 memory 字段；AgentPanel buildMemoryDigest()（无额外 LLM 调用的启发式压缩）+ 头部「记忆 N」LED 徽章（msgs>12 时亮起）；route.ts sceneWithMemory() 注入场景尾部（对话 + 视觉自查两分支）；SYSTEM_PROMPT 规则 17（指代早期轮次从记忆找依据/不重复已做操作）。E2E：localStorage 种 14 条 → 徽章「记忆 2」✓ fetch 拦截实证请求体 memory 摘要 + messages=12 ✓
+- 【r44 欢迎页打磨】（welcome light 6.5 / dark 7.5 双审计驱动）：副标题字距 0.34em→0.24em + mt-4、描述行 /85→/90、输入域 bg-card→bg-secondary/45（凹槽感）+ 焦点环 ring/25→/35 + border-ring/80 + placeholder /70→/85、恢复卡 hover:border-primary/45!（panel-card 未分层需 ! 提权）、:has 收紧 mt-3→mt-6（24px 呼吸）、8px 网格对齐（mt-4/mt-8）
+- 【验证链】lint 0/0 + tsc 应用代码 0 错；E2E：4HHB 加载→HUD「4HHB 4,779 AT Cartoon 带状」✓ agent 真实闭环「把配体用球棍表示并聚焦」→ 命令执行 → VLM 自查「已确认：配体（4 个 HEM）已显示为球棍，且画面已从全貌中景（105Å）推近到特写。目标达成」✓ 零新增浏览器错误；ray 探针 scale 1.907 ✓
+- 【VLM 终审】light main 6.5→9 / dark main 7.5→9.2 / welcome dark 7.5→8.5（四项预标记问题全确认 RESOLVED）/ welcome light 6.5→7.5
+
+Stage Summary:
+- r44 交付：①VLM 评分全线上扬（主工作台 7.5→9.2/9.0；欢迎页 7.5/6.5→8.5/7.5）②ray+outline 线稿化多轮遗留 bug 根因修复（WYSIWYG 厚度补偿）③Agent 长期对话记忆（跨窗口引用/不重复操作/记忆徽章）④新功能 ViewportHUD 取景器 OSD ⑤欢迎页排版节奏与输入域可及性打磨
+- 关键决策：①审计驱动收敛（每项 VLM 批评要么落地要么判定误读）②记忆摘要走启发式压缩而非 LLM 摘要调用（零成本零延迟零限流风险）③ray 粗细补偿上限 4× 防极端导出
+- 证据链：四份基线审计 + 三份复审（数字对比）+ fetch 拦截请求体实证 + syncEdgePass 探针数值 + agent VLM 闭环确认 + lint/tsc/浏览器错误三零
+- 截图：/tmp/r44-{welcome-dark,main-light,main-dark,welcome-fixed-dark,welcome-fixed-light,final-dark}.png
+- 未解决与风险：①welcome light 终审 7.5（VLM 剩余意见多为小尺度误读：圆角一致性实际统一 rounded-md；下轮可再压一档）②序列条超大蛋白缩小时的密度问题（VLM 建议 compact mode 阈值——未立项）③色觉障碍可达性（残基色板 deuteranopia 对比——未立项）
+- 下一阶段建议：①超大蛋白（>500 残基）序列 compact mode ②agent 记忆的可视化浏览（记忆面板查看完整摘要）③ray 导出画廊（会话内渲染历史缩略图）④VLM 剩余弱点按需收尾

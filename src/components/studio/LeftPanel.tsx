@@ -107,7 +107,7 @@ export function LeftPanel() {
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="mol-scroll flex-1 overflow-y-auto">
+      <div className="panel-sections mol-scroll flex-1 overflow-y-auto">
         {ui.panel === 'structures' && <StructuresPanel />}
         {ui.panel === 'reps' && <RepsPanel />}
         {ui.panel === 'colors' && <ColorsPanel />}
@@ -210,11 +210,12 @@ export function PanelHint({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** 分区标题：primary 刻线锚点 + 大写微标签（与工具栏/仪表条同一仪器语言；pt-4 = 分区间呼吸节奏） */
+/** 分区标题：仪器簇序号（CSS 计数器 01/02…）+ primary 刻线锚点 + 大写微标签（与工具栏/仪表条同一仪器语言；pt-4 = 分区间呼吸节奏） */
 export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between px-3 pt-4 pb-2">
       <h3 className="mol-micro flex items-center gap-1.5 text-muted-foreground/85">
+        <span aria-hidden className="mol-sec-idx" />
         <span className="h-2.5 w-[2px] rounded-full bg-primary/70" aria-hidden />
         {children}
       </h3>

@@ -172,6 +172,8 @@ export function StructuresPanel() {
   const setActive = useMolStore(s => s.setActive)
   const setStructureVisible = useMolStore(s => s.setStructureVisible)
   const setUi = useMolStore(s => s.setUi)
+  // 链/分子行选中态判定用：当前选择落在哪个链组（见下方 selChainIdx）
+  const selection = useMolStore(s => s.selection)
   // 叠合工具状态（≥2 结构显示）
   const [spOpen, setSpOpen] = useState(false)
   const [spMobile, setSpMobile] = useState<string | null>(null)   // 结构 id（null=自动第一个非活动）
@@ -250,11 +252,13 @@ export function StructuresPanel() {
             key={st.id}
             className={cn(
               // `!` 提权：panel-card 为未分层自定义规则，压过 @layer utilities 的状态类
-              'group panel-card p-2.5',
-              st.id === activeId && 'mol-elevate border-primary/60! bg-primary/5!',
+              'group panel-card relative p-2.5',
+              st.id === activeId && 'mol-elevate border-primary/45! bg-primary/[0.04]!',
               !st.visible && 'opacity-60 saturate-50',
             )}
           >
+            {/* 活动结构：翡翠左轨锚点（仪器标记，替代任意感绿边） */}
+            {st.id === activeId && <span aria-hidden className="absolute -left-px top-2 bottom-2 w-[2px] rounded-r-full bg-primary/85" />}
             <div className="flex items-center gap-2">
               <button
                 onClick={() => toggleCollapse(st.name)}
@@ -333,20 +337,20 @@ export function StructuresPanel() {
             </div>
             {!collapsed.has(st.name) && (
               <div className="mt-1.5 flex flex-wrap gap-1">
-                <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums">
+                <span className="rounded-[3px] border border-border/80 bg-transparent px-1.5 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
                   {st.summary.atoms.toLocaleString()} 原子
-                </Badge>
-                <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums">
+                </span>
+                <span className="rounded-[3px] border border-border/80 bg-transparent px-1.5 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
                   {st.summary.residues.toLocaleString()} 残基
-                </Badge>
+                </span>
                 {st.meta.resolution && (
-                  <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums">
+                  <span className="rounded-[3px] border border-border/80 bg-transparent px-1.5 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
                     {st.meta.resolution} Å
-                  </Badge>
+                  </span>
                 )}
-                <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] font-normal tabular-nums">
+                <span className="rounded-[3px] border border-border/80 bg-transparent px-1.5 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
                   {st.loadMs < 1 ? '<1' : st.loadMs.toFixed(0)} ms
-                </Badge>
+                </span>
               </div>
             )}
             {collapsed.has(st.name) && st.summary.atoms > 0 && (
@@ -367,6 +371,20 @@ export function StructuresPanel() {
         // 点行选分子而非整组——修复「点配体却选中整条链」
         const resChain: number[] = []
         if (data) data.chains.forEach((c, k) => c.residueIdx.forEach(ri => { resChain[ri] = k }))
+        // 选中链组判定：当前选择全部落在同一链组 → 该行显示选中态（仪器 tick 反馈）
+        // 注意 selection.indices 是原子索引，需经 atomResidue 映射到残基再查 resChain
+        const selChainIdx = new Set<number>()
+        const selRes = new Set<number>()
+        if (data && selection.structureId === st.id && selection.indices.length) {
+          for (const ai of selection.indices) {
+            const ri = data.atomResidue[ai]
+            if (ri === undefined) continue
+            selRes.add(ri)
+            const ci = resChain[ri]
+            if (ci !== undefined) selChainIdx.add(ci)
+          }
+        }
+        const isChainSelected = selChainIdx.size === 1
         type Row =
           | { kind: 'chain'; i: number; c: typeof st.chains[number] }
           | { kind: 'molecule'; i: number; c: typeof st.chains[number]; m: NonNullable<typeof data>['molecules'][number]; mi: number }
@@ -413,10 +431,15 @@ export function StructuresPanel() {
                           const idx = selectMolecule(m)
                           if (idx?.length) engineRef.current?.fitView([{ structureId: st.id, indices: idx }])
                         }}
-                        className="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80"
+                        className={cn(
+                          'flex min-h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition',
+                          isChainSelected && m.residues.some(ri => selRes.has(ri))
+                            ? 'bg-primary/[0.07] shadow-[inset_2px_0_0_0_var(--primary)]'
+                            : 'hover:bg-accent/80',
+                        )}
                         title={`选择此配体分子 ${m.label}（${m.atoms} 原子）· 双击聚焦${m.residues.length > 1 ? ` · 跨 ${m.residues.length} 个残基` : ''}`}
                       >
-                        <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
+                        <span className="h-3.5 w-1 shrink-0 rounded-full opacity-80" style={{ background: c.color }} />
                         <span className="w-5 shrink-0 font-mono text-xs font-bold">{label}</span>
                         {dupId && (
                           <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
@@ -473,10 +496,15 @@ export function StructuresPanel() {
                           engineRef.current?.fitView([{ structureId: st.id, indices: useMolStore.getState().selection.indices }])
                         }
                       }}
-                      className="flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80"
+                      className={cn(
+                        'flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition',
+                        isChainSelected && selChainIdx.has(i)
+                          ? 'bg-primary/[0.07] shadow-[inset_2px_0_0_0_var(--primary)]'
+                          : 'hover:bg-accent/80',
+                      )}
                       title={`选择此链组（${c.residues} 残基 · ${c.atoms} 原子）· 双击聚焦${dupId ? ' · 同链 ID 含多个链组，已按链组精确选择' : ''}`}
                     >
-                      <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
+                      <span className="h-3.5 w-1 shrink-0 rounded-full opacity-80" style={{ background: c.color }} />
                       <span className="w-6 shrink-0 font-mono text-xs font-bold">{label}</span>
                       {dupId && (
                         <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>

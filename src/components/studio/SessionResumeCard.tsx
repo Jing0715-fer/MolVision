@@ -43,7 +43,7 @@ function SessionResumeCard() {
     <button
       onClick={resume}
       disabled={loading}
-      className="welcome-in panel-card group mt-9 flex w-full items-center gap-3 px-4 py-3 text-left"
+      className="welcome-in panel-card group mt-9 flex w-full items-center gap-3 px-4 py-3 text-left hover:border-primary/45!"
       style={{ animationDelay: '200ms' }}
     >
       <HardDriveDownload className="h-[18px] w-[18px] shrink-0 text-primary" />

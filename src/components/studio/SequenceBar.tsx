@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { useViewportStore } from '@/lib/molecular/viewport-store'
 import { residueOneLetter } from '@/lib/molecular/chemistry'
-import { residueCssColor, ssCssColor } from '@/lib/molecular/colors'
+import { readableInk, residueCssColor, ssCssColor } from '@/lib/molecular/colors'
 import { cn } from '@/lib/utils'
 import { FadeEdge } from './FadeEdge'
 
@@ -276,7 +276,7 @@ export function SequenceBar() {
                     className="group flex shrink-0 items-center gap-1 rounded px-0.5 py-0.5 transition hover:bg-accent"
                     title={`点击选择链 ${chain.id.trim() || '—'}（${(chain.residueIdx || []).length} 残基）· 双击聚焦`}
                   >
-                    <span className="h-3.5 w-1 rounded-full transition group-hover:h-4" style={{ background: color }} />
+                    <span className="h-3.5 w-1 rounded-full opacity-80 transition group-hover:h-4" style={{ background: color }} />
                     <span className="font-mono text-[11px] font-bold leading-none">{chain.id === ' ' ? '—' : chain.id}</span>
                     <span className="font-mono text-[9px] tabular-nums leading-none text-muted-foreground/70">{(chain.residueIdx || []).length}</span>
                   </button>
@@ -286,12 +286,14 @@ export function SequenceBar() {
                     const r = data.residues[ri]
                     const isSel = selectedResidues.has(ri)
                     const cellInView = inView(ri)
+                    const cellColor = residueCssColor(r.resName)
                     return (
                       <ResidueCell
                         key={ri}
                         resIdx={ri}
                         letter={residueOneLetter(r.resName)}
-                        color={residueCssColor(r.resName)}
+                        color={cellColor}
+                        ink={readableInk(cellColor)}
                         ss={r.ss}
                         title={`${r.resName} ${r.resSeq}${r.iCode || ''}（链 ${r.chainId.trim() || '?'}）${r.ss === 'H' ? ' · 螺旋' : r.ss === 'E' ? ' · 折叠' : ''}${visArr ? (cellInView ? ' · 在视野内' : ' · 视野外') : ''}`}
                         selected={isSel}
@@ -329,11 +331,13 @@ export function SequenceBar() {
 }
 
 const ResidueCell = memo(function ResidueCell({
-  letter, color, ss, title, selected, position, inView, showInView, resIdx, onClick,
+  letter, color, ink, ss, title, selected, position, inView, showInView, resIdx, onClick,
 }: {
   resIdx: number
   letter: string
   color: string
+  /** 自适应墨色：按格底色亮度选近黑/近白（readableInk） */
+  ink: string
   ss: string
   title: string
   selected: boolean
@@ -362,12 +366,10 @@ const ResidueCell = memo(function ResidueCell({
         className="absolute inset-x-0.5 top-0.5 h-[3px] rounded-[1px] transition-opacity group-hover:opacity-100"
         style={{ background: ssCssColor(ss), opacity: ss === 'L' ? 0.3 : 0.85 }}
       />
-      {/* Jalview 式序号刻度：每 10 位显示位置数字，字母让位 */}
+      {/* Jalview 式序号刻度：每 10 位显示位置数字，字母让位（墨色按格底自适应） */}
       <span
-        className={cn(
-          'text-[10px] font-bold leading-none',
-          isMarker ? 'font-mono text-[9px] font-extrabold tabular-nums text-black/55' : 'text-black/90 [text-shadow:0_0_1px_rgba(255,255,255,0.35)]',
-        )}
+        className={cn('leading-none', isMarker ? 'font-mono text-[9px] font-extrabold tabular-nums' : 'text-[10px] font-bold')}
+        style={isMarker ? { color: ink, opacity: 0.7 } : { color: ink }}
       >
         {isMarker ? position : letter}
       </span>

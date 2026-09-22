@@ -41,6 +41,9 @@ export interface AgentRequestBody {
   messages: { role: 'user' | 'assistant'; content: string }[]
   /** 前端构建的当前场景上下文（结构/reps/选择/设置摘要） */
   scene: string
+  /** 长期对话记忆：最近 12 条之前的早期消息压缩摘要（用户意图 + 已执行命令 + 自查结论）。
+   *  后端注入场景上下文尾部——超出滚动窗口的对话仍可被引用（避免重复已完成的工作） */
+  memory?: string
   /** 视觉自查模式：执行命令后的视口截图（JPEG data URL，宽 ≤768） */
   image?: string
   /** 视觉自查模式：命令执行前的视口截图（前后对比——让 VLM 能判断「变化是否真的发生」） */

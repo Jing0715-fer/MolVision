@@ -255,6 +255,24 @@ export function residueCssColor(resName: string): string {
   return naBaseColor(resName)?.getStyle() ?? RESIDUE_COLORS[residueClass(resName)] ?? '#b8bcc4'
 }
 
+/** 残基格自适应墨色：按背景相对亮度选近黑/近白文字（WCAG 对比保障）
+ *  兼容 #rrggbb 与 rgb(r,g,b) 两种输入（naBaseColor 走 THREE getStyle 输出 rgb() 串） */
+export function readableInk(color: string): string {
+  let r = 255, g = 255, b = 255
+  const t = color.trim()
+  const hex = /^#?([0-9a-f]{6})$/i.exec(t)
+  const rgb = /^rgba?\(\s*(\d{1,3})[,\s]+(\d{1,3})[,\s]+(\d{1,3})/i.exec(t)
+  if (hex) {
+    const v = parseInt(hex[1], 16)
+    r = (v >> 16) & 255; g = (v >> 8) & 255; b = v & 255
+  } else if (rgb) {
+    r = +rgb[1]; g = +rgb[2]; b = +rgb[3]
+  }
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
+  const L = 0.2126 * lin(r / 255) + 0.7152 * lin(g / 255) + 0.0722 * lin(b / 255)
+  return L > 0.45 ? '#16191d' : '#ffffff'
+}
+
 export function ssCssColor(ss: string): string {
   return SS_COLORS[ss as keyof typeof SS_COLORS] ?? SS_COLORS.L
 }

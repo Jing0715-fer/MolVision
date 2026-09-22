@@ -57,12 +57,12 @@
   --secondary: oklch(0.955 0.006 85);
   --secondary-foreground: oklch(0.24 0.008 80);
   --muted: oklch(0.952 0.006 85);
-  --muted-foreground: oklch(0.525 0.014 78);
+  --muted-foreground: oklch(0.47 0.014 78);
   --accent: oklch(0.945 0.008 85);
   --accent-foreground: oklch(0.24 0.008 80);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.893 0.01 83);
-  --input: oklch(0.893 0.01 83);
+  --border: oklch(0.878 0.011 83);
+  --input: oklch(0.878 0.011 83);
   --ring: oklch(0.696 0.17 162.48);
   /* 墨色仪表状态条（浅色模式：墨底 + 米白读数） */
   --status-bg: oklch(0.235 0.012 80);
@@ -137,6 +137,11 @@
     @apply bg-background text-foreground;
     overscroll-behavior: none;
     -webkit-font-smoothing: antialiased;
+  }
+  /* 键盘焦点环（触觉反馈）：主色 60% 描边——仅 :focus-visible，不扰鼠标点击路径 */
+  :where(button, [role='button'], input, select, textarea, a[href]):focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--primary) 60%, transparent);
+    outline-offset: 1px;
   }
 }
 
@@ -298,6 +303,18 @@ canvas {
   align-self: stretch;
   margin: 6px 3px;
   background: color-mix(in oklab, var(--foreground) 9%, transparent);
+}
+
+/* 面板分区序号（仪器簇编号：CSS 计数器自动 01/02/03…） */
+.panel-sections { counter-reset: molsec; }
+.mol-sec-idx {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklab, var(--foreground) 38%, transparent);
+}
+.mol-sec-idx::before {
+  counter-increment: molsec;
+  content: counter(molsec, decimal-leading-zero);
 }
 
 /* 墨色仪表条（底部状态栏专用）：顶部 1px 内缝高光 = 机壳接缝 */
@@ -520,3 +537,5 @@ canvas {
   .welcome-orbit { animation: none; }
   .welcome-in { animation: none; }
 }
+
+/* r44-a watcher nudge */

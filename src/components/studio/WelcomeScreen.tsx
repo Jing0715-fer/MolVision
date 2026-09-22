@@ -80,7 +80,7 @@ export function WelcomeScreen() {
 
       {/* 主体（m-auto 居中，视口过矮时滚动不裁切） */}
       <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-10">
-        <div className="m-auto flex w-full max-w-[420px] flex-col items-center [&:has(.panel-card)_.load-sep]:mt-3">
+        <div className="m-auto flex w-full max-w-[420px] flex-col items-center [&:has(.panel-card)_.load-sep]:mt-6">
 
           {/* —— 品牌 hero（六角芯片带柔和电源光晕） —— */}
           <div className="welcome-in relative flex h-[76px] w-[76px] items-center justify-center" aria-hidden>
@@ -106,12 +106,12 @@ export function WelcomeScreen() {
             MolVision
           </h1>
           <div
-            className="welcome-in mol-micro mt-3.5 text-muted-foreground"
-            style={{ animationDelay: '110ms', letterSpacing: '0.34em' }}
+            className="welcome-in mol-micro mt-4 text-muted-foreground"
+            style={{ animationDelay: '110ms', letterSpacing: '0.24em' }}
           >
             Molecular Visualization Studio
           </div>
-          <p className="welcome-in mt-2.5 text-[11px] leading-relaxed text-muted-foreground/85" style={{ animationDelay: '150ms' }}>
+          <p className="welcome-in mt-2.5 text-[11px] leading-relaxed text-muted-foreground/90" style={{ animationDelay: '150ms' }}>
             在浏览器中探索蛋白质 · 核酸 · 配体与电子密度
           </p>
 
@@ -132,7 +132,7 @@ export function WelcomeScreen() {
 
           <form
             onSubmit={e => { e.preventDefault(); submitId() }}
-            className="welcome-in mt-3.5 flex w-full gap-2"
+            className="welcome-in mt-4 flex w-full gap-2"
             style={{ animationDelay: '280ms' }}
           >
             <input
@@ -144,7 +144,7 @@ export function WelcomeScreen() {
               aria-label="PDB 编号"
               autoComplete="off"
               spellCheck={false}
-              className="h-11 w-full min-w-0 flex-1 rounded-md border border-input bg-card text-center font-mono text-[15px] font-medium uppercase tracking-[0.28em] text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:font-sans placeholder:text-[11.5px] placeholder:font-normal placeholder:tracking-[0.1em] placeholder:text-muted-foreground/70 focus-visible:border-ring/70 focus-visible:ring-[3px] focus-visible:ring-ring/25"
+              className="h-11 w-full min-w-0 flex-1 rounded-md border border-input bg-secondary/45 text-center font-mono text-[15px] font-medium uppercase tracking-[0.28em] text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:font-sans placeholder:text-[11.5px] placeholder:font-normal placeholder:tracking-[0.1em] placeholder:text-muted-foreground/85 focus-visible:border-ring/80 focus-visible:ring-[3px] focus-visible:ring-ring/35"
             />
             <button
               type="submit"
@@ -164,7 +164,7 @@ export function WelcomeScreen() {
                 {loadingMsg || '处理中…'}
               </span>
             ) : (
-              <span className="text-[10px] text-muted-foreground/75">
+              <span className="text-[10px] text-muted-foreground/80">
                 RCSB Protein Data Bank 实时获取 · 可拖放文件到页面
               </span>
             )}
@@ -195,7 +195,7 @@ export function WelcomeScreen() {
           />
 
           {/* —— 经典示例 —— */}
-          <div className="welcome-in mt-9 flex w-full items-center gap-2.5" style={{ animationDelay: '380ms' }}>
+          <div className="welcome-in mt-8 flex w-full items-center gap-2.5" style={{ animationDelay: '380ms' }}>
             <span className="h-px flex-1 bg-border/80" />
             <span className="mol-micro text-muted-foreground">经典示例</span>
             <span className="h-px flex-1 bg-border/80" />

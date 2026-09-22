@@ -1125,15 +1125,16 @@ export class MolEngine {
     }
   }
 
-  /** 同步轮廓线 uniforms（分辨率/粗细/强度/相机深度范围/线色+背景色随背景亮度自适应/曝光） */
-  private syncEdgePass(wPx: number, hPx: number) {
+  /** 同步轮廓线 uniforms（分辨率/粗细/强度/相机深度范围/线色+背景色随背景亮度自适应/曝光）
+   *  thicknessScale：粗细分辨率补偿（ray 超采样导出用，见 rayRender——WYSIWYG 语义） */
+  private syncEdgePass(wPx: number, hPx: number, thicknessScale = 1) {
     const e = this.edgePass
     const s = this.settings
     if (!e || !s) return
     const u = (e.material as THREE.ShaderMaterial).uniforms
     u.uResolution.value.set(wPx, hPx)
     u.uOutlineOn.value = s.outline ? 1 : 0
-    u.uThickness.value = s.outlineThickness
+    u.uThickness.value = s.outlineThickness * thicknessScale
     u.uStrength.value = s.outlineStrength
     u.tDepth.value = this.composer?.renderTarget1.depthTexture ?? null
     u.uBgColor.value.copy(srgbComponents(s.background))
@@ -3610,7 +3611,11 @@ export class MolEngine {
           // 轮廓线 pass 常开（背景还原 + 可选描边）
           if (this.edgePass) {
             this.edgePass.enabled = true
-            this.syncEdgePass(w, h)
+            // 轮廓线 WYSIWYG：粗细按超采样倍率等比补偿——导出图缩回视口尺寸时线条视觉重量与实时视口一致。
+            // 旧实现用固定 px（3600px 导出里 1px 线缩回后近不可见；用户为补偿而调大参数又让视口变成线稿感
+            // ——多轮遗留「ray+outline 线稿化」的根因）。补偿上限 4×，防极端宽导出线条过粗。
+            const outlineScale = Math.max(1, Math.min(4, w / Math.max(1, cw * prevRatio)))
+            this.syncEdgePass(w, h, outlineScale)
           }
           this.resetComposerBuffers()
           this.composer.render()
