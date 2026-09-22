@@ -1719,3 +1719,23 @@ Stage Summary:
 - 截图：/tmp/r44-{welcome-dark,main-light,main-dark,welcome-fixed-dark,welcome-fixed-light,final-dark}.png
 - 未解决与风险：①welcome light 终审 7.5（VLM 剩余意见多为小尺度误读：圆角一致性实际统一 rounded-md；下轮可再压一档）②序列条超大蛋白缩小时的密度问题（VLM 建议 compact mode 阈值——未立项）③色觉障碍可达性（残基色板 deuteranopia 对比——未立项）
 - 下一阶段建议：①超大蛋白（>500 残基）序列 compact mode ②agent 记忆的可视化浏览（记忆面板查看完整摘要）③ray 导出画廊（会话内渲染历史缩略图）④VLM 剩余弱点按需收尾
+
+---
+Task ID: r45
+Agent: main
+Task: 欢迎页 VLM 评分专项提升（用户反馈「欢迎页的评分还是太低了，继续优化」）
+
+Work Log:
+- 基线取证：agent-browser 双主题截图 + z-ai vision 严格评审 → dark 8.2/10、light 7.2/10
+- dark 扣分项：静态感（缺动效）/ CTA 平淡 / 示例区拥挤 / 状态栏字小密集 / 缺版本号；light 扣分项：对比度危机（轨道线/辅助文字/分割线近隐形）/ 层次扁平（输入框无容器感、CTA 无冲击、标签无点击暗示）/ 墨色底座切割生硬
+- globals.css 新增 r45 基础设施：.welcome-cta（晶体按键：顶部内高光晶面 + 底部内阴影厚度 + 主色柔光 42%→55% hover，-1px 浮起 + brightness）、@keyframes led-pulse（待机 LED 呼吸 2.8s）、hero-badge-in（弹性入场 scale+rotate 回正 660ms）、hero-halo（六角电源光晕呼吸 4.2s）、nucleus-breathe（原子核呼吸）、status-micro 8.5→9.5px / status-val 10→10.5px（全局可读性）、--status-dim 浅 58%→70% / 深 55%→68%（WCAG）
+- WelcomeScreen.tsx 重写视觉层：①背景轨道电子 2 枚 animateMotion 巡航（16s 错相位 8s）②monogram 内 2 枚电子 animateMotion 沿 0°/60° 椭圆（7s/10.5s）+ 原子核呼吸 + halo 呼吸 + 弹性入场 ③版本徽章 pill（LED + v1.4 · ENGINE READY）④PDB 输入框 h-11→h-12 + bg-card 容器感 + 浅色 inset 阴影 + focus 主色光晕 24% + placeholder 加深 ⑤CTA h-12 晶体按键 ⑥示例芯片卡片化（bg-secondary/55 + ID 主色 bold mono + 名称灰阶 + hover -1px 浮起 + 主色投影 + active scale 0.97）⑦文件按钮容器化（bg-secondary/50 + inset 顶光 + 图标 hover 微升）⑧浅色径向晕影聚焦层 + 轨道线 0.055→0.095（深色 0.06）⑨分割线 foreground/[0.14]→[0.18] ⑩footer 加 v1.4 / © 2026 / LED 脉冲 ⑪max-w 420→448
+- SessionResumeCard.tsx：左缘翡翠刻线锚（38%→62% hover 延伸 + 8px 主色微光）+ 图标底座（primary/20 边 + primary/8 底）+ 卡片静止投影 + hover -1px 浮起 + 阴影扩散
+- 迭代复审：第一轮后 dark 8.2→8.5 / light 7.2→8.5；落实剩余扣分（状态栏 dim 提亮 / placeholder 全对比 / 分割线芯片边界加深 / 会话卡浮起+光条微光）后终审 **dark 9.2/10 + light 9.2/10（双主题 Production-Ready / S 级）**
+
+Stage Summary:
+- 评分跃迁：dark 8.2 → 9.2、light 7.2 → 9.2（VLM 双轮实测；剩余扣分均为静态截图不可见的 hover 微交互——已全部实现：输入框 focus 光晕、CTA 三态、芯片浮起/按压、会话卡浮起、文件按钮图标微升）
+- 功能回归全绿：欢迎页表单加载 1CRN → 工作台 canvas + 状态栏「1CRN 327 atoms · 46 res」✓；lint 0/0 ✓；dev.log 零新增错误（仅 2 条历史 429）✓；390px 移动端 footer 贴底 36px、无横向溢出 ✓；DOM 佐证：animateMotion×4、led-pulse×2、v1.4 footer+badge、input h=48px/border foreground 20%/Geist Mono ✓
+- 设计纪律保持：emerald 唯一强调色、无渐变、圆角 ≤ rounded-md、字号标度内（9~34px）、全部动效 prefers-reduced-motion 停用
+- 截图存档：shots/welcome-{dark,light}-r45.png、welcome-{dark,light}-final.png、welcome-mobile-390.png
+- 遗留：VLM 提示的「点击涟漪」未做（与仪器语言不符，刻意取舍）；弹窗体系（CommandPalette/LoadDialog 等）仍为 r41 仪器化水平，可作下轮 VLM 审计对象

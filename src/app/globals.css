@@ -64,11 +64,11 @@
   --border: oklch(0.878 0.011 83);
   --input: oklch(0.878 0.011 83);
   --ring: oklch(0.696 0.17 162.48);
-  /* 墨色仪表状态条（浅色模式：墨底 + 米白读数） */
+  /* 墨色仪表状态条（浅色模式：墨底 + 米白读数）；r45：dim 提亮保 WCAG 可读 */
   --status-bg: oklch(0.235 0.012 80);
   --status-fg: oklch(0.9 0.012 85);
-  --status-dim: oklch(0.9 0.012 85 / 58%);
-  --status-line: oklch(0.9 0.012 85 / 14%);
+  --status-dim: oklch(0.9 0.012 85 / 70%);
+  --status-line: oklch(0.9 0.012 85 / 15%);
   --status-hot: oklch(0.92 0.008 85);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -105,11 +105,11 @@
   --border: oklch(0.93 0.006 85 / 16%);
   --input: oklch(0.93 0.006 85 / 18%);
   --ring: oklch(0.696 0.17 162.48);
-  /* 墨色仪表状态条（深色模式：更深一档的炭底 + 暖白读数） */
+  /* 墨色仪表状态条（深色模式：更深一档的炭底 + 暖白读数）；r45：dim 提亮 */
   --status-bg: oklch(0.115 0.005 80);
   --status-fg: oklch(0.87 0.01 85);
-  --status-dim: oklch(0.87 0.01 85 / 55%);
-  --status-line: oklch(0.87 0.01 85 / 13%);
+  --status-dim: oklch(0.87 0.01 85 / 68%);
+  --status-line: oklch(0.87 0.01 85 / 14%);
   --status-hot: oklch(0.9 0.008 85);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
@@ -539,3 +539,86 @@ canvas {
 }
 
 /* r44-a watcher nudge */
+
+/* ============================================================
+   r45：VLM 评审驱动打磨（欢迎页 8.2/7.2 → 冲击 9+）
+   —— 扣分项：静态感 / CTA 平淡 / 浅色对比度危机 / 版本可信度
+   ============================================================ */
+
+/* —— CTA「晶体按键」：顶部内高光（晶面）+ 底部内阴影（厚度）+ 主色柔光 —— */
+.welcome-cta {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.34),
+    inset 0 -1px 1px oklch(0.22 0.04 163 / 0.38),
+    0 2px 14px color-mix(in oklab, var(--primary) 42%, transparent);
+  transition: box-shadow 170ms ease, transform 170ms ease, filter 170ms ease;
+}
+.welcome-cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.44),
+    inset 0 -1px 1px oklch(0.22 0.04 163 / 0.3),
+    0 5px 22px color-mix(in oklab, var(--primary) 55%, transparent);
+}
+.welcome-cta:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.96);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 0 -1px 1px oklch(0.22 0.04 163 / 0.45),
+    0 1px 8px color-mix(in oklab, var(--primary) 30%, transparent);
+}
+.welcome-cta:disabled { box-shadow: none; }
+
+/* —— 待机 LED 呼吸脉冲（系统就绪的可视信号） —— */
+@keyframes led-pulse {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 1px rgb(255 255 255 / 0.35),
+      0 0 0 0 color-mix(in oklab, var(--primary) 42%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 1px rgb(255 255 255 / 0.35),
+      0 0 7px 1.5px color-mix(in oklab, var(--primary) 25%, transparent);
+  }
+}
+.led-pulse { animation: led-pulse 2.8s ease-in-out infinite; }
+
+/* —— hero 徽章弹性入场（缩放 + 微旋转回正） —— */
+@keyframes hero-badge-in {
+  from { opacity: 0; transform: scale(0.68) rotate(-10deg); }
+  62%  { opacity: 1; transform: scale(1.045) rotate(1.6deg); }
+  to   { opacity: 1; transform: none; }
+}
+.hero-badge-in {
+  animation: hero-badge-in 660ms cubic-bezier(0.22, 1.36, 0.36, 1) both;
+}
+
+/* —— 品牌六角 halo 呼吸（电源指示灯的低频脉动） —— */
+@keyframes hero-halo {
+  0%, 100% { filter: drop-shadow(0 0 12px color-mix(in oklab, var(--primary) 20%, transparent)); }
+  50%      { filter: drop-shadow(0 0 24px color-mix(in oklab, var(--primary) 38%, transparent)); }
+}
+.hero-halo { animation: hero-halo 4.2s ease-in-out infinite; }
+
+/* —— 原子核呼吸 —— */
+@keyframes nucleus-breathe {
+  0%, 100% { opacity: 0.82; }
+  50%      { opacity: 1; }
+}
+.nucleus-breathe { animation: nucleus-breathe 3.5s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .led-pulse, .hero-halo, .nucleus-breathe { animation: none; }
+}
+
+/* —— 仪表条可读性提升（VLM：文字过小且密集） —— */
+.status-micro {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+}
+.status-val {
+  font-size: 10.5px;
+}

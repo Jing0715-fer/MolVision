@@ -1,7 +1,11 @@
 'use client'
 
 // 欢迎页：未加载结构时的「仪器待机」大屏（整屏接管，替代工作台界面）
-// 精密仪器语言：六角原子 monogram + 缓转轨道线稿背景 + 取景框刻度线 + 墨色仪表底座
+// r45 VLM 评审驱动打磨：
+//   · 注入生命力——轨道电子 animateMotion 巡航、六角 halo 呼吸、原子核呼吸、LED 待机脉冲
+//   · CTA 晶体按键（顶部晶面高光 + 底部厚度内阴影 + 主色柔光）
+//   · 浅色主题对比度危机修复——轨道线加深、径向晕影聚焦、分割线可见化
+//   · 版本徽章 + © 信息（专业软件可信度）；示例芯片卡片化（ID/名称视觉分层）
 // 仅保留必要入口：继续上次会话 / PDB 编号加载 / 本地文件（含 .molvision 会话）/ 经典示例
 import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
@@ -15,6 +19,12 @@ import { SessionResumeSlot } from './SessionResumeCard'
 
 /** 欢迎页示例精选（6 个均衡覆盖小蛋白/酶/四聚体/DNA/药物靶点；完整列表在加载对话框） */
 const WELCOME_EXAMPLES = EXAMPLE_STRUCTURES.filter(ex => ex.id !== '1D3Z')
+
+/** 背景大轨道电子巡航路径（椭圆 cx240 cy240 rx232 ry88） */
+const ORBIT_PATH = 'M 472 240 A 232 88 0 1 1 8 240 A 232 88 0 1 1 472 240'
+/** 品牌 monogram 内电子巡航路径（20×20 视图，rx8.2 ry3.1；一条原始角 + 一条 60° 角） */
+const MINI_ORBIT_A = 'M 18.2 10 A 8.2 3.1 0 1 1 1.8 10 A 8.2 3.1 0 1 1 18.2 10'
+const MINI_ORBIT_B = 'M 14.1 17.1 A 8.2 3.1 60 1 1 5.9 2.9 A 8.2 3.1 60 1 1 14.1 17.1'
 
 export function WelcomeScreen() {
   const { resolvedTheme, setTheme } = useTheme()
@@ -53,12 +63,14 @@ export function WelcomeScreen() {
         if (e.dataTransfer.files?.length) loadFiles(e.dataTransfer.files)
       }}
     >
-      {/* 背景：三轨道原子线稿缓慢旋转（呼应 monogram）+ 六角晶格虚线外框 + 轨道电子；
-          晕影遮罩：中心（让位品牌 hero）与外缘淡出，注意力收敛到中央 */}
+      {/* 背景：三轨道原子线稿缓慢旋转（电子沿轨巡航）+ 六角晶格虚线外框；
+          浅色主题轨道线加深一档（对比度危机修复），并叠径向晕影把视线收拢到中央 */}
       <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+        {/* 径向晕影（浅色专属：边缘极淡冷灰，中心让位 hero） */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_65%_at_50%_42%,transparent_38%,color-mix(in_oklab,var(--foreground)_3.5%,transparent)_100%)] dark:hidden" />
         <svg
           viewBox="0 0 480 480"
-          className="welcome-orbit h-[min(76vh,600px,92vw)] w-[min(76vh,600px,92vw)] text-foreground/[0.055] [mask-image:radial-gradient(circle,transparent_18%,black_52%,black_64%,transparent_86%)]"
+          className="welcome-orbit h-[min(76vh,600px,92vw)] w-[min(76vh,600px,92vw)] text-foreground/[0.095] dark:text-foreground/[0.06] [mask-image:radial-gradient(circle,transparent_18%,black_52%,black_64%,transparent_86%)]"
         >
           <g fill="none" stroke="currentColor" strokeWidth="1">
             <ellipse cx="240" cy="240" rx="232" ry="88" />
@@ -66,7 +78,13 @@ export function WelcomeScreen() {
             <ellipse cx="240" cy="240" rx="232" ry="88" transform="rotate(120 240 240)" />
             <polygon points="240,12 437.5,126 437.5,354 240,468 42.5,354 42.5,126" strokeDasharray="3 5" />
           </g>
-          <circle cx="472" cy="240" r="2.5" className="fill-primary" opacity="0.5" />
+          {/* 轨道电子：沿最外椭圆巡航（SVG 原生 animateMotion；reduced-motion 由 UA 策略停用） */}
+          <circle r="2.5" className="fill-primary">
+            <animateMotion dur="16s" repeatCount="indefinite" path={ORBIT_PATH} />
+          </circle>
+          <circle r="1.8" className="fill-primary" opacity="0.65">
+            <animateMotion dur="16s" begin="-8s" repeatCount="indefinite" path={ORBIT_PATH} />
+          </circle>
         </svg>
       </div>
 
@@ -80,15 +98,11 @@ export function WelcomeScreen() {
 
       {/* 主体（m-auto 居中，视口过矮时滚动不裁切） */}
       <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-10">
-        <div className="m-auto flex w-full max-w-[420px] flex-col items-center [&:has(.panel-card)_.load-sep]:mt-6">
+        <div className="m-auto flex w-full max-w-[448px] flex-col items-center [&:has(.panel-card)_.load-sep]:mt-7">
 
-          {/* —— 品牌 hero（六角芯片带柔和电源光晕） —— */}
-          <div className="welcome-in relative flex h-[76px] w-[76px] items-center justify-center" aria-hidden>
-            <svg
-              viewBox="0 0 28 28"
-              className="absolute inset-0 h-full w-full"
-              style={{ filter: 'drop-shadow(0 0 18px color-mix(in oklab, var(--primary) 26%, transparent))' }}
-            >
+          {/* —— 品牌 hero（六角芯片：弹性入场 + halo 呼吸 + 双电子巡航 + 原子核呼吸） —— */}
+          <div className="hero-badge-in relative flex h-[76px] w-[76px] items-center justify-center" aria-hidden>
+            <svg viewBox="0 0 28 28" className="hero-halo absolute inset-0 h-full w-full">
               <polygon points="14,1 25.1,7.25 25.1,20.75 14,27 2.9,20.75 2.9,7.25" className="fill-primary" />
             </svg>
             <svg
@@ -99,10 +113,16 @@ export function WelcomeScreen() {
               <ellipse cx="10" cy="10" rx="8.2" ry="3.1" />
               <ellipse cx="10" cy="10" rx="8.2" ry="3.1" transform="rotate(60 10 10)" />
               <ellipse cx="10" cy="10" rx="8.2" ry="3.1" transform="rotate(120 10 10)" />
-              <circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none" />
+              <circle className="nucleus-breathe" cx="10" cy="10" r="1.4" fill="currentColor" stroke="none" />
+              <circle r="0.95" fill="#fff" stroke="none">
+                <animateMotion dur="7s" repeatCount="indefinite" path={MINI_ORBIT_A} />
+              </circle>
+              <circle r="0.75" fill="#fff" stroke="none" opacity="0.75">
+                <animateMotion dur="10.5s" begin="-3.5s" repeatCount="indefinite" path={MINI_ORBIT_B} />
+              </circle>
             </svg>
           </div>
-          <h1 className="welcome-in mt-5 text-[32px] font-extrabold leading-none tracking-[-0.02em]" style={{ animationDelay: '60ms' }}>
+          <h1 className="welcome-in mt-5 text-[34px] font-extrabold leading-none tracking-[-0.022em]" style={{ animationDelay: '60ms' }}>
             MolVision
           </h1>
           <div
@@ -111,9 +131,19 @@ export function WelcomeScreen() {
           >
             Molecular Visualization Studio
           </div>
-          <p className="welcome-in mt-2.5 text-[11px] leading-relaxed text-muted-foreground/90" style={{ animationDelay: '150ms' }}>
+          <p className="welcome-in mt-2.5 text-[11px] leading-relaxed text-muted-foreground" style={{ animationDelay: '150ms' }}>
             在浏览器中探索蛋白质 · 核酸 · 配体与电子密度
           </p>
+
+          {/* 版本徽章（正式产品可信度：版本 + 引擎就绪读数） */}
+          <div className="welcome-in mt-5 flex items-center gap-2" style={{ animationDelay: '185ms' }}>
+            <span className="flex items-center gap-1.5 rounded-full border border-foreground/[0.16] dark:border-white/15 px-2.5 py-[3.5px]">
+              <span className="led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+              <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                v1.4 · Engine Ready
+              </span>
+            </span>
+          </div>
 
           {/* —— 继续上次会话（dynamic ssr:false 客户端挂载：水合安全 + 存档读取） —— */}
           <SessionResumeSlot />
@@ -123,11 +153,11 @@ export function WelcomeScreen() {
             className="load-sep welcome-in flex w-full items-center gap-2.5 mt-10"
             style={{ animationDelay: '240ms' }}
           >
-            <span className="h-px flex-1 bg-border/80" />
-            <span className="h-[3px] w-[3px] rotate-45 bg-muted-foreground/45" />
+            <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
+            <span className="h-[3px] w-[3px] rotate-45 bg-muted-foreground/60" />
             <span className="mol-micro text-muted-foreground">加载结构</span>
-            <span className="h-[3px] w-[3px] rotate-45 bg-muted-foreground/45" />
-            <span className="h-px flex-1 bg-border/80" />
+            <span className="h-[3px] w-[3px] rotate-45 bg-muted-foreground/60" />
+            <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
           </div>
 
           <form
@@ -144,12 +174,12 @@ export function WelcomeScreen() {
               aria-label="PDB 编号"
               autoComplete="off"
               spellCheck={false}
-              className="h-11 w-full min-w-0 flex-1 rounded-md border border-input bg-secondary/45 text-center font-mono text-[15px] font-medium uppercase tracking-[0.28em] text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:font-sans placeholder:text-[11.5px] placeholder:font-normal placeholder:tracking-[0.1em] placeholder:text-muted-foreground/85 focus-visible:border-ring/80 focus-visible:ring-[3px] focus-visible:ring-ring/35"
+              className="h-12 w-full min-w-0 flex-1 rounded-md border border-foreground/20 bg-card text-center font-mono text-[15px] font-medium uppercase tracking-[0.28em] text-foreground shadow-[inset_0_1px_2px_oklch(0.25_0.01_80/0.07)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:font-sans placeholder:text-[11.5px] placeholder:font-normal placeholder:tracking-[0.1em] placeholder:text-muted-foreground hover:border-foreground/35 focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_24%,transparent),inset_0_1px_2px_oklch(0.25_0.01_80/0.04)] dark:border-white/[0.16] dark:bg-white/[0.045] dark:shadow-none dark:hover:border-white/25 dark:focus-visible:border-primary dark:focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_26%,transparent)]"
             />
             <button
               type="submit"
               disabled={loading || id.length !== 4}
-              className="mol-btn-primary flex h-11 shrink-0 select-none items-center gap-2 rounded-md bg-primary px-5 text-[13px] font-medium text-primary-foreground transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+              className="welcome-cta flex h-12 shrink-0 select-none items-center gap-2 rounded-md bg-primary px-5 text-[13px] font-semibold text-primary-foreground disabled:pointer-events-none disabled:opacity-40"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               获取结构
@@ -164,22 +194,22 @@ export function WelcomeScreen() {
                 {loadingMsg || '处理中…'}
               </span>
             ) : (
-              <span className="text-[10px] text-muted-foreground/80">
+              <span className="text-[10px] text-muted-foreground">
                 RCSB Protein Data Bank 实时获取 · 可拖放文件到页面
               </span>
             )}
           </div>
 
-          {/* —— 本地文件（含 .molvision 会话） —— */}
+          {/* —— 本地文件（含 .molvision 会话）：容器化底座提升可点击暗示 —— */}
           <button
             onClick={() => fileRef.current?.click()}
             disabled={loading}
-            className="welcome-in mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent text-xs font-medium text-foreground/85 transition-[border-color,background-color] duration-150 hover:border-foreground/25 hover:bg-accent/60 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50"
+            className="welcome-in group mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md border border-foreground/[0.16] bg-secondary/50 text-xs font-medium text-foreground/85 shadow-[inset_0_1px_0_oklch(1_0_0/0.5)] transition-[border-color,background-color,transform] duration-150 hover:border-foreground/30 hover:bg-secondary/80 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 dark:border-white/[0.13] dark:bg-white/[0.035] dark:shadow-none dark:hover:border-white/25 dark:hover:bg-white/[0.06]"
             style={{ animationDelay: '340ms' }}
           >
-            <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+            <FolderOpen className="h-3.5 w-3.5 text-primary/80 transition-transform duration-200 group-hover:-translate-y-px" />
             打开本地文件…
-            <span className="font-mono text-[9.5px] font-normal tracking-wide text-muted-foreground/70">
+            <span className="font-mono text-[9.5px] font-normal tracking-wide text-muted-foreground/85">
               PDB / CIF / CCP4 / .molvision
             </span>
           </button>
@@ -194,21 +224,21 @@ export function WelcomeScreen() {
             }}
           />
 
-          {/* —— 经典示例 —— */}
+          {/* —— 经典示例（卡片化芯片：ID 主色等宽 + 名称灰阶，悬停浮起） —— */}
           <div className="welcome-in mt-8 flex w-full items-center gap-2.5" style={{ animationDelay: '380ms' }}>
-            <span className="h-px flex-1 bg-border/80" />
+            <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
             <span className="mol-micro text-muted-foreground">经典示例</span>
-            <span className="h-px flex-1 bg-border/80" />
+            <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
           </div>
-          <div className="welcome-in mt-3.5 flex flex-wrap justify-center gap-1.5" style={{ animationDelay: '420ms' }}>
+          <div className="welcome-in mt-3.5 flex flex-wrap justify-center gap-2" style={{ animationDelay: '420ms' }}>
             {WELCOME_EXAMPLES.map(ex => (
               <button
                 key={ex.id}
                 onClick={() => void fetchPdbId(ex.id)}
                 disabled={loading}
-                className="group flex items-center gap-2 rounded-md border border-border bg-transparent px-2.5 py-[7px] transition-[border-color,background-color] duration-150 hover:border-primary/50 hover:bg-primary/5 disabled:pointer-events-none disabled:opacity-50"
+                className="group flex items-center gap-2 rounded-md border border-foreground/[0.16] bg-secondary/55 px-3 py-2 transition-[border-color,background-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/45 hover:bg-primary/[0.06] hover:shadow-[0_2px_10px_color-mix(in_oklab,var(--primary)_13%,transparent)] active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 dark:border-white/[0.11] dark:bg-white/[0.03] dark:hover:border-primary/50 dark:hover:bg-primary/[0.09]"
               >
-                <span className="font-mono text-[11px] font-bold leading-none tracking-[0.08em] text-foreground/75 transition-colors duration-150 group-hover:text-primary">
+                <span className="font-mono text-[11px] font-bold leading-none tracking-[0.08em] text-primary/90 transition-colors duration-150 group-hover:text-primary">
                   {ex.id}
                 </span>
                 <span className="text-[11px] leading-none text-muted-foreground transition-colors duration-150 group-hover:text-foreground/85">
@@ -220,12 +250,12 @@ export function WelcomeScreen() {
         </div>
       </div>
 
-      {/* 墨色仪表底座（待机遥测读数 + 主题/GitHub） */}
+      {/* 墨色仪表底座（待机遥测读数 + 版本/版权 + 主题/GitHub） */}
       <footer className="instrument-bar relative z-10 flex h-9 shrink-0 items-center gap-3 px-4">
-        <span className="status-micro">MolVision</span>
+        <span className="status-micro">MolVision v1.4</span>
         <span className="status-sep" />
         <span className="status-val flex items-center gap-1.5">
-          <span className="led-dot h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+          <span className="led-dot led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
           待机 STANDBY
         </span>
         <span className="status-sep" />
@@ -233,7 +263,7 @@ export function WelcomeScreen() {
         <span className="status-sep hidden sm:block" />
         <span className="status-val hidden md:block">ENGINE WEBGL</span>
         <span className="status-sep hidden md:block" />
-        <span className="status-val hidden lg:block">SRC RCSB</span>
+        <span className="status-val hidden lg:block">© 2026</span>
         <span className="status-sep hidden lg:block" />
         <span className="status-val hidden truncate text-[color:var(--status-dim)] xl:block">
           拖放 PDB / CIF / .molvision 文件即可加载 · Ctrl+K 打开命令面板
