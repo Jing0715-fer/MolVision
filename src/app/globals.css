@@ -300,10 +300,24 @@ canvas {
   background: color-mix(in oklab, var(--foreground) 9%, transparent);
 }
 
-/* 墨色仪表条（底部状态栏专用） */
+/* 墨色仪表条（底部状态栏专用）：顶部 1px 内缝高光 = 机壳接缝 */
 .instrument-bar {
   background: var(--status-bg);
   color: var(--status-fg);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+/* 仪表 LED 指示点：顶部内高光（硬件发光二极管的镜面高光，不改色仅加质感） */
+.led-dot {
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / 0.35);
+}
+
+/* 序列条「磁带槽」：顶缘 1px 内缝（浅色 = 凹陷暗缝 / 深色 = 内高光） */
+.tape-well {
+  box-shadow: inset 0 1px 0 oklch(0.25 0.01 80 / 0.07);
+}
+.dark .tape-well {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
 
 /* 仪表条分区发丝线 */
@@ -366,6 +380,52 @@ canvas {
 .corner-tick.br { bottom: 10px; right: 10px; }
 .corner-tick.br::before { bottom: 0; right: 0; }
 .corner-tick.br::after { bottom: 0; right: 0; }
+
+/* 视口标定层（光学平台校准）：中心十字线 + 四边中点刻度
+   —— 与四角取景框同一 10px 内缩坐标系；极低不透明度（浅 7% / 深 11%）只留「标定感」不扰读 */
+.viewport-reticle {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0.07;
+}
+.dark .viewport-reticle {
+  opacity: 0.11;
+}
+.viewport-reticle::before,
+.viewport-reticle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: var(--foreground);
+  transform: translate(-50%, -50%);
+}
+.viewport-reticle::before { width: 18px; height: 1px; }
+.viewport-reticle::after { width: 1px; height: 18px; }
+.viewport-reticle .reticle-tick {
+  position: absolute;
+  background: var(--foreground);
+}
+.viewport-reticle .reticle-tick.rt,
+.viewport-reticle .reticle-tick.rb {
+  width: 1px;
+  height: 5px;
+  left: 50%;
+  margin-left: -0.5px;
+}
+.viewport-reticle .reticle-tick.rt { top: 10px; }
+.viewport-reticle .reticle-tick.rb { bottom: 10px; }
+.viewport-reticle .reticle-tick.rl,
+.viewport-reticle .reticle-tick.rr {
+  width: 5px;
+  height: 1px;
+  top: 50%;
+  margin-top: -0.5px;
+}
+.viewport-reticle .reticle-tick.rl { left: 10px; }
+.viewport-reticle .reticle-tick.rr { right: 10px; }
 
 /* 图标栏激活态侧缘缺口（notch） */
 .rail-notch {
@@ -460,5 +520,3 @@ canvas {
   .welcome-orbit { animation: none; }
   .welcome-in { animation: none; }
 }
-
-

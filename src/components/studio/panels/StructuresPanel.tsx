@@ -244,7 +244,7 @@ export function StructuresPanel() {
       }>
         已加载结构 ({structures.length})
       </SectionTitle>
-      <div className="space-y-1.5 px-2">
+      <div className="space-y-1.5 px-3">
         {structures.map(st => (
           <div
             key={st.id}
@@ -399,7 +399,7 @@ export function StructuresPanel() {
                 点击选链 · 色点上色
               </span>
             }>链 ({st.chains.length})</SectionTitle>
-            <div className="mol-scroll max-h-56 space-y-0.5 overflow-y-auto px-2 py-1">
+            <div className="mol-scroll max-h-56 space-y-0.5 overflow-y-auto px-3 py-1">
               {rows.map((row, k) => {
                 if (row.kind === 'molecule') {
                   const { i, c, m, mi } = row
@@ -413,7 +413,7 @@ export function StructuresPanel() {
                           const idx = selectMolecule(m)
                           if (idx?.length) engineRef.current?.fitView([{ structureId: st.id, indices: idx }])
                         }}
-                        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80"
+                        className="flex min-h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80"
                         title={`选择此配体分子 ${m.label}（${m.atoms} 原子）· 双击聚焦${m.residues.length > 1 ? ` · 跨 ${m.residues.length} 个残基` : ''}`}
                       >
                         <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
@@ -473,7 +473,7 @@ export function StructuresPanel() {
                           engineRef.current?.fitView([{ structureId: st.id, indices: useMolStore.getState().selection.indices }])
                         }
                       }}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80"
+                      className="flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left transition hover:bg-accent/80"
                       title={`选择此链组（${c.residues} 残基 · ${c.atoms} 原子）· 双击聚焦${dupId ? ' · 同链 ID 含多个链组，已按链组精确选择' : ''}`}
                     >
                       <span className="h-3.5 w-1 shrink-0 rounded-full" style={{ background: c.color }} />
@@ -539,7 +539,7 @@ export function StructuresPanel() {
                       <Copy className="h-3 w-3" /> 对称伴侣
                     </span>
                   </SectionTitle>
-                  <div className="space-y-2 px-2">
+                  <div className="space-y-2 px-3">
                     <div className="flex flex-wrap items-center gap-1">
                       <Badge variant="secondary" className="px-1.5 py-0 font-mono text-[9px] tabular-nums" title="空间群（CRYST1）">
                         {crystal.spaceGroup.trim() || 'P 1'}
@@ -600,7 +600,7 @@ export function StructuresPanel() {
                     <FlaskConical className="h-3 w-3" /> 配体
                   </span>
                 </SectionTitle>
-                <div className="space-y-1 px-2">
+                <div className="space-y-1 px-3">
                   {st.ligands.slice(0, 24).map(lg => (
                     <div key={lg.resName} className="group/lg flex items-center gap-1">
                       <button
@@ -672,7 +672,7 @@ export function StructuresPanel() {
               </span>
             </SectionTitle>
             {spOpen && (
-              <div className="space-y-2 px-2">
+              <div className="space-y-2 px-3">
                 <div className="flex items-center gap-1.5">
                   <select
                     value={mobile.id}

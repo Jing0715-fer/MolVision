@@ -205,7 +205,7 @@ export function Toolbar() {
         <div className="mr-1.5 flex shrink-0 items-center gap-2.5">
           <BrandMark />
           <div className="hidden leading-none md:block">
-            <div className="text-[13px] font-bold tracking-tight">MolVision</div>
+            <div className="text-[13px] font-extrabold tracking-[-0.02em]">MolVision</div>
             <div className="mol-micro mt-[3px] text-muted-foreground">Molecular Studio</div>
           </div>
         </div>

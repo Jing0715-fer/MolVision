@@ -198,7 +198,7 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="flex gap-0 overflow-hidden p-0 sm:w-[860px] sm:max-w-[calc(100vw-2rem)] h-[min(600px,88dvh)] w-[calc(100vw-2rem)] rounded-xl mol-elevate-lg"
+        className="flex gap-0 overflow-hidden p-0 sm:w-[860px] sm:max-w-[calc(100vw-2rem)] h-[min(600px,88dvh)] w-[calc(100vw-2rem)] rounded-lg mol-elevate-lg"
       >
         <DialogTitle className="sr-only">AI 模型服务商设置</DialogTitle>
         <DialogDescription className="sr-only">
@@ -207,7 +207,7 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
 
         <div className="flex min-h-0 w-full flex-col">
           {/* 顶栏 */}
-          <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-border/70 px-4">
+          <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-border px-4">
             <span className="flex h-5.5 w-5.5 items-center justify-center rounded-md bg-primary/10 text-primary">
               <KeyRound className="h-3 w-3" />
             </span>
@@ -220,7 +220,7 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
                 <button
                   onClick={() => setSelectedId(defaultProvider.id)}
                   title={`当前默认：${defaultProvider.displayName}（点击查看）`}
-                  className="flex h-6 min-w-0 items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 pl-1 pr-2.5 transition hover:border-border"
+                  className="flex h-6 min-w-0 items-center gap-1.5 rounded-full border border-border bg-background pl-1 pr-2.5 transition hover:border-border"
                 >
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
                   <span className="max-w-32 truncate text-[10px] font-medium">{defaultProvider.displayName}</span>
@@ -248,7 +248,7 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
           {/* 主体双栏（移动端纵向堆叠：横向供应商条 + 详情） */}
           <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
             {/* 左栏：供应商目录（桌面） */}
-            <aside className="hidden w-60 shrink-0 flex-col border-r border-border/70 bg-muted/25 sm:flex" aria-label="供应商目录">
+            <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-muted/40 sm:flex" aria-label="供应商目录">
               <div className="shrink-0 space-y-2 px-2.5 pb-2 pt-2.5">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground/60" />
@@ -257,7 +257,7 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
                     onChange={e => setSearch(e.target.value)}
                     placeholder="搜索供应商或模型…"
                     aria-label="搜索供应商"
-                    className="h-8 w-full rounded-md border border-border/60 bg-background pl-7.5 pr-2 text-xs outline-none transition placeholder:text-muted-foreground/50 focus:border-ring/60 focus:ring-2 focus:ring-ring/25"
+                    className="h-8 w-full rounded-md border border-border bg-background pl-7.5 pr-2 text-xs outline-none transition placeholder:text-muted-foreground/50 focus:border-ring/60 focus:ring-2 focus:ring-ring/25"
                   />
                 </div>
                 <div className="flex flex-wrap gap-1" role="tablist" aria-label="分类筛选">
@@ -271,7 +271,7 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
                         'rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors',
                         cat === c
                           ? 'bg-foreground text-background'
-                          : 'bg-background/70 text-muted-foreground ring-1 ring-border/60 hover:text-foreground',
+                          : 'bg-background text-muted-foreground border border-border hover:text-foreground',
                       )}
                     >
                       {c === 'all' ? '全部' : CATEGORY_LABEL[c]}
@@ -336,21 +336,21 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
                 )}
               </div>
 
-              <div className="flex shrink-0 items-center gap-1.5 border-t border-border/70 px-3 py-2 text-[10px] leading-tight text-muted-foreground/70">
+              <div className="flex shrink-0 items-center gap-1.5 border-t border-border px-3 py-2 text-[10px] leading-tight text-muted-foreground/70">
                 <Lock className="h-2.5 w-2.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 Key 仅存本机 .molvision/，服务端读取，前端不回传明文
               </div>
             </aside>
 
             {/* 移动端：供应商横向条 */}
-            <div className="mol-scroll-x flex max-h-24 shrink-0 flex-wrap gap-1.5 overflow-y-auto border-b border-border/70 px-3 py-2 sm:hidden">
+            <div className="mol-scroll-x flex max-h-24 shrink-0 flex-wrap gap-1.5 overflow-y-auto border-b border-border px-3 py-2 sm:hidden">
               {filtered.map(p => (
                 <button
                   key={p.id}
                   onClick={() => setSelectedId(p.id)}
                   className={cn(
                     'flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] transition-colors',
-                    selectedId === p.id ? 'border-foreground/30 bg-accent font-medium' : 'border-border/60 bg-background/70',
+                    selectedId === p.id ? 'border-foreground/30 bg-accent font-medium' : 'border-border bg-background',
                   )}
                 >
                   <Monogram label={p.label} brand={p.brand} size='md' />
@@ -513,7 +513,7 @@ function ProviderDetail({
   return (
     <div className="provider-detail-in flex min-h-0 flex-1 flex-col">
       {/* 品牌头部 */}
-      <div className="flex shrink-0 items-start gap-3 border-b border-border/70 px-4 py-3.5">
+      <div className="flex shrink-0 items-start gap-3 border-b border-border px-4 py-3.5">
         <Monogram label={p.label} brand={p.brand} size="lg" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -593,7 +593,7 @@ function ProviderDetail({
               autoComplete="off"
               spellCheck={false}
               disabled={p.id === 'zai'}
-              className="h-9 w-full rounded-md border border-border/70 bg-background pr-9 pl-3 font-mono text-xs outline-none transition placeholder:font-sans placeholder:text-muted-foreground/45 focus:border-ring/60 focus:ring-2 focus:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-9 w-full rounded-md border border-border bg-background pr-9 pl-3 font-mono text-xs outline-none transition placeholder:font-sans placeholder:text-muted-foreground/45 focus:border-ring/60 focus:ring-2 focus:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-60"
             />
             <button
               type="button"
@@ -631,7 +631,7 @@ function ProviderDetail({
                 aria-controls={`model-list-${p.id}`}
                 aria-haspopup="listbox"
                 className={cn(
-                  'flex h-9 w-full items-center gap-2 rounded-md border border-border/70 bg-background px-3 text-left transition focus:border-ring/60 focus:ring-2 focus:ring-ring/25',
+                  'flex h-9 w-full items-center gap-2 rounded-md border border-border bg-background px-3 text-left transition focus:border-ring/60 focus:ring-2 focus:ring-ring/25',
                   modelNotInList && 'border-amber-500/50',
                 )}
               >
@@ -717,7 +717,7 @@ function ProviderDetail({
             onBlur={() => { if (baseURL.trim() && lastProbedRef.current !== `${apiKey.trim()}::${baseURL.trim()}`) void runProbe({ reason: 'auto' }) }}
             placeholder={isLocal ? 'http://localhost:11434/v1' : 'https://api.example.com/v1'}
             spellCheck={false}
-            className="h-9 w-full rounded-md border border-border/70 bg-background px-3 font-mono text-xs outline-none transition placeholder:text-muted-foreground/45 focus:border-ring/60 focus:ring-2 focus:ring-ring/25"
+            className="h-9 w-full rounded-md border border-border bg-background px-3 font-mono text-xs outline-none transition placeholder:text-muted-foreground/45 focus:border-ring/60 focus:ring-2 focus:ring-ring/25"
           />
         </section>
 
@@ -730,13 +730,13 @@ function ProviderDetail({
       </div>
 
       {/* 底部操作条 */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border/70 bg-muted/25 px-4 py-2.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-muted/40 px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-1.5">
           {p.id !== 'zai' && p.hasApiKey && (
             <button
               onClick={() => void remove()}
               disabled={deleting}
-              className="flex h-7 items-center gap-1 rounded-md border border-border/60 px-2 text-[11px] text-muted-foreground/80 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50"
+              className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground/80 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50"
             >
               {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
               删除

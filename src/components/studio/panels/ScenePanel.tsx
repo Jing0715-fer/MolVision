@@ -47,7 +47,7 @@ export function ScenePanel() {
         {BG_PRESETS.map(bg => (
           <button
             key={bg}
-            onClick={() => updateSettings({ background: bg })}
+            onClick={() => updateSettings({ background: bg, backgroundPinned: true })}
             className={cn(
               'h-7 w-7 rounded-md border-2 shadow-inner transition',
               settings.background === bg ? 'border-primary scale-110' : 'border-border hover:border-muted-foreground/50',
@@ -59,7 +59,7 @@ export function ScenePanel() {
         <input
           type="color"
           value={settings.background}
-          onChange={e => updateSettings({ background: e.target.value })}
+          onChange={e => updateSettings({ background: e.target.value, backgroundPinned: true })}
           className="h-7 w-9 cursor-pointer rounded-md border border-border/60 bg-background/60 p-0.5"
           title="自定义背景色"
         />

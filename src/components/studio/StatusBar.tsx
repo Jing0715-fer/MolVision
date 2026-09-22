@@ -13,9 +13,9 @@ import { useMapStore } from '@/lib/molecular/map-store'
 import { usePerfStore } from '@/lib/molecular/perf-store'
 import { cn } from '@/lib/utils'
 
-/** 语义色小圆点（仪表高亮：在墨底上用 400 级亮度） */
+/** 语义色小圆点（仪表高亮：在墨底上用 400 级亮度；led-dot 顶部内高光 = 硬件 LED 质感） */
 function Dot({ tone, pulse }: { tone: string; pulse?: boolean }) {
-  return <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', tone, pulse && 'animate-pulse')} aria-hidden />
+  return <span className={cn('led-dot h-1.5 w-1.5 shrink-0 rounded-full', tone, pulse && 'animate-pulse')} aria-hidden />
 }
 
 /** 仪表分区：微标签 + 读数 */
@@ -65,7 +65,7 @@ export function StatusBar() {
       {st ? (
         <Readout label="structure">
           <span className="status-val font-bold tracking-tight" style={{ color: 'var(--status-hot)' }}>{st.name}</span>
-          <span className="status-val" style={{ color: 'var(--status-dim)' }}>
+          <span className="status-val opacity-80" style={{ color: 'var(--status-dim)' }}>
             {st.summary.atoms.toLocaleString()} atoms · {st.summary.residues.toLocaleString()} res · {st.summary.chains} ch
           </span>
         </Readout>

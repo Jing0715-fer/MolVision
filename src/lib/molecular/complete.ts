@@ -146,6 +146,7 @@ const REGISTRY: CmdDef[] = [
       { insert: 'sphere_scale', kind: 'value', detail: '球半径倍率' },
       { insert: 'stick_radius', kind: 'value', detail: '棍半径' },
       { insert: 'cartoon_width', kind: 'value', detail: '带宽度' },
+      { insert: 'bg_follow', kind: 'value', detail: '背景主题跟随 on/off' },
     ] : null),
   },
   { names: ['bg', 'background'], args: pos => (pos === 1 ? colorItems() : null) },

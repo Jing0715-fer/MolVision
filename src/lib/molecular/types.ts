@@ -131,6 +131,8 @@ export interface AtomLabel {
 
 export interface Settings {
   background: string
+  /** 背景已由用户/agent 显式设定（bg / set background）——主题切换不再跟随覆盖，尊重显式选择 */
+  backgroundPinned: boolean
   fog: boolean
   fogStrength: number
   fov: number
@@ -194,6 +196,7 @@ export interface Settings {
 export function defaultSettings(): Settings {
   return {
     background: '#ffffff',
+    backgroundPinned: false,
     fog: false,
     fogStrength: 0.5,
     fov: 45,

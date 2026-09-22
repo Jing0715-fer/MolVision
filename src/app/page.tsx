@@ -49,6 +49,13 @@ export default function Home() {
                 <span className="corner-tick bl" />
                 <span className="corner-tick br" />
               </div>
+              {/* 视口标定层：中心十字线 + 四边中点刻度（与取景框同族，不拦截交互） */}
+              <div aria-hidden className="viewport-reticle">
+                <span className="reticle-tick rt" />
+                <span className="reticle-tick rb" />
+                <span className="reticle-tick rl" />
+                <span className="reticle-tick rr" />
+              </div>
               <ConsoleBar />
               <AgentPanel />
             </main>

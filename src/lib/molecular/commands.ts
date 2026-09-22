@@ -322,7 +322,7 @@ export function runCommand(raw: string): void {
   if (cmd === 'bg' || cmd === 'background') {
     const css = parseCssColor((parts[1] ?? '').toLowerCase())
     if (!css) return err('用法: bg <#hex 或颜色名>')
-    useMolStore.getState().updateSettings({ background: css })
+    useMolStore.getState().updateSettings({ background: css, backgroundPinned: true })
     return ok(`背景色 → ${css}`)
   }
 
@@ -811,7 +811,7 @@ export function runCommand(raw: string): void {
   if (cmd === 'set') {
     const key = (parts[1] ?? '').toLowerCase()
     const rawVal = parts.slice(2).join(' ').trim()
-    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / cap_shading / transparency / sphere_scale / stick_radius / cartoon_width')
+    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / cap_shading / transparency / sphere_scale / stick_radius / cartoon_width / bg_follow')
     const s = useMolStore.getState()
     const num = parseFloat(rawVal)
     const on = ['on', '1', 'true', 'open'].includes(rawVal.toLowerCase())
@@ -857,6 +857,11 @@ export function runCommand(raw: string): void {
         if (!on && !off) return err('用法：set fog on|off')
         s.updateSettings({ fog: on })
         return ok(`雾效 ${on ? '开启（远端淡化）' : '关闭'}`)
+      }
+      case 'bg_follow': {
+        if (!on && !off) return err('用法：set bg_follow on|off（on = 主题切换时视口背景跟随；bg 命令会自动固定背景）')
+        s.updateSettings({ backgroundPinned: !on })
+        return ok(on ? '背景恢复主题跟随（切换深浅主题时同步）' : '背景固定（不随主题切换）')
       }
       case 'fog_strength': case 'fog_density': {
         if (isNaN(num)) return err('用法：set fog_strength <0-1>')

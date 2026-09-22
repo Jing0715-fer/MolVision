@@ -92,11 +92,11 @@ async function callAgent(
   }
 }
 
-/** 流式调用结果：决策 / 用户中止（携带已生成的部分文本）/ 错误 */
+/** 流式调用结果：决策 / 用户中止（携带已生成的部分文本）/ 错误（携带具体原因） */
 type StreamResult =
   | { kind: 'decision'; decision: AgentDecision }
   | { kind: 'aborted'; partial: string }
-  | { kind: 'error'; partial: string }
+  | { kind: 'error'; partial: string; err?: string }
 
 /** 调后端流式 LLM：onDelta 收累积原文，返回最终决策；signal 中断返回 aborted */
 async function callAgentStream(
@@ -119,7 +119,7 @@ async function callAgentStream(
         if (data.error) msg = data.error
       } catch { /* 非 JSON 错误体 */ }
       toast.error(`AI 助手出错：${msg}`)
-      return { kind: 'error', partial: acc }
+      return { kind: 'error', partial: acc, err: msg }
     }
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
@@ -143,7 +143,7 @@ async function callAgentStream(
           return { kind: 'decision', decision: ev.decision }
         } else if (ev.t === 'err') {
           toast.error(`AI 助手出错：${ev.error}`)
-          return { kind: 'error', partial: acc }
+          return { kind: 'error', partial: acc, err: ev.error }
         }
       }
     }
@@ -152,11 +152,11 @@ async function callAgentStream(
       return { kind: 'decision', decision: { reply: acc.replace(/^```[a-z]*\n?|```$/g, '').trim().slice(0, 800), commands: [] } }
     }
     toast.error('AI 助手连接中断，请重试')
-    return { kind: 'error', partial: acc }
+    return { kind: 'error', partial: acc, err: '连接中断' }
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') return { kind: 'aborted', partial: acc }
     toast.error(`AI 助手网络异常：${e instanceof Error ? e.message : '未知错误'}`)
-    return { kind: 'error', partial: acc }
+    return { kind: 'error', partial: acc, err: e instanceof Error ? e.message : '网络异常' }
   }
 }
 
@@ -175,8 +175,8 @@ function loadChats(): AgentChatMessage[] {
     const raw = localStorage.getItem(AGENT_CHAT_KEY)
     if (!raw) return []
     const arr = JSON.parse(raw) as AgentChatMessage[]
-    // streaming 标志不持久化（中断重载后不再处于流式态）
-    return Array.isArray(arr) ? arr.slice(-AGENT_CHAT_MAX).map(m => ({ ...m, streaming: undefined })) : []
+    // streaming 标志与视觉截图缩略图不持久化（体积；重载后视觉消息降级为纯文字评估）
+    return Array.isArray(arr) ? arr.slice(-AGENT_CHAT_MAX).map(m => ({ ...m, streaming: undefined, image: undefined })) : []
   } catch {
     return []
   }
@@ -229,11 +229,11 @@ export function AgentPanel() {
     })()
   }, [open, provider])
 
-  // 持久化（流式进行中跳过——终值到达时统一落盘，避免逐增量 stringify 开销）
+  // 持久化（流式进行中跳过——终值到达时统一落盘，避免逐增量 stringify 开销；缩略图剥离）
   useEffect(() => {
     if (msgs.some(m => m.streaming)) return
     try {
-      localStorage.setItem(AGENT_CHAT_KEY, JSON.stringify(msgs.slice(-AGENT_CHAT_MAX)))
+      localStorage.setItem(AGENT_CHAT_KEY, JSON.stringify(msgs.slice(-AGENT_CHAT_MAX).map(({ image: _img, ...rest }) => rest)))
     } catch { /* 配额满等异常静默 */ }
   }, [msgs])
 
@@ -331,9 +331,12 @@ export function AgentPanel() {
           if (review) {
             const revCmds = splitCommands(review.commands)
             const revId = newId()
+            // 缩略图瘦身（≤320px，纯展示用；768 版仅送 VLM）
+            let thumb: string | undefined
+            try { thumb = await shrinkImage(shot, 320) } catch { thumb = undefined }
             const revMsg: AgentChatMessage = {
               id: revId, role: 'assistant', kind: 'visual',
-              content: review.reply, time: nowTime(),
+              content: review.reply, time: nowTime(), image: thumb,
               commands: revCmds.length ? revCmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
             }
             setMsgs(m => [...m, revMsg])
@@ -403,9 +406,9 @@ export function AgentPanel() {
         patchAi({ content: (extractPartialReply(r.partial) || '…') + '（已停止）', streaming: false })
         toast.info('已停止生成')
       } else {
-        // 错误：保留已流出的部分文本并标记中断
+        // 错误：保留已流出的部分文本；无产出时气泡携带具体原因（限流/网络等可操作信息）
         if (inserted) patchAi({ content: (extractPartialReply(r.partial) || '…') + '（生成中断，请重试）', streaming: false })
-        else setMsgs(m => [...m, { id: newId(), role: 'assistant', content: '出错了，请重试或换个说法。', time: nowTime() }])
+        else setMsgs(m => [...m, { id: newId(), role: 'assistant', content: r.err ? `出错了：${r.err}` : '出错了，请重试或换个说法。', time: nowTime() }])
       }
     } finally {
       setBusy(false)
@@ -449,21 +452,22 @@ export function AgentPanel() {
 
   return (
     <div
-      className="absolute inset-y-3 right-3 z-30 flex w-full flex-col rounded-xl border border-border/70 bg-card/95 mol-elevate backdrop-blur-md sm:w-[356px] agent-panel-in"
+      className="absolute inset-y-3 left-3 right-3 z-30 flex flex-col rounded-lg border border-border bg-card mol-elevate sm:left-auto sm:w-[356px] agent-panel-in"
       role="complementary"
       aria-label="AI 助手面板"
     >
       {/* 头部 */}
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border/70 bg-gradient-to-b from-muted/40 to-transparent px-3">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
         <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Bot className="h-3.5 w-3.5" />
         </span>
         <span className="text-xs font-semibold">AI 绘图助手</span>
+        <span className="mol-micro hidden sm:inline">AGENT</span>
         {/* 当前供应商徽章：品牌色点 + 模型名（点击打开设置） */}
         <button
           onClick={() => setProviderOpen(true)}
           title={provider ? `${provider.displayName}${provider.effectiveModel ? ` · ${provider.effectiveModel}` : ''}（点击配置供应商）` : 'AI 供应商设置'}
-          className="hidden min-w-0 items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2 py-px font-mono text-[9px] font-medium text-muted-foreground transition hover:border-border hover:text-foreground sm:flex"
+          className="hidden min-w-0 items-center gap-1 rounded-full border border-border bg-background px-2 py-px font-mono text-[9px] font-medium text-muted-foreground transition hover:border-border hover:text-foreground sm:flex"
         >
           <span
             className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -488,7 +492,7 @@ export function AgentPanel() {
             title={visualOn ? '视觉自查已开：命令执行后审视渲染结果并自动修正' : '视觉自查已关（点击开启）'}
             className={cn(
               'flex h-6 w-6 items-center justify-center rounded transition hover:bg-accent',
-              visualOn ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/50',
+              visualOn ? 'text-primary' : 'text-muted-foreground/50',
             )}
           >
             {visualOn ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
@@ -517,7 +521,7 @@ export function AgentPanel() {
       <div ref={scrollRef} className="mol-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {msgs.length === 0 && !busy && (
           <div className="space-y-3.5 pt-2">
-            <div className="rounded-xl border border-dashed border-border/70 bg-muted/25 px-3 py-3.5 text-center">
+            <div className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-3.5 text-center">
               <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Bot className="h-4.5 w-4.5" />
               </span>
@@ -525,19 +529,19 @@ export function AgentPanel() {
                 用自然语言指挥整个工作台——加载、表示、着色、<br />测量、分析、动画，我会翻译成命令自动执行。
               </p>
               {visualOn && (
-                <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] text-emerald-600 dark:text-emerald-400">
+                <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] text-primary">
                   <Eye className="h-2.5 w-2.5" /> 执行后自动审视渲染结果
                 </p>
               )}
             </div>
             {SUGGESTION_GROUPS.map(grp => (
               <div key={grp.label} className="space-y-1.5">
-                <p className="px-1 text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/60">{grp.label}</p>
+                <p className="px-1 mol-micro text-muted-foreground/60">{grp.label}</p>
                 {grp.items.map(s => (
                   <button
                     key={s}
                     onClick={() => void send(s)}
-                    className="flex w-full items-center gap-1.5 rounded-lg border border-border/60 bg-card/70 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-all duration-150 hover:border-border hover:bg-accent/60 hover:text-foreground hover:translate-x-0.5"
+                    className="panel-card flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-all duration-150 hover:text-foreground hover:translate-x-0.5"
                   >
                     <Send className="h-3 w-3 shrink-0 text-muted-foreground/60" />
                     <span className="min-w-0 flex-1">{s}</span>
@@ -551,7 +555,7 @@ export function AgentPanel() {
         {msgs.map(m => (
           <div key={m.id} className={cn('flex flex-col', m.role === 'user' ? 'items-end' : 'items-start')}>
             {m.kind === 'visual' && (
-              <span className="mb-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-px text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
+              <span className="mb-0.5 inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-px text-[9px] font-medium text-primary">
                 <Eye className="h-2.5 w-2.5" /> 视觉自查
               </span>
             )}
@@ -559,19 +563,28 @@ export function AgentPanel() {
               className={cn(
                 'max-w-[92%] px-3 py-2 text-[11.5px] leading-relaxed whitespace-pre-wrap break-words',
                 m.role === 'user'
-                  ? 'rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-sm'
+                  ? 'rounded-lg rounded-br-sm bg-primary text-primary-foreground'
                   : cn(
-                    'rounded-2xl rounded-bl-md border border-border/60 bg-card/80 text-foreground shadow-xs',
-                    m.kind === 'visual' && 'border-l-2 border-l-emerald-500/70',
+                    'rounded-lg rounded-bl-sm border border-border bg-card text-foreground',
+                    m.kind === 'visual' && 'border-l-2 border-l-primary/70',
                   ),
               )}
             >
               {m.content}
               {m.streaming && (
-                <span aria-hidden className="ml-0.5 inline-block h-3 w-[5px] animate-pulse rounded-[1px] bg-emerald-500 align-middle" />
+                <span aria-hidden className="ml-0.5 inline-block h-3 w-[5px] animate-pulse rounded-[1px] bg-primary align-middle" />
               )}
               {m.streaming && !m.content && <span className="sr-only">正在生成回复</span>}
             </div>
+            {/* 视觉自查附带的视口截图缩略图（自检透明化：直观看到助手「看」到了什么） */}
+            {m.kind === 'visual' && m.image && (
+              <img
+                src={m.image}
+                alt="视觉自查时的视口截图"
+                className="mt-1.5 max-w-[92%] rounded-md border border-border bg-background"
+                loading="lazy"
+              />
+            )}
             {/* 命令卡片组 */}
             {m.commands && m.commands.length > 0 && (
               <div className="mt-1.5 w-full space-y-1.5">
@@ -582,12 +595,12 @@ export function AgentPanel() {
                     <div
                       key={msgKey}
                       className={cn(
-                        'rounded-md border bg-background/85 px-2 py-1.5 text-[10px] transition',
+                        'rounded-md border bg-background px-2 py-1.5 text-[10px] transition',
                         c.status === 'ok' && 'border-emerald-500/30',
                         c.status === 'error' && 'border-red-500/40',
                         c.status === 'confirm' && 'border-amber-500/50 bg-amber-500/5',
-                        c.status === 'blocked' && 'border-border/60 opacity-70',
-                        c.status === 'rejected' && 'border-border/60 opacity-55',
+                        c.status === 'blocked' && 'border-border opacity-70',
+                        c.status === 'rejected' && 'border-border opacity-55',
                       )}
                     >
                       <div className="flex items-center gap-1.5">
@@ -635,19 +648,19 @@ export function AgentPanel() {
                 })}
               </div>
             )}
-            <span className="mt-0.5 px-1 text-[8.5px] text-muted-foreground/50">{m.time}</span>
+            <span className="mt-0.5 px-1 font-mono text-[9px] tabular-nums text-muted-foreground/50">{m.time}</span>
           </div>
         ))}
 
         {busy && (
-          <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-border/60 bg-card/80 px-3 py-2 shadow-xs">
+          <div className="flex items-center gap-1.5 rounded-lg rounded-bl-sm border border-border bg-card px-3 py-2">
             {phase === 'visual'
-              ? <Sparkles className="h-3 w-3 animate-pulse text-emerald-500" />
-              : <Loader2 className={cn('h-3 w-3 animate-spin text-emerald-500')} />}
+              ? <Sparkles className="h-3 w-3 animate-pulse text-primary" />
+              : <Loader2 className={cn('h-3 w-3 animate-spin text-primary')} />}
             <span className="text-[11px] text-muted-foreground">{phaseLabel}…</span>
             <span className="flex gap-0.5">
               {[0, 1, 2].map(i => (
-                <span key={i} className="h-1 w-1 animate-pulse rounded-full bg-emerald-500/60" style={{ animationDelay: `${i * 200}ms` }} />
+                <span key={i} className="h-1 w-1 animate-pulse rounded-full bg-primary/60" style={{ animationDelay: `${i * 200}ms` }} />
               ))}
             </span>
             <span className="ml-auto text-[9px] text-muted-foreground/50">{phaseHint}</span>
@@ -656,8 +669,8 @@ export function AgentPanel() {
       </div>
 
       {/* 输入区 */}
-      <div className="shrink-0 border-t border-border/70 bg-gradient-to-b from-transparent to-muted/25 p-2.5">
-        <div className="flex items-end gap-1.5 rounded-xl border border-border bg-background px-2 py-1.5 shadow-xs transition focus-within:border-primary/50">
+      <div className="shrink-0 border-t border-border p-2.5">
+        <div className="flex items-end gap-1.5 rounded-lg border border-border bg-background px-2 py-1.5 transition focus-within:border-primary/50">
           <textarea
             ref={taRef}
             value={input}
@@ -682,7 +695,7 @@ export function AgentPanel() {
             title={canAbort ? '停止生成（保留已生成部分）' : '发送（Enter）'}
             className={cn(
               'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white transition disabled:opacity-40',
-              canAbort ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500',
+              canAbort ? 'bg-rose-600 hover:bg-rose-500' : 'bg-primary hover:bg-primary/90',
             )}
           >
             {busy

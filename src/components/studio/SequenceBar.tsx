@@ -129,7 +129,7 @@ export function SequenceBar() {
   }
 
   return (
-    <div className="shrink-0 border-y border-border bg-background">
+    <div className="tape-well shrink-0 border-y border-border bg-background">
       {/* 头部：标题 + 结构摘要 + 视野徽章 | 搜索定位 / 聚焦 / 高度 */}
       <div className="flex h-8 items-center gap-1 pr-2">
         <button
@@ -215,7 +215,7 @@ export function SequenceBar() {
           {/* 配体行（置顶免滚动）：每个 chip = 一个完整分子，点击选择、双击聚焦 */}
           {ligandMolecules.length > 0 && (
             <div className="mb-1 flex items-center gap-2 border-b border-dashed border-border/60 pb-2.5 pt-1">
-              <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1.5 bg-background pr-1">
+              <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1.5 border-r border-border/60 bg-background pr-1">
                 <FlaskConical className="h-3 w-3 text-amber-600 dark:text-amber-400" />
                 <span className="mol-micro text-muted-foreground">配体</span>
               </span>
@@ -266,7 +266,7 @@ export function SequenceBar() {
             }
             return (
               <div key={`${chain.id}-${ci}`} className="flex items-center gap-2 pb-2.5 pt-0.5">
-                <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-background pr-1.5">
+                <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 border-r border-border/60 bg-background pr-1.5">
                   <button
                     onClick={selectChain}
                     onDoubleClick={() => {
@@ -350,7 +350,7 @@ const ResidueCell = memo(function ResidueCell({
       data-res={resIdx}
       aria-label={title}
       className={cn(
-        'group relative flex h-7 w-[26px] shrink-0 flex-col items-center justify-end rounded-[4px] outline-none transition-all duration-100',
+        'group relative flex h-7 w-[26px] shrink-0 flex-col items-center justify-end rounded-[2px] outline-none transition-all duration-100',
         selected
           ? 'z-10 ring-2 ring-primary ring-offset-1 ring-offset-background'
           : 'hover:-translate-y-0.5 hover:z-10 hover:scale-[1.08] hover:shadow-md',
@@ -366,7 +366,7 @@ const ResidueCell = memo(function ResidueCell({
       <span
         className={cn(
           'text-[10px] font-bold leading-none',
-          isMarker ? 'font-mono text-[9px] font-extrabold tabular-nums text-black/75' : 'text-black/90 [text-shadow:0_0_1px_rgba(255,255,255,0.35)]',
+          isMarker ? 'font-mono text-[9px] font-extrabold tabular-nums text-black/55' : 'text-black/90 [text-shadow:0_0_1px_rgba(255,255,255,0.35)]',
         )}
       >
         {isMarker ? position : letter}

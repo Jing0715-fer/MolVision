@@ -7,23 +7,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  ArrowRight, FileUp, FolderOpen, Github, HardDriveDownload, Loader2, Moon, Sun,
+  FileUp, FolderOpen, Github, Loader2, Moon, Sun,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { EXAMPLE_STRUCTURES, fetchPdbId, loadFiles } from '@/lib/molecular/loader'
-import { restoreSession, sessionSnapshot } from '@/lib/molecular/session'
-import { cn } from '@/lib/utils'
+import { SessionResumeSlot } from './SessionResumeCard'
 
 /** 欢迎页示例精选（6 个均衡覆盖小蛋白/酶/四聚体/DNA/药物靶点；完整列表在加载对话框） */
 const WELCOME_EXAMPLES = EXAMPLE_STRUCTURES.filter(ex => ex.id !== '1D3Z')
-
-function relTime(ts: number): string {
-  const s = Math.max(0, Math.round((Date.now() - ts) / 1000))
-  if (s < 60) return '刚刚'
-  if (s < 3600) return `${Math.round(s / 60)} 分钟前`
-  if (s < 86400) return `${Math.round(s / 3600)} 小时前`
-  return `${Math.round(s / 86400)} 天前`
-}
 
 export function WelcomeScreen() {
   const { resolvedTheme, setTheme } = useTheme()
@@ -31,10 +22,6 @@ export function WelcomeScreen() {
   const loadingMsg = useMolStore(s => s.loadingMsg)
   const [id, setId] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  // 挂载时读一次会话存档摘要（lazy init；localStorage 仅客户端可达，异常静默返回 null）
-  const [session] = useState(sessionSnapshot)
-  const [sessionGone, setSessionGone] = useState(false)
-  const restoring = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -53,21 +40,6 @@ export function WelcomeScreen() {
     void fetchPdbId(v)
   }
 
-  const resume = () => {
-    if (restoring.current) return
-    restoring.current = true
-    const n = restoreSession()
-    if (n > 0) {
-      toast.success('已恢复上次会话', { description: `${n} 个结构 · 表示法与相机视角已还原` })
-    } else {
-      restoring.current = false
-      setSessionGone(true)
-      toast.error('会话恢复失败', { description: '本地存档中没有可恢复的结构，已忽略' })
-    }
-  }
-
-  const showResume = !!session && !sessionGone
-
   return (
     <div
       className="relative flex h-full w-full flex-col overflow-hidden bg-background"
@@ -81,11 +53,12 @@ export function WelcomeScreen() {
         if (e.dataTransfer.files?.length) loadFiles(e.dataTransfer.files)
       }}
     >
-      {/* 背景：三轨道原子线稿缓慢旋转（呼应 monogram）+ 六角晶格虚线外框 + 轨道电子 */}
+      {/* 背景：三轨道原子线稿缓慢旋转（呼应 monogram）+ 六角晶格虚线外框 + 轨道电子；
+          晕影遮罩：中心（让位品牌 hero）与外缘淡出，注意力收敛到中央 */}
       <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
         <svg
           viewBox="0 0 480 480"
-          className="welcome-orbit h-[min(76vh,600px,92vw)] w-[min(76vh,600px,92vw)] text-foreground/[0.055]"
+          className="welcome-orbit h-[min(76vh,600px,92vw)] w-[min(76vh,600px,92vw)] text-foreground/[0.055] [mask-image:radial-gradient(circle,transparent_18%,black_52%,black_64%,transparent_86%)]"
         >
           <g fill="none" stroke="currentColor" strokeWidth="1">
             <ellipse cx="240" cy="240" rx="232" ry="88" />
@@ -107,11 +80,15 @@ export function WelcomeScreen() {
 
       {/* 主体（m-auto 居中，视口过矮时滚动不裁切） */}
       <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-10">
-        <div className="m-auto flex w-full max-w-[420px] flex-col items-center">
+        <div className="m-auto flex w-full max-w-[420px] flex-col items-center [&:has(.panel-card)_.load-sep]:mt-3">
 
-          {/* —— 品牌 hero —— */}
+          {/* —— 品牌 hero（六角芯片带柔和电源光晕） —— */}
           <div className="welcome-in relative flex h-[76px] w-[76px] items-center justify-center" aria-hidden>
-            <svg viewBox="0 0 28 28" className="absolute inset-0 h-full w-full">
+            <svg
+              viewBox="0 0 28 28"
+              className="absolute inset-0 h-full w-full"
+              style={{ filter: 'drop-shadow(0 0 18px color-mix(in oklab, var(--primary) 26%, transparent))' }}
+            >
               <polygon points="14,1 25.1,7.25 25.1,20.75 14,27 2.9,20.75 2.9,7.25" className="fill-primary" />
             </svg>
             <svg
@@ -125,7 +102,7 @@ export function WelcomeScreen() {
               <circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none" />
             </svg>
           </div>
-          <h1 className="welcome-in mt-5 text-[32px] font-semibold leading-none tracking-tight" style={{ animationDelay: '60ms' }}>
+          <h1 className="welcome-in mt-5 text-[32px] font-extrabold leading-none tracking-[-0.02em]" style={{ animationDelay: '60ms' }}>
             MolVision
           </h1>
           <div
@@ -138,28 +115,12 @@ export function WelcomeScreen() {
             在浏览器中探索蛋白质 · 核酸 · 配体与电子密度
           </p>
 
-          {/* —— 继续上次会话（有存档时置顶为第一动作） —— */}
-          {showResume && (
-            <button
-              onClick={resume}
-              disabled={loading}
-              className="welcome-in panel-card group mt-9 flex w-full items-center gap-3 px-4 py-3 text-left"
-              style={{ animationDelay: '200ms' }}
-            >
-              <HardDriveDownload className="h-[18px] w-[18px] shrink-0 text-primary" />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium leading-tight">继续上次会话</span>
-                <span className="mt-1 block truncate font-mono text-[10px] leading-none tabular-nums text-muted-foreground">
-                  {session.count} 个结构 · {session.names.join(' / ')} · {relTime(session.savedAt)}
-                </span>
-              </span>
-              <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-[transform,color] duration-200 group-hover:translate-x-0.5 group-hover:text-primary" />
-            </button>
-          )}
+          {/* —— 继续上次会话（dynamic ssr:false 客户端挂载：水合安全 + 存档读取） —— */}
+          <SessionResumeSlot />
 
-          {/* —— 加载结构（fieldset 式图例分隔） —— */}
+          {/* —— 加载结构（fieldset 式图例分隔；:has 自适应——恢复卡挂载后收紧间距） —— */}
           <div
-            className={cn('welcome-in flex w-full items-center gap-2.5', showResume ? 'mt-3' : 'mt-10')}
+            className="load-sep welcome-in flex w-full items-center gap-2.5 mt-10"
             style={{ animationDelay: '240ms' }}
           >
             <span className="h-px flex-1 bg-border/80" />
@@ -259,16 +220,22 @@ export function WelcomeScreen() {
         </div>
       </div>
 
-      {/* 墨色仪表底座（待机读数 + 主题/GitHub） */}
+      {/* 墨色仪表底座（待机遥测读数 + 主题/GitHub） */}
       <footer className="instrument-bar relative z-10 flex h-9 shrink-0 items-center gap-3 px-4">
         <span className="status-micro">MolVision</span>
         <span className="status-sep" />
         <span className="status-val flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+          <span className="led-dot h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
           待机 STANDBY
         </span>
+        <span className="status-sep" />
+        <span className="status-val hidden sm:block">SYS OK</span>
+        <span className="status-sep hidden sm:block" />
+        <span className="status-val hidden md:block">ENGINE WEBGL</span>
         <span className="status-sep hidden md:block" />
-        <span className="status-val hidden truncate text-[color:var(--status-dim)] md:block">
+        <span className="status-val hidden lg:block">SRC RCSB</span>
+        <span className="status-sep hidden lg:block" />
+        <span className="status-val hidden truncate text-[color:var(--status-dim)] xl:block">
           拖放 PDB / CIF / .molvision 文件即可加载 · Ctrl+K 打开命令面板
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-0.5">

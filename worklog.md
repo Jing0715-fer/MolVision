@@ -1629,3 +1629,50 @@ Stage Summary:
 - 证据链：5 张过渡截图（首发/恢复/加载后/新建会话回归/拖放遮罩）+ 双主题终帧 + 像素采样 7 项 + lint 0/0 + errors 0；截图标签勘误：welcome-final-light 实为深色（主题状态跨截图残留），已重命名 -r 后缀对调
 - 未解决与风险：①VLM 审美终审连续 9 轮 429（限流恢复后建议补跑欢迎页双主题终审）②390px 移动端未实测（无 viewport 命令；布局审查通过：max-w-[420px]+px-6=358px 可用、chip flex-wrap、轨道 92vw 收缩、footer 提示 md+ 隐藏）③矮视口（577px）下内容滚动属预期（m-auto+overflow-y-auto）但滚动条样式未专项检查
 - 下一阶段建议：①VLM 恢复后补欢迎页审美终审 ②移动端实测（真机或可调视口工具）③ProviderSettingsDialog 仪器化收尾（r41 遗留）④ray+outline/SSAO 线稿化 bug（多轮遗留）
+---
+Task ID: r43-a
+Agent: frontend-styling-expert
+Task: 主工作台设计感强化（VLM 审计 5 项改进：视口标定层 / 状态栏 LED + 机壳接缝 / 序列条磁带槽 / 品牌字标加重 / 面板呼吸节奏）
+
+Work Log:
+- 读 worklog 尾部（r40/r41/r42 + 8-a/8-b）+ globals.css 全部仪器工具类 + 6 个目标文件（page/StatusBar/SequenceBar/Toolbar/LeftPanel/StructuresPanel），确认硬纪律与语义色边界；工作树干净（无前序未入账改动）
+- 【① 视口标定层】globals.css 新增 .viewport-reticle（absolute inset-0 z-10 pointer-events-none，主题自适应不透明度浅 7%/深 11%）：::before/::after = 中心十字线（18×1px + 1×18px，var(--foreground)）；4 枚 .reticle-tick 边中点刻度（1×5px / 5×1px，与四角取景框同一 10px 内缩坐标系）；page.tsx 在 corner-tick 层后新增同族 sibling 层（aria-hidden，零交互拦截）
+- 【② 状态栏】.led-dot 工具类（inset 0 1px 1px rgb(255 255 255/.35) 镜面顶高光）应用到 StatusBar Dot 组件——语义色 tone 不动仅加质感；.instrument-bar 就地精炼补 inset 0 1px 0 rgb(255 255 255/.06) 顶部 1px 机壳接缝（WelcomeScreen 底座同步受益）；结构名 font-bold（r40 已就位，核验）+ 统计 meta 行补 opacity-80（status-dim 之上再退一档）
+- 【③ 序列条】残基格 rounded-[4px]→rounded-[2px]；Jalview 刻度数字 text-black/75→/55（9px 本已就位，数字退后字母主导）；链标签 sticky 列 + 配体标签列补 border-r border-border/60 发丝线（标签区与残基格的分区线）；容器挂 .tape-well（浅色 inset 0 1px 0 oklch(0.25 0.01 80/.07) 凹陷暗缝 / 深色 rgb(255 255 255/.04) 内高光 = 磁带槽质感）
+- 【④ 工具栏】MolVision 字标 font-bold→font-extrabold + tracking-tight→tracking-[-0.02em]；品牌区后 mol-sep 与 Molecular Studio mol-micro 微标签核验已在位（header 子元素顺序实证：brand→mol-sep→工具区）
+- 【⑤ 面板呼吸】SectionTitle pt-3 pb-1.5→pt-4 pb-2（分区间 +4px，9 面板全局生效）；PanelHint 补 mt-2（此前与上一区块零间距是最 visibly cramped 点）；StructuresPanel 五处内容包装 px-2→px-3（与 SectionTitle/InfoPanel 的 12px 栅格对齐，内容收窄 8px 反而降低溢出风险）；链/配体分子行按钮补 min-h-8（行高统一 32px 实测 [32,32,32]/[32,32]，与 h-8 图标栏同节奏家族）
+- 【验证】①bun run lint 0 错 0 警（收尾复跑）②E2E：欢迎页 4HHB chip 点击 → 工作台 574 残基格 + 状态栏 4HHB 读数；深浅双主题截图 /tmp/r43a-dark.png、/tmp/r43a-light.png（aria-label="切换深浅主题" 真实切换）③计算样式实证：reticle rect 与 main rect 逐像素重合（centered ✓）/ opacity 0.07↔0.11 / pointer-events none / 十字线 18×1+1×18 / 4 刻度；led-dot box-shadow=rgba(255,255,255,.35) 0 1px 1px inset（双主题）；仪表条接缝 rgba(255,255,255,.06) 0 1px 0 inset；刻度数字 9px/Geist Mono/oklab(0 0 0/.55)；tape-well 双主题 seam；字标 800/-0.26px；行高 32px；SectionTitle 16/8px ④像素采样：浅色右缘刻度 rgb(238) vs 底 rgb(254)、十字线 Δ19.6（跨分子区）、LED 顶行 rgb(76,174,141) vs 主体 rgb(0,153,102)（镜面高光 + 翡翠语义色原样）、接缝行 +13 单位 ⑤溢出：body scrollWidth 1280=innerWidth，面板 291=291 ⑥功能冒烟：测距分段控件 → 状态栏「测距 0/2 Esc 退出」琥珀徽章 ✓；命令行 bg white → 「背景色 → #ffffff」日志行 ✓；9 面板全切换渲染 ✓ ⑦agent-browser errors：本轮交互零新增（仅 6 条同型预存 WelcomeScreen 恢复卡水合错配，见下）
+- 沙箱经验：Turbopack CSS watcher 偶发漏看 Edit 工具的二次写入——第一笔 globals.css 编辑（instrument-bar/led-dot/tape-well）编译生效、第二笔（viewport-reticle）静默丢失（served CSS 无该规则、元素 static/height 0）；touch 无效，bash 追加任意注释立即触发重编译后恢复。CSS 改动后必须核验 served stylesheet 含新规则再走验证链
+- 发现的预存问题（不在本任务范围）：WelcomeScreen L35 `useState(sessionSnapshot)` 客户端读 localStorage → 有存档时 SSR/CSR 恢复卡分支不一致 → 每次 reload 产生 hydration error（6 条同型；该文件归并行任务所有，未越界处理，建议 mounted 门控或 suppressHydrationWarning）；深色主题 + 白色 3D 底时 reticle/corner-tick 同为浅色前景 → 在画布白区近隐形（与 r40 取景框同族特性，浅色主题（审计低分项）反而最受益）
+
+Stage Summary:
+- 交付：VLM 审计 5 项批评全部落地为纯视觉层改动（7 文件，零逻辑/事件/键盘语义改动，未触碰并行任务-owned 文件与 src/lib）——①视口最大空白区获得「光学平台标定层」（中心十字线 + 四边中点刻度，7%/11% 极低存在感）②状态栏语义点升级硬件 LED（镜面顶高光）+ 机壳 1px 接缝 + 名称/meta 层级加深 ③序列条磁带槽化（顶缘内缝 + 链标签区发丝分界 + 残基格 2px 圆角 + 刻度数字退后）④品牌字标 800/-0.02em ⑤9 面板呼吸节奏统一（SectionTitle 16px 顶距 + PanelHint 8px 顶距 + 12px 内容栅格 + 32px 行高）
+- 关键决策：①reticle 刻度与四角取景框共用 10px 内缩坐标系与 var(--foreground) 色族（「同族不抢戏」）②tape-well 浅色用暗缝/深色用高光（凹陷感的主题倒易实现，avoid 白上白不可见）③呼吸节奏改动集中在共享基元（SectionTitle/PanelHint）一处生效全面板，避免逐面板散改 ④px-2→px-3 收窄内容 8px 同时消除与 SectionTitle 的栅格错位（InfoPanel 本就 px-3，StructuresPanel 是离群值）⑤min-h-8 统一链/分子行（与 h-8 图标栏同家族）
+- 证据链：lint 0/0 ✓ → 4HHB E2E（574 格 + 状态栏读数）✓ → 双主题截图存档 ✓ → 计算样式 12 项实证（reticle 几何/LED 阴影/接缝/9px 刻度/2px 圆角/800 字标/16px 标题距/32px 行高/tape-well 双主题/边线 1px/微标签规格/mol-sep 顺序）✓ → 像素采样 4 项（边刻度/十字线/LED 镜面/接缝）✓ → 双溢出核验 ✓ → 测距 + 命令行冒烟 ✓ → errors 零新增 ✓
+- 未解决与风险：①深色 + 白底时标定层在画布白区近隐形（设计族特性，非缺陷；如需深色画布常显可后续考虑 bg 感知变色——涉及语义判断，另行立项）②WelcomeScreen 恢复卡水合错配（预存，归并行任务）③VLM 主观终审本轮未跑（连续 9 轮 429，DOM+像素证据链替代；恢复后建议补双主题终审）
+
+---
+Task ID: r43
+Agent: main
+Task: 沙箱回滚恢复（本地 r31 → 远端 r42 硬重置同步）+ VLM 恢复后三份审计驱动的「设计感强化」+ Agent 能力打磨（视觉自检缩略图/限流韧性/bg 语义修复）
+
+Work Log:
+- 【代码恢复】本地沙箱回滚至 r31（3763976），远端已推进到 r42（6044ae7 欢迎页）。验证本地 r31 tree 与远端 9ea80e8 完全一致（33f66a1d 同 hash）→ 无未推送内容 → git reset --hard origin/main；rm -rf .next + python 双 fork 守护重启 dev server（Turbopack 脏 chunk 预防）；本地备份 branch backup-local-r31-rollback
+- 【VLM 三份审计】（限流恢复后首批）：dark main 7.5/10、light main 6.5/10、dark welcome 7.5/10。收敛方向：①视口「标定空间」十字线（最大区域当前是「空黑」）②状态栏 LED 高光/底盘接缝 ③序列条「仪器磁带」凹陷化 ④工具栏字标 800/-0.02em ⑤面板呼吸节奏 ⑥欢迎页 monogram 光晕+遥测读数 ⑦AgentPanel 圆角/渐变/半透明违例清零
+- 【子代理 r43-a】主工作台设计感强化：viewport-reticle 视口中心十字线+四边中点刻度（0.07/0.11 双主题透明度，与 corner-tick 同坐标系统）+ led-dot 状态点镜面高光（inset 0 1px 1px white/35，语义色不变）+ tape-well 序列条凹槽顶缝 + instrument-bar 底盘 1px 接缝 + 字标 font-extrabold tracking-[-0.02em]（实测 800/-0.26px）+ 序列格 rounded-[4px]→[2px] + 链/配体标签列 border-r 发丝线 + SectionTitle/PanelHint 呼吸 +4px + StructuresPanel px-3 对齐 12px 网格 + 链行 min-h-8 统一节奏。DOM 实证：reticle 与 main rect 完全重合、led shadow 计算样式、ruler 9px、零溢出
+- 【r43-b AgentPanel 仪器化】（逻辑零改动）：容器 rounded-xl/backdrop-blur/bg-card/95 → rounded-lg/bg-card 实底；头部渐变清除 + mol-micro「AGENT」上下文标签；消息气泡 rounded-2xl→rounded-lg + 空态卡/建议钮 panel-card 化；命令卡 bg-background 实底；输入区渐变清除；发送钮 bg-emerald-600→bg-primary token；流式光标/相位点/视觉徽章 emerald 裸 token→primary；时间戳 font-mono tabular-nums 9px；视觉开关钮→text-primary
+- 【r43-b 新能力：视觉自检缩略图】protocol.ts AgentChatMessage 增 image 字段；自查消息携带 ≤320px JPEG 缩略图（768 版仍仅送 VLM）——自检透明化（用户直观看到助手「看」到了什么）；持久化时剥离（配额保护，与 streaming 同策略）
+- 【r43-b 限流韧性】route.ts 流式重试退避 429 感知（700ms→2500ms）+ err 事件限流专用文案「服务限流中，请稍候片刻再试」；AgentPanel StreamResult error 携带 err 具体原因（错误气泡从泛化「出错了」升级为可操作信息）
+- 【r43-c WelcomeScreen】monogram 电源光晕（drop-shadow 18px primary/26%）+ 字标 800/-0.02em + 轨道线稿晕影遮罩（中心让位 hero/外缘淡出 mask-image）+ 仪表底座遥测读数（STANDBY · SYS OK · ENGINE WEBGL · SRC RCSB · 渐进 md/lg/xl 显隐）+ LED 点升 led-dot
+- 【r43-c 水合错误根治】发现并修复存量 bug：useState(sessionSnapshot) 惰性读 localStorage → SSR/CSR 首帧结构差异（每次带存档重载 6 错）。useSyncExternalStore 方案实测仍水合（React 19 该路径行为），最终 next/dynamic ssr:false 子组件（SessionResumeCard.tsx）：服务端零渲染、客户端挂载后渲染，全新浏览器会话实测 0 错误；分隔线间距 CSS :has() 自适应（卡片在场收紧 mt-3）
+- 【r43-b bg 固定语义修复】（E2E 中发现的真实 bug）：主题跟随效应把「显式 bg white」误判为「主题默认值」覆盖（agent 出版渲染被主题切换静默撤销）。Settings 增 backgroundPinned：bg 命令/ScenePanel 预设与取色器置 true；MolViewer 主题跟随跳过 pinned；新增 set bg_follow on|off 恢复跟随（commands 用法串 + complete.ts 候选）；session round-trip 自动兼容旧档（默认展开 false）。四步 E2E：bg white→pinned:true→主题切换 bg 保持 #ffffff→set bg_follow on→跟随恢复 #101215 ✓
+- 【E2E 全链路】①agent 真实 VLM 闭环：「加轮廓线和浅背景，出版级渲染风格」→ bg white + outline on 0.5 1 + ray 2400 三命令执行 → VLM 自检「视觉自查已确认：背景为白色，轮廓线已生效且克制不刺目，目标达成」→ 缩略图 320x105 渲染 ✓ 零错误 ②会话恢复：4HHB 加载→reload→恢复卡→点击→工作台还原 ✓ 零错误 ③390px 移动端（agent-browser set viewport 实测，多轮遗留缺口关闭）：欢迎页/工作台/agent 面板（366px 双边 12px inset——修复了 w-full+right-3 的 12px 左溢出）全部零横向溢出零错误 ④lint 0/0 + 应用代码 tsc 0 错 ⑤perf off 恢复 headless 降级画布 944x311 全质量
+- 沙箱经验：①agent-browser errors 列表粘滞（--clear 后仍显示旧错误，需全新 --session 才能验证清零）②agent-browser 支持 set viewport（此前多轮误记为无此命令）③VLM/zai 账号级 429 窗口间歇（本会话前段 3 审计成功、终审连续 4 轮 429）
+
+Stage Summary:
+- r43 交付：①代码恢复——远端 r42 全量同步（树哈希验证零丢失）②设计感强化——VLM 审计驱动的主工作台五面（视口标定层/LED 状态点/磁带序列条/字标/面板呼吸）+ 欢迎页遥测化 ③AgentPanel 仪器化收口（最后一块 major surface，渐变/圆角/半透明违例清零）④Agent 能力三 upgrade：视觉自检缩略图（透明化）+ 429 限流韧性（退避+专属文案+错误气泡具体化）+ bg 固定语义（显式选择优先于主题跟随，set bg_follow 可逆）⑤水合错误根治（dynamic ssr:false）⑥390px 移动端实测清账
+- 关键决策：①VLM 审计驱动而非拍脑袋——三份审计的收敛建议全部落地或判定不适用（如假 MEM 遥测改为真实 SYS/ENGINE/SRC 读数）②缩略图持久化剥离（体积）与 streaming 同策略 ③bg pinned 双向可达（命令固定 + bg_follow on 恢复），session 旧档自动兼容
+- 证据链：VLM 3 审计（dark 7.5/light 6.5/welcome 7.5）+ agent VLM 闭环确认「目标达成」+ 缩略图 DOM 实证 + 零错误会话（全新 session）+ 390px 零溢出 + lint/tsc 全绿 + 像素采样（视口白底 254 近白 1-3 漂移不可感知/状态栏墨底/工具栏纸底）
+- 截图：/tmp/r43-{baseline-welcome,baseline-main,main-dark,welcome-dark,final-agentview,final-dark,final-light2,agent-e2e,mobile-welcome,mobile-main,mobile-agent-fixed}.png
+- 未解决与风险：①VLM 终审连续 4 轮 429（下轮窗口恢复后补跑 light/double 终帧）②ray+outline/SSAO 线稿化 bug 仍在队列（多轮遗留，本轮 agent 用保守参数 0.5/1 规避）③AgentPanel 深色下 mol-micro AGENT 标签与供应商徽章在极窄宽度可能竞争空间（truncate 兜底）
+- 下一阶段建议：①VLM 恢复后补终审 + 审美迭代 ②ray 线稿化根因排查 ③agent 对话记忆增强（当前 slice(-12) 截断）/多轮修正预算可视化 ④ScenePanel 剩余 bg-background/60 家族清零（8-a 有意跳过项）

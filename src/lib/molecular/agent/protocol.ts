@@ -21,6 +21,8 @@ export interface AgentChatMessage {
   commands?: AgentCmdRecord[]
   /** visual = 视觉自查消息（VLM 看截图后的评估/修正） */
   kind?: 'chat' | 'visual'
+  /** 视觉自查消息附带的视口截图缩略图（JPEG data URL，≤320px 宽；持久化前剥离——体积） */
+  image?: string
   /** 流式生成中（打字机光标显示；持久化前剥离——中断重载不再是流式态） */
   streaming?: boolean
 }

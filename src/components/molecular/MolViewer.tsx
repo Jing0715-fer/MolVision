@@ -175,12 +175,13 @@ export default function MolViewer() {
     engine.current?.sync(useMolStore.getState())
   }, [visualRev])
 
-  // 主题切换时视口背景跟随：仅当背景仍为主题默认值（用户自定义过则尊重用户选择）
+  // 主题切换时视口背景跟随：仅当背景未被显式设定（bg 命令置 pinned——用户/agent 的显式选择优先于主题跟随）
   useEffect(() => {
     if (!resolvedTheme) return
     const DARK_DEFAULT = '#101215'
     const LIGHT_DEFAULT = '#ffffff'
     const store = useMolStore.getState()
+    if (store.settings.backgroundPinned) return
     const cur = store.settings.background.toLowerCase()
     if (resolvedTheme === 'light' && cur === DARK_DEFAULT) {
       store.updateSettings({ background: LIGHT_DEFAULT })

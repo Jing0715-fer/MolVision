@@ -342,14 +342,18 @@ export async function POST(req: Request) {
               lastErr = e instanceof Error ? e.message : 'LLM 调用异常'
               if (full) break // 已流出内容不重试（重发会重复推送增量）
             }
-            // 瞬时故障退避后重试
-            await new Promise(r => setTimeout(r, 700))
+            // 瞬时故障退避后重试（429 限流窗口显著更长——限流感知退避）
+            const isRate = /429|too many|rate.?limit/i.test(lastErr)
+            await new Promise(r => setTimeout(r, isRate ? 2500 : 700))
           }
         } catch (e) {
           lastErr = e instanceof Error ? e.message : 'LLM 调用异常'
         }
         if (decision) send({ t: 'end', decision })
-        else send({ t: 'err', error: `${lastErr}，请重试或换个说法` })
+        else {
+          const isRate = /429|too many|rate.?limit/i.test(lastErr)
+          send({ t: 'err', error: isRate ? '服务限流中，请稍候片刻再试' : `${lastErr}，请重试或换个说法` })
+        }
         try { controller.close() } catch { /* 客户端已断开 */ }
       },
     })
