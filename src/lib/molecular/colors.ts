@@ -4,7 +4,7 @@ import { elementInfo, residueClass, type ResidueClass } from './chemistry'
 import type { StructureData } from './parser'
 import { maxAtomSasa } from './sasa'
 
-export type ColorScheme = 'element' | 'chain' | 'spectrum' | 'residue' | 'ss' | 'bfactor' | 'sasa' | 'uniform'
+export type ColorScheme = 'element' | 'chain' | 'spectrum' | 'residue' | 'ss' | 'bfactor' | 'sasa' | 'uniform' | 'pocket'
 
 export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
   element: '元素 (CPK)',
@@ -15,6 +15,7 @@ export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
   bfactor: 'B 因子',
   sasa: '溶剂可及 (SASA)',
   uniform: '统一颜色',
+  pocket: '口袋 (配体距离)',
 }
 
 /** 链调色板：黄金角 HSL，稳定可复现 */
@@ -65,6 +66,20 @@ export const SASA_STOPS: [number, string][] = [
   [0.0, '#2e4a8f'], [0.3, '#4fa3c7'], [0.6, '#f2d74c'], [1.0, '#e0563d'],
 ]
 
+/** 口袋距离渐变停靠点（0 近配体深紫红 → 1 远端浅粉）——图例卡与着色共用。
+ *  色板刻意避开黄/蓝/红三色：这三个色相留给杂原子元素色（S 黄 · N 蓝 · O 红），
+ *  距离渐变只染碳原子，杂原子永远按元素色醒目可辨（PyMOL 出版图惯例） */
+export const POCKET_STOPS: [number, string][] = [
+  [0.0, '#a02fd0'], [0.5, '#c76fdd'], [1.0, '#f4b6e4'],
+]
+
+/** 口袋方案里配体碳的专属色（鲜绿）——与距离渐变紫粉、杂原子黄蓝红、铁锈橙全部拉开 */
+export const LIGAND_CARBON_COLOR = '#4caf50'
+
+/** 口袋距离渐变的距离锚点：≤2.7Å 视为紧贴配体（t=0），≥4.5Å 视为口袋外围（t=1） */
+export const POCKET_D_NEAR = 2.7
+export const POCKET_D_FAR = 4.5
+
 /** 渐变停靠点 → CSS linear-gradient 字符串（图例卡用） */
 export function stopsToGradient(stops: [number, string][]): string {
   return `linear-gradient(to right, ${stops.map(([t, c]) => `${c} ${(t * 100).toFixed(1)}%`).join(', ')})`
@@ -86,6 +101,62 @@ function bfactorColor(t: number): THREE.Color {
 
 export interface ColorContext {
   uniformColor?: string
+}
+
+// ---------- 口袋方案：配体距离场（WeakMap 缓存，结构不可变时只算一次） ----------
+
+interface PocketField {
+  /** 配体重原子索引（无配体为空 → 方案退化为元素色） */
+  ligandAtoms: number[]
+  /** 每残基到最近配体重原子距离（配体自身 = 0；未触及 = Infinity） */
+  resDist: Float32Array
+}
+const pocketFieldCache = new WeakMap<StructureData, PocketField>()
+
+const isLigandResidue = (r: { hetero: boolean; water: boolean; polymer: boolean }) =>
+  r.hetero && !r.water && !r.polymer
+
+function pocketField(structure: StructureData): PocketField {
+  const hit = pocketFieldCache.get(structure)
+  if (hit) return hit
+  const nRes = structure.residues.length
+  const resDist = new Float32Array(nRes).fill(Infinity)
+  const ligandAtoms: number[] = []
+  const pos = structure.atoms.positions
+  const els = structure.atoms.elements
+  for (let ri = 0; ri < nRes; ri++) {
+    const r = structure.residues[ri]
+    if (!isLigandResidue(r)) continue
+    for (let i = r.start; i < r.end; i++) {
+      if (els[i] !== 'H' && els[i] !== 'D') ligandAtoms.push(i)
+    }
+  }
+  if (ligandAtoms.length) {
+    // 每个配体重原子间 5.5Å 球内找聚合物重原子，记录残基级最近距离
+    for (const li of ligandAtoms) {
+      const lx = pos[li * 3], ly = pos[li * 3 + 1], lz = pos[li * 3 + 2]
+      const cand = structure.grid.queryRadius(lx, ly, lz, 5.5, pos)
+      for (const j of cand) {
+        const e = els[j]
+        if (e === 'H' || e === 'D') continue
+        const d = Math.hypot(pos[j * 3] - lx, pos[j * 3 + 1] - ly, pos[j * 3 + 2] - lz)
+        const rj = structure.atomResidue[j]
+        if (d < resDist[rj]) resDist[rj] = d
+      }
+    }
+    for (const li of ligandAtoms) resDist[structure.atomResidue[li]] = 0
+  }
+  const field = { ligandAtoms, resDist }
+  pocketFieldCache.set(structure, field)
+  return field
+}
+
+/** 距离 → 渐变色（近深紫红 → 远浅粉，线性插值） */
+const pocketNearColor = new THREE.Color(POCKET_STOPS[0][1])
+const pocketFarColor = new THREE.Color(POCKET_STOPS[POCKET_STOPS.length - 1][1])
+function pocketDistColor(d: number, out: THREE.Color): THREE.Color {
+  const t = Math.max(0, Math.min(1, (d - POCKET_D_NEAR) / (POCKET_D_FAR - POCKET_D_NEAR)))
+  return out.copy(pocketNearColor).lerp(pocketFarColor, t)
 }
 
 /** 计算整个结构的逐原子颜色（rgb Float32Array，线性空间） */
@@ -198,6 +269,47 @@ export function computeAtomColors(
     for (let i = 0; i < n; i++) {
       const c = sasa ? sasaExposureColor(sasa[i], atoms.elements[i], 1.4) : fallback
       out[i * 3] = c.r; out[i * 3 + 1] = c.g; out[i * 3 + 2] = c.b
+    }
+    return out
+  }
+
+  if (scheme === 'pocket') {
+    // 口袋专业配色（配体分析/出版互作图）：
+    //  · 配体残基：碳 = 鲜绿专属色，杂原子 = 元素色 → 配体作为一个整体从环境中脱颖而出
+    //  · 聚合物残基：碳 = 到配体最近距离的紫→粉渐变（残基级统一色，读作完整氨基酸），
+    //    杂原子 = 元素色（距离球外的残基无距离数据 → 退化为元素灰）
+    const field = pocketField(structure)
+    const ligRes = new Uint8Array(structure.residues.length)
+    for (let ri = 0; ri < structure.residues.length; ri++) {
+      if (isLigandResidue(structure.residues[ri])) ligRes[ri] = 1
+    }
+    const elemCache = new Map<string, THREE.Color>()
+    const ligC = new THREE.Color(LIGAND_CARBON_COLOR)
+    const resCache = new Map<number, THREE.Color>()
+    for (let i = 0; i < n; i++) {
+      const el = atoms.elements[i]
+      const ri = structure.atomResidue[i]
+      let col: THREE.Color
+      if (el !== 'C') {
+        // 杂原子一律元素色（N 蓝/O 红/S 黄/金属本色）——渐变只染碳，色板避开黄蓝红保杂原子醒目
+        let e = elemCache.get(el)
+        if (!e) { e = new THREE.Color(elementInfo(el).color); elemCache.set(el, e) }
+        col = e
+      } else if (ligRes[ri]) {
+        col = ligC
+      } else {
+        const d = field.resDist[ri]
+        if (Number.isFinite(d)) {
+          let rc = resCache.get(ri)
+          if (!rc) { rc = pocketDistColor(d, new THREE.Color()); resCache.set(ri, rc) }
+          col = rc
+        } else {
+          let e = elemCache.get(el)
+          if (!e) { e = new THREE.Color(elementInfo(el).color); elemCache.set(el, e) }
+          col = e
+        }
+      }
+      out[i * 3] = col.r; out[i * 3 + 1] = col.g; out[i * 3 + 2] = col.b
     }
     return out
   }

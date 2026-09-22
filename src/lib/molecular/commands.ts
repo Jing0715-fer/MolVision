@@ -63,6 +63,7 @@ const SCHEME_ALIASES: Record<string, ColorScheme> = {
   bfactor: 'bfactor', b: 'bfactor', temp: 'bfactor',
   sasa: 'sasa', sas: 'sasa', accessibility: 'sasa',
   uniform: 'uniform',
+  pocket: 'pocket', liganddist: 'pocket',
 }
 
 /** 按残基实例分组（同一残基编号的原子归为一实例——如 4 个 HEM 各为一实例）*/
@@ -108,7 +109,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'select [name=]expr', desc: '选择原子（可命名）', example: 'select site = within 5 of resn HEM' },
   { cmd: 'show <rep> [sel]', desc: '添加表示法（逗号/空格分隔皆可）', example: 'show ballstick, ligand · show cartoon protein' },
   { cmd: 'hide <rep> [sel]', desc: '移除匹配的表示法', example: 'hide lines' },
-  { cmd: 'color <方案|颜色> [sel]', desc: '给选择上色', example: 'color red chain A' },
+  { cmd: 'color <方案|颜色> [sel]', desc: '给选择上色（pocket=配体距离渐变）', example: 'color red chain A · color pocket' },
   { cmd: 'util cbc|cnc|ss|cbaw', desc: '实用着色（链/灰/二级结构/元素+白碳）', example: 'util cbc' },
   { cmd: 'set <项> <值>', desc: '渲染设置（灯光/fov/质量…）', example: 'set ambient 0.5' },
   { cmd: 'bg <颜色>', desc: '设置背景色', example: 'bg black' },
@@ -696,6 +697,9 @@ export function runCommand(raw: string): void {
     const p = PRESETS[name]
     if (p) {
       useMolStore.getState().applyPreset(name)
+      if (name === 'publication') {
+        return ok('已应用预设: 出版级互作——配体碳鲜绿单一色 · 口袋残基按到配体距离紫→粉渐变（杂原子元素色）· 智能主链（仅氢键参与者的主链 O/N 显示）。建议配 hbonds on 3.4 in byres(within 4.5 of (ligand)) and not water：氢键虚线出现时，参与互作的主链原子自动补显')
+      }
       return ok(`已应用预设: ${p.label}`)
     }
     // 场景组合预设（多命令链：表示法 + 环境 + 相机）
@@ -1498,7 +1502,11 @@ export function runCommand(raw: string): void {
       if (!isNaN(dist) && dist >= 2 && dist <= 6) patch.hbondMaxDist = dist
       s.updateSettings(patch)
       s.setHBondScope({ structureId: s.activeId, indices: idx })
-      return ok(`氢键已烘焙范围「${scopeExpr}」（${idx.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}）——不随 deselect 清除，端点球同步显示`)
+      // 范围不含配体时提示：配体-残基氢键是互作图核心（旧写法 and polymer 会漏掉配体自身氢键）
+      const scopeHint = /ligand|resn/i.test(scopeExpr)
+        ? ''
+        : '。提示：范围写 byres(within 4.5 of (ligand)) and not water 可同时画出配体-残基氢键（含配体本身）'
+      return ok(`氢键已烘焙范围「${scopeExpr}」（${idx.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}）——不随 deselect 清除，端点球同步显示${scopeHint}`)
     }
     let dist = parseFloat(parts[2] ?? '')
     if (isNaN(dist)) dist = parseFloat(arg)

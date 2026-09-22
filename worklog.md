@@ -1864,3 +1864,28 @@ Stage Summary:
 - 截图存档：/tmp/r50-isolate-fixed.png（单链口袋特写）、/tmp/r50-final.png（场景条+召回后整体）
 - 未解决与风险：①scene 条与 EnsembleBar 同在底部居中（ensemble 播放时可能叠——NMR 结构+场景同用场景罕见，未处理）②场景缩略图捕获时机为 save 瞬间（reps 重建动画中可能半帧）③弹窗体系 VLM 审计（r46 遗留）④超大蛋白序列条 compact mode
 - 下一阶段建议：①弹窗体系仪器化审计 ②ray OOM 守卫 ③agent 记忆可视化面板 ④scene 快照 session export 携带（.molvision 文件互导）
+
+---
+Task ID: r51
+Agent: main
+Task: 用户反馈五项配体口袋视图升级：配体单一专属色 + 距离渐变保留 + 氢键显示修复 + 主链 O/N 智能显隐 + 渐变后杂原子按元素着色（含 SwiftShader 渲染环境重大发现）
+
+Work Log:
+- 【用户原话】「好很多了，但是配体应该单独显示一种颜色，氨基酸根据距离有颜色渐变这一点很好，好像氢键还是没有显示？还是说没有氢键？如果主链的氧和氮如果不参与氢键互作可以不用显示主链的stick，然后侧链根据距离染完色后（避免黄，蓝和红色），还是要再进行一次按原子类型着色」
+- 【pocket 配色方案（colors.ts）】新增 ColorScheme 'pocket'：配体残基碳=鲜绿 LIGAND_CARBON_COLOR #4caf50（与渐变/黄蓝红/铁锈橙全拉开）；聚合物残基碳=到配体最近距离的紫→粉渐变（POCKET_STOPS #a02fd0→#c76fdd→#f4b6e4，色相 275-325° 刻意避开黄蓝红——三色留给杂原子元素色）；一切非碳原子=N 蓝 O 红 S 黄金属本色（「距离染完后按原子类型再着色」的语义实现：渐变只染碳，杂原子永远元素色醒目）；距离=残基级到最近配体重原子（WeakMap 缓存 pocketField，grid.queryRadius 5.5Å 球内逐配体原子扫描，配体自身=0，无配体结构退化为元素色）；锚点 POCKET_D_NEAR 2.7 / POCKET_D_FAR 4.5
+- 【preset publication 升级（store.ts）】口袋球棍 rep 配色 element→pocket；applyColor schemes 数组 +pocket（color pocket 命令烘焙静态口袋色板）
+- 【智能主链（engine.ts）】用户「主链的氧和氮如果不参与氢键互作可以不用显示主链的stick」：pocket 配色 + 棒类 rep（ballstick/sticks/lines）构建时过滤主链原子——仅当原子在 hbondShown 集合（当前真正渲染的氢键虚线端点，范围+链隔离过滤后的 draw 集）才保留；侧链从 CB 起漂在卡通带上方（出版互作图标准干净画法）；hbonds off→集合清零→主链回退隐藏
+- 【hbondShown 联动机制】updateHBonds 每轮把真正画到屏上的虚线端点记入 Map<entryId,Set>（noteShownHbonds 内容比对去抖）；集合变化→wakePocketReps()（仅存在 pocket rep 时 bump visualRev）→React effect→sync→口袋 rep 重建（rep 哈希含 hbondShownRev 签名）——修了 buildRep 存储哈希漏 hbSig 导致永不命中缓存的伴生 bug（逐帧重建）
+- 【氢键显示修复（根因）】旧 agent 规则 18 ③ 范围 byres(within 4.5 of (ligand)) and polymer 把配体本身排除——配体-残基氢键（血红素丙酸基-精氨酸盐桥等互作图核心）永远画不出来；新范围 byres(within 4.5 of (ligand)) and not water（含配体）：4HHB 链 A 口袋实测 110 条氢键虚线；hbonds in 命令输出附范围不含配体时的教育提示
+- 【UI】ColorLegend 新增 pocket 图例卡（优先级最高：渐变条 POCKET_STOPS + 近 2.7Å/≥4.5Å 刻度 + 配体碳绿块 + N 蓝 O 红 S 黄元素色注记）；ColorsPanel 方案条目（绿+渐变+蓝 swatches）；RepsPanel SCHEMES 补 pocket+sasa
+- 【agent 教育（route.ts）】COMMAND_REF：publication 描述更新 + color 方案表 +pocket + hbonds in 标准写法含配体说明；规则 17/18 ②③ 更新（智能主链语义 + 范围必须含配体）；REVIEW 症状速查「氢键虚线缺失」修为含配体写法
+- 【E2E（数据级+视觉级混合验证）】①全命令链 console 输出验证（isolate 连带保留/pocket 预设反馈/224 原子烘焙范围/view from 17° 仰角）②「110 氢键」状态徽章 ③青色虚线像素级确认（teal 55px@相机联动位置——材质色渲染不受环境缺陷影响）④智能主链引擎探针：hbonds off→mask=140（纯侧链+配体）on→mask=178（+38 个氢键参与主链原子补显）⑤颜色管线 Bun 直测：HEM 碳→#4caf50 精确、LEU86 侧链碳→#cb82d9 渐变紫 ⑥instanceColor 缓冲读回：紫/绿/红值正确 ⑦GPU program 反查：USE_INSTANCING_COLOR/USE_COLOR/vColor 乘法全部就位 ⑧图例卡 DOM 验证「口袋 · 配体距离…配体碳·NOS」⑨lint 0/0 + tsc src 零错 + 浏览器零错误
+- 【⚠️ 重大环境发现：SwiftShader instanceColor 缺陷】沙箱 agent-browser 为 SwiftShader 软件渲染（ANGLE Vulkan Subzero）——裸 WebGL2 双 divisor 实例属性测试实证：实例属性错位（实例 i 读到实例 i-1 的颜色）→ three.js InstancedMesh.instanceColor 渲染失效→球棍/空间填充一律材质底色（白×光照=灰）。四个决定性证据：①r50 基线（stash 我的改动）preset ballstick 全灰——非本轮回归 ②live paint 全绿 instanceColor 无效 ③GPU program 着色器全对而渲染灰 ④裸 WebGL 复现。**对真实用户零影响（硬件 GPU 上 instanceColor 是 three.js 十年成熟路径）；cartoon 走 vertexColors 不受影响；氢键虚线/端点球走材质色不受影响**。历史教训：r48 档案截图考古证明 40k 饱和红像素中仅 740 在视口（其余为序列条 chips）——历轮 VLM 对「元素色/CPK」的确认全是序列条+卡通+青虚线的错觉。**后续轮 E2E 颜色断言必须走引擎数据探针（如本轮），截图颜色断言仅对 cartoon/虚线/UI 可信**
+- 【踩坑】React 受控输入仍需原生 value setter + input 事件（沿用）；console 打开时 ColorLegend 隐藏（底部命令行遮挡——验证图例前先关 console）；截图区域统计必须严格限定 canvas rect（y 44-355），序列条 chips 颜色（极性绿/芳香紫/负电荷红）与 3D 内容混淆是本轮调试最大干扰源；public/ 静态页加载 662KB three.module.js 会 fetch 失败（原因未明），裸 WebGL eval 测试是更可靠的隔离手段
+
+Stage Summary:
+- 用户五项反馈全部落地：①配体碳鲜绿专属色（一个视觉整体从环境中脱颖而出）②距离渐变保留（残基级紫→粉，2.7→4.5Å 锚定）③氢键显示修复（范围含配体——110 条虚线，含配体-残基互作）④智能主链（仅氢键参与者的主链 O/N 补显，hbonds off 回退隐藏）⑤杂原子按元素色（渐变避开黄蓝红保 N/O/S 永远醒目——「距离染完后再按原子类型着色」的专业语义）
+- 架构决策：pocket 方案同时是智能主链的开关标记（colorScheme==='pocket' 的棒类 rep 启用主链过滤）——一个概念一个开关；hbondShown 走「真正渲染的虚线端点」而非原始检测集——语义即「参与当前显示的氢键互作」；rep 哈希 hbSig 签名修复（口袋 rep 重建收敛性）
+- SwiftShader instanceColor 环境缺陷定位与文档化（对真实用户无影响；后续轮 E2E 颜色验证方法论变更：引擎探针优先）
+- 未解决与风险：①沙箱截图无法展示 pocket 配色效果（环境缺陷，用户预览面板真实 GPU 正常）②VLM 429 限流持续（cron webDevReview 与本会话竞争配额）——本轮 VLM 终审缺失，以像素级+数据级双重验证替代 ③弹窗体系 VLM 审计（r46 遗留）④超大蛋白序列条 compact mode ⑤ray OOM 守卫
+- 下一阶段建议：①等 VLM 配额恢复后补一轮真实预览终审 ②口袋图例卡与 hbond 面板的联动教育（点击图例跳转说明）③pocket 方案对核酸结构的适配验证 ④序列条 compact mode

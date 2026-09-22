@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 
 const SCHEMES: { key: ColorScheme; swatches: string[] }[] = [
   { key: 'element', swatches: ['#909090', '#3050f8', '#ff0d0d', '#ffff30', '#ff8000'] },
+  { key: 'pocket', swatches: ['#4caf50', '#a02fd0', '#c76fdd', '#f4b6e4', '#3050f8'] },
   { key: 'chain', swatches: ['#e35d5d', '#6bbf6b', '#5da5e0', '#d5a54a', '#a06bd8'] },
   { key: 'spectrum', swatches: ['#e05d5d', '#e8c17a', '#8fd694', '#4fb3c6', '#9a5fd4'] },
   { key: 'residue', swatches: ['#f2c46d', '#8fd694', '#4fb3c6', '#e05d5d', '#c39bd3'] },

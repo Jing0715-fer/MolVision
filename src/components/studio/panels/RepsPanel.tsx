@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/popover'
 
 const REP_TYPES: RepType[] = ['cartoon', 'putty', 'ballstick', 'sticks', 'spacefill', 'lines', 'surface']
-const SCHEMES: ColorScheme[] = ['element', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'uniform']
+const SCHEMES: ColorScheme[] = ['element', 'pocket', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'sasa', 'uniform']
 
 /** 表示法类型 → lucide 图标（中性色：单一强调色纪律，类型识别靠图标形状不靠彩虹色） */
 const TYPE_ICON: Record<RepType, { icon: typeof Ribbon; className?: string }> = {

@@ -194,7 +194,9 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
     label: '出版级互作',
     reps: () => [
       { ...defaultRep('cartoon', 'polymer', 'chain') },
-      { ...defaultRep('ballstick', 'byres(within 4.5 of (ligand)) and not water', 'element') },
+      // pocket 方案：配体碳鲜绿 + 口袋残基碳按到配体距离紫→粉渐变（杂原子元素色）；
+      // 棍棒几何同时启用智能主链——仅氢键参与者的主链 O/N 显示，其余主链原子不进几何
+      { ...defaultRep('ballstick', 'byres(within 4.5 of (ligand)) and not water', 'pocket') },
     ],
   },
   hybrid: {
@@ -373,7 +375,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
       ? new Set(s.selection.indices)
       : null // null = 全结构
     // 目标可能是 scheme 名或 css 颜色
-    const schemes: ColorScheme[] = ['element', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'sasa', 'uniform']
+    const schemes: ColorScheme[] = ['element', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'sasa', 'uniform', 'pocket']
     const isScheme = schemes.includes(target as ColorScheme)
     let colors: Float32Array
     if (isScheme) {
