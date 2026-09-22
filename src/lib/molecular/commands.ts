@@ -111,7 +111,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'hide <rep> [sel]', desc: '移除匹配的表示法', example: 'hide lines' },
   { cmd: 'color <方案|颜色> [sel]', desc: '给选择上色（pocket=配体距离渐变）', example: 'color red chain A · color pocket' },
   { cmd: 'util cbc|cnc|ss|cbaw', desc: '实用着色（链/灰/二级结构/元素+白碳）', example: 'util cbc' },
-  { cmd: 'set <项> <值>', desc: '渲染设置（灯光/fov/质量…）', example: 'set ambient 0.5' },
+  { cmd: 'set <项> <值>', desc: '渲染设置（灯光/fov/质量/过渡手感 transition…）', example: 'set ambient 0.5 · set transition cinematic' },
   { cmd: 'bg <颜色>', desc: '设置背景色', example: 'bg black' },
   { cmd: 'zoom [sel|in|out]', desc: '聚焦选择/推拉镜头（zoom ligand, 5 带缓冲）', example: 'zoom ligand · zoom in · zoom out' },
   { cmd: 'turn <x|y|z> <±°>', desc: '旋转视角（x俯仰 y水平 z滚转）', example: 'turn y 30 · turn x -15' },
@@ -144,7 +144,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
   { cmd: 'morph <名> = <A> <B> [帧] [norefine]', desc: '构象插值轨迹（自动叠合 + 键长约束/去碰撞精修）', example: 'morph m1 = 1BQL 2LYZ 40 · morph m = 1BQL 2LYZ norefine' },
   { cmd: 'morph multi <名> = <A> <B> <C>… [帧]', desc: '多态构象样条插值（Catmull-Rom 过 3+ 构象）', example: 'morph multi m = 1BQL 2LYZ 2VB1 60' },
-  { cmd: 'movie play|stop|edit [秒 轮]', desc: '关键帧巡航（无秒数时走时间轴；edit 打开编排）', example: 'movie play · movie edit' },
+  { cmd: 'movie play|stop|smooth|hold|edit [秒 轮]', desc: '关键帧巡航（smooth=平滑连续路径录像丝滑 · hold=逐帧驻留 · 无秒数走时间轴；edit 编排）', example: 'movie play smooth 4 2 · movie smooth' },
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
@@ -1102,7 +1102,7 @@ export function runCommand(raw: string): void {
   if (cmd === 'set') {
     const key = (parts[1] ?? '').toLowerCase()
     const rawVal = parts.slice(2).join(' ').trim()
-    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / cap_shading / transparency / sphere_scale / stick_radius / cartoon_width / bg_follow')
+    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / transition / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / cap_shading / transparency / sphere_scale / stick_radius / cartoon_width / bg_follow')
     const s = useMolStore.getState()
     const num = parseFloat(rawVal)
     const on = ['on', '1', 'true', 'open'].includes(rawVal.toLowerCase())
@@ -1168,6 +1168,12 @@ export function runCommand(raw: string): void {
         if (isNaN(num)) return err('用法：set spin_speed <0.5-20>')
         s.updateSettings({ spinSpeed: clampNum(num, 0.5, 20, 2) })
         return ok(`旋转速度 → ${clampNum(num, 0.5, 20, 2)}`)
+      }
+      case 'transition': case 'cam_transition': {
+        const t = rawVal.toLowerCase()
+        if (!['quick', 'normal', 'cinematic'].includes(t)) return err('用法：set transition quick|normal|cinematic（视角书签/正交视角/场景恢复的飞行时长 0.35/0.65/1.2s）')
+        s.updateSettings({ camTransition: t as 'quick' | 'normal' | 'cinematic' })
+        return ok(`视角过渡 → ${t === 'quick' ? '敏锐 0.35s' : t === 'normal' ? '标准 0.65s' : '电影 1.2s'}（场景面板「交互与动画」可同样切换）`)
       }
       case 'quality': {
         const q = rawVal.toLowerCase()
@@ -1250,7 +1256,7 @@ export function runCommand(raw: string): void {
         return n ? ok(`cartoon 宽度 → ${clampNum(num, 0.3, 4, 1)}（${n} 个表示）`) : err('没有 cartoon 表示')
       }
       default:
-        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, cap_color, cap_shading, transparency, sphere_scale, stick_radius, cartoon_width`)
+        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, transition, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, cap_color, cap_shading, transparency, sphere_scale, stick_radius, cartoon_width`)
     }
   }
 
@@ -1796,7 +1802,8 @@ export function runCommand(raw: string): void {
       const okStart = eng.startRecording()
       if (!okStart) return err('当前浏览器不支持画布录制（MediaRecorder）')
       useRecordStore.getState().setRecording(true)
-      return ok('开始录制（30fps WebM）——可同时播放 ensemble / rock / spin；record stop 停止并下载')
+      const smooth = useMovieStore.getState().smooth
+      return ok(`开始录制（30fps WebM）——可同时播放 ensemble / rock / spin；record stop 停止并下载${smooth ? ' · movie play 走平滑巡航（当前默认，录像连贯）' : ' · 录连贯转场推荐：movie smooth 开启平滑巡航'}`)
     }
     if (sub === 'stop' || sub === 'off') {
       if (!eng.isRecording) return err('当前未在录制')
@@ -1959,11 +1966,17 @@ export function runCommand(raw: string): void {
   if (cmd === 'movie') {
     const sub = (parts[1] ?? 'status').toLowerCase()
     if (sub === 'play' || sub === 'start') {
-      const secs = parseFloat(parts[2] ?? '')
-      const loops = parseInt(parts[3] ?? '', 10)
+      // 模式关键字（任意位置）：smooth = 平滑巡航（录像连贯）；hold = 逐帧驻留（PyMOL 经典）；缺省用面板开关的默认
+      const args = parts.slice(2)
+      const hasSmooth = args.some(a => a.toLowerCase() === 'smooth' || a.toLowerCase() === 'cruise')
+      const hasHold = args.some(a => a.toLowerCase() === 'hold' || a.toLowerCase() === 'classic')
+      const nums = args.filter(a => /^[\d.]+$/.test(a))
+      const secs = parseFloat(nums[0] ?? '')
+      const loops = parseInt(nums[1] ?? '', 10)
       const hasSecs = !isNaN(secs)
       const dur = hasSecs ? secs : 2.6
       const n = isNaN(loops) ? undefined : loops
+      const smooth = hasSmooth ? true : hasHold ? false : useMovieStore.getState().smooth
       const vs = useViewsStore.getState()
       const tl = useMovieStore.getState().timeline
       const byId = new Map(vs.bookmarks.map(b => [b.id, b] as const))
@@ -1975,14 +1988,22 @@ export function runCommand(raw: string): void {
       // 开始消息立即打印（playMovie 的 promise 在播放结束时才 resolve）
       if (useTl) {
         const totalMs = tl.reduce((s, e) => s + e.duration, 0)
-        ok(`movie 开始（时间轴模式）：${validTl} 个关键帧 · 单轮 ${(totalMs / 1000).toFixed(1)}s（逐段时长）× ${rounds} 轮——拖动/滚轮接管停止；record start 可同步录制`)
+        ok(`movie 开始（时间轴模式${smooth ? ' · 平滑巡航' : ' · 逐帧驻留'}）：${validTl} 个关键帧 · 单轮 ${(totalMs / 1000).toFixed(1)}s（逐段时长）× ${rounds} 轮——拖动/滚轮接管停止；record start 可同步录制`)
       } else {
-        ok(`movie 开始：${vs.bookmarks.length} 个视角 × ${rounds} 轮 × ${dur}s——拖动/滚轮可随时接管停止；record start 可同步录制`)
+        ok(`movie 开始（${smooth ? '平滑巡航：关键帧间速度连续，录像丝滑' : '逐帧驻留：每机位 easeInOut 停顿'}）：${vs.bookmarks.length} 个视角 × ${rounds} 轮 × ${dur}s——拖动/滚轮可随时接管停止；record start 可同步录制`)
       }
-      void playMovie({ duration: dur * 1000, loops: n, useTimeline: useTl }).then(r => {
+      void playMovie({ duration: dur * 1000, loops: n, useTimeline: useTl, smooth }).then(r => {
         if (!r.ok) err(r.error)
       })
       return
+    }
+    if (sub === 'smooth' || sub === 'cruise') {
+      useMovieStore.getState().setSmooth(true)
+      return ok('movie 默认模式已设为平滑巡航（关键帧间 Catmull-Rom 连续插值，速度不归零——录像连贯无顿挫）——movie play 使用此默认；movie hold 切回逐帧驻留')
+    }
+    if (sub === 'hold' || sub === 'classic') {
+      useMovieStore.getState().setSmooth(false)
+      return ok('movie 默认模式已设为逐帧驻留（每个关键帧 easeInOut 停顿——PyMOL 经典幻灯片式）——movie play 使用此默认；movie smooth 切回平滑巡航')
     }
     if (sub === 'stop' || sub === 'end') {
       stopMovie()
@@ -1994,12 +2015,12 @@ export function runCommand(raw: string): void {
     }
     const ms = useMovieStore.getState()
     if (ms.playing) {
-      return ok(`movie 播放中：段 ${ms.seg + 1}/${ms.total}（${ms.currentName ?? ''}），本段 ${(ms.duration / 1000).toFixed(1)}s × ${ms.loops} 轮`)
+      return ok(`movie 播放中${ms.smooth ? '（平滑巡航）' : '（逐帧驻留）'}：段 ${ms.seg + 1}/${ms.total}（${ms.currentName ?? ''}），本段 ${(ms.duration / 1000).toFixed(1)}s × ${ms.loops} 轮`)
     }
     const tlInfo = ms.timeline.length
       ? ` · 时间轴 ${ms.timeline.length} 段（movie play 走时间轴模式；movie edit 打开编排面板）`
       : ' · movie edit 打开时间轴编排面板'
-    return ok(`movie 未播放。已存 ${useViewsStore.getState().bookmarks.length} 个视角书签（上限 ${MAX_BOOKMARKS}）——movie play [秒/视角] [轮数] 启动${tlInfo}`)
+    return ok(`movie 未播放。已存 ${useViewsStore.getState().bookmarks.length} 个视角书签（上限 ${MAX_BOOKMARKS}）——movie play [smooth|hold] [秒/视角] [轮数] 启动；当前默认模式：${ms.smooth ? '平滑巡航（录像连贯）' : '逐帧驻留（PyMOL 经典）'}${tlInfo}`)
   }
 
   if (cmd === 'ensemble' || cmd === 'ens') {

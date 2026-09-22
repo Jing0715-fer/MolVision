@@ -44,6 +44,8 @@ interface DragState {
   sx: number
   sy: number
   moved: boolean
+  /** 拖拽链行的横向滚动容器（边缘自动滚动用；每链一行各自的 FadeEdge） */
+  scroller: HTMLElement | null
 }
 
 /** 拖拽预览渲染态（state：范围高亮 + 浮动提示） */
@@ -153,7 +155,26 @@ export function SequenceBar() {
   }
 
   // ———— 拖拽批量选取：window 级 pointermove/up + Esc 取消（早退前挂载，内部 null 守卫）————
+  // 含边缘自动滚动（r52 backlog）：指针贴近滚动容器左右边缘时 rAF 持续滚动，
+  // 滚动后用 elementFromPoint 重算指针下的格子（不依赖各浏览器对「滚动到指针下」的
+  // pointerover 派发差异）——长链拖到边缘无需松手分段
   useEffect(() => {
+    const EDGE = 56          // 边缘触发区宽度（px）
+    const MAX_SPEED = 20     // 最大滚动速度（px/帧 @60fps ≈ 1200px/s）
+    let autoDir = 0          // -1 左 · 0 停 · 1 右
+    let raf = 0
+    /** 用指针坐标直接命中格子并推进拖拽范围（自动滚动路径复用 handlePointerOver 语义） */
+    const applyCellAt = (x: number, y: number) => {
+      const d = dragRef.current
+      if (!d || !d.moved) return
+      const el = document.elementFromPoint(x, y)
+      const cell = el ? el.closest<HTMLElement>('button[data-res]') : null
+      if (!cell || Number(cell.dataset.chain) !== d.chainIdx) return
+      const k = Number(cell.dataset.k)
+      if (k === d.curPos) return
+      d.curPos = k
+      setDragView({ chainIdx: d.chainIdx, lo: Math.min(d.anchorPos, k), hi: Math.max(d.anchorPos, k), mode: d.mode, chainRes: d.chainRes })
+    }
     const move = (e: PointerEvent) => {
       const d = dragRef.current
       if (!d) return
@@ -165,11 +186,37 @@ export function SequenceBar() {
       if (d.moved && dragTipRef.current) {
         dragTipRef.current.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`
       }
+      // 边缘检测：进入触发区记录方向（rAF 循环负责持续滚动）；
+      // 横向滚动容器 = 拖拽链行自身的 FadeEdge（非外层纵向 body）
+      const body = d.scroller
+      if (d.moved && body) {
+        const r = body.getBoundingClientRect()
+        if (e.clientX < r.left + EDGE) autoDir = -1
+        else if (e.clientX > r.right - EDGE) autoDir = 1
+        else autoDir = 0
+      }
     }
+    const step = () => {
+      const d = dragRef.current
+      if (d && d.moved && autoDir !== 0) {
+        const body = d.scroller
+        if (body) {
+          const r = body.getBoundingClientRect()
+          const px = lastPtRef.current.x
+          // 侵入越深滚越快（线性渐变，最低保底 2px/帧）
+          const depth = autoDir < 0 ? Math.min(1, (r.left + EDGE - px) / EDGE) : Math.min(1, (px - (r.right - EDGE)) / EDGE)
+          body.scrollLeft += autoDir * Math.max(2, MAX_SPEED * Math.max(0, depth))
+          applyCellAt(px, lastPtRef.current.y)
+        }
+      }
+      raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
     const finish = (commit: boolean) => {
       const d = dragRef.current
       if (!d) return
       dragRef.current = null
+      autoDir = 0
       setDragView(null)
       if (!d.moved || !commit || !activeId || !data) return
       const lo = Math.min(d.anchorPos, d.curPos)
@@ -210,6 +257,7 @@ export function SequenceBar() {
     window.addEventListener('pointercancel', cancel)
     window.addEventListener('keydown', key, { capture: true })
     return () => {
+      cancelAnimationFrame(raf)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', cancel)
@@ -265,6 +313,7 @@ export function SequenceBar() {
       sx: e.clientX,
       sy: e.clientY,
       moved: false,
+      scroller: cell.closest<HTMLElement>('.mol-scroll-x'),
     }
   }
 

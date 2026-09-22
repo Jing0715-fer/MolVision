@@ -38,7 +38,7 @@ interface SessionData {
   activeIndex: number
   structures: SessionStructure[]
   settings: Settings
-  camera: { pos: [number, number, number]; target: [number, number, number] } | null
+  camera: { pos: [number, number, number]; target: [number, number, number]; up?: [number, number, number]; fov?: number } | null
   namedSelections: { name: string; structureIndex: number; expr: string | null; indices: number[] | null; count: number }[]
   /** SF 计算的密度图设置（恢复时自动重拉结构因子 + Worker 重算；文件来源不入档） */
   map?: SessionMap
@@ -102,6 +102,10 @@ export function saveSession(): boolean {
     ? {
         pos: eng.camera.position.toArray() as [number, number, number],
         target: eng.controls.target.toArray() as [number, number, number],
+        // r54：up/fov 入档——旧档无此二字段时恢复保持默认（向后兼容）；
+        // 否则滚动过的视角/变焦存档丢失，恢复后构图漂移
+        up: eng.camera.up.toArray().map(v => +v.toFixed(4)) as [number, number, number],
+        fov: +eng.camera.fov.toFixed(2),
       }
     : null
   const activeIndex = s.structures.findIndex(x => x.id === s.activeId)
@@ -226,16 +230,15 @@ export function restoreSession(): number {
     .filter((x): x is NonNullable<typeof x> => !!x)
   if (named.length) useMolStore.setState({ namedSelections: named })
   // 恢复相机（引擎挂载并 sync 完成后覆盖 fitView——欢迎页首发时引擎晚于结构就位）
+  // r54：up/fov 一并恢复（走 setCameraState——极点位姿豁免/俯仰限位/正交同步统一处理）
   if (data.camera) {
-    const { pos, target } = data.camera
+    const { pos, target, up, fov } = data.camera
     whenEngineReady(() => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const eng = engineRef.current
           if (!eng) return
-          eng.camera.position.set(pos[0], pos[1], pos[2])
-          eng.controls.target.set(target[0], target[1], target[2])
-          eng.controls.update()
+          eng.setCameraState({ pos, target, ...(up ? { up } : {}), ...(typeof fov === 'number' && fov > 5 && fov < 120 ? { fov } : {}) })
           useMolStore.getState().bumpVisual()
         })
       })

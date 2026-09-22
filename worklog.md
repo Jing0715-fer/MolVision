@@ -1941,3 +1941,30 @@ Stage Summary:
 - 架构决策：orbitExempt 显式豁免（登记制）优于推断式（位置出界即豁免）——墙的刚性不再受浮点噪声侵蚀；逐帧 controls.update 使 damping 惯性/autoRotate 从「设计存在」变为「实际生效」，顺带修复拖拽手感（有惯性尾巴）
 - 未解决与风险：①VLM 视觉终审持续 429（配额竞争），以 DOM/像素/引擎探针三层替代——真实预览效果待用户侧确认 ②旋转速度默认 2（~9°/s@60fps）偏温和，用户可调（0.5-12 滑杆）③拖拽边缘自动滚动仍是 r52 backlog ④弹窗体系 VLM 审计（r46 遗留）
 - 下一阶段建议：①VLM 配额恢复后补真实预览终审 ②序列条 compact mode（超大蛋白）③拖拽边缘自动滚动 ④agent 记忆可视化面板
+
+---
+Task ID: r54
+Agent: main
+Task: 用户反馈：恢复视角不平滑（疑似有重置操作，录像不连贯）——全面代码审查 + E2E + 新功能开发
+
+Work Log:
+- 【用户原话】「进行全面代码审查和e2e测试，继续打磨项目各种细节，开发更多新功能。恢复视角感觉并不是平缓过渡过去的，而是存在一个重置视角的操作？导致录像不连贯」
+- 【复现（引擎探针逐帧采样）】①纯 up 变化测试（roll 60° 后 animateCameraTo 回正）：t=4ms/532ms quat 完全不变（up 全程旧值）→ t=1098ms 结尾一帧内 60° 突变——「重置视角」实锤；②front→top 飞行：接近极点时（y=169→176）quat 从 -0.27 乱摆到 -0.63（lookAt 退化帧）+ 结尾 snap 双重不连贯
+- 【根因】camAnim 旧实现只插值 pos/target/fov，up「结尾一次性落位」（中途改 up 会绕 target 翻转的旧顾虑）；录像（canvas.captureStream 30fps）把每一帧不连续都录进去
+- 【修复 1：up 全程球面插值】camAnim 增 up0/upQ（Quaternion.setFromUnitVectors）；每帧 slerpQuaternions(identity→upQ, e) 应用到 up0 写回 camera.up + 每帧 camera.lookAt(target)——方向随插值位姿即时更新：结尾零跳变（slerp(1)=up1 精确落位）、极点过渡无退化帧（up 随高度协同旋转，视线与 up 永不平行）。验证：roll 60° 动画中途 up=[-0.14,0.98,0.15]（70% 插值态）结尾精确 [0,1,0]；front→top 飞行 up 平滑 [0,1,0]→[0,0.94,-0.34]→[0,0.04,-1]→[0,0,-1]
+- 【修复 2：飞行时限位豁免】updateOrbitClampDynamic 检测 camAnim/camPath 飞行中 → clamp 全程敞开（否则 controls.update 每帧把飞行中途极角钳回边界，穿越极区路径打架抖动）；用户输入取消飞行后重武装逻辑照常
+- 【新功能 1：movie 平滑巡航（Catmull-Rom 连续路径）】engine 新增 camPath 状态 + animateCameraPath(poses, segDurs)（首帧自动前置当前位姿无缝起飞）+ getCameraPathState；tick 巡航块：Hermite 基 Catmull-Rom（切线=(k[i+1]-k[i-1])/2，关键帧处速度连续不归零——区别于逐段 easeInOut 的驻留式幻灯片）+ up 逐段球面插值 + 全局 easeInOutCubic 柔和起停；movie.ts playMovie({smooth}) 单条路径贯穿全部关键帧（多轮 = 序列重复，末→首回绕段平滑衔接）；store 增 smooth/playingSmooth（localStorage v1 持久化，新环境默认 smooth=true 直接服务录像诉求，旧档尊重已存选择）；命令 movie play [smooth|hold] [秒 轮] / movie smooth|hold 设默认 + status/help/complete/agent-prompt/record 提示全链路更新；MovieTimeline 模式开关（Waves/Pause 图标 teal 激活态）+ MovieBadge 显示实际播放模式（playingSmooth）
+- 【新功能 2：会话相机 up/fov 入档】旧档只存 pos/target（roll 过的视角/变焦恢复即漂移）且恢复走裸字段写（绕过极点豁免/限位）；现在 save 含 up+fov，恢复走 setCameraState 统一管线。验证：roll 30°+fov32 保存 → 刷新恢复 up=[-0.36,0.89,0.3] fov=32 精确还原
+- 【新功能 3：视角过渡手感设置】Settings.camTransition（quick 350ms/normal 650ms/cinematic 1200ms，defaultSettings 自动兼容旧会话）；animateCameraTo dur 参数化（缺省查 CAM_TRANSITION_MS）；ScenePanel 交互与动画区新增 Timer 图标三档 pill 单选组（role=radiogroup）+ set transition quick|normal|cinematic 命令 + help/complete/agent prompt 更新。验证：quick 相机 ~626ms 停止变化 vs cinematic ~1252ms（2fps 采样粒度内清晰区分）
+- 【新功能 4：序列条拖拽边缘自动滚动（r52 backlog 清账）】拖拽 pointermove 进入滚动容器左右 56px 边缘区 → rAF 循环按侵入深度线性加速滚动（2-20px/帧）；滚动后 elementFromPoint 直接命中格子推进范围（不依赖浏览器对「滚动到指针下」的 pointerover 派发差异）；关键修正：滚动容器是链行自身的 .mol-scroll-x（FadeEdge 内），非外层 bodyRef 纵向容器——DragState 增 scroller 字段 pointerdown 时 closest 捕获（多链各行独立）。验证：拖到右缘停住 2s → scrollLeft 0→90、范围实时扩到「A 1–68」、松手提交 81 格选中
+- 【代码审查发现并修复】①movie store 多处 persistTimeline 落 smooth 字段（写入路径全覆盖）②接管日志段号改用 store.seg（旧实现 path 清空后读到 0/3）③MovieTimeline 控制行 h-8→min-h-8 flex-wrap（新增模式按钮后窄屏换行，390px 实测 rowH 51px 正常换行）
+- 【E2E 全量（agent-browser DOM+数值探针）】①up-slerp 数值断言（中途插值态+结尾精确）②极点飞行 up 轨迹平滑 ③平滑巡航全流程：badge「movie · 平滑巡航 · 机位A 段 1/5」+ pathState seg/progress 递增 + 完成日志 + pointerdown 接管即停（cancelCount 0→1 同帧、path cleared、badge 消失）④经典 hold 模式回归（badge 无 smooth 前缀逐段推进）⑤MovieTimeline 模式开关点击→持久化 localStorage.smooth=true→按钮 teal 重渲⑥record start 提示含平滑巡航推荐 + record stop 导出 0.2MB WebM（录制+巡航全链路）⑦会话相机 up/fov 跨刷新还原 ⑧Shift+数字书签恢复落位精确（up/pos 与书签一致）⑨r53 回归：view top phi=0.00° 精确、S 键自旋起停正常 ⑩390px 时间轴适配（366px 宽度内、控制行换行）⑪lint 0/0 + tsc src 0 错 + console/dev.log 无运行时错误
+- 【沙箱经验】①HMR 模块重评估会替换 zustand 单例（store 归零）且 MolViewer effect 重挂导致 engine 重建——跨 eval 测试需先打 __id 身份标记甄别；偶发空会话覆盖是 dev-only 现象（防脱节守卫在旧 store 已空时无法区分）②agent-browser set viewport <w> <h> 设置视口（390px 响应式实测可用）；`viewport` 不是顶层命令③合成 pointerdown 必须带 pointerType:'mouse'（handlePointerDown 过滤）且 dispatch 在 cell 上（事件委托读 target.closest）④测试中 engine 直改（turnCamera/setCameraState 相机类）安全无 store 竞态，settings 类必须走真实 UI 路径（r53 经验仍然有效）
+
+Stage Summary:
+- 用户「恢复视角不平滑/有重置操作/录像不连贯」三点全部账清：根因 = camAnim up 向量结尾一次性落位（单帧 60° 突变 = 「重置」观感）+ 极点 lookAt 退化乱摆 + 逐段驻留式巡航每关键帧速度归零。修复后书签/正交视角/场景恢复全程六自由度连续插值（pos/target/fov/up 球面 slerp + 逐帧 lookAt），录像无任何单帧跳变
+- movie 平滑巡航（Catmull-Rom 关键帧连续路径 + 速度不归零 + 轮间平滑回绕 + 新环境默认开启）是本轮最大新功能——直接服务录像连贯诉求；record start 提示引导发现
+- 附带清账：会话相机 up/fov 持久化（滚动视角不再漂移）、序列条拖拽边缘自动滚动（r52 backlog）、视角过渡手感三档（quick/normal/cinematic，面板+命令双入口）
+- 架构决策：①飞行中俯仰限位全程豁免（动画独占轨迹，用户输入即取消+重武装）②巡航路径首帧自动前置当前位姿（调用方免传、起飞无缝）③playingSmooth 与 smooth 分离（badge 显示实际播放模式 vs 持久化默认）④edge 自动滚动用 elementFromPoint 重算命中（浏览器无关确定性行为）
+- 未解决与风险：①VLM 视觉终审持续 429（本轮以 DOM computed style + 数值探针 + 截图存档三层替代）②SwiftShader ~2fps 使动画时长测量粒度 ±500ms（quick 626ms/cinematic 1252ms 的 2 倍差在粒度内可辨）③序列条 compact mode（超大蛋白）仍是 backlog
+- 下一阶段建议：①VLM 配额恢复后补真实预览视觉终审 ②序列条 compact mode ③agent 记忆可视化面板 ④弹窗体系 VLM 审计（r46 遗留）

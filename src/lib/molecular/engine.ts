@@ -120,6 +120,15 @@ const UP_VECTOR = new THREE.Vector3(0, 1, 0)
 const ORBIT_CLAMP_RAD = THREE.MathUtils.degToRad(12)
 /** 俯仰限位动态评估复用向量（每帧分配避免） */
 const TMP_ORBIT_V = new THREE.Vector3()
+const TMP_Q_IDENTITY = new THREE.Quaternion()
+const TMP_Q_SLERP = new THREE.Quaternion()
+const TMP_V_UP = new THREE.Vector3()
+/** 视角过渡手感 → 默认飞行时长（ms）；camTransition 设置驱动（ScenePanel 可调） */
+const CAM_TRANSITION_MS: Record<'quick' | 'normal' | 'cinematic', number> = {
+  quick: 350,
+  normal: 650,
+  cinematic: 1200,
+}
 /** superpose 空结果常量（失败时展开用） */
 const NULL_RESULT: SuperposeResult = {
   ok: false, error: '', mobileChain: '?', refChain: '?', matched: 0,
@@ -283,13 +292,27 @@ export class MolEngine {
   /** rock 摇摆：基准偏移与相位 */
   private rockBase: THREE.Vector3 | null = null
   private rockT = 0
-  /** 视角书签平滑过渡（p=相机位置插值；g=controls.target 插值；fov 线性；up 结尾落位） */
+  /** 视角书签平滑过渡（p=相机位置插值；g=controls.target 插值；fov 线性；
+   *  up 全程球面插值——结尾零跳变、极点过渡无退化帧） */
   private camAnim: {
     t0: number; dur: number
     p0: THREE.Vector3; p1: THREE.Vector3
     g0: THREE.Vector3; g1: THREE.Vector3
     fov0: number; fov1: number
-    up1: THREE.Vector3
+    up0: THREE.Vector3; up1: THREE.Vector3
+    /** up0→up1 旋转（up 无变化时为 null，跳过插值工作） */
+    upQ: THREE.Quaternion | null
+  } | null = null
+  /** 相机巡航路径（movie 平滑模式）：关键帧 Catmull-Rom 位置/目标插值 + up 逐段球面插值，
+   *  关键帧处速度连续（无逐帧驻留顿挫，录像丝滑）；全局 easeInOutCubic 柔和起停 */
+  private camPath: {
+    t0: number
+    /** 段累计时长边界（ms；cum.length = 段数） */
+    cum: number[]
+    keys: { p: THREE.Vector3; g: THREE.Vector3; up: THREE.Vector3; fov: number }[]
+    /** 每段 up 旋转（keys[i]→keys[i+1]；近平行为 null） */
+    upQ: (THREE.Quaternion | null)[]
+    total: number
   } | null = null
   /** 用户中断相机动画计数（pointerdown/wheel 时递增；movie 序列播放器用它检测接管） */
   private camAnimCancelCount = 0
@@ -509,13 +532,75 @@ export class MolEngine {
         this.camera.fov = a.fov0 + (a.fov1 - a.fov0) * e
         this.camera.updateProjectionMatrix()
       }
+      // up 球面插值 + 逐帧 lookAt：方向随插值位姿即时更新——
+      // 结尾零跳变（旧实现结尾一次性换 up = 录像中可见的「重置视角」突变），
+      // 极点过渡无退化帧（旧实现 up 全程不变，接近 top/bottom 时 lookAt 退化产生方向乱摆）
+      if (a.upQ) {
+        TMP_Q_SLERP.slerpQuaternions(TMP_Q_IDENTITY, a.upQ, e)
+        this.camera.up.copy(a.up0).applyQuaternion(TMP_Q_SLERP).normalize()
+      }
+      this.camera.lookAt(this.controls.target)
       if (this.activeCamera === this.orthoCamera) this.updateOrthoFrustum()
       if (k >= 1) {
-        // 落位：up 向量（中途改会绕 target 翻转，结尾一次性应用）
+        // 落位：up 精确归位（slerp(1) 已到位，此处兜底浮点误差）+ controls 同步球坐标
         this.camera.up.copy(a.up1)
         this.orthoCamera.up.copy(a.up1)
         this.controls.update()
         this.camAnim = null
+      }
+    } else if (this.camPath) {
+      // 巡航路径：关键帧间 Catmull-Rom（速度连续，无驻留）+ 全局 easeInOutCubic 柔和起停
+      const a = this.camPath
+      const s = Math.min(1, (now - a.t0) / a.total)
+      const se = s < 0.5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2
+      const tMs = se * a.total
+      // 定位当前段 i（cum[i-1] ≤ tMs < cum[i]；末尾溢出钳到最后一段）
+      let i = 0
+      while (i < a.cum.length - 1 && tMs >= a.cum[i]) i++
+      const segStart = i === 0 ? 0 : a.cum[i - 1]
+      const f = Math.min(1, (tMs - segStart) / Math.max(1, a.cum[i] - segStart))
+      const k0 = a.keys[i], k1 = a.keys[i + 1]
+      const km = a.keys[i - 1] ?? k0    // 端点钳位（首段切线参考自身）
+      const kp = a.keys[i + 2] ?? k1    // 尾段同理
+      // Catmull-Rom（Hermite 基）：过全部关键帧，切线 = (k[i+1]-k[i-1])/2，速度在关键帧处连续
+      const f2 = f * f, f3 = f2 * f
+      const h00 = 2 * f3 - 3 * f2 + 1, h10 = f3 - 2 * f2 + f, h01 = -2 * f3 + 3 * f2, h11 = f3 - f2
+      this.camera.position.set(
+        h00 * k0.p.x + 0.5 * h10 * (k1.p.x - km.p.x) + h01 * k1.p.x + 0.5 * h11 * (kp.p.x - k0.p.x),
+        h00 * k0.p.y + 0.5 * h10 * (k1.p.y - km.p.y) + h01 * k1.p.y + 0.5 * h11 * (kp.p.y - k0.p.y),
+        h00 * k0.p.z + 0.5 * h10 * (k1.p.z - km.p.z) + h01 * k1.p.z + 0.5 * h11 * (kp.p.z - k0.p.z),
+      )
+      this.controls.target.set(
+        h00 * k0.g.x + 0.5 * h10 * (k1.g.x - km.g.x) + h01 * k1.g.x + 0.5 * h11 * (kp.g.x - k0.g.x),
+        h00 * k0.g.y + 0.5 * h10 * (k1.g.y - km.g.y) + h01 * k1.g.y + 0.5 * h11 * (kp.g.y - k0.g.y),
+        h00 * k0.g.z + 0.5 * h10 * (k1.g.z - km.g.z) + h01 * k1.g.z + 0.5 * h11 * (kp.g.z - k0.g.z),
+      )
+      if (Math.abs(k1.fov - k0.fov) > 1e-3) {
+        this.camera.fov = k0.fov + (k1.fov - k0.fov) * f
+        this.camera.updateProjectionMatrix()
+      }
+      const uq = a.upQ[i]
+      if (uq) {
+        TMP_Q_SLERP.slerpQuaternions(TMP_Q_IDENTITY, uq, f)
+        this.camera.up.copy(k0.up).applyQuaternion(TMP_Q_SLERP).normalize()
+      } else {
+        this.camera.up.copy(k0.up)
+      }
+      this.camera.lookAt(this.controls.target)
+      if (this.activeCamera === this.orthoCamera) this.updateOrthoFrustum()
+      if (s >= 1) {
+        const last = a.keys[a.keys.length - 1]
+        this.camera.position.copy(last.p)
+        this.controls.target.copy(last.g)
+        this.camera.up.copy(last.up)
+        this.orthoCamera.up.copy(last.up)
+        if (Math.abs(this.camera.fov - last.fov) > 1e-3) {
+          this.camera.fov = last.fov
+          this.camera.updateProjectionMatrix()
+        }
+        this.camera.lookAt(this.controls.target)
+        this.controls.update()
+        this.camPath = null
       }
     }
     // rock 摇摆：绕 target 上下轴正弦摆动（用户拖动时以新视角为基准）
@@ -1229,17 +1314,19 @@ export class MolEngine {
 
   private onPointerDown = (e: PointerEvent) => {
     this.downPos = { x: e.clientX, y: e.clientY, t: performance.now(), button: e.button }
-    // 用户接管相机：取消书签过渡动画
-    if (this.camAnim) this.camAnimCancelCount++
+    // 用户接管相机：取消书签过渡/巡航动画
+    if (this.camAnim || this.camPath) this.camAnimCancelCount++
     this.camAnim = null
+    this.camPath = null
     // rock 摇摆中用户拖动：以拖动后视角为新基准
     if (this.rockBase) this.rockBase = null
   }
 
-  /** 滚轮缩放同样取消书签过渡（passive：不阻断 OrbitControls） */
+  /** 滚轮缩放同样取消书签过渡/巡航（passive：不阻断 OrbitControls） */
   private onCancelCamAnim = () => {
-    if (this.camAnim) this.camAnimCancelCount++
+    if (this.camAnim || this.camPath) this.camAnimCancelCount++
     this.camAnim = null
+    this.camPath = null
   }
 
   /** movie 序列播放器用：用户中断相机动画的累计次数 */
@@ -3270,6 +3357,16 @@ export class MolEngine {
       this.orbitExempt = false
       return
     }
+    // 飞行中（书签过渡/巡航路径）：动画完全接管轨迹——限位全程啠开，
+    // 免得 controls.update 每帧把飞行中途的极角钳回边界（穿越极区的路径互相打架产生抖动）；
+    // 用户输入会取消飞行（cancel 计数递增）且重武装逻辑因 camAnim 非空不会触发——安全
+    if (this.camAnim || this.camPath) {
+      if (c.minPolarAngle !== 0 || c.maxPolarAngle !== Math.PI) {
+        c.minPolarAngle = 0
+        c.maxPolarAngle = Math.PI
+      }
+      return
+    }
     const off = TMP_ORBIT_V.subVectors(this.activeCamera.position, c.target)
     const r = off.length()
     if (r < 1e-6) return
@@ -3500,6 +3597,9 @@ export class MolEngine {
 
   /** 相机状态导入（set_view；JSON 文本解析后调用） */
   setCameraState(s: { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }) {
+    // 显式相机操作接管：停掉飞行中动画
+    this.camAnim = null
+    this.camPath = null
     if (Array.isArray(s.pos) && s.pos.length === 3) this.activeCamera.position.fromArray(s.pos)
     if (Array.isArray(s.target) && s.target.length === 3) this.controls.target.fromArray(s.target)
     if (Array.isArray(s.up) && s.up.length === 3) {
@@ -3592,38 +3692,102 @@ export class MolEngine {
     return true
   }
 
-  /** 视角书签平滑过渡：easeInOutCubic 插值（pos/target/fov），up 在结尾落位；
-   *  spin/rock 开启或参数非法时直接落位（每帧改相机的模式与过渡动画互相打架） */
-  animateCameraTo(s: { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }, dur = 650) {
+  /** 视角书签平滑过渡：easeInOutCubic 插值 pos/target/fov，up 全程球面插值（结尾零跳变）；
+   *  spin/rock 开启或参数非法时直接落位（每帧改相机的模式与过渡动画互相打架）；
+   *  dur 缺省时按 camTransition 手感设置（quick 350 · normal 650 · cinematic 1200ms） */
+  animateCameraTo(s: { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }, dur?: number) {
     const valid = Array.isArray(s.pos) && s.pos.length === 3 && Array.isArray(s.target) && s.target.length === 3
     if (!valid || this.settings?.spin || this.settings?.rock) {
       this.setCameraState(s)
       return
     }
+    const d = dur ?? CAM_TRANSITION_MS[this.settings?.camTransition ?? 'normal']
     // 投影模式先行切换（正交/透视过渡期间保持目标模式）
     if (typeof s.ortho === 'boolean' && this.settings && s.ortho !== this.settings.ortho) {
       useMolStore.getState().updateSettings({ ortho: s.ortho })
     }
     const fov1 = typeof s.fov === 'number' && s.fov > 5 && s.fov < 120 ? s.fov : this.camera.fov
+    const up0 = this.camera.up.clone().normalize()
     const up1 = Array.isArray(s.up) && s.up.length === 3
       ? new THREE.Vector3().fromArray(s.up).normalize()
-      : this.camera.up.clone()
+      : up0.clone()
+    // up0→up1 旋转（无变化时 null：跳过每帧插值）
+    const upQ = Math.abs(up0.dot(up1)) < 0.99999
+      ? new THREE.Quaternion().setFromUnitVectors(up0, up1)
+      : null
     // 目标极点位姿（view top/bottom / 极点书签）→ 豁免俯仰限位（动画全程啠开，精确落位）
     if (Array.isArray(s.pos) && Array.isArray(s.target)) {
       this.maybeExemptOrbit((s.pos as number[])[0], (s.pos as number[])[1], (s.pos as number[])[2],
         (s.target as number[])[0], (s.target as number[])[1], (s.target as number[])[2])
     }
+    this.camPath = null
     this.camAnim = {
       t0: performance.now(),
-      dur: Math.max(120, dur),
+      dur: Math.max(120, d),
       p0: this.camera.position.clone(),
       p1: new THREE.Vector3().fromArray(s.pos as number[]),
       g0: this.controls.target.clone(),
       g1: new THREE.Vector3().fromArray(s.target as number[]),
       fov0: this.camera.fov,
       fov1,
+      up0,
       up1,
+      upQ,
     }
+  }
+
+  /** 相机巡航路径（movie 平滑模式）：关键帧序列 Catmull-Rom 连续插值——
+   *  关键帧处速度不归零（区别于逐段 easeInOut 的驻留式巡航），录像连贯无顿挫；
+   *  up 逐段球面插值 + 每帧 lookAt，路径穿越极区也无退化帧；全局 easeInOutCubic 柔和起停。
+   *  首帧自动取当前相机位姿（无缝起飞），poses 为全部要途经的关键帧；
+   *  @param segDurs 每段时长 ms（段 i = 「起飞/上一关键帧 → poses[i]」，segDurs.length = poses.length） */
+  animateCameraPath(poses: { pos: number[]; target: number[]; up?: number[]; fov?: number }[], segDurs: number[]) {
+    if (poses.length < 2 || this.settings?.spin || this.settings?.rock) return false
+    for (const p of poses) {
+      if (!Array.isArray(p.pos) || p.pos.length !== 3 || !Array.isArray(p.target) || p.target.length !== 3) return false
+    }
+    // 首帧自动前置当前位姿：起飞无缝，poses 全部关键帧都会被途经
+    const keys = [
+      { p: this.camera.position.clone(), g: this.controls.target.clone(), up: this.camera.up.clone().normalize(), fov: this.camera.fov },
+      ...poses.map(p => ({
+        p: new THREE.Vector3().fromArray(p.pos),
+        g: new THREE.Vector3().fromArray(p.target),
+        up: Array.isArray(p.up) && p.up.length === 3
+          ? new THREE.Vector3().fromArray(p.up).normalize()
+          : UP_VECTOR.clone(),
+        fov: typeof p.fov === 'number' && p.fov > 5 && p.fov < 120 ? p.fov : this.camera.fov,
+      })),
+    ]
+    const nSeg = keys.length - 1
+    const cum: number[] = []
+    let acc = 0
+    for (let i = 0; i < nSeg; i++) {
+      acc += Math.max(120, segDurs[i] ?? 1500)
+      cum.push(acc)
+    }
+    const upQ: (THREE.Quaternion | null)[] = []
+    for (let i = 0; i < nSeg; i++) {
+      upQ.push(Math.abs(keys[i].up.dot(keys[i + 1].up)) < 0.99999
+        ? new THREE.Quaternion().setFromUnitVectors(keys[i].up, keys[i + 1].up)
+        : null)
+    }
+    // 目标含极点位姿（top/bottom 机位）→ 豁免俯仰限位（路径全程接管）
+    for (const k of keys) this.maybeExemptOrbit(k.p.x, k.p.y, k.p.z, k.g.x, k.g.y, k.g.z)
+    this.camAnim = null
+    this.camPath = { t0: performance.now(), cum, keys, upQ, total: acc }
+    return true
+  }
+
+  /** 巡航路径状态（UI 同步当前段/进度）：非巡航中返回 null */
+  getCameraPathState(): { seg: number; total: number; progress: number } | null {
+    if (!this.camPath) return null
+    const a = this.camPath
+    const s = Math.min(1, (performance.now() - a.t0) / a.total)
+    const se = s < 0.5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2
+    const tMs = se * a.total
+    let i = 0
+    while (i < a.cum.length - 1 && tMs >= a.cum[i]) i++
+    return { seg: i, total: a.cum.length, progress: s }
   }
 
   /** fitView 取点抽出（orient 复用） */

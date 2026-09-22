@@ -32,6 +32,11 @@ export interface MovieState {
   loops: number
   /** 当前段书签（UI 显示名称用） */
   currentName: string | null
+  /** 本次播放的实际模式（badge 显示用）：true = 平滑巡航中 */
+  playingSmooth: boolean
+  /** 播放模式默认：true = 平滑巡航（关键帧间速度连续，录像丝滑）；false = 逐帧驻留（每关键帧停顿，PyMOL 经典） */
+  smooth: boolean
+  setSmooth: (on: boolean) => void
   // ---------- 时间轴编辑（持久化） ----------
   timeline: TimelineEntry[]
   timelineOpen: boolean
@@ -53,15 +58,21 @@ export interface MovieState {
   stop: () => void
 }
 
-function persistTimeline(timeline: TimelineEntry[], loopsEdit: number) {
-  try { localStorage.setItem(TL_KEY, JSON.stringify({ v: 1, timeline, loops: loopsEdit })) } catch { /* 容量满：静默 */ }
+function persistTimeline(timeline: TimelineEntry[], loopsEdit: number, smooth?: boolean) {
+  try {
+    localStorage.setItem(TL_KEY, JSON.stringify({
+      v: 1, timeline, loops: loopsEdit,
+      smooth: smooth ?? useMovieStore.getState().smooth,
+    }))
+  } catch { /* 容量满：静默 */ }
 }
 
-function loadTimeline(): { timeline: TimelineEntry[]; loopsEdit: number } {
+function loadTimeline(): { timeline: TimelineEntry[]; loopsEdit: number; smooth: boolean } {
   try {
     const raw = localStorage.getItem(TL_KEY)
-    if (!raw) return { timeline: [], loopsEdit: 1 }
-    const obj = JSON.parse(raw) as { timeline?: unknown; loops?: unknown }
+    // 无存档的新环境默认平滑巡航（录像连贯）；旧存档无 smooth 字段 → 保持经典驻留（尊重既有选择）
+    if (!raw) return { timeline: [], loopsEdit: 1, smooth: true }
+    const obj = JSON.parse(raw) as { timeline?: unknown; loops?: unknown; smooth?: unknown }
     const timeline: TimelineEntry[] = []
     if (Array.isArray(obj.timeline)) {
       for (const x of obj.timeline) {
@@ -72,9 +83,9 @@ function loadTimeline(): { timeline: TimelineEntry[]; loopsEdit: number } {
       }
     }
     const loopsEdit = typeof obj.loops === 'number' ? Math.max(1, Math.min(10, Math.round(obj.loops))) : 1
-    return { timeline, loopsEdit }
+    return { timeline, loopsEdit, smooth: typeof obj.smooth === 'boolean' ? obj.smooth : true }
   } catch {
-    return { timeline: [], loopsEdit: 1 }
+    return { timeline: [], loopsEdit: 1, smooth: true }
   }
 }
 
@@ -85,15 +96,22 @@ export const useMovieStore = create<MovieState>((set, get) => ({
   duration: 2600,
   loops: 1,
   currentName: null,
+  playingSmooth: false,
+  smooth: false,
   timeline: [],
   timelineOpen: false,
   loopsEdit: 1,
   hydrated: false,
 
+  setSmooth: on => {
+    set({ smooth: on === true })
+    persistTimeline(get().timeline, get().loopsEdit, on === true)
+  },
+
   hydrate: () => {
     if (get().hydrated || typeof window === 'undefined') return
-    const { timeline, loopsEdit } = loadTimeline()
-    set({ timeline, loopsEdit, hydrated: true })
+    const { timeline, loopsEdit, smooth } = loadTimeline()
+    set({ timeline, loopsEdit, smooth, hydrated: true })
   },
 
   setTimelineOpen: open => set({ timelineOpen: open }),
@@ -144,7 +162,7 @@ export const useMovieStore = create<MovieState>((set, get) => ({
     set({ timeline: [] })
   },
 
-  stop: () => set({ playing: false, currentName: null }),
+  stop: () => set({ playing: false, currentName: null, playingSmooth: false }),
 }))
 
 let running = false
@@ -160,11 +178,14 @@ interface PlaySeg {
  * 启动 movie 序列播放（异步；重复调用会被运行中守卫拒绝）。
  * @param opts.useTimeline true = 走编辑的时间轴（每段独立时长 + loopsEdit 轮数）；
  *                         false/缺省 = 全部书签 × 统一时长（经典模式）
+ * @param opts.smooth true = 平滑巡航（关键帧间 Catmull-Rom 连续插值，速度不归零——录像连贯）；
+ *                   false/缺省 = 逐帧驻留（每关键帧 easeInOut 停顿，PyMOL 经典）
  */
 export async function playMovie(opts: {
   duration?: number
   loops?: number
   useTimeline?: boolean
+  smooth?: boolean
 } = {}): Promise<{ ok: true; views: number; segs: number } | { ok: false; error: string }> {
   if (running) return { ok: false, error: 'movie 已在播放中（movie stop 停止）' }
   const useTimeline = opts.useTimeline === true
@@ -196,10 +217,46 @@ export async function playMovie(opts: {
   const total = segs.length * rounds
   running = true
   useMovieStore.getState().stop() // 清残留态
-  useMovieStore.setState({ playing: true, seg: 0, total, duration: segs[0].duration, loops: rounds, currentName: segs[0].view.name ?? null })
+  useMovieStore.setState({ playing: true, seg: 0, total, duration: segs[0].duration, loops: rounds, currentName: segs[0].view.name ?? null, playingSmooth: opts.smooth === true })
 
-  let seg = 0
   try {
+    // —— 平滑巡航：单条 Catmull-Rom 路径贯穿全部关键帧（含轮间回绕），速度连续无驻留 ——
+    if (opts.smooth === true) {
+      const allPoses = segs.map(s => s.view.camera)
+      const allDurs = segs.map(s => s.duration)
+      for (let r = 1; r < rounds; r++) {
+        allPoses.push(...segs.map(s => s.view.camera))
+        allDurs.push(...segs.map(s => s.duration))
+      }
+      const started = eng.animateCameraPath(allPoses, allDurs)
+      if (!started) {
+        return { ok: false, error: '无法启动平滑巡航（相机被程序控制或关键帧无效）' }
+      }
+      const totalMs = allDurs.reduce((a, b) => a + b, 0)
+      const cancelBase = eng.cameraCancelCount()
+      const deadline = performance.now() + totalMs + 500
+      while (performance.now() < deadline) {
+        if (!useMovieStore.getState().playing) return { ok: true, views: bookmarks.length, segs: segs.length }
+        if (eng.cameraCancelCount() > cancelBase) {
+          const segNow = useMovieStore.getState().seg
+          useMovieStore.setState({ playing: false, currentName: null })
+          useMolStore.getState().appendLog('out', `movie：用户接管相机，平滑巡航提前结束（${segNow + 1}/${total} 段）`)
+          return { ok: true, views: bookmarks.length, segs: segs.length }
+        }
+        // UI 同步：当前段目的地 = segs[seg % segs.length]
+        const ps = eng.getCameraPathState()
+        if (ps) {
+          const dest = segs[ps.seg % segs.length]
+          useMovieStore.setState({ seg: ps.seg, currentName: dest.view.name, duration: dest.duration })
+        }
+        await sleep(120)
+      }
+      useMolStore.getState().appendLog('out', `movie 平滑巡航完成：${segs.length} 帧 × ${rounds} 轮（Catmull-Rom 连续路径）`)
+      return { ok: true, views: bookmarks.length, segs: segs.length }
+    }
+
+    // —— 经典逐段播放 ——
+    let seg = 0
     for (let round = 0; round < rounds; round++) {
       for (let i = 0; i < segs.length; i++) {
         if (!useMovieStore.getState().playing) return { ok: true, views: bookmarks.length, segs: segs.length }
@@ -222,11 +279,11 @@ export async function playMovie(opts: {
       }
     }
     useMolStore.getState().appendLog('out', `movie 播放完成：${segs.length} 段 × ${rounds} 轮`)
+    return { ok: true, views: bookmarks.length, segs: segs.length }
   } finally {
     running = false
-    useMovieStore.setState({ playing: false, currentName: null })
+    useMovieStore.setState({ playing: false, currentName: null, playingSmooth: false })
   }
-  return { ok: true, views: bookmarks.length, segs: segs.length }
 }
 
 /** 停止序列播放（用户 UI / movie stop 命令） */

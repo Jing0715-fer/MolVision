@@ -146,6 +146,8 @@ export interface Settings {
   rock: boolean
   /** 俯仰限位：拖拽旋转限制在 ±78° 仰角内（不过顶/不过底，防无限制翻滚；view top/bottom 轴视角不受影响） */
   orbitClamp: boolean
+  /** 视角过渡手感：quick=敏锐 350ms · normal=标准 650ms · cinematic=电影 1200ms（书签/正交视角/场景恢复的平滑飞行时长） */
+  camTransition: 'quick' | 'normal' | 'cinematic'
   slab: boolean
   slabThickness: number
   /** 切层中心沿视线的偏移（Å；0 = 环绕目标处，正 = 远离相机） */
@@ -210,6 +212,7 @@ export function defaultSettings(): Settings {
     spinSpeed: 2,
     rock: false,
     orbitClamp: true,
+    camTransition: 'normal',
     slab: false,
     slabThickness: 18,
     slabOffset: 0,

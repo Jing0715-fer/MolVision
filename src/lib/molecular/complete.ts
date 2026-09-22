@@ -183,6 +183,7 @@ const REGISTRY: CmdDef[] = [
       { insert: 'fog_strength', kind: 'value', detail: '雾强度 0-1' },
       { insert: 'fov', kind: 'value', detail: '视场角 10-100' },
       { insert: 'spin_speed', kind: 'value', detail: '转速 0.5-20' },
+      { insert: 'transition', kind: 'value', detail: '过渡手感 quick/normal/cinematic' },
       { insert: 'quality', kind: 'value', detail: 'low/medium/high' },
       { insert: 'stereo', kind: 'value', detail: '立体 on/off' },
       { insert: 'axes', kind: 'value', detail: '罗盘 on/off' },
@@ -346,9 +347,14 @@ const REGISTRY: CmdDef[] = [
   {
     names: ['movie'],
     args: pos => (pos === 1 ? [
-      { insert: 'play', kind: 'sub', detail: '播放' },
+      { insert: 'play', kind: 'sub', detail: '播放 [smooth|hold] [秒 轮]' },
       { insert: 'stop', kind: 'sub', detail: '停止' },
+      { insert: 'smooth', kind: 'sub', detail: '默认平滑巡航（录像连贯）' },
+      { insert: 'hold', kind: 'sub', detail: '默认逐帧驻留（经典）' },
       { insert: 'edit', kind: 'sub', detail: '时间轴编排' },
+    ] : pos === 2 ? [
+      { insert: 'smooth', kind: 'value', detail: '平滑巡航：连续路径' },
+      { insert: 'hold', kind: 'value', detail: '逐帧驻留：经典' },
     ] : null),
   },
   {

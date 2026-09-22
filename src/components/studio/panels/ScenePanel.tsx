@@ -2,7 +2,7 @@
 
 // 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤/会话管理
 import { useRef, useState } from 'react'
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d, Activity, PenLine, SquareSplitHorizontal, Contrast } from 'lucide-react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d, Activity, PenLine, SquareSplitHorizontal, Contrast, Timer } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
@@ -178,6 +178,35 @@ export function ScenePanel() {
             ? '开启：拖拽旋转限制在 ±78° 仰角内——不过顶/不过底，防止无限制翻滚导致方向迷失；view top/bottom 轴视角不受影响。'
             : '关闭：自由全向翻转（PyMOL 行为）——可越过顶/底极点连续翻滚。'}
         </p>
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Timer className="h-3.5 w-3.5 text-rose-400" /> 视角过渡手感
+            </span>
+            <div className="flex shrink-0 rounded-full border border-border/60 bg-background/60 p-0.5" role="radiogroup" aria-label="视角过渡手感">
+              {(([['quick', '敏锐'], ['normal', '标准'], ['cinematic', '电影']] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  role="radio"
+                  aria-checked={settings.camTransition === k}
+                  onClick={() => updateSettings({ camTransition: k })}
+                  className={cn(
+                    'rounded-full px-2.5 py-1 text-[10px] font-medium transition',
+                    settings.camTransition === k
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                  title={k === 'quick' ? '书签/正交视角恢复 0.35s 敏锐直达' : k === 'normal' ? '0.65s 标准平滑飞行' : '1.2s 电影级缓动——录像慢镜头感'}
+                >
+                  {label}
+                </button>
+              )))}
+            </div>
+          </div>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground/70">
+            视角书签 / 正交视角 / 场景恢复的平滑飞行时长：敏锐 0.35s · 标准 0.65s · 电影 1.2s（movie 时间轴逐段时长不受影响）。
+          </p>
+        </div>
       </div>
 
       <SectionTitle>灯光与渲染</SectionTitle>

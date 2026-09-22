@@ -3,10 +3,11 @@
 // movie 时间轴编排面板（视口底部）：视角书签关键帧的可视化编排
 // - 关键帧卡片（缩略图 + 名称 + 时长徽章）横向排列，箭头连接
 // - 拖拽排序（pointer capture + 插入指示条）；点选卡片 → 底部控制行编辑时长/预览/删除
+// - 播放模式开关：平滑巡航（Catmull-Rom 连续路径，录像连贯）/ 逐帧驻留（PyMOL 经典）
 // - 播放走时间轴模式（逐段独立时长）；轮数可调；localStorage 持久化（molvision-movie-v1）
 // 打开时 EnsembleBar / 快速风格按钮上移让位（MolViewer 按 bottom-[196px] 处理）
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Eye, Film, Minus, Pause, Play, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import { ChevronRight, Eye, Film, Minus, Pause, Play, Plus, RefreshCw, Trash2, Waves, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { playMovie, stopMovie, useMovieStore, type TimelineEntry } from '@/lib/molecular/movie'
 import { useViewsStore, type ViewBookmark } from '@/lib/molecular/views-store'
@@ -24,6 +25,8 @@ export function MovieTimeline() {
   const loopsEdit = useMovieStore(s => s.loopsEdit)
   const playing = useMovieStore(s => s.playing)
   const seg = useMovieStore(s => s.seg)
+  const smooth = useMovieStore(s => s.smooth)
+  const setSmooth = useMovieStore(s => s.setSmooth)
   const hydrate = useMovieStore(s => s.hydrate)
   const setTimelineOpen = useMovieStore(s => s.setTimelineOpen)
   const syncTimeline = useMovieStore(s => s.syncTimeline)
@@ -127,9 +130,14 @@ export function MovieTimeline() {
   }
   const doPlay = () => {
     if (playing) { stopMovie(); return }
-    void playMovie({ useTimeline: true }).then(r => {
+    const useSmooth = useMovieStore.getState().smooth
+    void playMovie({ useTimeline: true, smooth: useSmooth }).then(r => {
       if (!r.ok) toast.error(r.error)
-      else toast.success('movie 时间轴播放中', { description: `${r.segs} 段逐段巡航 · 拖动/滚轮接管或 Esc 停止 · record start 可同步录制` })
+      else toast.success(`movie ${useSmooth ? '平滑巡航' : '时间轴'}播放中`, {
+        description: useSmooth
+          ? 'Catmull-Rom 连续路径 · 关键帧处速度不归零 · 拖动/滚轮接管或 Esc 停止 · record start 可同步录制'
+          : `${r.segs} 段逐段巡航 · 拖动/滚轮接管或 Esc 停止 · record start 可同步录制`,
+      })
     })
   }
   const previewView = (view: ViewBookmark) => {
@@ -251,8 +259,8 @@ export function MovieTimeline() {
         </FadeEdge>
       )}
 
-      {/* 控制行：播放 + 轮数 + 选中卡片编辑 */}
-      <div className="flex h-8 items-center gap-2">
+      {/* 控制行：播放 + 模式 + 轮数 + 选中卡片编辑（窄屏可换行） */}
+      <div className="flex min-h-8 flex-wrap items-center gap-2">
         <button
           onClick={doPlay}
           disabled={!canPlay}
@@ -265,6 +273,22 @@ export function MovieTimeline() {
         >
           {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="ml-0.5 h-3.5 w-3.5" />}
           {playing ? '停止' : `播放 ${validCount} 帧`}
+        </button>
+        {/* 播放模式开关：平滑巡航 ⇄ 逐帧驻留（持久化；movie play smooth/hold 命令同义） */}
+        <button
+          onClick={() => setSmooth(!smooth)}
+          className={cn(
+            'flex h-7 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[10px] font-semibold transition active:scale-95',
+            smooth
+              ? 'border-teal-400/60 bg-teal-500/15 text-teal-600 shadow-[0_0_10px_rgba(45,212,191,0.25)] dark:text-teal-400'
+              : 'border-border/60 bg-background/60 text-muted-foreground hover:text-foreground',
+          )}
+          title={smooth
+            ? '平滑巡航：关键帧间 Catmull-Rom 连续插值，速度不归零（录像丝滑无顿挫）——点击切回逐帧驻留（PyMOL 经典）'
+            : '逐帧驻留：每个关键帧 easeInOut 停顿，幻灯片式演示——点击切换平滑巡航（录像推荐）'}
+        >
+          {smooth ? <Waves className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+          {smooth ? '平滑巡航' : '逐帧驻留'}
         </button>
         {/* 轮数 stepper */}
         <div className="flex h-7 shrink-0 items-center rounded-full border border-border/60 bg-background/60 pl-2 pr-1">
