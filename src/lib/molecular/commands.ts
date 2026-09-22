@@ -23,6 +23,7 @@ import { buildMorph, buildMultiMorph } from './morph'
 import { playMovie, stopMovie, useMovieStore } from './movie'
 import { buildSvgExport, downloadSvg } from './svg-export'
 import { clearCmdHistory } from './cmd-history'
+import { whenEngineReady } from './engine-ready'
 import { toast } from 'sonner'
 
 /** 数值裁剪（NaN 时取默认值） */
@@ -331,11 +332,12 @@ export function runCommand(raw: string): void {
     // 推拉镜头：zoom in / zoom out（拉近 / 拉远一步）
     const zoomArg = rest.toLowerCase()
     if (zoomArg === 'in') {
-      engineRef.current?.dollyCamera(0.72)
+      // 引擎可能尚未挂载（欢迎页首发 load 后立即 zoom 的命令链）——入队等待，不静默丢失
+      whenEngineReady(() => engineRef.current?.dollyCamera(0.72))
       return ok('已拉近（可连按；zoom <选择> 可聚焦特定部分）')
     }
     if (zoomArg === 'out') {
-      engineRef.current?.dollyCamera(1.38)
+      whenEngineReady(() => engineRef.current?.dollyCamera(1.38))
       return ok('已拉远（可连按；zoom 无参数回到全量适配）')
     }
     // 逗号语法 + 可选缓冲距离（PyMOL：zoom ligand, 5 → 聚焦后退 5 Å）
@@ -347,11 +349,15 @@ export function runCommand(raw: string): void {
       const res = s.selectFromExpr(selExpr)
       if (res.error) return err(`选择错误: ${res.error}`)
       const sel = useMolStore.getState().selection
-      if (sel.structureId) engineRef.current?.fitView([{ structureId: sel.structureId, indices: sel.indices }])
-      if (!isNaN(buffer) && buffer !== 0) engineRef.current?.moveCamera('z', Math.max(-50, Math.min(50, buffer)))
+      // whenEngineReady：欢迎页→工作台切换瞬间引擎（MolViewer dynamic）可能仍在挂载中，
+      // 直接 engineRef.current?.… 会静默落空（相机不动、命令链白跑）——入队，引擎就位后统一冲刷
+      whenEngineReady(() => {
+        if (sel.structureId) engineRef.current?.fitView([{ structureId: sel.structureId, indices: sel.indices }])
+        if (!isNaN(buffer) && buffer !== 0) engineRef.current?.moveCamera('z', Math.max(-50, Math.min(50, buffer)))
+      })
       return ok(`缩放到 ${selExpr}${!isNaN(buffer) && buffer !== 0 ? `（缓冲 ${buffer > 0 ? '+' : ''}${buffer} Å）` : ''}`)
     }
-    engineRef.current?.fitView()
+    whenEngineReady(() => engineRef.current?.fitView())
     return ok('缩放到全部结构')
   }
 

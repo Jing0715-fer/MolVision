@@ -1763,3 +1763,26 @@ Stage Summary:
 - 设计纪律：emerald 唯一强调色、遮罩用语义 background token（非纯黑）、无渐变、圆角 ≤ rounded-lg
 - 截图存档：shots/welcome-fab-v2-dark.png、welcome-agentpanel-v2-{dark,light}.png、welcome-agentpanel-390.png
 - 遗留：浅色遮罩 bg-background/35 为白雾效果（与深色黑压暗语义一致）；建议下轮对 AgentPanel 内部建议卡做 VLM 细审（本轮融合度已 9.5 但卡片排版本审）
+
+---
+Task ID: r47
+Agent: main
+Task: 修复用户报告核心 bug：欢迎页 AI 助手「加载 4HHB 展示血红素口袋」命令链全部叉号 + 最终目的落空
+
+Work Log:
+- 【复现】agent-browser 全新 session 在欢迎页发同款指令：LLM 生成 7 条命令（load 4hhb / contacts / preset publication / view / bg white / outline / ray 2400）→ load 结构落地触发视图切换 → 结构加载成功但全部命令卡显示「被界面切换中断」叉号
+- 【根因 1（执行链断裂）】AgentPanel 的 msgs/busy/phase/visualOn 均为组件 useState：load 落地 → page.tsx 切换 welcome↔studio → AgentPanel(float) 卸载、工作台 AgentPanel 重新挂载 → 新实例 loadChats() 把 localStorage 里 running/pending 态全部误标 error「被界面切换中断」；旧闭包即使继续执行也无人展示（已卸载组件 setState 为 no-op，持久化 useEffect 已死，磁盘停留在 running 态）
+- 【根因 2（zoom 静默落空）】commands.ts zoom 走 engineRef.current?.fitView —— 视图切换后 MolViewer（dynamic chunk）尚未挂载完，engineRef 为 null，optional chaining 静默跳过 → 相机不动 → 口袋聚焦白跑
+- 【修复 1】新建 src/lib/molecular/agent/chat-store.ts：对话状态（msgs/busy/phase/visualOn + patchCmds 等动作）迁入模块级 zustand 单例——独立于组件生命周期，视图切换零丢失，执行链跨面板实例无缝延续；持久化改为 store.subscribe 模块级订阅（msgs 引用变化 + 非 streaming 才写盘）；loadChats 规范化（running/pending → error + 重试）仅在模块初始化（页面刷新）执行一次，文案改「页面刷新时被中断」
+- 【修复 2】AgentPanel 重构为纯订阅者：9 处 useState → useAgentChatStore 选择器；删除组件内 loadChats/loadVisualPref/持久化 useEffect/patchCmds useCallback；toggleVisual/clearChat 改走 store；runTail 视觉自查前新增引擎就绪等待（最多 5s 轮询 engineRef，视图切换后自查不落空）
+- 【修复 3】commands.ts zoom/fit 全分支（in/out/选择聚焦/全量适配）走 whenEngineReady 入队：引擎在场退化为立即执行（常规路径零行为差异），未挂载时排队等待 MolViewer 冲刷——与 loader.ts fitView 同一基础设施；orient 保持显式报错（agent 自动修正轮可兜底）
+- 【E2E 验证】全新 session 欢迎页发同款指令 → 7 条命令跨视图切换全部 ✓（okIcons:7、interrupted:false）、视口聚焦血红素口袋（HEMA142/HEMB148 3D 标签 + 序列条 499/574 视野）、localStorage 落盘 statuses=ok×7；刷新语义单测：种 pending/running/ok 三态 → reload → 前两者 ✗（「页面刷新时被中断」+ 重试）后者保持 ✓；lint 0/0
+- 【沙箱事故】ray 2400 超采样渲染触发 OOM kill（next-server 1.58GB RSS vs 4GB 沙箱上限）+ nohup 管道孙进程随 shell 退出被回收（两次静默死亡）——最终 python 双 fork 守护重启 dev server 稳定运行；agent-browser 多 session profile 各自独立 localStorage（zai 429 限流间歇使该轮视觉自查静默跳过，既有 try-catch 设计，非回归）
+
+Stage Summary:
+- 用户报告 bug 双根因修复账清：①执行链 zustand 化——对话状态迁入模块级 store，欢迎页 load 触发的视图切换不再误标/中断命令链，新面板实时显示执行进度（本次 E2E 7/7 全绿）②zoom 引擎就绪队列——相机操作不因引擎挂载时序落空，「展示口袋并聚焦」端到端达成 ③视觉自查引擎等待（≤5s）使切换后首查不静默跳过
+- 行为语义精确化：「中断 + 可重试」只在真实中断（页面刷新）时出现；界面切换是正常流程而非中断
+- 架构收益：chat-store 成为 agent 状态唯一事实源，后续欢迎页/工作台/任何挂载点的 AgentPanel 天然共享同一执行链
+- 截图存档：/tmp/r47-e2e-fixed.png（工作台命令链全 ✓ + HEM 口袋聚焦）、/tmp/r47-welcome-final.png
+- 未解决与风险：①ray 2400 在 4GB 沙箱可能 OOM（用户本地通常无此限制；可考虑 ray 分辨率上限守卫——未立项）②agent 视觉自查受 VLM 429 限流间歇（既有韧性设计：静默跳过不影响主流程）③弹窗体系 VLM 审计（r46 遗留建议，下轮候选）
+- 下一阶段建议：①弹窗体系（CommandPalette/LoadDialog/HistoryDialog）VLM 审计与仪器化收敛 ②超大蛋白序列条 compact mode ③agent 记忆可视化浏览面板 ④ray 分辨率上限守卫（OOM 防护）

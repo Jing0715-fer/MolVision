@@ -12,8 +12,9 @@ import { toast } from 'sonner'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
 import { buildSceneContext } from '@/lib/molecular/agent/context'
 import { classifyCmd, execAgentCmd, splitCommands } from '@/lib/molecular/agent/runner'
+import { useAgentChatStore } from '@/lib/molecular/agent/chat-store'
 import {
-  AGENT_CHAT_KEY, AGENT_CHAT_MAX, AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentStreamEvent,
+  AGENT_CHAT_KEY, AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentStreamEvent,
 } from '@/lib/molecular/agent/protocol'
 import { ProviderSettingsDialog, type ProviderInfo } from './ProviderSettingsDialog'
 import { cn } from '@/lib/utils'
@@ -57,15 +58,6 @@ function lastGoalText(list: AgentChatMessage[]): string {
     if (list[i].role === 'user') return list[i].content
   }
   return '优化当前视图的渲染效果'
-}
-
-function loadVisualPref(): boolean {
-  if (typeof window === 'undefined') return true
-  try {
-    return localStorage.getItem(AGENT_VISUAL_KEY) !== 'off'
-  } catch {
-    return true
-  }
 }
 
 /** 调后端 LLM：返回决策或 null（错误已 toast）。带 image 时走 VLM 视觉自查分支（可选前后对比）；memory 为长期对话记忆摘要 */
@@ -170,29 +162,6 @@ function nowTime(): string {
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
 }
 
-function loadChats(): AgentChatMessage[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const raw = localStorage.getItem(AGENT_CHAT_KEY)
-    if (!raw) return []
-    const arr = JSON.parse(raw) as AgentChatMessage[]
-    // streaming 标志与视觉截图缩略图不持久化（体积；重载后视觉消息降级为纯文字评估）；
-    // 面板卸载（欢迎页↔工作台切换 / 刷新）时被中断的命令 → error 态（带重试按钮，用户可一键重跑）
-    return Array.isArray(arr) ? arr.slice(-AGENT_CHAT_MAX).map(m => ({
-      ...m,
-      streaming: undefined,
-      image: undefined,
-      commands: m.commands?.map(c =>
-        c.status === 'running' || c.status === 'pending'
-          ? { ...c, status: 'error' as const, output: '被界面切换中断，可重新执行' }
-          : c,
-      ),
-    })) : []
-  } catch {
-    return []
-  }
-}
-
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 /** 命令状态 → 图标与配色 */
@@ -207,22 +176,21 @@ function CmdStatusIcon({ status }: { status: AgentCmdRecord['status'] }) {
   }
 }
 
-/** 忙碌阶段（思考 → 流式生成 → 执行 → 视觉自查） */
-type BusyPhase = 'think' | 'stream' | 'exec' | 'visual'
-
-/**
- * AI 助手面板
- * @param float 悬浮变体（欢迎页）：四边离锚（64px 顶部 / 底部脱离仪表底座），
- *              呈「浮动对话框」而非「停靠工具」——与右下 AI 入口胶囊同一悬浮语言
- */
 export function AgentPanel({ float = false }: { float?: boolean }) {
   const open = useMolStore(s => s.ui.agentOpen)
   const setUi = useMolStore(s => s.setUi)
-  const [msgs, setMsgs] = useState<AgentChatMessage[]>(loadChats)
+  // 对话状态存于模块级 store（而非组件 useState）：欢迎页 load <PDB> 触发视图切换时
+  // AgentPanel 卸载重挂，执行链与命令进度跨面板实例无缝延续（修复「被界面切换中断」误报）
+  const msgs = useAgentChatStore(s => s.msgs)
+  const setMsgs = useAgentChatStore(s => s.setMsgs)
+  const busy = useAgentChatStore(s => s.busy)
+  const setBusy = useAgentChatStore(s => s.setBusy)
+  const phase = useAgentChatStore(s => s.phase)
+  const setPhase = useAgentChatStore(s => s.setPhase)
+  const visualOn = useAgentChatStore(s => s.visualOn)
+  const setVisualOn = useAgentChatStore(s => s.setVisualOn)
+  const patchCmds = useAgentChatStore(s => s.patchCmds)
   const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [phase, setPhase] = useState<BusyPhase>('think')
-  const [visualOn, setVisualOn] = useState<boolean>(loadVisualPref)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [providerOpen, setProviderOpen] = useState(false)
   /** 当前默认供应商（头部徽章 + 设置页保存后刷新） */
@@ -257,13 +225,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     })()
   }, [open, provider])
 
-  // 持久化（流式进行中跳过——终值到达时统一落盘，避免逐增量 stringify 开销；缩略图剥离）
-  useEffect(() => {
-    if (msgs.some(m => m.streaming)) return
-    try {
-      localStorage.setItem(AGENT_CHAT_KEY, JSON.stringify(msgs.slice(-AGENT_CHAT_MAX).map(({ image: _img, ...rest }) => rest)))
-    } catch { /* 配额满等异常静默 */ }
-  }, [msgs])
+  // 持久化已迁至 chat-store 模块级订阅（独立于组件生命周期）：面板卸载/重挂不再丢失写入时机
 
   // 自动滚底（每个增量都跟随）
   useEffect(() => {
@@ -276,18 +238,11 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   }, [open])
 
   const toggleVisual = useCallback(() => {
-    setVisualOn(v => {
-      const next = !v
-      try { localStorage.setItem(AGENT_VISUAL_KEY, next ? 'on' : 'off') } catch { /* 忽略 */ }
-      toast.info(next ? '视觉自查已开启：命令执行后助手会审视渲染结果并自动修正' : '视觉自查已关闭')
-      return next
-    })
-  }, [])
-
-  /** 更新某条消息的命令记录 */
-  const patchCmds = useCallback((msgId: string, cmds: AgentCmdRecord[]) => {
-    setMsgs(m => m.map(x => (x.id === msgId ? { ...x, commands: [...cmds] } : x)))
-  }, [])
+    const next = !useAgentChatStore.getState().visualOn
+    setVisualOn(next)
+    try { localStorage.setItem(AGENT_VISUAL_KEY, next ? 'on' : 'off') } catch { /* 忽略 */ }
+    toast.info(next ? '视觉自查已开启：命令执行后助手会审视渲染结果并自动修正' : '视觉自查已关闭')
+  }, [setVisualOn])
 
   /**
    * 组装发送给后端的对话历史。
@@ -373,6 +328,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     if (!fixTurnRan && visualBudget > 0 && visualOn && records.some(r => r.status === 'ok' && isVisualCmd(r.cmd))) {
       setPhase('visual')
       await sleep(800) // 让引擎渲染稳定（ray/异步命令落地）
+      // 视图切换后引擎（MolViewer dynamic）可能仍在挂载中：等待就位再截图，自查不落空
+      for (let i = 0; i < 25 && !engineRef.current; i++) await sleep(200)
       // ray 阻塞期间相机 tween 被冻结（过期定时器先行触发）——等渲染循环追上、动画落位再截图
       for (let i = 0; i < 15 && engineRef.current?.isCameraAnimating(); i++) await sleep(100)
       const eng = engineRef.current
@@ -486,7 +443,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   }, [msgs, patchCmds])
 
   const clearChat = useCallback(() => {
-    setMsgs([])
+    useAgentChatStore.getState().clearMsgs()
     try { localStorage.removeItem(AGENT_CHAT_KEY) } catch { /* 忽略 */ }
     toast.info('助手对话已清空')
   }, [])
