@@ -100,6 +100,7 @@ const onOff = (): CompletionItem[] => [
 const REGISTRY: CmdDef[] = [
   { names: ['load', 'fetch'], args: () => null },
   { names: ['select', 'sel'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
+  { names: ['deselect', 'desel'], args: () => null },
   {
     names: ['create'],
     expr: true,
@@ -233,7 +234,22 @@ const REGISTRY: CmdDef[] = [
       { insert: 'off', kind: 'sub', detail: '移除' },
     ] : null),
   },
-  { names: ['hbonds'], args: pos => (pos === 1 ? onOff() : null) },
+  {
+    names: ['hbonds'],
+    args: (pos, ctx) => (pos === 1
+      ? [
+        { insert: 'on', kind: 'sub', detail: '开（默认 3.5Å）' },
+        { insert: 'off', kind: 'sub', detail: '关' },
+        { insert: 'in', kind: 'sub', detail: '烘焙独立范围（不随 deselect 清除）' },
+      ]
+      : pos >= 2
+        ? [
+          { insert: 'in', kind: 'sub', detail: '烘焙独立范围（不随 deselect 清除）' },
+          { insert: '3.2', kind: 'value', detail: '距离上限 Å（2-6）' },
+          ...selItems(ctx).slice(0, 4),
+        ]
+        : null),
+  },
   { names: ['ssao', 'ao', 'gtao'], args: pos => (pos === 1 ? onOff() : null) },
   { names: ['outline'], args: pos => (pos === 1 ? onOff() : null) },
   { names: ['fps'], args: pos => (pos === 1 ? onOff() : null) },

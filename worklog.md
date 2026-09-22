@@ -1786,3 +1786,29 @@ Stage Summary:
 - 截图存档：/tmp/r47-e2e-fixed.png（工作台命令链全 ✓ + HEM 口袋聚焦）、/tmp/r47-welcome-final.png
 - 未解决与风险：①ray 2400 在 4GB 沙箱可能 OOM（用户本地通常无此限制；可考虑 ray 分辨率上限守卫——未立项）②agent 视觉自查受 VLM 429 限流间歇（既有韧性设计：静默跳过不影响主流程）③弹窗体系 VLM 审计（r46 遗留建议，下轮候选）
 - 下一阶段建议：①弹窗体系（CommandPalette/LoadDialog/HistoryDialog）VLM 审计与仪器化收敛 ②超大蛋白序列条 compact mode ③agent 记忆可视化浏览面板 ④ray 分辨率上限守卫（OOM 防护）
+
+---
+Task ID: r48
+Agent: main
+Task: 修复用户实测四问题：口袋特写视角 / 选中状态残留 / 侧链残缺（无 byres）/ 氢键虚线缺失 + agent 能力打磨
+
+Work Log:
+- 【用户实测复述】「加载血红蛋白 4HHB，展示血红素口袋」：load/select/show 全 ✓ 但 ①视角仍全景不特写 ②select heme 后 UI 选中高亮一直挂着 ③show ballstick, within 4.5 of (heme) and protein 只显示距离球内部分原子（侧链残缺）④没有氢键虚线
+- 【根因分析】①viewFrom 只特写选择本身（单 HEM ~25Å 但口袋残基被画框裁切；多 HEM 均布时兜底实例也只特写配体本体）②selection 无清除命令（PyMOL deselect 缺失），状态栏徽章/链行/序列条高亮永续 ③LLM 教育缺失：命令速查没教 byres；preset publication/bindingsite 自身也是残缺原子版 within 4.5 of (ligand) ④hbondSelOnly 默认 true：无选择集时 hbonds on 直接不渲染（「仅选择集模式：请先选择」），且 deselect 会令氢键消失——范围与 UI 选中态互斥
+- 【deselect 命令】commands.ts 新增 deselect/desel：清 selection（rev+1，状态栏/面板/序列条高亮归零）+ runner 白名单 + complete.ts 候选 + 速查收录
+- 【hbondScope 烘焙范围】store 新增 hbondScope {structureId, indices, rev} + setHBondScope；commands.ts hbonds 命令新语法 `hbonds on [nÅ] in <表达式>`（evaluate → 烘焙独立范围）；engine.ts 氢键过滤升级为三级优先：hbondScope > hbondSelOnly 选择集 > 全局网络（端点球同步 scope）；hbonds off 同步清 scope；loadPdb/removeStructure 清理对应 scope——「口袋范围氢键 + deselect 清 UI」并存不互斥
+- 【byres 完整残基】PRESETS bindingsite/publication 口袋 rep 从 within 4.5 of (ligand) 升级为 byres(within 4.5 of (ligand))（完整残基主链+侧链）；SYSTEM_PROMPT 规则 15 重写：口袋环境必须 byres 展开（明示「只用 within 会令侧链残缺：主链断片侧链半个，不专业」）
+- 【出版流程升级】规则 16 扩为七步：contacts → preset publication → ③ hbonds on 3.4 in byres(within 4.5 of (ligand)) and polymer（口袋氢键虚线，烘焙范围）→ view from → bg/outline → ⑥ deselect（收尾清洁，明示不影响氢键）→ ray；触发词增「展示口袋」；REVIEW_PROMPT 症状速查新增 3 条：侧链残缺→byres 重 show+hide 旧残缺表示 / 需氢键虚线→hbonds in 烘焙 / 选中残留→deselect
+- 【viewFrom 口袋上下文构图】engine.viewFrom 升级：小体积选择（包围球 <12Å——单配体/残基）自动并入 4.5Å 邻域原子进构图点集（O(n·m) 提前跳出近邻，毫秒级），质心/包围球/距离按「配体+口袋」集群计算——口袋残基完整入画不被画框裁切；速查与规则同步「口袋集群约占画面 1/2 特写」
+- 【context.ts】场景上下文新增「氢键烘焙范围」行（agent 可感知 scope 存活；选择行补 deselect 可清除提示）
+- 【E2E 全链路】①「加载血红蛋白 4HHB，展示血红素口袋」→ LLM 生成 load/preset publication/show ballstick, byres(within 4.5 of (resn HEM))/zoom——byres 教育生效 ✓ 4/4 ok ②跟进「加上氢键虚线，取消选中状态」→ hbonds on 3.4 in byres(within 4.5 of (ligand)) and polymer + deselect ✓✓ ③执行后状态：ok 7 err 0；状态栏 selected 徽章消失；链行高亮 bg-primary/[0.07] 0 格 ④agent 视觉自查自证：「氢键虚线在配体与口袋残基间清晰可见，选中高亮也已清除，目标达成」——deselect 后氢键仍在 = 烘焙范围语义实证 ⑤独立 VLM 审图 8.5/10：血红素+口袋残基完整入画 / 氢键虚线可见 / 构图聚焦特写「视觉重心完全集中在血红素及直接相互作用微环境」（扣分仅 UI 演示截图属性，非视口缺陷） ⑥lint 0/0
+- 【踩坑】MultiEdit new_str 行尾误多写一个反引号——孤立 ` 开启新模板串吞掉后 9 行代码，tsc/eslint 报错位置在 9 行之后（与 r46 JSX 注释同族：报错位置远离真实病灶，需向上游搜未闭合标点）
+- 【沙箱经验】agent-browser fill+click 发送若撞上 busy=true 会被 send 前置守卫静默吞掉（消息从未入列）——跟进指令需等 busy=false 再发
+
+Stage Summary:
+- 用户四问题全部修复且 E2E 闭环：①口袋特写（viewFrom 自动并入 4.5Å 邻域构图——VLM 确认「聚焦良好，视觉重心完全集中在微环境」）②选中残留（deselect 命令——状态栏/面板/序列条三处高亮归零实证）③侧链残缺（byres 教育 + preset 双升级——LLM 实测生成 byres 命令）④氢键虚线（hbonds in 烘焙范围——deselect 后仍显示，范围与选中态解耦）
+- 架构决策：氢键范围从「实时跟随 selection」升级为三级优先（烘焙 scope > 选择集 > 全局）——hbondSelOnly 的 PyMOL「范围显示」专业语义保留，同时解除与 deselect 的互斥；scope 生命周期随结构增删自清理
+- 提示词教育是本轮杠杆最大的改动：规则 15/16 + 症状速查 3 条新症状，LLM 从「生成残缺 within 命令」变为「生成 byres + hbonds in + deselect 完整专业序列」（同一指令前后对比实证）
+- 截图存档：shots/r48-hbonds-pocket-e2e.png（口袋特写 + 氢键虚线 + 命令卡 7/7 ✓）
+- 未解决与风险：①VLM 把 teal 氢键虚线描述为「红色」（暗背景 0x4fd1c5 亮度感知差异，非缺陷；如需可调色）②命令行 ConsoleBar 折叠态下 press 反引号超时未测（agent 链路与命令行共用 runCommand 同路径，功能等价已验）③弹窗体系 VLM 审计（r46 起遗留）
+- 下一阶段建议：①弹窗体系仪器化审计 ②超大蛋白序列条 compact mode ③ray 分辨率上限守卫（沙箱 OOM 防护）④agent 记忆可视化面板

@@ -1467,6 +1467,7 @@ export class MolEngine {
       state.settings.hbondSelOnly, state.settings.hideWater, state.settings.background,
       state.structures.filter(s => s.visible).map(s => s.id).join('|'),
       state.selection.structureId, state.selection.rev,
+      state.hbondScope ? state.hbondScope.structureId + ':' + state.hbondScope.rev : '-',
     ].join('#')
     if (hbondKey !== this.lastHbondKey) {
       this.lastHbondKey = hbondKey
@@ -1522,12 +1523,21 @@ export class MolEngine {
         hbonds = detected
       }
       if (!hbonds) continue
-      // 选择过滤：仅选择集模式下，无选择（或选择在其它结构）时不渲染——
-      // 「范围显示」语义（PyMOL 专业用法）；全局网络对大结构是视觉噪声
-      if (s.hbondSelOnly) {
+      // 范围过滤优先级：hbondScope（hbonds in <表达式> 烘焙，不随 deselect 清除）>
+      // 仅选择集模式（实时跟随 selection）> 全结构网络。虚线与端点球同范围。
+      let scoped = false
+      const baked = state.hbondScope
+      if (baked && baked.structureId === entry.id && baked.indices.length > 0) {
+        const scope = new Set(baked.indices)
+        hbonds = hbonds.filter(hb => scope.has(hb.donor) || scope.has(hb.acceptor))
+        scoped = true
+      } else if (baked && baked.structureId === entry.id) {
+        continue // 结构被点名但范围空（清除中的过渡态）
+      } else if (s.hbondSelOnly) {
         if (state.selection.structureId !== entry.id || !state.selection.indices.length) continue
         const sel = new Set(state.selection.indices)
         hbonds = hbonds.filter(hb => sel.has(hb.donor) || sel.has(hb.acceptor))
+        scoped = true
       }
       if (!hbonds.length) continue
       // 上限保护
@@ -1576,9 +1586,8 @@ export class MolEngine {
       lines.computeLineDistances()
       lines.renderOrder = 8
       this.hbondGroup.add(lines)
-      // 端点小标记（InstancedMesh）：仅选择集范围内显示——全局网络的虚线自身已可追溯，
+      // 端点小标记（InstancedMesh）：仅范围模式（scope 烘焙或选择集）时显示——全局网络的虚线自身已可追溯，
       // 端点球只会加重视觉重量（用户反馈「绿球堆」）；局部分析时球帮助定位两端原子
-      const scoped = s.hbondSelOnly && state.selection.structureId === entry.id && state.selection.indices.length > 0
       if (scoped && endPts.length > 0) {
         const sphereGeo = new THREE.SphereGeometry(0.12, 8, 6)
         const sphereMat = new THREE.MeshBasicMaterial({ color: hbColor, transparent: true, opacity: 0.5, depthWrite: false })
@@ -3215,17 +3224,46 @@ export class MolEngine {
   }
 
   /** view from <选择>：沿「结构质心 → 选择质心」方向观察——配体在前景、口袋开口正对相机
-   *  （结合位点出版图的标准视角）；叠加 ~17° 仰角增加纵深。距离按选择包围球自适应拉近
-   *  （配体约占画面 1/3-1/2 的特写构图）。方向无意义（选择贴近全局质心，如多配体均布）
+   *  （结合位点出版图的标准视角）；叠加 ~17° 仰角增加纵深。距离按「选择 + 4.5Å 口袋上下文」
+   *  包围球自适应（小体积选择自动并入邻域原子——口袋残基完整入画不被画框裁切；配体+口袋
+   *  集群约占画面 1/2 的特写构图）。方向无意义（选择贴近全局质心，如多配体均布）
    *  时返回 false 由调用方回退（命令层会自动挑离相机目标最近的配体实例重试）。 */
   viewFrom(refs?: { structureId: string; indices?: number[] }[]): boolean {
-    const selPts = this.collectFitPoints(refs)
+    let selPts = this.collectFitPoints(refs)
     const allPts = this.collectFitPoints()
     if (selPts.length < 1 || allPts.length < 4) return false
     const centroid = (pts: number[][]) => {
       const c = new THREE.Vector3()
       for (const p of pts) c.add(new THREE.Vector3(p[0], p[1], p[2]))
       return c.multiplyScalar(1 / pts.length)
+    }
+    // 小体积选择（包围球 < 12Å——单个配体/残基）自动并入 4.5Å 口袋上下文原子：
+    // 特写取景按「配体 + 口袋残基」集群计算，口袋完整入画（O(n·m) 近邻，毫秒级）
+    const bboxOf = (pts: number[][]): { min: [number, number, number]; max: [number, number, number] } => {
+      const min: [number, number, number] = [Infinity, Infinity, Infinity]
+      const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+      for (const p of pts) {
+        for (let d = 0; d < 3; d++) {
+          if (p[d] < min[d]) min[d] = p[d]
+          if (p[d] > max[d]) max[d] = p[d]
+        }
+      }
+      return { min, max }
+    }
+    const selRadius0 = 0.5 * Math.hypot(...(([0, 1, 2] as const).map(d => bboxOf(selPts).max[d] - bboxOf(selPts).min[d]) as [number, number, number]))
+    if (selRadius0 < 12 && allPts.length > selPts.length) {
+      const near: number[][] = []
+      for (const p of allPts) {
+        let d2 = Infinity
+        for (const q of selPts) {
+          const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2]
+          const dd = dx * dx + dy * dy + dz * dz
+          if (dd < d2) d2 = dd
+          if (d2 <= 20.25) break // ≤4.5² 已命中，提前出
+        }
+        if (d2 <= 20.25) near.push(p)
+      }
+      if (near.length) selPts = selPts.concat(near)
     }
     const selC = centroid(selPts)
     const allC = centroid(allPts)
@@ -3235,15 +3273,8 @@ export class MolEngine {
     // 仰角 ~17°（tan≈0.3）：打破纯正视的扁平感；dir 近竖直时换参考轴避免退化
     const upRef = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0)
     dir.addScaledVector(upRef, 0.3).normalize()
-    // 距离：选择包围球半径 + 5Å 口袋环境（fov 适配；配体约占画面 1/3-1/2 —— 实测 VLM 终审认可的特写构图）
-    const min: [number, number, number] = [Infinity, Infinity, Infinity]
-    const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
-    for (const p of selPts) {
-      for (let d = 0; d < 3; d++) {
-        if (p[d] < min[d]) min[d] = p[d]
-        if (p[d] > max[d]) max[d] = p[d]
-      }
-    }
+    // 距离：选择+口袋包围球半径 + 4Å 呼吸余量（fov 适配；口袋集群约占画面 1/2 的特写构图）
+    const { min, max } = bboxOf(selPts)
     const selRadius = 0.5 * Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2])
     const radius = Math.max(4, selRadius + 4)
     const dist = Math.max(10, (radius / Math.sin((this.camera.fov * Math.PI) / 360)) * 0.95)

@@ -13,7 +13,7 @@ const AUTO_PREFIXES = new Set([
   // 加载与对象
   'load', 'fetch', 'create', 'split_chains', 'splitchains', 'activate', 'use',
   // 选择与表示
-  'select', 'sel', 'show', 'display', 'hide', 'undisplay', 'preset', 'style',
+  'select', 'sel', 'deselect', 'desel', 'show', 'display', 'hide', 'undisplay', 'preset', 'style',
   // 着色
   'color', 'colour', 'util', 'reset_colors', 'recolor', 'bg', 'background',
   // 视角

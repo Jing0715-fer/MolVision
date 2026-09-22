@@ -37,9 +37,15 @@ export function buildSceneContext(): string {
   // 当前选择
   if (s.selection.structureId && s.selection.indices.length) {
     const st = s.structures.find(x => x.id === s.selection.structureId)
-    lines.push(`- 当前选择：${st?.name ?? '?'} 中 ${s.selection.indices.length} 个原子（可在此基础上 show/hide/color/zoom）`)
+    lines.push(`- 当前选择：${st?.name ?? '?'} 中 ${s.selection.indices.length} 个原子（可在此基础上 show/hide/color/zoom；deselect 可清除）`)
   } else {
     lines.push('- 当前无选择（color/show 无选择时作用于活动结构整体）')
+  }
+
+  // 氢键烘焙范围（hbonds in 命令遗留——不随 deselect 清除）
+  if (s.hbondScope && s.hbondScope.indices.length) {
+    const st = s.structures.find(x => x.id === s.hbondScope!.structureId)
+    lines.push(`- 氢键烘焙范围：${st?.name ?? '?'} 中 ${s.hbondScope.indices.length} 个原子（deselect 不影响；hbonds off 清除）`)
   }
 
   // 命名选择

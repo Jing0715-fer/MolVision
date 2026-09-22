@@ -24,6 +24,9 @@ export interface MolState {
   structures: StructureEntry[]
   activeId: string | null
   selection: SelectionState
+  /** 氢键范围烘焙（hbonds in <表达式> 命令）：不随 deselect 清除——
+   *  口袋工作流可以「指定范围氢键 + 取消 UI 选中态」并存，端点球也以此范围显示 */
+  hbondScope: { structureId: string; indices: number[]; rev: number } | null
   namedSelections: NamedSelection[]
   measureMode: MeasureMode
   measurePicks: { structureId: string; atoms: number[] } | null
@@ -66,6 +69,8 @@ export interface MolState {
   setSelection: (structureId: string | null, indices: number[], mode?: 'replace' | 'add' | 'remove') => void
   selectFromExpr: (expr: string) => { count: number; error?: string }
   invertSelection: () => void
+  /** 氢键范围烘焙设置（hbonds in <表达式>）；null 清除 */
+  setHBondScope: (scope: { structureId: string; indices: number[] } | null) => void
   saveNamedSelection: (name: string) => void
   deleteNamedSelection: (name: string) => void
   setMeasureMode: (mode: MeasureMode) => void
@@ -177,14 +182,15 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
     label: '结合口袋',
     reps: () => [
       { ...defaultRep('cartoon', 'polymer', 'chain') },
-      { ...defaultRep('ballstick', 'within 4.5 of (ligand)', 'element') },
+      // byres：口袋残基展开为完整残基（主链+侧链）——只有 within 球内的部分原子会令侧链残缺
+      { ...defaultRep('ballstick', 'byres(within 4.5 of (ligand))', 'element') },
     ],
   },
   publication: {
     label: '出版级互作',
     reps: () => [
       { ...defaultRep('cartoon', 'polymer', 'chain') },
-      { ...defaultRep('ballstick', 'within 4.5 of (ligand) and not water', 'element') },
+      { ...defaultRep('ballstick', 'byres(within 4.5 of (ligand)) and not water', 'element') },
     ],
   },
   hybrid: {
@@ -208,6 +214,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
   structures: [],
   activeId: null,
   selection: { structureId: null, indices: [], rev: 0 },
+  hbondScope: null,
   namedSelections: [],
   measureMode: 'off',
   measurePicks: null,
@@ -258,6 +265,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
       everHadStructures: true,
       visualRev: s.visualRev + 1,
       selection: { structureId: null, indices: [], rev: s.selection.rev + 1 },
+      hbondScope: null,
     }))
     return id
   },
@@ -277,6 +285,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
         selection: s.selection.structureId === id
           ? { structureId: null, indices: [], rev: s.selection.rev + 1 }
           : s.selection,
+        hbondScope: s.hbondScope?.structureId === id ? null : s.hbondScope,
         visualRev: s.visualRev + 1,
       }
     })
@@ -441,6 +450,10 @@ export const useMolStore = create<MolState>()((set, get) => ({
     const inv: number[] = []
     for (let i = 0; i < data.atoms.count; i++) if (!cur.has(i)) inv.push(i)
     set(s => ({ selection: { structureId: s.selection.structureId, indices: inv, rev: s.selection.rev + 1 }, visualRev: s.visualRev + 1 }))
+  },
+
+  setHBondScope: (scope) => {
+    set(s => ({ hbondScope: scope ? { ...scope, rev: (s.hbondScope?.rev ?? 0) + 1 } : (s.hbondScope ? { structureId: '', indices: [], rev: s.hbondScope.rev + 1 } : null) }))
   },
 
   saveNamedSelection: (name) => {

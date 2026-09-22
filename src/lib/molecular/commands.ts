@@ -1183,12 +1183,41 @@ export function runCommand(raw: string): void {
     return ok(`已导出矢量图 ${r.width}×${r.height} · ${r.items.toLocaleString()} 个原语 · ${r.ms.toFixed(0)} ms${skipped}——SVG 无限缩放不失真，可直接入稿`)
   }
 
+  if (cmd === 'deselect' || cmd === 'desel') {
+    // 清除当前选择（状态栏徽章 / 面板链行 / 序列条高亮归零；不影响氢键范围烘焙 hbondScope）
+    const s = useMolStore.getState()
+    if (!s.selection.structureId && !s.selection.indices.length) return ok('当前无选择')
+    useMolStore.setState(st => ({ selection: { structureId: null, indices: [], rev: st.selection.rev + 1 }, visualRev: st.visualRev + 1 }))
+    return ok('已取消选择（面板/序列条高亮已清除；hbonds in 范围不受影响）')
+  }
+
   if (cmd === 'hbonds' || cmd === 'hbond' || cmd === 'hbon') {
     const s = useMolStore.getState()
     const arg = (parts[1] ?? 'on').toLowerCase()
     if (arg === 'off' || arg === '0') {
       s.updateSettings({ showHBonds: false })
-      return ok('氢键显示关闭')
+      if (s.hbondScope) s.setHBondScope(null)
+      return ok('氢键显示关闭（范围烘焙已同步清除）')
+    }
+    // 范围子句：hbonds on [nÅ] in <表达式>（如 hbonds on 3.4 in byres(within 4.5 of ligand)）
+    // 烘焙为独立范围——不随 deselect 清除，也不依赖后续选择变化（口袋工作流标准用法）
+    const inMatch = input.slice(parts[0].length).match(/\bin\s+(.+)$/i)
+    if (inMatch) {
+      const scopeExpr = inMatch[1].trim()
+      if (!s.activeId) return err('没有加载结构')
+      const data = dataRegistry.get(s.activeId)
+      if (!data) return err('结构数据不存在')
+      const named = buildNamedMasks(s.activeId, data)
+      const r = evaluateSelection(scopeExpr, { structure: data, named })
+      if (r.error) return err(`范围选择错误: ${r.error}`)
+      const idx = maskToIndices(r.mask)
+      if (!idx.length) return err('范围选择为空')
+      const dist = parseFloat(parts[2] ?? '')
+      const patch: Partial<import('./types').Settings> = { showHBonds: true }
+      if (!isNaN(dist) && dist >= 2 && dist <= 6) patch.hbondMaxDist = dist
+      s.updateSettings(patch)
+      s.setHBondScope({ structureId: s.activeId, indices: idx })
+      return ok(`氢键已烘焙范围「${scopeExpr}」（${idx.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}）——不随 deselect 清除，端点球同步显示`)
     }
     let dist = parseFloat(parts[2] ?? '')
     if (isNaN(dist)) dist = parseFloat(arg)
@@ -1196,10 +1225,12 @@ export function runCommand(raw: string): void {
     if (!isNaN(dist) && dist >= 2 && dist <= 6) patch.hbondMaxDist = dist
     s.updateSettings(patch)
     const hasSel = s.selection.indices.length > 0
-    const scope = s.settings.hbondSelOnly
-      ? (hasSel ? `当前选择集（${s.selection.indices.length.toLocaleString()} 原子）范围内` : '仅选择集模式：请先选择残基/链（无选择时暂不显示，避免全局网络淹没结构）')
+    const scope = s.hbondScope
+    if (scope) return ok(`氢键网络开启（烘焙范围 ${scope.indices.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}，deselect 不影响）`)
+    const scope2 = s.settings.hbondSelOnly
+      ? (hasSel ? `当前选择集（${s.selection.indices.length.toLocaleString()} 原子）范围内` : '仅选择集模式：请先选择残基/链，或用 hbonds on 3.4 in <表达式> 烘焙独立范围（不随 deselect 清除）')
       : '全结构网络（大结构较密，可在场景面板开启「仅选择集」缩小范围）'
-    return ok(`氢键网络开启${!isNaN(dist) && dist >= 2 && dist <= 6 ? `（距离上限 ${dist} Å）` : ''}——${scope}，快捷键 B 切换`)
+    return ok(`氢键网络开启${!isNaN(dist) && dist >= 2 && dist <= 6 ? `（距离上限 ${dist} Å）` : ''}——${scope2}，快捷键 B 切换`)
   }
 
   if (cmd === 'ssao' || cmd === 'ao' || cmd === 'gtao') {
