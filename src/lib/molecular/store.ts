@@ -75,7 +75,8 @@ export interface MolState {
   invertSelection: () => void
   /** 氢键范围烘焙设置（hbonds in <表达式>）；null 清除 */
   setHBondScope: (scope: { structureId: string; indices: number[] } | null) => void
-  saveNamedSelection: (name: string) => void
+  /** 保存命名选择；默认取当前选择，也可传入 indices 快照（序列条拖框选保存） */
+  saveNamedSelection: (name: string, indices?: number[], structureId?: string) => void
   deleteNamedSelection: (name: string) => void
   setMeasureMode: (mode: MeasureMode) => void
   measurePick: (structureId: string, atomIdx: number) => void
@@ -480,16 +481,18 @@ export const useMolStore = create<MolState>()((set, get) => ({
     set(s => ({ hbondScope: scope ? { ...scope, rev: (s.hbondScope?.rev ?? 0) + 1 } : (s.hbondScope ? { structureId: '', indices: [], rev: s.hbondScope.rev + 1 } : null) }))
   },
 
-  saveNamedSelection: (name) => {
+  saveNamedSelection: (name, indices, structureId) => {
     const s = get()
-    if (!s.selection.structureId || !s.selection.indices.length) return
+    const idx = indices ?? (s.selection.structureId ? s.selection.indices : [])
+    const sid = structureId ?? s.selection.structureId
+    if (!sid || !idx.length) return
     set({
       namedSelections: [...s.namedSelections.filter(n => n.name !== name), {
         name,
-        structureId: s.selection.structureId,
+        structureId: sid,
         expr: null,
-        indices: s.selection.indices,
-        count: s.selection.indices.length,
+        indices: idx,
+        count: idx.length,
       }],
     })
   },

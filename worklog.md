@@ -1889,3 +1889,27 @@ Stage Summary:
 - SwiftShader instanceColor 环境缺陷定位与文档化（对真实用户无影响；后续轮 E2E 颜色验证方法论变更：引擎探针优先）
 - 未解决与风险：①沙箱截图无法展示 pocket 配色效果（环境缺陷，用户预览面板真实 GPU 正常）②VLM 429 限流持续（cron webDevReview 与本会话竞争配额）——本轮 VLM 终审缺失，以像素级+数据级双重验证替代 ③弹窗体系 VLM 审计（r46 遗留）④超大蛋白序列条 compact mode ⑤ray OOM 守卫
 - 下一阶段建议：①等 VLM 配额恢复后补一轮真实预览终审 ②口袋图例卡与 hbond 面板的联动教育（点击图例跳转说明）③pocket 方案对核酸结构的适配验证 ④序列条 compact mode
+
+---
+Task ID: r52
+Agent: main
+Task: 用户需求：序列条 UI 专业化——序号不再顶替字母 + 字母居中/紧凑格宽 + PyMOL 式拖拽批量选取 + 选取保存命名选择
+
+Work Log:
+- 【用户原话】「优化序列的显示方式的ui界面，目前第10个位置只显示了10，而不是氨基酸的缩写，而且字母没有剧中，宽度利用不充分，有太多空隙浪费了空间，需要向pymol一样支持拖拽批量选取，选取的氨基酸也像pymol一样可以保存选择」
+- 【刻度行独立（根治「第10位只显示10」）】旧实现 position%10===0 时直接把字母换成数字；新结构每链两行——上方刻度行（h-12px，每 10 位显示真实 resSeq 残基号居中对齐该格、每 5 位 4px 小刻度线，Jalview 式）+ 下方字母行（字母永远显示）；两行同置一个 FadeEdge 滚动容器天然同步横滚
+- 【格子重设计（居中+密度）】格宽 26px→19px（密度 +37%）；h-7→h-6；flex items-center justify-center 字母水平垂直居中（旧 justify-end 贴底）；SS 轨道 3px→2px 顶部；选中 ring-2 ring-inset（不遮邻格）；hover scale 1.18
+- 【PyMOL 式拖拽批量选取】pointerdown(mouse only) 记 anchor→window pointermove 判 moved（3px 阈值，防单击误判）→cell pointerover 事件委托更新范围→window pointerup 提交 setSelection(mode)；Shift=追加 Alt=移除；拖动中格子叠 bg-primary/55 蒙层（remove 模式 destructive/55）+ 跟随鼠标浮动提示「A 6–16 · 11 残基 · 松开确认」（外层 JS transform 每帧定位零 React 渲染、内层 -translate 偏移、ref callback 挂载即定位防左上角闪烁）；Esc 取消
+- 【事件委托架构】onPointerDown/onPointerOver/onClick 挂链容器（closest('button[data-res]') + data-chain/data-k 解析），ResidueCell 保持纯展示 props → memo 高效跳过（dragView 变化仅边界两格重渲）；suppressClickAt 时间戳 350ms 抑制拖拽提交后的原生 click（pointerup 与 click 目标可能不同）
+- 【Esc 冲突修复】MolViewer 全局 Esc=deselect（预先存在的 PyMOL 语义）会在拖拽取消时误清选择——序列条 Esc 拦截改 window capture 阶段 + stopPropagation（真实键盘事件从焦点元素冒泡，window capture 先于 MolViewer 的 bubble 监听）；E2E 实证：Shift 拖拽 94 原子 → Esc 取消第二段拖拽 → 选择保持 94
+- 【框选保存条】拖拽提交（replace 模式）浮出 inline 条：已框选 A 6–16 · 11 残基 · 85 原子 + 命名输入（Enter 提交）+ 保存选择 + 聚焦 + 关闭；indices 快照存 state（与后续选择变化解耦，保存的就是框选那一刻）
+- 【store 扩展】saveNamedSelection(name, indices?, structureId?) 可选快照参数（向后兼容：SelectionPanel/commands.ts 单参调用不受影响）
+- 【头部选择库 popover】Bookmark 按钮（徽标显示已存数量）：当前选择命名保存 + 已存列表（名称/count at/跨结构标注/选中召回/聚焦/删除悬停）；召回支持 indices 型与 expr 型（evaluateSelection 求值兜底）
+- 【E2E（agent-browser DOM 级全链路）】①刻度行：pos10→"10" pos20→"20"（rulerSample 21 格验证）②字母永远显示：第 10 位 V、第 20 位 H ③格宽 19px + align/justify center（computed style 实证）④拖拽 replace：85 原子/11 格 ring/蒙层 11 格/浮动提示可见 ⑤Shift 追加：39→94 ⑥Alt 移除：94→69 ⑦Esc 取消拖拽不清选择（修复前后对比）⑧单击单残基 9 原子/双击聚焦 detail=2 ⑨框选保存条文本+快照保存（helix_turn）→徽标「选择1」⑩库召回 85 原子恢复 ⑪库保存当前选择（single_res）→ 列表 2 项 ⑫库删除→徽标回落 ⑬移动端 390px：按钮可见+横滚正常 ⑭lint 0/0 + tsc src 0 + 浏览器零错误
+- 【VLM 限流】本轮 429（与 r51 同况），以 DOM computed style + 数值断言替代视觉终审（SwiftShader 环境经验：DOM 级验证比截图颜色断言更可靠）
+
+Stage Summary:
+- 用户四点诉求全部落地：①刻度独立行（字母永不顶替）②字母居中+19px 紧凑格（密度+37%）③PyMOL 式拖拽批量选取（Shift/Alt/Esc 全修饰）④框选保存命名选择（inline 快照保存条+选择库 popover 召回/聚焦/删除闭环）
+- 架构决策：事件委托挂容器保持 ResidueCell 纯展示 memo（大链性能）；浮动提示走 JS transform 零渲染路径；Esc 拖拽取消用 capture 阶段拦截避免与全局 deselect 快捷键互踩；保存走 indices 快照语义（框选那一刻的状态，与后续操作解耦）
+- 未解决与风险：①拖到 FadeEdge 边缘无自动滚动（PyMOL 有；长链拖选需分段，可后续加边缘速度滚动）②超大蛋白（>3000 残基）双行 DOM 数量翻倍（空刻度格轻量 div，实测 574 格流畅；compact mode 仍是 backlog）③VLM 视觉终审待配额恢复
+- 下一阶段建议：①拖拽边缘自动滚动 ②序列条 compact mode（超大蛋白）③口袋图例与 hbond 面板联动教育 ④弹窗体系 VLM 审计（r46 遗留）
