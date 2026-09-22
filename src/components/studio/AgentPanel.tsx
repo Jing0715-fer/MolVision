@@ -297,6 +297,12 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       } else if (cls === 'confirm') {
         records[i] = { ...records[i], status: 'confirm', output: '影响较大，请确认后执行' }
       } else {
+        // 视图切换窗口兑底：load 刚落地（activeId 已设）而 MolViewer（dynamic）仍在挂载——
+        // 引擎依赖命令（view from/orient/ray…）此刻会失败或入队静默。有结构但引擎缺席 →
+        // 等就位再执行（≤8s；常规工作台引擎恒在场，此检查零开销）。修正轮走同一 runTurn 同样受益
+        if (useMolStore.getState().activeId && !engineRef.current) {
+          for (let w = 0; w < 40 && !engineRef.current; w++) await sleep(200)
+        }
         records[i] = { ...records[i], status: 'running' }
         patchCmds(msgId, records)
         records[i] = await execAgentCmd(records[i].cmd)
@@ -305,11 +311,14 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       await sleep(120)
     }
     // 自动修正：有失败命令且未到深度上限 → 把失败信息反馈 LLM 求修正命令
+    // （附带成功命令的关键输出——多实例均布提示/加载摘要等对修正同样有价值）
     let fixTurnRan = false
     const fails = records.filter(r => r.status === 'error' && r.output)
     if (fails.length && depth < 1) {
       setPhase('think')
-      const fixPrompt = `刚才这些命令执行失败了，请修正（换正确的选择表达式 / 命令写法）后重新给出命令：\n${fails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n只给出修正后需要执行的命令，不要重复已成功的命令。`
+      const okOuts = records.filter(r => r.status === 'ok' && r.output)
+        .slice(-6).map(r => `- ${r.cmd} → ${(r.output ?? '').replace(/\s+/g, ' ').slice(0, 110)}`)
+      const fixPrompt = `刚才这些命令执行失败了，请修正（换正确的选择表达式 / 命令写法）后重新给出命令：\n${fails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}${okOuts.length ? `\n\n已成功命令的关键输出（含系统提示，供参考）：\n${okOuts.join('\n')}` : ''}\n只给出修正后需要执行的命令，不要重复已成功的命令。`
       const fix = await callAgent([...buildApiHistory(priorMsgs), { role: 'user', content: fixPrompt }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs))
       if (fix) {
         const fixCmds = splitCommands(fix.commands)
@@ -329,7 +338,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       setPhase('visual')
       await sleep(800) // 让引擎渲染稳定（ray/异步命令落地）
       // 视图切换后引擎（MolViewer dynamic）可能仍在挂载中：等待就位再截图，自查不落空
-      for (let i = 0; i < 25 && !engineRef.current; i++) await sleep(200)
+      // （大结构 4HHB + 出版预设挂载可达 5s+，与命令前等待同款 8s 预算）
+      for (let i = 0; i < 40 && !engineRef.current; i++) await sleep(200)
       // ray 阻塞期间相机 tween 被冻结（过期定时器先行触发）——等渲染循环追上、动画落位再截图
       for (let i = 0; i < 15 && engineRef.current?.isCameraAnimating(); i++) await sleep(100)
       const eng = engineRef.current

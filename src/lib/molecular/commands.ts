@@ -349,13 +349,36 @@ export function runCommand(raw: string): void {
       const res = s.selectFromExpr(selExpr)
       if (res.error) return err(`选择错误: ${res.error}`)
       const sel = useMolStore.getState().selection
+      // 多实例均布提示（纯数据层计算，不依赖引擎）：选择覆盖 2~12 个彼此远离的残基拷贝
+      // （如血红蛋白 4×HEM）时全部入框会拉远到全景——输出单实例聚焦写法供用户/修正轮参考
+      let spreadNote = ''
+      const zdata = sel.structureId ? dataRegistry.get(sel.structureId) : null
+      if (zdata && sel.indices.length >= 2) {
+        const insts = groupInstances(zdata, sel.indices)
+        if (insts.length >= 2 && insts.length <= 12) {
+          const cents = insts.map(inst => {
+            let cx = 0, cy = 0, cz = 0
+            for (const i of inst.indices) { cx += zdata.atoms.positions[i * 3]; cy += zdata.atoms.positions[i * 3 + 1]; cz += zdata.atoms.positions[i * 3 + 2] }
+            return [cx / inst.indices.length, cy / inst.indices.length, cz / inst.indices.length] as const
+          })
+          let minPair = Infinity
+          for (let a = 0; a < cents.length; a++) for (let b = a + 1; b < cents.length; b++) {
+            minPair = Math.min(minPair, Math.hypot(cents[a][0] - cents[b][0], cents[a][1] - cents[b][1], cents[a][2] - cents[b][2]))
+          }
+          if (minPair > 25) {
+            const r0 = zdata.residues[zdata.atomResidue[insts[0].indices[0]]]
+            const c0 = r0.chainId.trim() || 'A'
+            spreadNote = `——选择横跨 ${insts.length} 个远距拷贝（${insts.map(i => i.label).slice(0, 4).join('、')}${insts.length > 4 ? '…' : ''}）已全部入框；单拷贝特写：zoom (resn ${r0.resName} and chain ${c0}), 6`
+          }
+        }
+      }
       // whenEngineReady：欢迎页→工作台切换瞬间引擎（MolViewer dynamic）可能仍在挂载中，
       // 直接 engineRef.current?.… 会静默落空（相机不动、命令链白跑）——入队，引擎就位后统一冲刷
       whenEngineReady(() => {
         if (sel.structureId) engineRef.current?.fitView([{ structureId: sel.structureId, indices: sel.indices }])
         if (!isNaN(buffer) && buffer !== 0) engineRef.current?.moveCamera('z', Math.max(-50, Math.min(50, buffer)))
       })
-      return ok(`缩放到 ${selExpr}${!isNaN(buffer) && buffer !== 0 ? `（缓冲 ${buffer > 0 ? '+' : ''}${buffer} Å）` : ''}`)
+      return ok(`缩放到 ${selExpr}${!isNaN(buffer) && buffer !== 0 ? `（缓冲 ${buffer > 0 ? '+' : ''}${buffer} Å）` : ''}${spreadNote}`)
     }
     whenEngineReady(() => engineRef.current?.fitView())
     return ok('缩放到全部结构')
@@ -521,11 +544,31 @@ export function runCommand(raw: string): void {
 
   if (cmd === 'orient') {
     // 主轴对齐（PyMOL orient：PCA）；可带选择表达式（容忍逗号写法 orient ligand, 5）
-    const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
     const rest = input.slice(parts[0].length).trim().replace(/,/g, ' ')
+    const s = useMolStore.getState()
+    const eng = engineRef.current
+    if (!eng) {
+      // 视图切换窗口（欢迎页 load 落地 → MolViewer dynamic 挂载中）：选择先行求值，
+      // 相机操作入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
+      if (!s.structures.length) return err('引擎未就绪（先加载结构）')
+      let refs: { structureId: string; indices: number[] }[] | undefined
+      let cnt = 0
+      if (rest) {
+        if (!s.activeId) return err('没有活动结构')
+        const data = dataRegistry.get(s.activeId)
+        if (!data) return err('结构数据不存在')
+        const named = buildNamedMasks(s.activeId, data)
+        const r = evaluateSelection(rest, { structure: data, named })
+        if (r.error) return err(`选择错误: ${r.error}`)
+        const indices = maskToIndices(r.mask)
+        if (!indices.length) return err('选择为空')
+        refs = [{ structureId: s.activeId, indices }]
+        cnt = indices.length
+      }
+      whenEngineReady(() => engineRef.current?.orient(refs))
+      return ok(cnt ? `已按主轴对齐视角（${cnt.toLocaleString()} 个原子，PCA）` : '已按主轴对齐视角（全部可见结构）')
+    }
     if (rest) {
-      const s = useMolStore.getState()
       if (!s.activeId) return err('没有活动结构')
       const data = dataRegistry.get(s.activeId)
       if (!data) return err('结构数据不存在')
@@ -549,8 +592,13 @@ export function runCommand(raw: string): void {
       return err('用法：turn <x|y|z> <±角度°>（x=俯仰 y=水平方位 z=滚转；如 turn y 30、turn x -15）')
     }
     const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
-    eng.turnCamera(axis as 'x' | 'y' | 'z', deg)
+    if (!eng) {
+      // 视图切换窗口：入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
+      if (!useMolStore.getState().structures.length) return err('引擎未就绪（先加载结构）')
+      whenEngineReady(() => engineRef.current?.turnCamera(axis as 'x' | 'y' | 'z', deg))
+    } else {
+      eng.turnCamera(axis as 'x' | 'y' | 'z', deg)
+    }
     const axisName = axis === 'x' ? '水平屏轴（俯仰）' : axis === 'y' ? '竖直屏轴（水平方位）' : '视线轴（滚转）'
     return ok(`视角旋转：绕${axisName} ${deg > 0 ? '+' : ''}${deg}°（turn 反向可退回）`)
   }
@@ -563,8 +611,13 @@ export function runCommand(raw: string): void {
       return err('用法：move <x|y|z> <±Å>（x=右移 y=上移 z=推拉；如 move z -10 拉近）')
     }
     const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
-    eng.moveCamera(axis as 'x' | 'y' | 'z', d)
+    if (!eng) {
+      // 视图切换窗口：入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
+      if (!useMolStore.getState().structures.length) return err('引擎未就绪（先加载结构）')
+      whenEngineReady(() => engineRef.current?.moveCamera(axis as 'x' | 'y' | 'z', d))
+    } else {
+      eng.moveCamera(axis as 'x' | 'y' | 'z', d)
+    }
     const axisName = axis === 'x' ? '水平右移' : axis === 'y' ? '竖直上移' : d > 0 ? '推远' : '拉近'
     return ok(`视角平移：${axisName} ${d > 0 ? '+' : ''}${d} Å`)
   }
@@ -578,17 +631,23 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'set_view') {
-    const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
     const rest = input.slice(parts[0].length).trim()
     if (!rest) return err('用法：set_view {"pos":[..],"target":[..],"up":[..]}（JSON 来自 get_view）')
+    let parsed: { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }
     try {
-      const parsed = JSON.parse(rest) as { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }
-      eng.setCameraState(parsed)
-      return ok('视角已恢复')
+      parsed = JSON.parse(rest) as typeof parsed
     } catch {
       return err('JSON 解析失败——请粘贴 get_view 输出的完整 JSON')
     }
+    const eng = engineRef.current
+    if (!eng) {
+      // 视图切换窗口：入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
+      if (!useMolStore.getState().structures.length) return err('引擎未就绪（先加载结构）')
+      whenEngineReady(() => engineRef.current?.setCameraState(parsed))
+      return ok('视角已恢复')
+    }
+    eng.setCameraState(parsed)
+    return ok('视角已恢复')
   }
 
   if (cmd === 'view' || cmd === 'views' || cmd === 'bookmark') {
@@ -608,9 +667,21 @@ export function runCommand(raw: string): void {
       if (r.error) return err(`选择错误: ${r.error}`)
       const indices = maskToIndices(r.mask)
       if (!indices.length) return err('选择为空')
+      const sid = s.activeId
       const eng = engineRef.current
-      if (!eng) return err('引擎未就绪')
-      if (eng.viewFrom([{ structureId: s.activeId, indices }])) {
+      if (!eng) {
+        // 视图切换窗口（欢迎页 load 落地 → MolViewer dynamic 挂载中）：入队等待冲刷——
+        // 与 zoom 同语义（r47 模式），相机操作不因挂载时序失败；多配体兑底也在冲刷时执行
+        whenEngineReady(() => {
+          const e = engineRef.current
+          if (!e) return
+          if (e.viewFrom([{ structureId: sid!, indices }])) return
+          const inst = nearestInstance(data, indices, e)
+          if (inst) e.viewFrom([{ structureId: sid!, indices: inst.indices }])
+        })
+        return ok(`视角 → 从「${selExpr}」方向观察（选择在前景、开口正对相机，17° 仰角增加纵深）`)
+      }
+      if (eng.viewFrom([{ structureId: sid!, indices }])) {
         return ok(`视角 → 从「${selExpr}」方向观察（选择在前景、开口正对相机，17° 仰角增加纵深）`)
       }
       // 多配体兑底：选择质心贴近结构中心（如 ligand 覆盖 4 个 HEM 均布）→ 自动挑离相机目标最近的配体实例重试
@@ -627,7 +698,12 @@ export function runCommand(raw: string): void {
     }
     if (AXIS_VIEW_LABELS[sub]) {
       const eng = engineRef.current
-      if (!eng) return err('引擎未就绪')
+      if (!eng) {
+        // 视图切换窗口：入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
+        if (!useMolStore.getState().structures.length) return err('引擎未就绪（先加载结构）')
+        whenEngineReady(() => engineRef.current?.setAxisView(sub))
+        return ok(`视角 → ${AXIS_VIEW_LABELS[sub]}（保持目标点与距离，平滑过渡）`)
+      }
       if (!eng.setAxisView(sub)) return err('引擎未就绪')
       return ok(`视角 → ${AXIS_VIEW_LABELS[sub]}（保持目标点与距离，平滑过渡）`)
     }

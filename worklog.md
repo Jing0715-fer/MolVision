@@ -1812,3 +1812,29 @@ Stage Summary:
 - 截图存档：shots/r48-hbonds-pocket-e2e.png（口袋特写 + 氢键虚线 + 命令卡 7/7 ✓）
 - 未解决与风险：①VLM 把 teal 氢键虚线描述为「红色」（暗背景 0x4fd1c5 亮度感知差异，非缺陷；如需可调色）②命令行 ConsoleBar 折叠态下 press 反引号超时未测（agent 链路与命令行共用 runCommand 同路径，功能等价已验）③弹窗体系 VLM 审计（r46 起遗留）
 - 下一阶段建议：①弹窗体系仪器化审计 ②超大蛋白序列条 compact mode ③ray 分辨率上限守卫（沙箱 OOM 防护）④agent 记忆可视化面板
+
+---
+Task ID: r49
+Agent: main
+Task: 修复用户实测回归：view from 命令「引擎未就绪」执行失败（欢迎页 load 触发视图切换窗口内两次撞墙，含自动修正轮）+ zoom 多拷贝选择拉回全景 + agent 修正轮上下文增强
+
+Work Log:
+- 【用户实测复述】「加载血红蛋白 4HHB，展示血红素口袋」：load/select/preset/show byres 全 ✓，但 view from heme → 引擎未就绪 ✗；zoom heme, 6 ✓（入队冲刷）；自动修正轮 view from (resn HEM and chain A) → 仍引擎未就绪 ✗（用户原话：view from 命令都执行失败了）
+- 【根因】r47 的 whenEngineReady 入队只覆盖 zoom/fit——view from/orient/turn/move/view <axis>/set_view 六类相机命令仍走 engineRef.current 直判 null 报错；自动修正轮在命令失败后立即执行不等引擎；大结构 4HHB+出版预设的 MolViewer（dynamic chunk）挂载窗口 > 命令链+修正轮总时长
+- 【修复 1（commands.ts 六命令入队）】view from：选择先行求值（纯数据层）→ 引擎缺席且有结构时 whenEngineReady 入队（多配体 nearestInstance 兜底也在冲刷回调内执行）+ 乐观 ok 消息；orient 同模式（含选择求值前置）；turn/move/view <axis>/set_view（JSON 先解析）：有结构入队、空场景诚实报错「引擎未就绪（先加载结构）」；get_view 保持同步读语义（读命令不可延迟）
+- 【修复 2（runTurn 命令前引擎等待）】AgentPanel runTurn 循环内每条 auto 命令执行前：activeId 存在且引擎缺席 → 轮询等待 ≤8s（常规工作台引擎恒在场零开销；修正轮走同一 runTurn 递归同样受益）——ray/png/symmetry 等全部引擎依赖命令不再撞挂载窗口
+- 【修复 3（zoom 多实例均布提示）】zoom <选择> 求值后纯数据层检测：残基实例 2~12 个且两两质心距 >25Å（如 4×HEM）→ ok 消息附「选择横跨 N 个远距拷贝（HEM142·A、HEM148·B…）已全部入框；单拷贝特写：zoom (resn HEM and chain A), 6」——控制台用户与修正轮 LLM 均可见（链 A 全部残基等连续选择实例数 >12 自然豁免，无误伤）
+- 【修复 4（修正轮上下文增强）】fixPrompt 附带最近 ≤6 条成功命令的关键输出（各截 110 字）——多实例提示/加载摘要进入修正 LLM 视野，修正更精准
+- 【修复 5（提示词教育）】规则 14 增补「多拷贝选择陷阱」段（命名/resn 选择覆盖多远距拷贝时 zoom 拉回全景→限定单链或 view from 自动挑最近实例；view from 后勿叠加同选择 zoom，需更近用 zoom in/move z -15）；规则 16 ④ 同步补充
+- 【附带账清】engine.ts sync() 内联类型补 hbondScope 字段（r48 遗留类型缺口：运行时传全量 store 无碍但 tsc 报错——r48 只跑 lint 未跑 tsc）；AgentPanel okOuts r.output ?? '' 空值防御
+- 【E2E 全链路（agent-browser 真实闭环）】①欢迎页发用户原话指令「加载血红蛋白 4HHB，展示血红素口袋」→ LLM 生成 8 条：load 4hhb/preset publication/view from (resn HEM and chain A)/zoom within 5 of (resn HEM and chain A)/bg white/outline on 0.5 1/deselect/ray 2400——8/8 全 ✓ 零「引擎未就绪」（对照用户实测两连 ✗）②视觉自查自证「聚焦展示 A 链的血红素结合口袋」③独立 VLM 对比裁定：与本轮 r48 口袋特写基准「同一级别（口袋特写）」④跟进「创建命名选择 heme…缩放到 heme，缓冲 6 Å」→ zoom heme, 6 输出多实例提示原文实证（4 拷贝列出+单拷贝建议）⑤跟进「从 heme 方向观察口袋」→ view from heme => 「多配体均布已自动聚焦 HEM142·A」——用户原始失败命令完整复活 ⑥ray 2400 无 OOM（dev server 存活、eval 响应正常）⑦lint 0/0 + tsc src 零错
+- 【沙箱经验】首个 VLM 审图把背景四聚体卡通误读为「全景」——用 r48 存档基准做 A/B 对比裁定（「同一级别口袋特写」）比孤立评分可靠；agent-browser fill+click 前需确认上一轮 busy=false（发送守卫静默吞消息）
+
+Stage Summary:
+- 用户报告回归账清：view from「引擎未就绪」双根因修复——①命令层六类相机命令 whenEngineReady 入队（与 r47 zoom 同语义：选择求值前置、乐观回报、多配体兜底随冲刷执行）②runTurn 每条命令前引擎等待（≤8s，修正轮同受益）——用户原话指令 E2E 复测 8/8 全绿、view from heme 命名选择路径与 (resn HEM and chain A) 内联路径双验通过
+- 新能力：zoom 多实例均布检测（2~12 实例且两两 >25Å → 输出远距拷贝清单+单拷贝特写建议）；修正轮携带成功命令输出（修正 LLM 获得系统提示级上下文）；提示词多拷贝陷阱教育（规则 14/16）
+- r48 遗留类型缺口账清（sync 内联类型 hbondScope）——tsc src 归零；建议后续轮 lint+tsc 双跑
+- 架构语义：fitView 保留相机方向（pos−target 归一化）——view from 定方向 + zoom 定取景的正交叠加语义成立；whenEngineReady 队列按入队顺序冲刷保证命令链时序
+- 截图存档：/tmp/r49-e2e-pocket.png（口袋特写全链）、/tmp/r49-final-viewfrom.png（view from heme 后）
+- 未解决与风险：①LLM 规则遵循仍有漂移（本轮链跳过规则 16 ①contacts ③hbonds——症状速查与自查可兜底，未加硬约束）②弹窗体系 VLM 审计（r46 起遗留）③超大蛋白序列条 compact mode ④ray 分辨率上限守卫（沙箱 OOM 防护）
+- 下一阶段建议：①弹窗体系仪器化审计 ②ray OOM 守卫 ③序列条 compact mode ④agent 记忆可视化面板

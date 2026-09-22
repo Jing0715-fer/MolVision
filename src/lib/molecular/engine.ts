@@ -1344,6 +1344,7 @@ export class MolEngine {
     measurements: Measurement[]
     measurePicks: { structureId: string; atoms: number[] } | null
     settings: Settings
+    hbondScope: { structureId: string; indices: number[]; rev: number } | null
   }) {
     this.applySettings(state.settings)
     const filtersKey = `${state.settings.hideHydrogens}|${state.settings.hideWater}|${state.settings.quality}`
