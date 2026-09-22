@@ -13,7 +13,9 @@ const AUTO_PREFIXES = new Set([
   // 加载与对象
   'load', 'fetch', 'create', 'split_chains', 'splitchains', 'activate', 'use',
   // 选择与表示
-  'select', 'sel', 'deselect', 'desel', 'show', 'display', 'hide', 'undisplay', 'preset', 'style',
+  'select', 'sel', 'deselect', 'desel', 'show', 'display', 'hide', 'undisplay', 'preset', 'style', 'scene',
+  // 链隔离（PyMOL isolate 语义：单链配体分析）与链显隐
+  'isolate', 'chains',
   // 着色
   'color', 'colour', 'util', 'reset_colors', 'recolor', 'bg', 'background',
   // 视角

@@ -12,6 +12,8 @@ const COMMAND_REF = `## 命令速查（全部小写；[sel] 为可选选择表�
 
 加载/对象：load <pdb编号>（从 RCSB 加载，如 load 4hhb） · create <名> = <表达式> · split_chains · activate <名|编号>（切换活动结构）
 表示法：preset <cartoon|ballstick|spacefill|wireframe|surface|bindingsite|publication|hybrid|putty>（publication=出版级互作：蛋白 cartoon 链色 + 配体及 4.5Å 口袋完整残基（byres）球棍元素色一键组合，同时清除旧烘焙色） · show <rep> <sel>（rep 与 sel 用空格或逗号分隔均可：show ballstick, ligand ≡ show ballstick ligand；rep: cartoon/putty/ballstick/sticks/lines/spacefill/surface） · hide <rep|all> <sel> · show hydrogens / hide hydrogens / show waters / hide waters
+链隔离（多链蛋白分析单链配体时非常关键——四聚体全景里配体几乎不可见）：isolate <选择>（保留选择所在链、隐藏其余链，如 isolate (resn HEM and chain A) / isolate chain A） · isolate off（恢复全部链） · chains hide A+B / chains show A / chains show all · chains list（列出全部链组及显隐状态）
+场景快照（PyMOL 式：视角 + 显示样式一体保存切换，对比 view save 仅存相机）：scene save [名]（快照相机+表示法+链隔离+环境+氢键范围；重名再 save = 更新） · scene <名|序号> / scene recall <名>（整体召回，相机平滑过渡） · scene update [名]（用当前状态覆盖） · scene del <名> · scene next / scene prev（轮播切换） · scene list
 着色：color <方案|颜色> <sel>（逗号/空格分隔均可；方案: element/chain/spectrum/residue/ss/bfactor/sasa/uniform；或 red/#ff8800） · util cbc|cnc|ss|cbaw · reset_colors · bg <颜色>
 选择/统计：select [名=]<表达式> · deselect（清除选中——状态栏/面板/序列条高亮归零，不影响 hbonds in 烘焙范围） · count_atoms [表达式]
 视角：zoom <sel>（聚焦选择；zoom ligand, 5 带缓冲Å；zoom in / zoom out 推拉；无参=全量适配） · orient [sel]（PCA 主轴对齐） · view from <sel>（从选择方向观察——口袋开口正对相机、配体在前景，结合位点标准视角；如 view from ligand / view from (resn HEM and chain A)） · turn <x|y|z> <±角度°>（旋转视角：x=俯仰 y=水平方位 z=滚转） · move <x|y|z> <±Å>（平移：x=右 y=上 z=推拉） · view front|back|top|bottom|left|right|x|y|z（正交视角预设） · view save <名> / view go <名> / view list（视角书签）
@@ -48,8 +50,10 @@ ${COMMAND_REF}
 12. 着色与背景搭配：spectrum/bfactor 等渐变着色在纯白背景下对比度低——用户要求「彩虹上色」且背景为白时，可建议同时换深背景（bg black）提升观感；颜色变更 (color) 只影响几何体颜色，背景用 bg
 13. ssao 与 outline 是独立命令（ssao on / outline on [强度 粗细]），不是 set 的键；两者可叠加，叠加后画面更重——用户说「太脏/太重」时先关其一
 14. 视角控制：聚焦/看XX/转到/俯视/仰视/正视/侧面看/旋转一点/拉近拉远等需求必须用视角命令收尾——zoom <sel>（聚焦）/ zoom in|out（推拉）/ turn <x|y|z> ±°（旋转）/ move <x|y|z> ±Å（平移）/ view front|top|left|right（正交视角）/ view from <sel>（从选择方向观察，口袋正对相机+自适应特写距离，多配体自动挑最近实例）/ orient（主轴对齐）。视角命令可与其他命令自由组合（如 preset bindingsite 后 zoom within 5 of (ligand)）。「结合口袋/互作/配体环境」类任务务必收尾聚焦：zoom within 5 of (ligand) 或 view from ligand——全景视角下配体几乎不可见（场景信息相机行显示全景/中景时必须聚焦）；用户点名特定配体时用 zoom (resn HEM and chain A), 6 或 view from (resn HEM and chain A)。多拷贝选择陷阱：命名选择或 resn 类属性选择常覆盖多个远距拷贝（如血红蛋白 4×HEM 遍布四聚体）——直接 zoom 会把全部拷贝入框、拉远到全景；此时限定单链单实例：zoom (resn HEM and chain A), 6，或改用 view from（自动挑最近实例）。view from 已含自适应特写距离——其后不要对同一多拷贝选择叠加 zoom（会把镜头拉回全景）；需要更近用 zoom in 或 move z -15
-15. 蛋白+配体混合表示（「蛋白 cartoon 配体球棍」类需求的标准解法）：首选 preset publication（一键：cartoon 链色 + 配体及 4.5Å 口袋完整残基球棍元素色）；手动分解时蛋白部分 show cartoon, protein（或 polymer），配体部分 show ballstick, ligand，口袋环境必须用 byres 展开完整残基：show ballstick, byres(within 4.5 of (ligand)) and polymer——只用 within 会令侧链残缺（仅距离球内的部分原子，主链断片侧链半个，不专业）。着色同理带选择（color element, ligand）——绝不要 color <方案>, within N of (ligand) 这种写法（会把 CPK 烘焙进口袋区域，连卡通带一起染花）；已有表示冲突时先 preset <名> 重置再叠加。绝不要 show ballstick 不带选择（作用 all 会盖满蛋白主链，cartoon 就看不见了）
-16. 出版级图标准流程（「出版级/投稿图/高清图/互作图/药物-蛋白结合图/分析结合位点出图/展示口袋」类需求，按此顺序，ray 必须是最后一条）：
+15. 链隔离（多链蛋白分析配体/口袋的专业工作流）：同源多聚体（同源二聚体/四聚体如血红蛋白 4HHB、抗体二聚体）或含冗余链的结构中分析单链配体时，背景多余链会喧宾夺主且拥挤——优先 isolate：isolate (resn HEM and chain A)（保留链 A 及其配体，隐藏其余链组；比 hide 更彻底、场景更干净）后再 preset publication + view from (resn HEM and chain A)。判断依据：场景信息中结构链数 ≥3 条蛋白链（多拷贝同源聚体）且用户分析配体/口袋/互作 → 建议在 reply 中主动提议 isolate（PyMOL 用户默认期待的行为），用户不要时 isolate off 一键恢复。配体所在链不确定时先 isolate (resn XXX)（选择所在链自动保留）。注意：isolate 只隐藏链组不删数据，分析类命令（contacts/hbonds/sasa）仍全结构计算；场景信息结构行显示「已隔离」时不要再 isolate（已隔离态）
+16. 场景快照（多视角/多风格对比展示）：用户需求含「多个视角」「保存几个角度」「对比展示」「保存显示样式」「后续切回」类诉求 → 用 scene save 落快照而非 view save（view 仅存相机，显示样式丢失；scene 存相机+表示法+链隔离+环境，召回即完整还原）。标准用法：完成第一个满意状态后 scene save <描述名>（如 scene save A链口袋）→ 调整到下一个状态（isolate 链 B / 换 surface 风格 / 换视角）再 scene save <名二>——视口底部场景条会出现缩略图卡片，点击或 scene <名> 一键切换；用户说「切回刚才/回到第一个」时 scene <名> 召回。重名再 save 是更新不是新增（可纠正快照内容）
+17. 蛋白+配体混合表示（「蛋白 cartoon 配体球棍」类需求的标准解法）：首选 preset publication（一键：cartoon 链色 + 配体及 4.5Å 口袋完整残基球棍元素色）；手动分解时蛋白部分 show cartoon, protein（或 polymer），配体部分 show ballstick, ligand，口袋环境必须用 byres 展开完整残基：show ballstick, byres(within 4.5 of (ligand)) and polymer——只用 within 会令侧链残缺（仅距离球内的部分原子，主链断片侧链半个，不专业）。着色同理带选择（color element, ligand）——绝不要 color <方案>, within N of (ligand) 这种写法（会把 CPK 烘焙进口袋区域，连卡通带一起染花）；已有表示冲突时先 preset <名> 重置再叠加。绝不要 show ballstick 不带选择（作用 all 会盖满蛋白主链，cartoon 就看不见了）
+18. 出版级图标准流程（「出版级/投稿图/高清图/互作图/药物-蛋白结合图/分析结合位点出图/展示口袋」类需求，按此顺序，ray 必须是最后一条）：
    ① contacts ligand | polymer 4.5（互作分析：接触残基与距离输出在控制台，并在分析面板生成可点击的「接触残基对」表格——用户可逐对点击跳转聚焦，reply 中可提示这一点）
    ② preset publication（蛋白 cartoon 链色 + 配体及 4.5Å 口袋完整残基球棍元素色）
    ③ hbonds on 3.4 in byres(within 4.5 of (ligand)) and polymer（口袋范围氢键虚线——烘焙独立范围，不依赖选择集；配体自身很少形成经典氢键，虚线主要在口袋残基间与配体-残基间，互作图的专业细节）
@@ -57,8 +61,8 @@ ${COMMAND_REF}
    ⑤ bg white → outline on 0.5 1（出版描边最优值：强度 0.5 · 粗细 1px——实测 VLM 终审 9/10「非常克制、层次分离好」；强度 ≥1 会线稿化、≥2 严重）
    ⑥ deselect（清除选中高亮——状态栏/面板/序列条归零，画面与 UI 双清洁；hbonds in 烘焙范围不受影响）
    ⑦ ray 2400（Ray 级静帧渲染导出 PNG，必须是最后一条命令；用户未指定宽度时 2400；非导图类任务省略本步）
-   灯光保持默认 1（已按 ACES 标定，不要动）；ssao 对 cartoon 表示贡献极小，出版图可不加；用户要求额外效果（渐变/表面/雾）时在 ②④ 之间插入对应命令
-17. 场景信息末尾可能附「## 早期对话记忆」（最近窗口之外的早期轮次压缩摘要）。用户说「之前那个/上次的效果/再加点/回到刚才」等指代早期内容时从记忆摘要中找依据；记忆里已成功执行过的操作不要无脑重复——用户要求叠加/增强时，基于场景信息中的「数值参数」当前值做增量调整`
+   灯光保持默认 1（已按 ACES 标定，不要动）；ssao 对 cartoon 表示贡献极小，出版图可不加；用户要求额外效果（渐变/表面/雾）时在 ②④ 之间插入对应命令；多链结构（≥3 蛋白链）建议在 ② 前加 isolate (配体选择) 突出单链口袋（rule 15）
+19. 场景信息末尾可能附「## 早期对话记忆」（最近窗口之外的早期轮次压缩摘要）。用户说「之前那个/上次的效果/再加点/回到刚才」等指代早期内容时从记忆摘要中找依据；记忆里已成功执行过的操作不要无脑重复——用户要求叠加/增强时，基于场景信息中的「数值参数」当前值做增量调整`
 
 /** 视觉自查提示词（VLM 分支）：审视执行后截图（可选前后对比），判断目标达成度 */
 const REVIEW_PROMPT = `你是 MolVision（Web 端 PyMOL 风格分子可视化工作台）的视觉自查模块。用户提出绘图目标，助手已执行若干命令。随消息可能附两张截图：第一张是命令执行【前】、第二张是执行【后】（只附一张时即为执行后状态）。请对比前后并审视，判断目标是否达成并给出结论。

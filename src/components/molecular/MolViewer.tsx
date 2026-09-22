@@ -22,6 +22,7 @@ import { RecordBadge } from '@/components/studio/RecordBadge'
 import { ColorLegend } from '@/components/studio/ColorLegend'
 import { MapLegend } from '@/components/studio/MapLegend'
 import { ViewBar } from '@/components/studio/ViewBar'
+import { SceneBar } from '@/components/studio/SceneBar'
 import { TourOverlay } from '@/components/studio/TourOverlay'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 import { useViewsStore } from '@/lib/molecular/views-store'
@@ -546,6 +547,9 @@ export default function MolViewer() {
 
       {/* 视角书签浮层（右缘竖排，保存/跳转相机视角） */}
       <ViewBar />
+
+      {/* 场景快照条（底部居中，有保存场景时显示；相机+表示法+链隔离+环境一体切换） */}
+      <SceneBar />
 
       {/* 左下角图例列：密度图 σ 控制（交互）+ 颜色标尺（putty/B 因子/SASA 着色时显示）；时间轴打开时上移让位 */}
       <div className={cn(

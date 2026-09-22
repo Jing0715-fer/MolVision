@@ -28,6 +28,8 @@ interface SessionStructure {
   transform?: RigidTransform
   /** 晶体对称伴侣（恢复时重放生成） */
   symmetry?: { radius: number; count: number }
+  /** 链组级隔离（isolate / chains hide）：被隐藏的链组索引（恢复时重放） */
+  hiddenChains?: number[]
 }
 
 interface SessionData {
@@ -86,6 +88,7 @@ export function saveSession(): boolean {
       visible: st.visible,
       transform: st.transform,
       symmetry: st.symmetry,
+      hiddenChains: st.hiddenChains?.length ? st.hiddenChains : undefined,
     })
   }
   // 防脱节保护：内存有结构但全部拿不到源文本（HMR 模块替换后 textRegistry 重建、
@@ -188,7 +191,7 @@ export function restoreSession(): number {
       // 覆盖 reps / overrides / visible / transform
       useMolStore.setState(s => ({
         structures: s.structures.map(x => x.id === id
-          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible, transform: ss.transform }
+          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible, transform: ss.transform, hiddenChains: ss.hiddenChains?.length ? ss.hiddenChains : undefined, rev: x.rev + 1 }
           : x),
       }))
       // 重放对称伴侣（引擎视图就绪后由 sync 构建；此处仅写入设置）
@@ -440,7 +443,7 @@ export async function mergeSessionFile(file: File): Promise<number> {
       textRegistry.set(id, ss.text)
       useMolStore.setState(s => ({
         structures: s.structures.map(x => x.id === id
-          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible, transform: ss.transform }
+          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible, transform: ss.transform, hiddenChains: ss.hiddenChains?.length ? ss.hiddenChains : undefined, rev: x.rev + 1 }
           : x),
       }))
       if (ss.symmetry?.radius && ss.symmetry.radius > 0) {

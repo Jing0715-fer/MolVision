@@ -1838,3 +1838,29 @@ Stage Summary:
 - 截图存档：/tmp/r49-e2e-pocket.png（口袋特写全链）、/tmp/r49-final-viewfrom.png（view from heme 后）
 - 未解决与风险：①LLM 规则遵循仍有漂移（本轮链跳过规则 16 ①contacts ③hbonds——症状速查与自查可兜底，未加硬约束）②弹窗体系 VLM 审计（r46 起遗留）③超大蛋白序列条 compact mode ④ray 分辨率上限守卫（沙箱 OOM 防护）
 - 下一阶段建议：①弹窗体系仪器化审计 ②ray OOM 守卫 ③序列条 compact mode ④agent 记忆可视化面板
+
+---
+Task ID: r50
+Agent: main
+Task: 用户需求实现：多链蛋白分析配体时单链隔离展示 + PyMOL 式场景系统（视角+显示样式一体保存切换）
+
+Work Log:
+- 【用户原话】「对于分析配体的，如果有多条链的话，只展示其中一条链，隐藏其他链感觉会更好一些，甚至可以提供多个不同视角（类似pymol中不仅保存视角，也保存显示的样式）让用户选择会更好」
+- 【链隔离基础设施】types.ts StructureEntry 新增 hiddenChains?: number[]（隐藏链组索引）；store 新增 setChainHidden/toggleChainHidden（bump entry.rev 触发 rep 重建）；engine.ts 三处接入过滤——buildRep 几何过滤（atomChainGroups WeakMap 缓存原子→链组查找表）、updateHBonds 端点过滤（虚线不悬空指向隐藏原子）、updateLabels 标签隐藏
+- 【isolate 命令】isolate <选择>（保留选择所在链组+同链 ID 蛋白/核酸链组自动连带——「分析链 A 配体」看到链 A 蛋白+配体而非孤零零 HEM，水/其他组不连带）/ isolate off；chains hide A+B / chains show A|all / chains list（同链 ID 多链组全匹配）
+- 【场景系统】新建 scene-store.ts（molvision-scenes-v1 localStorage 独立持久化）：快照=相机+各结构 reps/显隐/hiddenChains/colorOverrides+环境设置（背景/雾/轮廓/SSAO/氢键参数）+hbondScope+活动结构名，按结构名召回（未加载跳过报告）；saveScene 重名原位更新（PyMOL scene update 语义）；recallScene 引擎缺席 whenEngineReady 入队（欢迎页 load 窗口不失败）；cycleScene next/prev 轮播
+- 【命令】scene save/recall/update/del/clear/next/prev/list + scene <名|序号>；SCENE_SUBS 智能分发——scene 后非子命令词仍是 preset 别名（向后兼容 scene cartoon）
+- 【UI】SceneBar.tsx（视口底部居中胶片条：缩略图卡片+Layers 徽标+◀▶ 轮播+Save 按钮+双击重命名+悬停删除）；StructuresPanel 链行加眼睛开关（Eye/EyeOff，隐藏链行 opacity-55）+「隔离中 N 链 ⊠」一键解除徽章
+- 【agent】runner 白名单 +isolate/chains/scene（scene 此前竟不在白名单——LLM 生成被拒实测发现）；context.ts 结构行附「已隔离」+ 场景快照行（名称列表+「回到刚才」引导）；route.ts 命令速查新增链隔离/场景快照两节 + 规则 15（链隔离：≥3 蛋白链且分析配体时主动提议 isolate）+ 规则 16（多视角诉求→scene save 而非 view save）+ 规则 18 出版流程建议多链结构先 isolate
+- 【session 持久化】SessionStructure +hiddenChains（保存/恢复两处重放）
+- 【补全/帮助】complete.ts isolate/chains/scene 候选+sceneNameItems 场景名补全；COMMAND_HELP 三条目；makeThumb 从 views-store 导出共用
+- 【E2E】①chains list ✓（4HHB 12 链组列出）②isolate (resn HEM and chain A) → 保留 A(配体)+A(蛋白) 连带，隐藏 10/12 ✓（初版只保留配体组——连带保留修复后 VLM 确认「单链口袋特写、背景纯净」）③scene save A链口袋 ✓ ④破坏状态（isolate off+surface+白底）→ scene recall ✓ 完整还原（卡通+隔离+口袋相机；隔离徽章回归）⑤AI 助手「只保留链A展示血红素口袋，保存为场景」→ LLM 生成 isolate chain A + scene save 链A血红素口袋 ✓（scene 白名单修复后实测通过）⑥场景条缩略图回填 ✓ 点击卡片召回 ✓ 删 del ✓ ⑦VLM 终审：单链口袋特写完美、场景条美观、无 UI 缺陷 ⑧lint 0/0 + tsc src 零错 + 浏览器零错误
+- 【踩坑】agent eval 里 dispatchEvent 派发 input 事件对 React 受控输入必须用原生 value setter（沿用既有经验）；agent-browser click ref 超时改 eval 直接 .click() 更稳
+
+Stage Summary:
+- 用户两需求全部落地：①多链蛋白配体分析单链隔离（isolate+chains+链行眼睛，同 ID 蛋白链连带保留语义）②PyMOL 式场景系统（相机+表示法+链隔离+环境一体快照，底部场景条缩略图切换，scene save/recall/next/prev 全命令 + AI 助手可自主保存召回）
+- 架构决策：链隔离走 rep 构建层过滤（mask 归零）而非 Object3D.visible——与 hideHydrogens/hideWater 同模式，标签/氢键/对称伴侣一致性处理；场景快照按结构名映射（跨会话/跨 load 存活，不依赖内部 id）
+- 语义设计：isolate 连带保留是交互关键——「分析链 A 的配体」应看到链 A 蛋白+配体（初版孤零零 HEM 被实测抓出即修）；scene 重名 save=更新（PyMOL scene update 语义合并进 save）
+- 截图存档：/tmp/r50-isolate-fixed.png（单链口袋特写）、/tmp/r50-final.png（场景条+召回后整体）
+- 未解决与风险：①scene 条与 EnsembleBar 同在底部居中（ensemble 播放时可能叠——NMR 结构+场景同用场景罕见，未处理）②场景缩略图捕获时机为 save 瞬间（reps 重建动画中可能半帧）③弹窗体系 VLM 审计（r46 遗留）④超大蛋白序列条 compact mode
+- 下一阶段建议：①弹窗体系仪器化审计 ②ray OOM 守卫 ③agent 记忆可视化面板 ④scene 快照 session export 携带（.molvision 文件互导）

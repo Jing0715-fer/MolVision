@@ -17,6 +17,7 @@ import { evaluateSelection, maskToIndices } from './selection'
 import { fetchAndComputeMap, removeMap, setMapLook } from './map-load'
 import { useMapStore } from './map-store'
 import { MAX_BOOKMARKS, useViewsStore } from './views-store'
+import { useSceneStore } from './scene-store'
 import { useTourStore } from './tour-store'
 import { TOURS, findTour } from './tours'
 import { buildMorph, buildMultiMorph } from './morph'
@@ -156,11 +157,202 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'history [clear]', desc: '命令历史面板（搜索/置顶/执行；clear 清空）', example: 'history · history clear' },
   { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
   { cmd: 'preset <名>', desc: '应用风格预设（含出版级互作）', example: 'preset publication' },
+  { cmd: 'isolate <选择>|off', desc: '链隔离：保留选择所在链隐藏其余（多链蛋白单链配体分析）', example: 'isolate (resn HEM and chain A) · isolate off' },
+  { cmd: 'chains hide|show|list', desc: '链显隐手动控制（同链 ID 多链组全匹配）', example: 'chains hide B+C · chains show all' },
+  { cmd: 'scene save|recall|next|list', desc: '场景快照：相机+表示法+链隔离+环境一体保存切换', example: 'scene save A链口袋 · scene recall A链口袋 · scene next' },
   { cmd: 'delete <名>', desc: '删除命名选择', example: 'delete site' },
   { cmd: 'close [名|all]', desc: '关闭结构（默认活动结构）', example: 'close · close all · close 4HHB' },
   { cmd: 'clear', desc: '移除所有结构（同 close all）', example: 'clear' },
   { cmd: 'help', desc: '显示帮助', example: 'help' },
 ]
+
+/** scene 快照子命令集合（其余词仍是 preset 别名，向后兼容） */
+const SCENE_SUBS = new Set(['save', 'add', 'recall', 'go', 'restore', 'update', 'list', 'ls', 'del', 'rm', 'delete', 'clear', 'next', 'prev'])
+
+/** 求值选择表达式并返回原子索引（活动结构；共用路径） */
+function evalActiveSelection(expr: string): { indices: number[]; error?: string } {
+  const s = useMolStore.getState()
+  if (!s.activeId) return { indices: [], error: '没有活动结构' }
+  const data = dataRegistry.get(s.activeId)
+  if (!data) return { indices: [], error: '结构数据不存在' }
+  const named = buildNamedMasks(s.activeId, data)
+  const r = evaluateSelection(expr, { structure: data, named })
+  if (r.error) return { indices: [], error: `选择错误: ${r.error}` }
+  return { indices: maskToIndices(r.mask) }
+}
+
+/** 原子索引 → 覆盖链组集合（链隔离判定用） */
+function chainGroupsOf(data: StructureData, indices: number[]): Set<number> {
+  const groups = new Set<number>()
+  for (const i of indices) {
+    for (let ci = 0; ci < data.chains.length; ci++) {
+      const c = data.chains[ci]
+      if (i >= c.start && i < c.end) { groups.add(ci); break }
+    }
+  }
+  return groups
+}
+
+/** 链组索引 → 人类可读标签（A（蛋白）· B（配体链）…） */
+function chainGroupLabels(entry: { chains: { id: string; type: string }[] }, groups: Iterable<number>): string[] {
+  const TYPE_LABEL: Record<string, string> = { protein: '蛋白', nucleic: '核酸', ligand: '配体', water: '水', other: '其他' }
+  return [...groups].map(g => {
+    const c = entry.chains[g]
+    return `${c.id.trim() || '?'}（${TYPE_LABEL[c.type] ?? '其他'}）`
+  })
+}
+
+/** isolate / chains / scene 命令实现（commands.ts 内部共用） */
+function runIsolateCommand(raw: string, parts: string[], ok: (m: string) => void, err: (m: string) => void): void {
+  const rest = raw.slice(parts[0].length).trim().replace(/,/g, ' ').trim()
+  const s = useMolStore.getState()
+
+  // isolate off / isolate reset：恢复全部链
+  if (!rest) {
+    return err('用法: isolate <选择表达式>（保留选择所在链，隐藏其余链）/ isolate off（恢复全部链）')
+  }
+  if (rest.toLowerCase() === 'off' || rest.toLowerCase() === 'reset' || rest.toLowerCase() === 'show') {
+    if (!s.activeId) return err('没有活动结构')
+    s.setChainHidden(s.activeId, null)
+    return ok('已恢复显示全部链（隔离解除）')
+  }
+
+  if (!s.activeId) return err('没有活动结构')
+  const data = dataRegistry.get(s.activeId)
+  const entry = s.structures.find(x => x.id === s.activeId)
+  if (!data || !entry) return err('结构数据不存在')
+
+  const ev = evalActiveSelection(rest)
+  if (ev.error) return err(ev.error)
+  const keep = chainGroupsOf(data, ev.indices)
+  if (!keep.size) return err('选择为空')
+  // 同链 ID 连带保留：选择命中配体链组（如 chain A 的 HEM）时，同 ID 的蛋白链组（chain A 聚合部分）
+  // 自动并入保留集——「分析链 A 的配体」应该看到链 A 蛋白 + 配体，而不是孤零零一个 HEM。
+  // 水/其他链组不连带（噪声）；只有蛋白/核酸链组才值得连带保留。
+  const keepIds = new Set([...keep].map(g => data.chains[g].id.trim().toUpperCase()))
+  const linked: number[] = []
+  for (let g = 0; g < data.chains.length; g++) {
+    if (keep.has(g)) continue
+    const c = data.chains[g]
+    const isPolymer = c.type === 'protein' || c.type === 'nucleic'
+    if (isPolymer && keepIds.has(c.id.trim().toUpperCase())) { keep.add(g); linked.push(g) }
+  }
+  const hidden: number[] = []
+  for (let g = 0; g < data.chains.length; g++) if (!keep.has(g)) hidden.push(g)
+  if (!hidden.length) return ok('选择已覆盖全部链——无需隔离（所有链都在显示中）')
+  s.setChainHidden(s.activeId, hidden)
+  const total = data.chains.length
+  const linkedNote = linked.length ? `（含同 ID 蛋白链组 ${chainGroupLabels(entry, linked).join('、')}——配体所在链的聚合部分自动连带）` : ''
+  return ok(`已隔离：保留 ${chainGroupLabels(entry, keep).join('、')}${linkedNote}，隐藏其余 ${hidden.length}/${total} 个链组——多链蛋白分析单链配体时非常实用（isolate off 恢复）`)
+}
+
+function runChainsCommand(raw: string, parts: string[], ok: (m: string) => void, err: (m: string) => void): void {
+  const sub = (parts[1] ?? '').toLowerCase()
+  const s = useMolStore.getState()
+  if (!s.activeId) return err('没有活动结构')
+  const data = dataRegistry.get(s.activeId)
+  const entry = s.structures.find(x => x.id === s.activeId)
+  if (!data || !entry) return err('结构数据不存在')
+  const hidden = entry.hiddenChains ?? []
+
+  if (sub === 'list' || sub === 'ls' || !sub) {
+    ok(`链组（${data.chains.length} 个，隐藏 ${hidden.length} 个）：`)
+    data.chains.forEach((c, i) => {
+      const hid = hidden.includes(i)
+      ok(`  ${hid ? '⊘' : '◉'}  ${String(i).padStart(2)}  ${(c.id.trim() || '?').padEnd(3)} ${c.type === 'protein' ? '蛋白' : c.type === 'nucleic' ? '核酸' : c.type === 'ligand' ? '配体' : c.type === 'water' ? '水' : '其他'}  ${c.residueIdx.length} 残基`)
+    })
+    return ok('隐藏：chains hide A+B / chains hide A · 恢复：chains show A / chains show all · 隔离到选择：isolate <选择>')
+  }
+  if (sub === 'show' || sub === 'hide') {
+    // chains hide A+B+C / chains show A / chains show all
+    const arg = raw.slice(parts[0].length).trim()
+    const subLower = arg.toLowerCase()
+    const argRest = subLower.startsWith('show') ? arg.slice(4).trim() : subLower.startsWith('hide') ? arg.slice(4).trim() : ''
+    if (sub === 'show' && (argRest === 'all' || argRest === '*')) {
+      s.setChainHidden(s.activeId, null)
+      return ok('已恢复显示全部链')
+    }
+    const ids = argRest.toUpperCase().split(/[+\s,]+/).map(x => x.trim()).filter(Boolean)
+    if (!ids.length) return err('用法: chains hide A+B / chains show A / chains show all（链 ID 不分大小写）')
+    // 同一链 ID 可能对应多个链组（蛋白链 A + 配体链 A）——按 ID 匹配全部组
+    const groups = data.chains.map((c, i) => ({ id: c.id.trim().toUpperCase(), i })).filter(c => ids.includes(c.id))
+    if (!groups.length) return err(`未找到链 ${ids.join('+')}——可用链：${[...new Set(data.chains.map(c => c.id.trim() || '?'))].join('、')}`)
+    const cur = new Set(hidden)
+    if (sub === 'hide') groups.forEach(g => cur.add(g.i))
+    else groups.forEach(g => cur.delete(g.i))
+    s.setChainHidden(s.activeId, cur.size ? [...cur] : null)
+    const verb = sub === 'hide' ? '隐藏' : '恢复'
+    return ok(`已${verb}链 ${ids.join('+')}（${groups.length} 个链组）——当前隐藏 ${cur.size}/${data.chains.length} 个链组`)
+  }
+  return err('用法: chains list / chains hide <A+B> / chains show <A|all> / chains reset（同 isolate off）')
+}
+
+function runSceneCommand(parts: string[], ok: (m: string) => void, err: (m: string) => void): void {
+  const sc = useSceneStore.getState()
+  if (!sc.hydrated) sc.hydrate()
+  const sub = (parts[1] ?? '').toLowerCase()
+  const rest = parts.slice(2).join(' ').trim()
+
+  if (sub === 'save' || sub === 'add') {
+    const r = sc.saveScene(rest || undefined)
+    if (!r.ok) return err(r.error)
+    return ok(r.updated
+      ? `已更新场景「${r.scene.name}」——相机/表示法/链隔离/环境整体覆盖（结构卡片下方场景条同步刷新）`
+      : `已保存场景「${r.scene.name}」——相机 + 表示法 + 链隔离 + 环境一体快照（缩略图稍后回填；重名再 save 会更新而非新增）`)
+  }
+  if (sub === 'update') {
+    const target = rest ? findScene(rest) : undefined
+    if (rest && !target) return err(`找不到场景「${rest}」——scene list 查看`)
+    const r = sc.updateScene(target ? target.id : sc.activeSceneId ?? (sc.scenes.length - 1))
+    if (!r.ok) return err(r.error)
+    return ok(`已用当前状态更新场景「${r.scene.name}」`)
+  }
+  if (!sub || sub === 'list' || sub === 'ls') {
+    if (!sc.scenes.length) return ok('暂无场景快照——scene save [名称] 保存当前完整状态（相机+表示法+链隔离+环境；对比 view save 仅存相机）')
+    ok(`场景快照（${sc.scenes.length}/${10}）：`)
+    sc.scenes.forEach((x, i) => {
+      const t = new Date(x.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      const n = x.structures.length
+      ok(`  ${String(i + 1).padEnd(2)}  ${x.name.padEnd(14)} ${t} · ${n} 结构${x.hbondScope ? ' · 氢键范围' : ''}${x.camera ? ' · 相机' : ' · 无相机'}${sc.activeSceneId === x.id ? ' ← 当前' : ''}`)
+    })
+    return ok('召回：scene <序号|名称>（或 scene recall）；更新：scene update；删除：scene del；轮播：scene next/prev')
+  }
+  if (sub === 'del' || sub === 'rm' || sub === 'delete') {
+    if (!rest) return err('用法: scene del <序号|名称>')
+    const target = findScene(rest)
+    if (!target) return err(`找不到场景「${rest}」——scene list 查看`)
+    sc.deleteScene(target.id)
+    return ok(`已删除场景「${target.name}」`)
+  }
+  if (sub === 'clear') {
+    sc.clearScenes()
+    return ok('已清空所有场景快照')
+  }
+  if (sub === 'next' || sub === 'prev') {
+    if (!sc.scenes.length) return err('暂无场景——先 scene save 保存')
+    if (!sc.cycleScene(sub === 'next' ? 1 : -1)) return err('召回失败（结构未加载？）——场景按结构名恢复，先 load 对应结构')
+    return ok(`已切换到「${useSceneStore.getState().activeSceneId ? findSceneById(useSceneStore.getState().activeSceneId!)?.name : ''}」`)
+  }
+  // scene <序号|名称> / scene recall <序号|名称>
+  const arg = sub === 'recall' || sub === 'go' || sub === 'restore' ? rest : parts.slice(1).join(' ').trim()
+  if (!arg) return err('用法: scene save [名] | scene <序号|名> | scene update | scene del <名> | scene next/prev | scene list')
+  const target = findScene(arg)
+  if (!target) return err(`找不到场景「${arg}」——scene list 查看`)
+  const r = sc.recallScene(target.id)
+  if (!r.ok) return err(r.error)
+  const missing = r.missing.length ? `；未加载跳过：${r.missing.join('、')}` : ''
+  return ok(`已召回场景「${target.name}」——恢复 ${r.restored} 个结构的表示法/链隔离/环境${r.cameraApplied ? ' + 相机平滑过渡' : ''}${missing}（scene save 同名可快照当前状态）`)
+}
+
+function findScene(arg: string): { id: string; name: string } | undefined {
+  const scenes = useSceneStore.getState().scenes
+  const n = Number(arg)
+  return Number.isInteger(n) && n >= 1 ? scenes[n - 1] : scenes.find(x => x.name.toLowerCase() === arg.toLowerCase())
+}
+
+function findSceneById(id: string): { id: string; name: string } | undefined {
+  return useSceneStore.getState().scenes.find(x => x.id === id)
+}
 
 export function runCommand(raw: string): void {
   const store = useMolStore.getState()
@@ -486,8 +678,21 @@ export function runCommand(raw: string): void {
     return ok(`已添加 ${s.selection.indices.length} 个标签`)
   }
 
+  if (cmd === 'isolate') {
+    return runIsolateCommand(input, parts, ok, err)
+  }
+
+  if (cmd === 'chains' || cmd === 'chain' && (parts[1] ?? '').toLowerCase() === 'hide' || cmd === 'chain' && (parts[1] ?? '').toLowerCase() === 'show') {
+    return runChainsCommand(input, parts, ok, err)
+  }
+
   if (cmd === 'preset' || cmd === 'style' || cmd === 'scene') {
     const name = (parts[1] ?? '').toLowerCase()
+    // 场景快照子命令（scene save/recall/update/del/clear/next/prev）——
+    // 先于 preset 别名判定（非子命令时 scene 仍是 preset 别名，向后兼容）
+    if (cmd === 'scene' && SCENE_SUBS.has(name)) {
+      return runSceneCommand(parts, ok, err)
+    }
     const p = PRESETS[name]
     if (p) {
       useMolStore.getState().applyPreset(name)

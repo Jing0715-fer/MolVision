@@ -3,6 +3,7 @@
 import { COMMAND_HELP } from './commands'
 import { COLOR_SCHEME_LABELS } from './colors'
 import { REP_LABELS } from './types'
+import { useSceneStore } from './scene-store'
 
 /** 补全上下文（调用方从 store 即时读取） */
 export interface CompletionCtx {
@@ -97,6 +98,28 @@ const onOff = (): CompletionItem[] => [
   { insert: 'off', kind: 'value', detail: '关' },
 ]
 
+/** preset 名候选（scene 命令非子命令时仍可作 preset 别名） */
+const presetNameItems = (): CompletionItem[] => [
+  { insert: 'publication', kind: 'preset', detail: '出版级互作（卡通+口袋球棍）' },
+  { insert: 'bindingsite', kind: 'preset', detail: '结合口袋' },
+  { insert: 'cartoon', kind: 'preset', detail: 'Cartoon 经典' },
+  { insert: 'ballstick', kind: 'preset', detail: '球棍模型' },
+  { insert: 'spacefill', kind: 'preset', detail: '空间填充' },
+  { insert: 'wireframe', kind: 'preset', detail: '线框' },
+  { insert: 'surface', kind: 'preset', detail: '分子表面' },
+  { insert: 'hybrid', kind: 'preset', detail: '混合风格' },
+  { insert: 'putty', kind: 'preset', detail: 'Putty B 因子管' },
+]
+
+/** 已保存场景名候选（scene recall/del/update <名> 补全；SSR 安全） */
+const sceneNameItems = (): CompletionItem[] => {
+  try {
+    return useSceneStore.getState().scenes.map(sc => ({ insert: sc.name, kind: 'sel' as const, detail: '场景快照' }))
+  } catch {
+    return []
+  }
+}
+
 const REGISTRY: CmdDef[] = [
   { names: ['load', 'fetch'], args: () => null },
   { names: ['select', 'sel'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
@@ -109,6 +132,33 @@ const REGISTRY: CmdDef[] = [
       : pos >= 3 ? selItems(ctx) : null),
   },
   { names: ['split_chains'] },
+  {
+    names: ['isolate'],
+    expr: true,
+    args: (pos, ctx) => (pos >= 1
+      ? [...selItems(ctx), { insert: 'off', kind: 'sub', detail: '恢复全部链' }]
+      : null),
+  },
+  {
+    names: ['chains'],
+    args: pos => (pos === 1 ? [
+      { insert: 'hide', kind: 'sub', detail: '隐藏链：chains hide A+B' },
+      { insert: 'show', kind: 'sub', detail: '恢复链：chains show A / all' },
+      { insert: 'list', kind: 'sub', detail: '列出全部链组及显隐' },
+    ] : null),
+  },
+  {
+    names: ['scene'],
+    args: (pos) => (pos === 1 ? [
+      { insert: 'save', kind: 'sub', detail: '快照当前完整状态（相机+表示法+链隔离+环境）' },
+      { insert: 'recall', kind: 'sub', detail: '召回场景' },
+      { insert: 'update', kind: 'sub', detail: '用当前状态覆盖既有场景' },
+      { insert: 'next', kind: 'sub', detail: '轮播下一个' },
+      { insert: 'prev', kind: 'sub', detail: '轮播上一个' },
+      { insert: 'list', kind: 'sub', detail: '列出全部场景' },
+      ...presetNameItems(),
+    ] : pos >= 2 ? sceneNameItems() : null),
+  },
   { names: ['show', 'display'], args: (pos, ctx) => (pos === 1 ? repItems() : pos >= 2 ? selItems(ctx) : null) },
   { names: ['hide', 'undisplay'], args: (pos, ctx) => (pos === 1 ? repItems() : pos >= 2 ? selItems(ctx) : null) },
   { names: ['color', 'colour'], args: (pos, ctx) => (pos === 1 ? colorItems() : pos >= 2 ? selItems(ctx) : null) },
@@ -343,17 +393,7 @@ const REGISTRY: CmdDef[] = [
   { names: ['label'], args: pos => (pos === 1 ? onOff() : null) },
   {
     names: ['preset', 'style'],
-    args: pos => (pos === 1 ? [
-      { insert: 'publication', kind: 'preset', detail: '出版级互作（卡通+口袋球棍）' },
-      { insert: 'bindingsite', kind: 'preset', detail: '结合口袋' },
-      { insert: 'cartoon', kind: 'preset', detail: 'Cartoon 经典' },
-      { insert: 'ballstick', kind: 'preset', detail: '球棍模型' },
-      { insert: 'spacefill', kind: 'preset', detail: '空间填充' },
-      { insert: 'wireframe', kind: 'preset', detail: '线框' },
-      { insert: 'surface', kind: 'preset', detail: '分子表面' },
-      { insert: 'hybrid', kind: 'preset', detail: '混合风格' },
-      { insert: 'putty', kind: 'preset', detail: 'Putty B 因子管' },
-    ] : null),
+    args: pos => (pos === 1 ? presetNameItems() : null),
   },
   { names: ['delete'], args: (pos, ctx) => (pos === 1 ? ctx.namedSelections.map(n => ({ insert: n, kind: 'sel', detail: '命名选择' })) : null) },
   { names: ['close'], args: (pos, ctx) => (pos === 1 ? [...structItems(ctx), { insert: 'all', kind: 'value', detail: '全部结构' }] : null) },

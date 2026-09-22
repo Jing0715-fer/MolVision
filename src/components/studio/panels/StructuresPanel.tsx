@@ -413,7 +413,16 @@ export function StructuresPanel() {
         return (
           <>
             <SectionTitle right={
-              <span className="text-[10px] text-muted-foreground/70" title="点击行选中链 · 右侧色点可直接上色（无需切到颜色标签）">
+              <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70" title="点击行选中链 · 右侧色点可直接上色（无需切到颜色标签） · 眼睛图标隐藏/恢复单链">
+                {st.hiddenChains?.length ? (
+                  <button
+                    onClick={() => { useMolStore.getState().setChainHidden(st.id, null); toast.success('已恢复显示全部链', { description: 'isolate off 亦可解除隔离' }) }}
+                    className="rounded bg-amber-500/15 px-1.5 py-px font-medium text-amber-600 transition hover:bg-amber-500/25 dark:text-amber-400"
+                    title="当前隔离中：部分链已隐藏，点击全部恢复"
+                  >
+                    隔离中 {st.hiddenChains.length} 链 ⊠
+                  </button>
+                ) : null}
                 点击选链 · 色点上色
               </span>
             }>链 ({st.chains.length})</SectionTitle>
@@ -479,6 +488,7 @@ export function StructuresPanel() {
                 // 用 chainidx 按链组索引选择，避免「点配体链却选中整条链」
                 const dupId = st.chains.filter(x => x.id === c.id).length > 1
                 const label = c.id === ' ' ? '—' : c.id
+                const chainHidden = !!st.hiddenChains?.includes(i)
                 const selectChain = () => {
                   const store = useMolStore.getState()
                   store.setActive(st.id)
@@ -487,7 +497,7 @@ export function StructuresPanel() {
                   return res
                 }
                 return (
-                  <div key={`${c.id}-${i}-${k}`} className="flex items-center gap-0.5">
+                  <div key={`${c.id}-${i}-${k}`} className={cn('flex items-center gap-0.5', chainHidden && 'opacity-55')}>
                     <button
                       onClick={() => { selectChain() }}
                       onDoubleClick={() => {
@@ -514,6 +524,19 @@ export function StructuresPanel() {
                       <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/70">
                         {c.residues > 0 && `${c.residues} res`}
                       </span>
+                    </button>
+                    {/* 链组眼睛开关（isolate/chains hide 同一状态源）：隐藏单链分析单链配体 */}
+                    <button
+                      onClick={() => {
+                        const store = useMolStore.getState()
+                        store.setActive(st.id)
+                        store.toggleChainHidden(st.id, i)
+                      }}
+                      aria-label={chainHidden ? `恢复显示链 ${label}` : `隐藏链 ${label}`}
+                      title={chainHidden ? `恢复显示链 ${label}（chains show ${label} 同效）` : `隐藏链 ${label}——多链蛋白只看单链时用（isolate <选择> 一键隔离到选择所在链；chains hide ${label} 同效）`}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition hover:bg-accent hover:text-foreground active:scale-95"
+                    >
+                      {chainHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
                     <QuickColorPopover
                       label={`链 ${label}`}

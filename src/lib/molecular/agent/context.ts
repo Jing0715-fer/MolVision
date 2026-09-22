@@ -3,11 +3,20 @@
 import { useMolStore, engineRef } from '../store'
 import { REP_LABELS } from '../types'
 import { useViewsStore } from '../views-store'
+import { useSceneStore } from '../scene-store'
 
-/** 视角书签数量（store 在 SSR/首帧前为空——安全读取） */
+/** 视角书签/场景快照数量（store 在 SSR/首帧前为空——安全读取） */
 function countViewBookmarks(): number {
   try {
     return useViewsStore.getState().bookmarks.length
+  } catch {
+    return 0
+  }
+}
+
+function countScenes(): number {
+  try {
+    return useSceneStore.getState().scenes.length
   } catch {
     return 0
   }
@@ -27,7 +36,10 @@ export function buildSceneContext(): string {
       const active = st.id === s.activeId ? '【活动】' : ''
       const chains = st.chains.map(c => `${c.id.trim() || '?'}(${c.type === 'protein' ? '蛋白' : c.type === 'nucleic' ? '核酸' : '其他'}·${c.residues}残基)`).join(' ')
       const lig = st.ligands.slice(0, 8).map(l => `${l.resName}×${l.count}`).join(' ')
-      lines.push(`- ${active}${st.name} [${st.format}] ${st.summary.atoms}原子/${st.summary.residues}残基 · 链: ${chains || '无'}${lig ? ` · 配体: ${lig}` : ''}${st.summary.waters ? ` · 水${st.summary.waters}` : ''}${st.visible ? '' : ' · 已隐藏'}`)
+      const iso = st.hiddenChains?.length
+        ? ` · 已隔离：仅显示 ${st.chains.length - st.hiddenChains.length}/${st.chains.length} 链组（isolate off 恢复全部）`
+        : ''
+      lines.push(`- ${active}${st.name} [${st.format}] ${st.summary.atoms}原子/${st.summary.residues}残基 · 链: ${chains || '无'}${lig ? ` · 配体: ${lig}` : ''}${st.summary.waters ? ` · 水${st.summary.waters}` : ''}${st.visible ? '' : ' · 已隐藏'}${iso}`)
       if (st.reps.length) {
         lines.push(`  表示法: ${st.reps.map(r => `${REP_LABELS[r.type]}(${r.selection}${r.visible ? '' : ',隐藏'}${r.colorScheme !== 'element' ? ',' + r.colorScheme : ''})`).join('；')}`)
       }
@@ -85,6 +97,16 @@ export function buildSceneContext(): string {
   }
   const views = countViewBookmarks()
   if (views > 0) lines.push(`- 视角书签 ${views} 个（view list 可列出）`)
+
+  // 场景快照（scene save/recall——相机+表示法+链隔离+环境一体）
+  const scenes = countScenes()
+  if (scenes > 0) {
+    let names = ''
+    try {
+      names = useSceneStore.getState().scenes.map(x => x.name).join('、')
+    } catch { /* SSR 安全 */ }
+    lines.push(`- 场景快照 ${scenes} 个${names ? `（${names}）` : ''}——scene <名|序号> 可整体召回（用户说「回到刚才/切回那个状态」时优先用）`)
+  }
 
   // 最近命令（让 LLM 知道用户刚做过什么）
   const recent = s.consoleLog.filter(l => l.type === 'in').slice(-6).map(l => l.text)
