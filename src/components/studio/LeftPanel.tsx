@@ -107,7 +107,7 @@ export function LeftPanel() {
           <ChevronLeft className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="panel-sections mol-scroll flex-1 overflow-y-auto">
+      <div className="mol-scroll flex-1 overflow-y-auto">
         {ui.panel === 'structures' && <StructuresPanel />}
         {ui.panel === 'reps' && <RepsPanel />}
         {ui.panel === 'colors' && <ColorsPanel />}
@@ -188,7 +188,7 @@ export function LeftPanel() {
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="打开控制面板"
-          className="absolute left-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card/90 shadow-lg backdrop-blur transition md:hidden"
+          className="absolute left-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card mol-elevate transition md:hidden"
         >
           <Boxes className="h-4 w-4" />
         </button>
@@ -204,18 +204,17 @@ export function LeftPanel() {
 
 export function PanelHint({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mx-3 mt-2 mb-2 rounded-md border border-border/50 bg-muted/40 px-2.5 py-2 text-[10.5px] leading-relaxed text-muted-foreground">
+    <p className="mx-3 mb-2 rounded-md border border-border/50 bg-muted/40 px-2.5 py-2 text-[10.5px] leading-relaxed text-muted-foreground">
       {children}
     </p>
   )
 }
 
-/** 分区标题：仪器簇序号（CSS 计数器 01/02…）+ primary 刻线锚点 + 大写微标签（与工具栏/仪表条同一仪器语言；pt-4 = 分区间呼吸节奏） */
+/** 分区标题：primary 刻线锚点 + 大写微标签（与工具栏/仪表条同一仪器语言） */
 export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-3 pt-4 pb-2">
+    <div className="flex items-center justify-between px-3 pt-3 pb-1.5">
       <h3 className="mol-micro flex items-center gap-1.5 text-muted-foreground/85">
-        <span aria-hidden className="mol-sec-idx" />
         <span className="h-2.5 w-[2px] rounded-full bg-primary/70" aria-hidden />
         {children}
       </h3>

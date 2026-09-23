@@ -3424,7 +3424,11 @@ export class MolEngine {
 
   // ---------- 视角 ----------
 
-  fitView(refs?: { structureId: string; indices?: number[] }[]) {
+  fitView(refs?: { structureId: string; indices?: number[] }[], opts: { animate?: boolean; buffer?: number } = {}) {
+    // r55：默认缓动（zoom/聚焦/双击 fitView 在录制中不再瞬时跳变，与 view 书签同一路径）；
+    // buffer 并入缓动终点（zoom ligand, 5 的后退距离——避免旧「动画后瞬时 moveCamera」互相覆盖）
+    const animate = opts.animate !== false
+    const buffer = Number.isFinite(opts.buffer) ? Math.max(-200, Math.min(200, opts.buffer as number)) : 0
     const state = useMolStore.getState()
     const pts: number[][] = []
     if (refs && refs.length) {
@@ -3442,7 +3446,20 @@ export class MolEngine {
         if (!entry.visible) continue
         const data = dataRegistry.get(entry.id)
         if (!data) continue
-        for (let i = 0; i < data.atoms.count; i++) pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+        // 隐藏链组的原子不参与取景（zoom/orient/viewFrom/ray 阴影相机随显隐收缩）
+        if (entry.hiddenChains?.length) {
+          const hiddenRes = new Set<number>()
+          for (let k = 0; k < data.chains.length; k++) {
+            if (!entry.hiddenChains.includes(k)) continue
+            for (const ri of data.chains[k].residueIdx) hiddenRes.add(ri)
+          }
+          for (let i = 0; i < data.atoms.count; i++) {
+            if (hiddenRes.has(data.atomResidue[i])) continue
+            pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+          }
+        } else {
+          for (let i = 0; i < data.atoms.count; i++) pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+        }
       }
     }
     if (!pts.length) return
@@ -3459,9 +3476,15 @@ export class MolEngine {
     const dir = new THREE.Vector3().subVectors(this.activeCamera.position, this.controls.target)
     if (dir.lengthSq() < 1e-6) dir.set(0.5, 0.35, 1)
     dir.normalize()
-    const dist = (radius / Math.sin((this.camera.fov * Math.PI) / 360)) * 1.18
+    const dist = (radius / Math.sin((this.camera.fov * Math.PI) / 360)) * 1.18 + buffer
+    const dest = center.clone().addScaledVector(dir, dist)
+    if (animate) {
+      // 平滑过渡：animateCameraTo（up 球面 slerp / 极点豁免 / 过渡手感三档均由 r54 管线统一处理）
+      this.animateCameraTo({ pos: dest.toArray(), target: center.toArray() })
+      return
+    }
     this.controls.target.copy(center)
-    this.activeCamera.position.copy(center).addScaledVector(dir, dist)
+    this.activeCamera.position.copy(dest)
     if (this.activeCamera === this.orthoCamera) {
       this.updateOrthoFrustum()
       this.orthoCamera.position.copy(this.activeCamera.position)
@@ -3472,10 +3495,14 @@ export class MolEngine {
   }
 
   resetView() {
-    this.activeCamera.position.set(40, 30, 60)
-    this.controls.target.set(0, 0, 0)
-    this.controls.update()
-    this.fitView()
+    // r55：平滑归位——有结构 → 缓动到全量适配位姿；空场景 → 缓动到默认机位
+    // （瞬时 set 在录制中表现为「视角突变」；用户拖拽/滚轮可随时中断，复用 camAnimCancel）
+    const hasStructures = useMolStore.getState().structures.some(x => x.visible)
+    if (hasStructures) {
+      this.fitView()
+      return
+    }
+    this.animateCameraTo({ pos: [40, 30, 60], target: [0, 0, 0] })
   }
 
   /** view from <选择>：沿「结构质心 → 选择质心」方向观察——配体在前景、口袋开口正对相机
@@ -3561,20 +3588,20 @@ export class MolEngine {
     const v2 = new THREE.Vector3(vecs[1][0], vecs[1][1], vecs[1][2]).normalize()
     const v3 = new THREE.Vector3().crossVectors(v1, v2).normalize()
     const center = new THREE.Vector3(c[0], c[1], c[2])
-    const dist = Math.max(2, this.activeCamera.position.distanceTo(this.controls.target))
-    this.controls.target.copy(center)
-    this.activeCamera.up.copy(v2)
-    this.orthoCamera.up.copy(v2)
-    this.activeCamera.position.copy(center).addScaledVector(v3, dist)
-    // 主轴竖直时相机落在极点附近 → 豁免俯仰限位（保持 PCA 对齐精确性；先登记再 update）
-    this.maybeExemptOrbit(
-      this.activeCamera.position.x, this.activeCamera.position.y, this.activeCamera.position.z,
-      center.x, center.y, center.z,
-    )
-    if (this.activeCamera === this.orthoCamera) this.updateOrthoFrustum()
-    this.updateOrbitClampDynamic()
-    this.controls.update()
-    this.fitView(refs)
+    // r55：适配距离与 fitView 同式，主轴对齐走缓动（up 球面 slerp 由 animateCameraTo 处理；
+    // 极点豁免也在其内部登记——主轴竖直的 PCA 对齐仍能精确落位）；录制中 orient 不再跳变
+    const rmin: [number, number, number] = [Infinity, Infinity, Infinity]
+    const rmax: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+    for (const p of pts) {
+      for (let d = 0; d < 3; d++) {
+        if (p[d] < rmin[d]) rmin[d] = p[d]
+        if (p[d] > rmax[d]) rmax[d] = p[d]
+      }
+    }
+    const radius = Math.max(2, 0.5 * Math.hypot(rmax[0] - rmin[0], rmax[1] - rmin[1], rmax[2] - rmin[2]))
+    const dist = Math.max(2, (radius / Math.sin((this.camera.fov * Math.PI) / 360)) * 1.18)
+    const pos = center.clone().addScaledVector(v3, dist)
+    this.animateCameraTo({ pos: pos.toArray(), target: center.toArray(), up: v2.toArray() })
     return true
   }
 
@@ -3809,7 +3836,20 @@ export class MolEngine {
         if (!entry.visible) continue
         const data = dataRegistry.get(entry.id)
         if (!data) continue
-        for (let i = 0; i < data.atoms.count; i++) pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+        // r55：隐藏链组的原子不参与取景（viewFrom 方向/特写距离/ray 阴影相机随显隐收缩）
+        if (entry.hiddenChains?.length) {
+          const hiddenRes = new Set<number>()
+          for (let k = 0; k < data.chains.length; k++) {
+            if (!entry.hiddenChains.includes(k)) continue
+            for (const ri of data.chains[k].residueIdx) hiddenRes.add(ri)
+          }
+          for (let i = 0; i < data.atoms.count; i++) {
+            if (hiddenRes.has(data.atomResidue[i])) continue
+            pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+          }
+        } else {
+          for (let i = 0; i < data.atoms.count; i++) pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+        }
       }
     }
     return pts

@@ -1968,3 +1968,23 @@ Stage Summary:
 - 架构决策：①飞行中俯仰限位全程豁免（动画独占轨迹，用户输入即取消+重武装）②巡航路径首帧自动前置当前位姿（调用方免传、起飞无缝）③playingSmooth 与 smooth 分离（badge 显示实际播放模式 vs 持久化默认）④edge 自动滚动用 elementFromPoint 重算命中（浏览器无关确定性行为）
 - 未解决与风险：①VLM 视觉终审持续 429（本轮以 DOM computed style + 数值探针 + 截图存档三层替代）②SwiftShader ~2fps 使动画时长测量粒度 ±500ms（quick 626ms/cinematic 1252ms 的 2 倍差在粒度内可辨）③序列条 compact mode（超大蛋白）仍是 backlog
 - 下一阶段建议：①VLM 配额恢复后补真实预览视觉终审 ②序列条 compact mode ③agent 记忆可视化面板 ④弹窗体系 VLM 审计（r46 遗留）
+
+---
+Task ID: r55-merge
+Agent: main
+Task: r55 与远端 r44–r54 的合并对账（发现本地文件系统回退到 r43 快照而远端已推进到 r54——r55 初版基于旧基线实现）
+
+Work Log:
+- 发现：git fetch 后 origin/main 已有 r46–r54 九个提交（chat-store zustand 化、isolate/chains 链隔离、场景系统、pocket 配色、序列条拖拽、旋转限位、相机 up-slerp/Catmull-Rom 巡航），本地文件系统却是 r43 快照（mode-only 差异）——上一会话工作已推远端但本地环境回退
+- rebase 尝试失败（r43 本地独有提交与远端九提交大面积冲突）→ abort，改用「reset --hard origin/main + 按语义重放 r55」策略；r55 初版完整保留在 r55-work-backup 分支
+- 重放核对：①AgentPanel 已被 r46+ 仪器化 → 仅需叠加会话管理 UI ②MovieTimeline/MovieBadge/RecordBadge/EnsembleBar/ColorLegend/MapLegend/TourOverlay/LeftPanel 八文件 r43 后远端零改动 → 从备份分支原样检出 ③链可见性 r50 已有完整实现（isolate/chains 命令 + hiddenChains + 面板眼睛 + 会话持久化）→ 放弃 r55 版 disable/enable 重复实现，仅保留 engine 层增量
+- chat-store.ts 演进为多会话（保留全部既有 API：msgs 派生为活动会话消息、setMsgs 无活动会话自动开一个、busy 期间切换/新建/删活动会话 store 层拒绝——保护执行链跨视图延续的原始动机）；SESSIONS_KEY=molvision-agent-sessions-v1 与 r55 初版键名/字段完全兼容（早期 E2E 会话数据零损迁移）；持久化剥离 image/streaming；旧 AGENT_CHAT_KEY 自动迁移
+- engine 增量（r54 相机管线上叠加）：fitView(opts.animate 默认 true + buffer 并入缓动终点)——zoom ligand,5 不再「动画后瞬时 moveCamera」互覆；orient 全程缓动（适配距离与 fitView 同式，极点豁免由 animateCameraTo 内部处理）；resetView 缓动归位；collectFitPoints 过滤 hiddenChains（zoom/orient/viewFrom/ray 阴影相机随链显隐收缩——E2E 实证：4HHB 全结构 fit 168.3Å → isolate 链 A 后 106.7Å）；set_view 命令走 animateCameraTo；session.ts 相机恢复保留 r54 的 setCameraState 决策（页面载入瞬时归位是 r54 显式选择，注释注明极点豁免/俯仰限位统一处理）
+- AgentPanel 叠加：SessionListPopover（busy 守卫 + 行内重命名 + 两击删除 + sessionTimeLabel）+ 头部会话标题切换器 + 新建会话按钮 + 清空按钮语义改「当前会话」；AGENT_CHAT_KEY 导入移除
+- E2E（合并后全量重验）：旧会话数据跨架构无损加载（2 条目）→ 新消息「聚焦到血红素配体，缓动过去」自动定题 → agent 执行 view from ligand + zoom ligand, 6（输出带 r55「（平滑过渡）」标记）→ VLM 自查确认「视角从全景平滑过渡到口袋特写」+ 截图缩略图（image 字段）正常 → isolate (chain A) 隐藏 9/12 链组 + fit 距离收缩实证 → isolate off 恢复 → fitView tween 取证（anim=true + 精确落位 168.3）→ agent-browser errors 空、lint 0/0、tsc src 零错误
+- VLM 设计审计：8/10（上轮 7.5）——「无明显廉价感、圆角统一规范、高度协调无贴片割裂感」；lint/tsc/dev.log 全绿
+
+Stage Summary:
+- 交付（合并对账后净增量）：①AI 助手多会话管理（chat-store 会话化演进，API 零破坏，busy 执行链保护）②八浮层仪器化（teal/半透明/渐变家族 → 实底 + mol-elevate + primary）③相机缓动三处补全（fitView+buffer/orient/resetView + set_view——r54 的书签 slerp 之外把「聚焦/对齐/归位/恢复」四类跳变全部收口）④collectFitPoints 链显隐过滤（r50 遗漏的取景层）⑤zoom 缓冲冲突修复
+- 关键决策：放弃 r55 初版 disable/enable 命令与重复 store API（r50 isolate/chains 已覆盖且更成熟）；session 恢复保持 r54 瞬时决策不动；八样式文件经「r43 后远端零改动」验证后原样迁移
+- 未解决与风险：①agent「只保留链A」类需求语义执行仍不完整（LLM 只 disable/isolate B 未隔离 C/D——下轮在 SYSTEM_PROMPT 补「只保留链 X ⇒ isolate (chain X)」显式句式映射）②headless rAF 节流下相机中间帧不可采样（已用 anim 标志+精确落位替代取证）③r55-work-backup 分支保留一轮后可删

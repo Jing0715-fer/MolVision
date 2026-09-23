@@ -6,15 +6,16 @@
 // 修正命令本身还会被再自查一轮（有界双轮：修到效果理想为止，不无限循环）
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Ban, Bot, Check, ChevronDown, Clock, Eye, EyeOff, Loader2, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
+  Ban, Bot, Check, ChevronDown, Clock, Eye, EyeOff, Loader2, MessageSquarePlus, Pencil, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
 import { buildSceneContext } from '@/lib/molecular/agent/context'
 import { classifyCmd, execAgentCmd, splitCommands } from '@/lib/molecular/agent/runner'
-import { useAgentChatStore } from '@/lib/molecular/agent/chat-store'
+import { SESSIONS_MAX, sessionTimeLabel, useAgentChatStore } from '@/lib/molecular/agent/chat-store'
 import {
-  AGENT_CHAT_KEY, AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentStreamEvent,
+  AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentStreamEvent,
 } from '@/lib/molecular/agent/protocol'
 import { ProviderSettingsDialog, type ProviderInfo } from './ProviderSettingsDialog'
 import { cn } from '@/lib/utils'
@@ -176,6 +177,167 @@ function CmdStatusIcon({ status }: { status: AgentCmdRecord['status'] }) {
   }
 }
 
+/** 会话列表浮层（r55 多会话管理）：切换 / 新建 / 重命名（行内输入）/ 删除（两击确认）。
+ *  busy 期间切换与新建由 store 层拒绝（保护执行链），浮层内非活动条目仍可删除 */
+function SessionListPopover({
+  open, onOpenChange, busy,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  busy: boolean
+}) {
+  const sessions = useAgentChatStore(s => s.sessions)
+  const activeId = useAgentChatStore(s => s.activeId)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [confirmDel, setConfirmDel] = useState<string | null>(null)
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 关闭浮层时清理行内编辑/删除确认态（事件回调而非 effect——避免 setState-in-effect）
+  const handleOpenChange = (o: boolean) => {
+    if (!o) {
+      setEditingId(null)
+      setConfirmDel(null)
+      if (resetTimer.current) clearTimeout(resetTimer.current)
+    }
+    onOpenChange(o)
+  }
+
+  const armDelete = (id: string, title: string) => {
+    if (confirmDel === id) {
+      if (resetTimer.current) clearTimeout(resetTimer.current)
+      setConfirmDel(null)
+      if (useAgentChatStore.getState().deleteSession(id)) toast.success(`已删除会话「${title}」`)
+      else toast.info('生成中——结束后再删除当前会话')
+      return
+    }
+    setConfirmDel(id)
+    if (resetTimer.current) clearTimeout(resetTimer.current)
+    resetTimer.current = setTimeout(() => setConfirmDel(null), 2600)
+  }
+
+  const commitRename = () => {
+    if (!editingId) return
+    const t = draft.trim()
+    if (t) useAgentChatStore.getState().renameSession(editingId, t)
+    setEditingId(null)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <button
+          disabled={busy}
+          title={busy ? '生成中——结束后可切换会话' : '会话历史（切换 / 新建 / 重命名 / 删除）'}
+          aria-label="打开会话历史"
+          className={cn(
+            'flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left transition',
+            busy ? 'cursor-not-allowed opacity-60' : 'hover:bg-accent',
+          )}
+        >
+          <span className="truncate text-xs font-medium">{sessions.find(s => s.id === activeId)?.title ?? '新会话'}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" side="bottom" className="w-64 rounded-lg border-border p-0 mol-elevate-lg">
+        <div className="flex items-center justify-between border-b border-border px-2.5 py-2">
+          <span className="mol-micro text-muted-foreground">会话 {sessions.length}/{SESSIONS_MAX}</span>
+          <button
+            onClick={() => {
+              const id = useAgentChatStore.getState().newSession()
+              if (id) { onOpenChange(false); toast.info('已新建会话（上下文已清零）') }
+              else toast.info('生成中——结束后再新建会话')
+            }}
+            className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-primary transition hover:bg-primary/10"
+            title="新建会话（清空上下文重新开始）"
+          >
+            <MessageSquarePlus className="h-3 w-3" />
+            新建
+          </button>
+        </div>
+        <div className="mol-scroll max-h-72 overflow-y-auto p-1.5">
+          {sessions.length === 0 && (
+            <p className="px-2 py-3 text-center text-[10px] text-muted-foreground">暂无历史会话</p>
+          )}
+          {sessions.map(s => {
+            const isActive = s.id === activeId
+            const editing = editingId === s.id
+            return (
+              <div
+                key={s.id}
+                className={cn(
+                  'group relative flex items-center gap-1 rounded-md px-1.5 py-1.5 transition',
+                  isActive ? 'bg-accent' : 'hover:bg-accent/60',
+                  busy && !isActive && 'pointer-events-none opacity-45',
+                )}
+              >
+                {/* 活动会话左缘刻线（与图标栏 notch 同族） */}
+                {isActive && <span className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r-sm bg-primary" />}
+                {editing ? (
+                  <input
+                    value={draft}
+                    autoFocus
+                    onChange={e => setDraft(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitRename()
+                      if (e.key === 'Escape') setEditingId(null)
+                      e.stopPropagation()
+                    }}
+                    onBlur={commitRename}
+                    aria-label="会话重命名"
+                    className="h-6 min-w-0 flex-1 rounded border border-primary/50 bg-background px-1.5 text-[11px] outline-none"
+                  />
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (useAgentChatStore.getState().switchSession(s.id)) onOpenChange(false)
+                      else toast.info('生成中——结束后可切换会话')
+                    }}
+                    className="min-w-0 flex-1 text-left"
+                    title={`切换到「${s.title}」（${s.messages.length} 条消息 · ${sessionTimeLabel(s.updatedAt)}）`}
+                  >
+                    <span className={cn('block truncate text-[11px]', isActive ? 'font-semibold text-foreground' : 'text-foreground/90')}>
+                      {s.title}
+                    </span>
+                    <span className="mt-0.5 block truncate font-mono text-[9px] tabular-nums text-muted-foreground/70">
+                      {s.messages.length} 条 · {sessionTimeLabel(s.updatedAt)}
+                    </span>
+                  </button>
+                )}
+                <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                  {!editing && (
+                    <button
+                      onClick={() => { setEditingId(s.id); setDraft(s.autoTitle ? '' : s.title) }}
+                      aria-label="重命名会话"
+                      title="重命名"
+                      className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/70 transition hover:bg-accent hover:text-foreground"
+                    >
+                      <Pencil className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => armDelete(s.id, s.title)}
+                    aria-label={confirmDel === s.id ? '再次点击确认删除' : '删除会话'}
+                    title={confirmDel === s.id ? '再次点击确认删除' : '删除'}
+                    className={cn(
+                      'flex h-5 w-5 items-center justify-center rounded transition',
+                      confirmDel === s.id
+                        ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                        : 'text-muted-foreground/70 hover:bg-accent hover:text-red-600 dark:hover:text-red-400',
+                    )}
+                  >
+                    {confirmDel === s.id ? <Check className="h-3 w-3" /> : <Trash2 className="h-2.5 w-2.5" />}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function AgentPanel({ float = false }: { float?: boolean }) {
   const open = useMolStore(s => s.ui.agentOpen)
   const setUi = useMolStore(s => s.setUi)
@@ -192,6 +354,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   const patchCmds = useAgentChatStore(s => s.patchCmds)
   const [input, setInput] = useState('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [sessionListOpen, setSessionListOpen] = useState(false)
   const [providerOpen, setProviderOpen] = useState(false)
   /** 当前默认供应商（头部徽章 + 设置页保存后刷新） */
   const [provider, setProvider] = useState<ProviderInfo | null>(null)
@@ -454,8 +617,12 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
   const clearChat = useCallback(() => {
     useAgentChatStore.getState().clearMsgs()
-    try { localStorage.removeItem(AGENT_CHAT_KEY) } catch { /* 忽略 */ }
-    toast.info('助手对话已清空')
+    toast.info('当前会话已清空（历史会话不受影响）')
+  }, [])
+
+  const startNewSession = useCallback(() => {
+    if (useAgentChatStore.getState().newSession()) toast.info('已新建会话（上下文已清零）')
+    else toast.info('生成中——结束后再新建会话')
   }, [])
 
   const onTaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
@@ -482,13 +649,12 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       role="complementary"
       aria-label="AI 助手面板"
     >
-      {/* 头部 */}
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
-        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary">
+      {/* 头部：会话切换器（r55 多会话）+ 供应商徽章 + 长期记忆徽章 + 工具组 */}
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-2">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Bot className="h-3.5 w-3.5" />
         </span>
-        <span className="text-xs font-semibold">AI 绘图助手</span>
-        <span className="mol-micro hidden sm:inline">AGENT</span>
+        <SessionListPopover open={sessionListOpen} onOpenChange={setSessionListOpen} busy={busy} />
         {/* 当前供应商徽章：品牌色点 + 模型名（点击打开设置） */}
         <button
           onClick={() => setProviderOpen(true)}
@@ -514,6 +680,18 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
         )}
         <div className="ml-auto flex items-center gap-0.5">
           <button
+            onClick={startNewSession}
+            disabled={busy}
+            aria-label="新建会话"
+            title={busy ? '生成中——结束后可新建' : '新建会话（清空上下文重新开始）'}
+            className={cn(
+              'flex h-6 w-6 items-center justify-center rounded transition hover:bg-accent hover:text-foreground',
+              busy ? 'cursor-not-allowed text-muted-foreground/40' : 'text-muted-foreground',
+            )}
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" />
+          </button>
+          <button
             onClick={() => setProviderOpen(true)}
             aria-label="AI 供应商设置"
             title="供应商与 API Key 设置"
@@ -536,8 +714,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           {msgs.length > 0 && (
             <button
               onClick={clearChat}
-              aria-label="清空助手对话"
-              title="清空对话记录"
+              aria-label="清空当前会话"
+              title="清空当前会话（历史会话不受影响）"
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <Trash2 className="h-3.5 w-3.5" />

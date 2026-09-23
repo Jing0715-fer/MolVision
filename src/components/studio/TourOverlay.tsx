@@ -109,7 +109,7 @@ export function TourOverlay() {
       aria-label={`演示引导：${tour.title}`}
       className="tour-in absolute left-1/2 top-3 z-40 w-[min(30rem,calc(100%-1.5rem))] -translate-x-1/2"
     >
-      <div className="overflow-hidden rounded-lg border border-border/70 bg-card/95 shadow-lg backdrop-blur-md">
+      <div className="overflow-hidden rounded-lg border border-border bg-card mol-elevate-lg">
         {/* 章节顶条（单色） */}
         <div className={cn('h-1 w-full', accent.ring)} />
 

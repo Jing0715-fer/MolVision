@@ -567,14 +567,14 @@ export function runCommand(raw: string): void {
       }
       // whenEngineReady：欢迎页→工作台切换瞬间引擎（MolViewer dynamic）可能仍在挂载中，
       // 直接 engineRef.current?.… 会静默落空（相机不动、命令链白跑）——入队，引擎就位后统一冲刷
+      // r55：缓冲并入缓动终点（fitView opts.buffer）——旧「动画后瞬时 moveCamera」会互相覆盖
       whenEngineReady(() => {
-        if (sel.structureId) engineRef.current?.fitView([{ structureId: sel.structureId, indices: sel.indices }])
-        if (!isNaN(buffer) && buffer !== 0) engineRef.current?.moveCamera('z', Math.max(-50, Math.min(50, buffer)))
+        if (sel.structureId) engineRef.current?.fitView([{ structureId: sel.structureId, indices: sel.indices }], { buffer: isNaN(buffer) ? 0 : buffer })
       })
-      return ok(`缩放到 ${selExpr}${!isNaN(buffer) && buffer !== 0 ? `（缓冲 ${buffer > 0 ? '+' : ''}${buffer} Å）` : ''}${spreadNote}`)
+      return ok(`缩放到 ${selExpr}${!isNaN(buffer) && buffer !== 0 ? `（缓冲 ${buffer > 0 ? '+' : ''}${buffer} Å）` : ''}${spreadNote}（平滑过渡）`)
     }
     whenEngineReady(() => engineRef.current?.fitView())
-    return ok('缩放到全部结构')
+    return ok('缩放到全部结构（平滑过渡）')
   }
 
   if (cmd === 'activate' || cmd === 'use') {
@@ -852,11 +852,12 @@ export function runCommand(raw: string): void {
     if (!eng) {
       // 视图切换窗口：入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
       if (!useMolStore.getState().structures.length) return err('引擎未就绪（先加载结构）')
-      whenEngineReady(() => engineRef.current?.setCameraState(parsed))
-      return ok('视角已恢复')
+      whenEngineReady(() => engineRef.current?.animateCameraTo(parsed))
+      return ok('视角已恢复（平滑过渡）')
     }
-    eng.setCameraState(parsed)
-    return ok('视角已恢复')
+    // r55：与 view 书签跳转同一路径（up 球面 slerp + 极点豁免 + 过渡手感三档）——录像不跳变
+    eng.animateCameraTo(parsed)
+    return ok('视角已恢复（平滑过渡）')
   }
 
   if (cmd === 'view' || cmd === 'views' || cmd === 'bookmark') {

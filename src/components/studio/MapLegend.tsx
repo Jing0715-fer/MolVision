@@ -101,7 +101,7 @@ export function MapLegend() {
       ref={cardRef}
       style={free ? { position: 'fixed', left: free.x, top: free.y, zIndex: 40 } : undefined}
       className={cn(
-        'pointer-events-auto w-52 select-none rounded-lg border border-border/60 bg-card/90 p-2 shadow-lg backdrop-blur-sm transition-opacity',
+        'pointer-events-auto w-52 select-none rounded-lg border border-border bg-card p-2 mol-elevate transition-opacity',
         !info.visible && 'opacity-60',
       )}
       aria-label="密度图 σ 控制"

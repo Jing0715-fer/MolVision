@@ -86,7 +86,7 @@ export function EnsembleBar() {
       className={cn(
         'absolute left-1/2 z-10 -translate-x-1/2 transition-all duration-300',
         timelineOpen ? 'bottom-[196px]' : 'bottom-3',
-        'flex items-center gap-2.5 rounded-lg border border-border/60 bg-popover/95 px-3 py-2 shadow-lg backdrop-blur-md',
+        'flex items-center gap-2.5 rounded-lg border border-border bg-popover px-3 py-2 mol-elevate',
       )}
       onPointerDown={e => e.stopPropagation()}
     >

@@ -3,11 +3,10 @@
 // movie 时间轴编排面板（视口底部）：视角书签关键帧的可视化编排
 // - 关键帧卡片（缩略图 + 名称 + 时长徽章）横向排列，箭头连接
 // - 拖拽排序（pointer capture + 插入指示条）；点选卡片 → 底部控制行编辑时长/预览/删除
-// - 播放模式开关：平滑巡航（Catmull-Rom 连续路径，录像连贯）/ 逐帧驻留（PyMOL 经典）
 // - 播放走时间轴模式（逐段独立时长）；轮数可调；localStorage 持久化（molvision-movie-v1）
 // 打开时 EnsembleBar / 快速风格按钮上移让位（MolViewer 按 bottom-[196px] 处理）
 import { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Eye, Film, Minus, Pause, Play, Plus, RefreshCw, Trash2, Waves, X } from 'lucide-react'
+import { ChevronRight, Eye, Film, Minus, Pause, Play, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { playMovie, stopMovie, useMovieStore, type TimelineEntry } from '@/lib/molecular/movie'
 import { useViewsStore, type ViewBookmark } from '@/lib/molecular/views-store'
@@ -25,8 +24,6 @@ export function MovieTimeline() {
   const loopsEdit = useMovieStore(s => s.loopsEdit)
   const playing = useMovieStore(s => s.playing)
   const seg = useMovieStore(s => s.seg)
-  const smooth = useMovieStore(s => s.smooth)
-  const setSmooth = useMovieStore(s => s.setSmooth)
   const hydrate = useMovieStore(s => s.hydrate)
   const setTimelineOpen = useMovieStore(s => s.setTimelineOpen)
   const syncTimeline = useMovieStore(s => s.syncTimeline)
@@ -130,14 +127,9 @@ export function MovieTimeline() {
   }
   const doPlay = () => {
     if (playing) { stopMovie(); return }
-    const useSmooth = useMovieStore.getState().smooth
-    void playMovie({ useTimeline: true, smooth: useSmooth }).then(r => {
+    void playMovie({ useTimeline: true }).then(r => {
       if (!r.ok) toast.error(r.error)
-      else toast.success(`movie ${useSmooth ? '平滑巡航' : '时间轴'}播放中`, {
-        description: useSmooth
-          ? 'Catmull-Rom 连续路径 · 关键帧处速度不归零 · 拖动/滚轮接管或 Esc 停止 · record start 可同步录制'
-          : `${r.segs} 段逐段巡航 · 拖动/滚轮接管或 Esc 停止 · record start 可同步录制`,
-      })
+      else toast.success('movie 时间轴播放中', { description: `${r.segs} 段逐段巡航 · 拖动/滚轮接管或 Esc 停止 · record start 可同步录制` })
     })
   }
   const previewView = (view: ViewBookmark) => {
@@ -151,7 +143,7 @@ export function MovieTimeline() {
     <div
       className={cn(
         'absolute bottom-3 left-1/2 z-20 w-max -translate-x-1/2',
-        'flex max-w-[calc(100%-24px)] flex-col gap-1.5 rounded-2xl border border-teal-500/30 bg-popover/95 p-2.5 shadow-2xl backdrop-blur-md',
+        'flex max-w-[calc(100%-24px)] flex-col gap-1.5 rounded-lg border border-border bg-card p-2.5 mol-elevate',
         'sm:max-w-[min(720px,calc(100%-260px))]',
       )}
       onPointerDown={e => e.stopPropagation()}
@@ -159,7 +151,7 @@ export function MovieTimeline() {
     >
       {/* 头部：标题 + 统计 + 操作 */}
       <div className="flex items-center gap-2">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400">
+        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Film className="h-3 w-3" />
         </span>
         <span className="text-[11px] font-semibold text-foreground">movie 时间轴</span>
@@ -169,7 +161,7 @@ export function MovieTimeline() {
         <div className="flex-1" />
         <button
           onClick={doSync}
-          className="flex h-6 items-center gap-1 rounded-md border border-border/60 bg-background/60 px-2 text-[10px] font-medium text-foreground transition hover:bg-accent"
+          className="flex h-6 items-center gap-1 rounded-md border border-border bg-muted/40 px-2 text-[10px] font-medium text-foreground transition hover:bg-accent"
           title="用当前视角书签重建关键帧（保留已有时长设置）"
         >
           <RefreshCw className="h-3 w-3" /> 同步书签
@@ -194,7 +186,7 @@ export function MovieTimeline() {
 
       {/* 关键帧卡片带（横向滚动） */}
       {timeline.length === 0 ? (
-        <div className="flex h-[76px] w-[min(560px,70vw)] flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/70 bg-muted/30 text-center">
+        <div className="flex h-[76px] w-[min(560px,70vw)] flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border bg-muted/25 text-center">
           <span className="text-[11px] text-muted-foreground">时间轴为空——「同步书签」把视角书签导入为关键帧</span>
           <span className="text-[10px] text-muted-foreground/70">V 键保存机位 · view save 名称 · 上限 12 帧</span>
         </div>
@@ -205,7 +197,7 @@ export function MovieTimeline() {
             return (
               <div key={e.viewId} className="flex items-center">
                 {/* 插入指示条 */}
-                {insertBeforeSlot(i) && <div data-insert-slot={i} className="mx-0.5 h-14 w-[3px] shrink-0 rounded-full bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.7)]" />}
+                {insertBeforeSlot(i) && <div data-insert-slot={i} className="mx-0.5 h-14 w-[3px] shrink-0 rounded-full bg-primary" />}
                 <div
                   ref={el => { nodeRefs.current[i] = el }}
                   onPointerDown={ev => onNodePointerDown(ev, i)}
@@ -219,19 +211,19 @@ export function MovieTimeline() {
                     setCtx({ x: ev.clientX, y: ev.clientY, i })
                   }}
                   className={cn(
-                    'relative w-[68px] shrink-0 cursor-grab touch-none select-none rounded-lg border bg-card/90 p-1 transition',
-                    selected === i ? 'border-teal-400/80 ring-1 ring-teal-400/40' : 'border-border/60 hover:border-teal-400/40',
-                    isDragging && 'z-10 cursor-grabbing border-teal-400 opacity-90 shadow-xl',
+                    'relative w-[68px] shrink-0 cursor-grab touch-none select-none rounded-md border bg-background p-1 transition',
+                    selected === i ? 'border-primary/70 ring-1 ring-primary/30' : 'border-border hover:border-foreground/25',
+                    isDragging && 'z-10 cursor-grabbing border-primary opacity-90 mol-elevate',
                   )}
                   style={isDragging ? { transform: `translateX(${drag!.dx}px) scale(1.05)` } : undefined}
                   title={`${view?.name ?? '书签已删除'} · ${(e.duration / 1000).toFixed(1)}s（拖拽排序 · 点击选中）`}
                 >
                   {view?.thumb ? (
-                    <img src={view.thumb} alt={view.name} className="h-9 w-full rounded-md object-cover" draggable={false} />
+                    <img src={view.thumb} alt={view.name} className="h-9 w-full rounded-sm object-cover" draggable={false} />
                   ) : (
                     <div className={cn(
-                      'flex h-9 w-full items-center justify-center rounded-md text-[9px]',
-                      view ? 'bg-muted/70 text-muted-foreground' : 'bg-red-500/10 text-red-500',
+                      'flex h-9 w-full items-center justify-center rounded-sm text-[9px]',
+                      view ? 'bg-muted/70 text-muted-foreground' : 'bg-red-500/10 text-red-600 dark:text-red-400',
                     )}>
                       {view ? '无缩略图' : '已失效'}
                     </div>
@@ -239,12 +231,12 @@ export function MovieTimeline() {
                   <div className="mt-0.5 truncate text-center text-[9px] font-medium leading-tight text-foreground/90">
                     {view?.name ?? '（失效书签）'}
                   </div>
-                  <div className="text-center font-mono text-[9px] tabular-nums leading-tight text-teal-600 dark:text-teal-400">
+                  <div className="text-center font-mono text-[9px] tabular-nums leading-tight text-primary">
                     {(e.duration / 1000).toFixed(1)}s
                   </div>
                   {/* 播放中当前段脉冲点 */}
                   {playing && validCount > 0 && seg % validCount === i && (
-                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 animate-pulse rounded-full bg-teal-400 shadow" />
+                    <span className="absolute -right-1 -top-1 h-2.5 w-2.5 animate-pulse rounded-full bg-primary" />
                   )}
                 </div>
                 {/* 连接箭头（末尾不画） */}
@@ -255,43 +247,27 @@ export function MovieTimeline() {
             )
           })}
           {/* 末尾追加槽位指示条 */}
-          {insertAtEnd() && <div data-insert-end className="mx-0.5 h-14 w-[3px] shrink-0 rounded-full bg-teal-400 shadow-[0_0_8px_rgba(45,212,191,0.7)]" />}
+          {insertAtEnd() && <div data-insert-end className="mx-0.5 h-14 w-[3px] shrink-0 rounded-full bg-primary" />}
         </FadeEdge>
       )}
 
-      {/* 控制行：播放 + 模式 + 轮数 + 选中卡片编辑（窄屏可换行） */}
-      <div className="flex min-h-8 flex-wrap items-center gap-2">
+      {/* 控制行：播放 + 轮数 + 选中卡片编辑 */}
+      <div className="flex h-8 items-center gap-2">
         <button
           onClick={doPlay}
           disabled={!canPlay}
           className={cn(
-            'flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold text-white shadow-md transition active:scale-95',
+            'flex h-7 shrink-0 items-center gap-1.5 rounded-md px-3 text-[11px] font-semibold text-white transition active:scale-95',
             playing
-              ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:brightness-110'
-              : canPlay ? 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:brightness-110' : 'cursor-not-allowed from-muted to-muted text-muted-foreground shadow-none',
+              ? 'bg-amber-600 hover:bg-amber-500'
+              : canPlay ? 'bg-primary hover:bg-primary/90 mol-btn-primary' : 'cursor-not-allowed bg-muted text-muted-foreground',
           )}
         >
           {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="ml-0.5 h-3.5 w-3.5" />}
           {playing ? '停止' : `播放 ${validCount} 帧`}
         </button>
-        {/* 播放模式开关：平滑巡航 ⇄ 逐帧驻留（持久化；movie play smooth/hold 命令同义） */}
-        <button
-          onClick={() => setSmooth(!smooth)}
-          className={cn(
-            'flex h-7 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[10px] font-semibold transition active:scale-95',
-            smooth
-              ? 'border-teal-400/60 bg-teal-500/15 text-teal-600 shadow-[0_0_10px_rgba(45,212,191,0.25)] dark:text-teal-400'
-              : 'border-border/60 bg-background/60 text-muted-foreground hover:text-foreground',
-          )}
-          title={smooth
-            ? '平滑巡航：关键帧间 Catmull-Rom 连续插值，速度不归零（录像丝滑无顿挫）——点击切回逐帧驻留（PyMOL 经典）'
-            : '逐帧驻留：每个关键帧 easeInOut 停顿，幻灯片式演示——点击切换平滑巡航（录像推荐）'}
-        >
-          {smooth ? <Waves className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-          {smooth ? '平滑巡航' : '逐帧驻留'}
-        </button>
         {/* 轮数 stepper */}
-        <div className="flex h-7 shrink-0 items-center rounded-full border border-border/60 bg-background/60 pl-2 pr-1">
+        <div className="flex h-7 shrink-0 items-center rounded-md border border-border bg-muted/40 pl-2 pr-1">
           <span className="text-[10px] text-muted-foreground">轮数</span>
           <button
             onClick={() => setLoopsEdit(loopsEdit - 1)}
@@ -311,7 +287,7 @@ export function MovieTimeline() {
         </div>
         {/* 选中卡片编辑 */}
         {sel && sel.view ? (
-          <div className="flex h-7 min-w-0 items-center gap-1 overflow-x-auto rounded-full border border-border/60 bg-background/60 px-2">
+          <div className="flex h-7 min-w-0 items-center gap-1 overflow-x-auto rounded-md border border-border bg-muted/40 px-2">
             <span className="max-w-24 shrink-0 truncate text-[10px] font-medium text-foreground/90">{sel.view.name}</span>
             <span className="shrink-0 text-[9px] text-muted-foreground">时长</span>
             <button
@@ -321,7 +297,7 @@ export function MovieTimeline() {
             >
               <Minus className="h-3 w-3" />
             </button>
-            <span className="w-10 shrink-0 text-center font-mono text-[10px] font-bold tabular-nums text-teal-600 dark:text-teal-400">
+            <span className="w-10 shrink-0 text-center font-mono text-[10px] font-bold tabular-nums text-primary">
               {(timeline[selected!].duration / 1000).toFixed(1)}s
             </span>
             <button
@@ -359,7 +335,7 @@ export function MovieTimeline() {
         const last = timeline.length - 1
         return (
           <div
-            className="fixed z-50 min-w-44 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-xl"
+            className="fixed z-50 min-w-44 overflow-hidden rounded-md border border-border bg-popover p-1 mol-elevate-lg"
             style={{
               left: Math.max(8, Math.min(ctx.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 200)),
               top: Math.max(8, Math.min(ctx.y, (typeof window !== 'undefined' ? window.innerHeight : 9999) - 300)),
@@ -367,7 +343,7 @@ export function MovieTimeline() {
             onClick={e => e.stopPropagation()}
             role="menu"
           >
-            <div className="border-b border-border/60 px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
+            <div className="border-b border-border px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
               <span className="block truncate">{entry.view?.name ?? '（失效书签）'}</span>
               <span className="font-mono">{(entry.e.duration / 1000).toFixed(1)}s · 第 {ctx.i + 1}/{timeline.length} 帧</span>
             </div>

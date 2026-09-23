@@ -59,7 +59,7 @@ export function RecordBadge() {
   }
 
   return (
-    <div className="absolute left-3 top-3 z-30 flex items-center gap-2 rounded-full border border-red-500/40 bg-popover/95 px-3 py-1.5 shadow-xl backdrop-blur">
+    <div className="absolute left-3 top-3 z-30 flex items-center gap-2 rounded-full border border-red-500/40 bg-popover px-3 py-1.5 mol-elevate">
       <span className="relative flex h-3 w-3 items-center justify-center">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-60" />
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />

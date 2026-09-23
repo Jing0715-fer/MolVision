@@ -1,14 +1,13 @@
 'use client'
 
-// 颜色标尺图例（视口左下角浮层）：B 因子/putty 渐变条 + 管径映射；SASA 暴露度条；
-// 口袋方案（配体距离渐变 + 配体色块 + 杂原子元素色注记）
-// 出现条件：活动结构存在可见 putty 表示法、或 bfactor/sasa/pocket 配色的可见表示法
+// 颜色标尺图例（视口左下角浮层）：B 因子/putty 渐变条 + 管径映射；SASA 暴露度条
+// 出现条件：活动结构存在可见 putty 表示法、或 bfactor/sasa 配色的可见表示法
 import { useMemo } from 'react'
 import { useMolStore, dataRegistry } from '@/lib/molecular/store'
-import { BFACTOR_STOPS, SASA_STOPS, POCKET_STOPS, POCKET_D_NEAR, POCKET_D_FAR, LIGAND_CARBON_COLOR, stopsToGradient } from '@/lib/molecular/colors'
+import { BFACTOR_STOPS, SASA_STOPS, stopsToGradient } from '@/lib/molecular/colors'
 import type { RepConfig } from '@/lib/molecular/types'
 
-type LegendKind = 'pocket' | 'putty' | 'bfactor' | 'sasa'
+type LegendKind = 'putty' | 'bfactor' | 'sasa'
 
 /** putty 管径 SVG 路径：与 representations.ts 同映射 r = rMin + (rMax−rMin)·sqrt(t)，
  *  半高按 (r−rMin)/(rMax−rMin) = sqrt(t) 归一化到 1.1..5.5px（viewBox 高 12） */
@@ -39,9 +38,8 @@ export function ColorLegend() {
 
   const legend = useMemo(() => {
     if (!st) return null
-    // 优先级：pocket（配体分析语境）> putty（管径+颜色双映射）> bfactor > sasa（需已有 SASA 数据）
+    // 优先级：putty（管径+颜色双映射）> bfactor > sasa（需已有 SASA 数据）
     const visible = st.reps.filter((r: RepConfig) => r.visible)
-    const pocketRep = visible.find(r => r.colorScheme === 'pocket')
     const puttyRep = visible.find(r => r.type === 'putty')
     const bfactorRep = visible.find(r => r.colorScheme === 'bfactor')
     const sasaRep = visible.find(r => r.colorScheme === 'sasa')
@@ -49,15 +47,14 @@ export function ColorLegend() {
 
     let kind: LegendKind | null = null
     let rep: RepConfig | null = null
-    if (pocketRep && (data?.molecules.length ?? 0) > 0) { kind = 'pocket'; rep = pocketRep }
-    else if (puttyRep) { kind = 'putty'; rep = puttyRep }
+    if (puttyRep) { kind = 'putty'; rep = puttyRep }
     else if (bfactorRep) { kind = 'bfactor'; rep = bfactorRep }
     else if (sasaRep && data?.sasa) { kind = 'sasa'; rep = sasaRep }
     if (!kind || !rep) return null
 
     // B 范围（着色用全原子；putty 管径用 CA + puttyRange 钳制）
     let bRange: { min: number; max: number; cap?: number } | null = null
-    if (kind !== 'sasa' && kind !== 'pocket' && data) {
+    if (kind !== 'sasa' && data) {
       let min = Infinity, max = -Infinity
       const b = data.atoms.bfactors
       const n = data.atoms.count
@@ -80,88 +77,55 @@ export function ColorLegend() {
 
   return (
     <div
-      className="pointer-events-none w-44 select-none rounded-lg border border-border/60 bg-card/85 p-2 shadow-lg backdrop-blur-sm"
+      className="pointer-events-none w-44 select-none rounded-lg border border-border bg-card p-2 mol-elevate"
       aria-label="颜色标尺图例"
     >
-      {kind === 'pocket' ? (
-        <>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-[10px] font-semibold tracking-wide text-foreground/80">口袋 · 配体距离</span>
-            <span className="text-[9px] text-muted-foreground/80">碳原子渐变</span>
-          </div>
-          {/* 渐变条 */}
-          <div
-            className="h-2.5 w-full rounded-[3px] border border-border/50"
-            style={{ background: stopsToGradient(POCKET_STOPS) }}
-          />
-          <div className="mt-0.5 flex items-baseline justify-between font-mono text-[9px] leading-none text-muted-foreground">
-            <span>近 {POCKET_D_NEAR} Å</span>
-            <span className="text-[8px]">残基→配体</span>
-            <span>≥{POCKET_D_FAR} Å</span>
-          </div>
-          {/* 配体色块 + 杂原子元素色注记 */}
-          <div className="mt-1.5 flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-[3px] border border-border/50" style={{ background: LIGAND_CARBON_COLOR }} />
-            <span className="text-[9px] leading-none text-muted-foreground/90">配体碳</span>
-            <span className="mx-0.5 text-[8px] text-muted-foreground/50">·</span>
-            <span className="h-2.5 w-2.5 shrink-0 rounded-[3px] border border-border/50" style={{ background: '#3050f8' }} />
-            <span className="text-[9px] leading-none text-muted-foreground/90">N</span>
-            <span className="h-2.5 w-2.5 shrink-0 rounded-[3px] border border-border/50" style={{ background: '#ff0d0d' }} />
-            <span className="text-[9px] leading-none text-muted-foreground/90">O</span>
-            <span className="h-2.5 w-2.5 shrink-0 rounded-[3px] border border-border/50" style={{ background: '#ffff30' }} />
-            <span className="text-[9px] leading-none text-muted-foreground/90">S</span>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-[10px] font-semibold tracking-wide text-foreground/80">
-              {kind === 'sasa' ? 'SASA 暴露度' : 'B 因子 (Å²)'}
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-[10px] font-semibold tracking-wide text-foreground/80">
+          {kind === 'sasa' ? 'SASA 暴露度' : 'B 因子 (Å²)'}
+        </span>
+        {kind === 'putty' && (
+          <span className="text-[9px] text-muted-foreground/80">putty 管径</span>
+        )}
+      </div>
+
+      {/* 渐变条 */}
+      <div
+        className="h-2.5 w-full rounded-[3px] border border-border/50"
+        style={{ background: stopsToGradient(kind === 'sasa' ? SASA_STOPS : BFACTOR_STOPS) }}
+      />
+
+      {/* 数值刻度 */}
+      <div className="mt-0.5 flex items-baseline justify-between font-mono text-[9px] leading-none text-muted-foreground">
+        {kind === 'sasa'
+          ? <><span>埋藏 0%</span><span className="text-[8px]">暴露分数</span><span>100% 暴露</span></>
+          : <>
+            <span>{bRange ? bRange.min.toFixed(1) : '—'}</span>
+            <span>{bRange ? ((bRange.min + (bRange.cap ?? bRange.max)) / 2).toFixed(0) : ''}</span>
+            <span>
+              {bRange ? (bRange.cap ?? bRange.max).toFixed(1) : '—'}
+              {bRange?.cap != null && <span className="text-[8px] text-amber-600 dark:text-amber-400" title={`已钳制（实际最大 ${bRange.max.toFixed(0)}+）`}>*</span>}
             </span>
-            {kind === 'putty' && (
-              <span className="text-[9px] text-muted-foreground/80">putty 管径</span>
-            )}
+          </>}
+      </div>
+
+      {/* putty 管径可视化（细→粗，与渲染同 sqrt 映射） */}
+      {kind === 'putty' && (
+        <>
+          <svg viewBox="0 0 128 12" className="mt-1.5 h-3 w-full" aria-hidden>
+            <defs>
+              <linearGradient id="mv-putty-grad" x1="0" y1="0" x2="1" y2="0">
+                {BFACTOR_STOPS.map(([t, c], i) => (
+                  <stop key={i} offset={t} stopColor={c} />
+                ))}
+              </linearGradient>
+            </defs>
+            <path d={puttyTubePath()} fill="url(#mv-putty-grad)" stroke="rgba(0,0,0,0.18)" strokeWidth="0.4" />
+          </svg>
+          <div className="mt-0.5 flex items-center justify-between text-[9px] leading-none text-muted-foreground/80">
+            <span>刚性（细）</span>
+            <span>柔性（粗）</span>
           </div>
-
-          {/* 渐变条 */}
-          <div
-            className="h-2.5 w-full rounded-[3px] border border-border/50"
-            style={{ background: stopsToGradient(kind === 'sasa' ? SASA_STOPS : BFACTOR_STOPS) }}
-          />
-
-          {/* 数值刻度 */}
-          <div className="mt-0.5 flex items-baseline justify-between font-mono text-[9px] leading-none text-muted-foreground">
-            {kind === 'sasa'
-              ? <><span>埋藏 0%</span><span className="text-[8px]">暴露分数</span><span>100% 暴露</span></>
-              : <>
-                <span>{bRange ? bRange.min.toFixed(1) : '—'}</span>
-                <span>{bRange ? ((bRange.min + (bRange.cap ?? bRange.max)) / 2).toFixed(0) : ''}</span>
-                <span>
-                  {bRange ? (bRange.cap ?? bRange.max).toFixed(1) : '—'}
-                  {bRange?.cap != null && <span className="text-[8px] text-amber-600 dark:text-amber-400" title={`已钳制（实际最大 ${bRange.max.toFixed(0)}+）`}>*</span>}
-                </span>
-              </>}
-          </div>
-
-          {/* putty 管径可视化（细→粗，与渲染同 sqrt 映射） */}
-          {kind === 'putty' && (
-            <>
-              <svg viewBox="0 0 128 12" className="mt-1.5 h-3 w-full" aria-hidden>
-                <defs>
-                  <linearGradient id="mv-putty-grad" x1="0" y1="0" x2="1" y2="0">
-                    {BFACTOR_STOPS.map(([t, c], i) => (
-                      <stop key={i} offset={t} stopColor={c} />
-                    ))}
-                  </linearGradient>
-                </defs>
-                <path d={puttyTubePath()} fill="url(#mv-putty-grad)" stroke="rgba(0,0,0,0.18)" strokeWidth="0.4" />
-              </svg>
-              <div className="mt-0.5 flex items-center justify-between text-[9px] leading-none text-muted-foreground/80">
-                <span>刚性（细）</span>
-                <span>柔性（粗）</span>
-              </div>
-            </>
-          )}
         </>
       )}
     </div>
