@@ -9,6 +9,7 @@ import { applyRigidTransform } from './superpose'
 import { useMapStore } from './map-store'
 import { fetchAndComputeMap, removeMap } from './map-load'
 import { useViewsStore, type ViewBookmark } from './views-store'
+import { useSceneStore, type MolScene } from './scene-store'
 import { whenEngineReady } from './engine-ready'
 import { stopMovie, useMovieStore } from './movie'
 import { useEnsembleStore } from './ensemble-store'
@@ -43,8 +44,50 @@ interface SessionData {
   namedSelections: { name: string; structureIndex: number; expr: string | null; indices: number[] | null; count: number }[]
   /** SF 计算的密度图设置（恢复时自动重拉结构因子 + Worker 重算；文件来源不入档） */
   map?: SessionMap
-  /** 视角书签（仅 .molvision 文件导出/导入携带；本地存档走独立 localStorage 键） */
+  /** 视角书签（随会话存档携带——r73：书签属于会话上下文，恢复时一并还原） */
   views?: ViewBookmark[]
+  /** 场景快照（同上：随会话存档携带/恢复） */
+  scenes?: MolScene[]
+}
+
+// ---------- 会话边界（r73：书签/场景 = 会话上下文，修复「新会话泄漏旧视角」） ----------
+
+/** 本页面生命周期内是否已跨越过会话边界（恢复/导入/合并/新建）。
+ *  跨越过后，后续结构加载不再触发「开新会话清孤儿」判定。 */
+let sessionBoundaryHandled = false
+
+/** 标记会话边界已处理（restoreSession / importSessionFile / mergeSessionFile / newSession 调用） */
+function markSessionBoundary() {
+  sessionBoundaryHandled = true
+}
+
+/** 欢迎页跳过「继续上次会话」直接加载新结构 = 开新会话：
+ *  清除遗留的视角书签/场景快照（孤儿数据——其宿主会话存档即将被 autosave 覆盖，
+ *  保留只会泄漏到新会话，用户无从辨别来源）。
+ *  仅在本生命周期首次结构加载且未跨越过任何会话边界时判定一次。
+ *  由 loader.loadStructureText 接线（所有结构加载入口的汇点）。 */
+export function beginFreshSessionIfSkipped(): void {
+  if (sessionBoundaryHandled) return
+  const s = useMolStore.getState()
+  if (s.everHadStructures) {
+    // 已有结构（本 run 更早的加载/恢复已过）——不是「跳过恢复」窗口
+    sessionBoundaryHandled = true
+    return
+  }
+  sessionBoundaryHandled = true
+  const vs = useViewsStore.getState()
+  const sc = useSceneStore.getState()
+  if (!vs.hydrated) vs.hydrate()
+  if (!sc.hydrated) sc.hydrate()
+  const nViews = useViewsStore.getState().bookmarks.length
+  const nScenes = useSceneStore.getState().scenes.length
+  if (!nViews && !nScenes) return
+  useViewsStore.getState().clearBookmarks()
+  useSceneStore.getState().clearScenes()
+  useMolStore.getState().appendLog('out', tt({
+    zh: `已开始新会话：清除上个会话遗留的 ${nViews} 个视角书签${nScenes ? ` · ${nScenes} 个场景快照` : ''}（未恢复旧会话）`,
+    en: `New session started: cleared ${nViews} view bookmark${nViews === 1 ? '' : 's'}${nScenes ? ` · ${nScenes} scene snapshot${nScenes === 1 ? '' : 's'}` : ''} left from the previous session (old session not restored)`,
+  }))
 }
 
 interface SessionMap {
@@ -125,11 +168,21 @@ export function saveSession(): boolean {
       visible: mapInfo.visible,
     }
     : undefined
+  // 视角书签 + 场景快照随存档入档（r73：会话上下文；未 hydrate 时先读 localStorage
+  // ——ViewBar/SceneBar 挂载前触发的 autosave 也不丢书签）
+  const vs = useViewsStore.getState()
+  if (!vs.hydrated) vs.hydrate()
+  const sc = useSceneStore.getState()
+  if (!sc.hydrated) sc.hydrate()
+  const views = useViewsStore.getState().bookmarks
+  const scenes = useSceneStore.getState().scenes
   const data: SessionData = {
     version: 1,
     savedAt: Date.now(),
     activeIndex,
     structures: structs,
+    ...(views.length ? { views } : {}),
+    ...(scenes.length ? { scenes } : {}),
     // 氢键网络为按需分析叠加层：不随会话自动恢复（否则每次加载结构都会冒出
     // 青绿虚线网络且用户难以察觉来源——曾连续两轮用户反馈；按 B 可随时重开）。
     // 参数（距离/含水/仅选择集）仍持久化，只剥离总开关。
@@ -170,6 +223,7 @@ export function hasSession(): boolean {
 
 /** 恢复会话；返回恢复的结构数量 */
 export function restoreSession(): number {
+  markSessionBoundary()
   let data: SessionData | null = null
   try {
     const raw = localStorage.getItem(KEY)
@@ -260,6 +314,18 @@ export function restoreSession(): number {
     }, host?.id)
   }
   useMolStore.getState().appendLog('out', tt({ zh: `已恢复上次会话：${restored} 个结构`, en: `Last session restored: ${restored} ${restored === 1 ? 'structure' : 'structures'}` }))
+  // 视角书签 + 场景快照随会话恢复（r73：替换语义——存档是保存时刻的权威快照；
+  // 旧存档无此二字段时不劦本地键，向后兼容）
+  if (Array.isArray(data.views) || Array.isArray(data.scenes)) {
+    const nv = Array.isArray(data.views) ? useViewsStore.getState().importBookmarks(data.views) : -1
+    const nsx = Array.isArray(data.scenes) ? useSceneStore.getState().importScenes(data.scenes) : -1
+    if (nv > 0 || nsx > 0) {
+      const parts: string[] = []
+      if (nv > 0) parts.push(tt({ zh: `${nv} 个视角书签`, en: `${nv} view bookmark${nv === 1 ? '' : 's'}` }))
+      if (nsx > 0) parts.push(tt({ zh: `${nsx} 个场景快照`, en: `${nsx} scene snapshot${nsx === 1 ? '' : 's'}` }))
+      useMolStore.getState().appendLog('out', tt({ zh: `已随会话恢复：${parts.join(' · ')}`, en: `Restored with the session: ${parts.join(' · ')}` }))
+    }
+  }
   // 旧存档带着氢键网络总开关恢复时：已强制关闭（分析叠加层不随会话自动恢复），
   // 给出明确交代与重开路径——彻底断绝「一加载就冒绿线且来源不明」
   if (archivedHBondsOn) {
@@ -281,6 +347,7 @@ export function clearSession() {
  * 确认交互由 UI 层负责（有结构时弹确认）。返回被关闭的结构数。
  */
 export function newSession(): number {
+  markSessionBoundary()
   const s = useMolStore.getState()
   const closed = s.structures.length
   // 1) 停止播放与编排
@@ -319,8 +386,9 @@ export function newSession(): number {
     measureMode: 'off',
     everHadStructures: false,
   })
-  // 6) 视角书签 + 时间轴持久化键
+  // 6) 视角书签 + 场景快照 + 时间轴持久化键（r73：补清 scenes——旧实现漏清）
   useViewsStore.getState().clearBookmarks()
+  useSceneStore.getState().clearScenes()
   try { localStorage.removeItem('molvision-movie-v1') } catch { /* ignore */ }
   // 7) 本地会话存档
   clearSession()
@@ -330,8 +398,8 @@ export function newSession(): number {
     useMolStore.getState().bumpVisual()
   })
   useMolStore.getState().appendLog('out', closed > 0
-    ? tt({ zh: `已新建会话（关闭 ${closed} 个结构 · 书签/时间轴/密度图已清空）`, en: `New session started (closed ${closed} ${closed === 1 ? 'structure' : 'structures'} · bookmarks/timeline/map cleared)` })
-    : tt({ zh: '已新建会话（清空书签/时间轴/密度图）', en: 'New session started (bookmarks/timeline/map cleared)' }))
+    ? tt({ zh: `已新建会话（关闭 ${closed} 个结构 · 书签/场景/时间轴/密度图已清空）`, en: `New session started (closed ${closed} ${closed === 1 ? 'structure' : 'structures'} · bookmarks/scenes/timeline/map cleared)` })
+    : tt({ zh: '已新建会话（清空书签/场景/时间轴/密度图）', en: 'New session started (bookmarks/scenes/timeline/map cleared)' }))
   return closed
 }
 
@@ -354,14 +422,18 @@ export function exportSessionFile(): boolean {
   let data: SessionData
   try { data = JSON.parse(raw) as SessionData } catch { return false }
   if (!data.structures?.length) return false
-  // 视角书签随文件携带（首次访问时确保已从 localStorage 装载）
+  // 视角书签 + 场景快照随文件携带（首次访问时确保已从 localStorage 装载）
   const vs = useViewsStore.getState()
   if (!vs.hydrated) vs.hydrate()
+  const vss = useSceneStore.getState()
+  if (!vss.hydrated) vss.hydrate()
   const views = useViewsStore.getState().bookmarks
+  const scenes = useSceneStore.getState().scenes
   const withFormat = {
     format: SESSION_FILE_FORMAT,
     ...data,
     ...(views.length ? { views } : {}),
+    ...(scenes.length ? { scenes } : {}),
   }
   const blob = new Blob([JSON.stringify(withFormat)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -388,29 +460,25 @@ export async function importSessionFile(file: File): Promise<number> {
   if (!data.structures.some(s => s.text)) {
     throw new Error(tt({ zh: '会话文件中没有包含结构数据（可能导出时被裁剪）', en: 'The session file contains no structure data (possibly trimmed during export)' }))
   }
-  // 替换模式：清空现有结构后恢复
+  // 替换模式：清空现有结构后恢复（restoreSession 内部：mark 会话边界 +
+  // 从刚写入的 KEY 恢复结构/设置/相机/命名选择/书签/场景——r73 起书签与场景
+  // 由 restoreSession 统一恢复，此处不再重复导入）
   const store = useMolStore.getState()
   for (const st of [...store.structures]) store.removeStructure(st.id)
   try { localStorage.setItem(KEY, JSON.stringify({ ...data, format: undefined, savedAt: Date.now() })) } catch { /* ignore */ }
   const restored = restoreSession()
-  // 视角书签：文件携带则替换，未携带则保留本地现有书签
-  if (Array.isArray(data.views)) {
-    const n = useViewsStore.getState().importBookmarks(data.views)
-    if (n > 0) {
-      useMolStore.getState().appendLog('out', tt({ zh: `已导入 ${n} 个视角书签（来自会话文件）`, en: `Imported ${n} view bookmarks (from the session file)` }))
-    }
-  }
   return restored
 }
 
 /**
  * 合并导入 .molvision 文件：不清空当前场景，把文件中的结构追加进来。
  * · 名称冲突自动加序号后缀（如 4HHB-2）；保留文件中的叠合位姿与对称设置
- * · 命名选择随结构合并（重名跳过）；视角书签追加（重名跳过）
+ * · 命名选择随结构合并（重名跳过）；视角书签与场景快照追加（重名跳过）
  * · 当前设置/相机/密度图保持不变（合并只动结构与书签）
  * 返回新增结构数（-1 = 文件无效）。
  */
 export async function mergeSessionFile(file: File): Promise<number> {
+  markSessionBoundary()
   const text = await file.text()
   let data: (SessionData & { format?: string }) | null = null
   try { data = JSON.parse(text) as SessionData & { format?: string } } catch {
@@ -485,6 +553,12 @@ export async function mergeSessionFile(file: File): Promise<number> {
   if (Array.isArray(data.views)) {
     const n = useViewsStore.getState().mergeBookmarks(data.views)
     if (n > 0) useMolStore.getState().appendLog('out', tt({ zh: `已合并 ${n} 个视角书签（重名跳过）`, en: `Merged ${n} view bookmarks (duplicates skipped)` }))
+  }
+
+  // 场景快照合并（追加，重名跳过——r73：随书签一同合并）
+  if (Array.isArray(data.scenes)) {
+    const n = useSceneStore.getState().mergeScenes(data.scenes)
+    if (n > 0) useMolStore.getState().appendLog('out', tt({ zh: `已合并 ${n} 个场景快照（重名跳过）`, en: `Merged ${n} scene snapshots (duplicates skipped)` }))
   }
 
   // 合并后快照到本地存档（含原有 + 新增结构）

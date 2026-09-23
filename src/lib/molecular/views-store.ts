@@ -1,5 +1,9 @@
-// 视角书签：相机状态 + 视口缩略图，localStorage 独立持久化（molvision-views-v1）
-// 与会话存档（结构/reps/密度图）解耦——清空结构不清空书签，跨刷新/跨会话保留
+// 视角书签：相机状态 + 视口缩略图，localStorage 持久化（molvision-views-v1）
+// r73 语义修正：书签属于**会话上下文**（曾为「跨刷新/跨会话保留」——用户实测定性为
+// 泄漏：开新会话时旧书签凭空出现、无从辨别来源）。现行规则：
+// · 随会话存档一并保存/恢复（saveSession / restoreSession / .molvision 文件导入合并）
+// · 「新建会话」（session new）与「跳过恢复直接加载新结构」（beginFreshSessionIfSkipped，
+//   loader 接线）时清空——孤儿书签的宿主会话存档即将被 autosave 覆盖，保留无意义
 import { create } from 'zustand'
 import { tt } from '@/i18n'
 import { engineRef } from './store'

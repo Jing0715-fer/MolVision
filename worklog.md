@@ -2982,3 +2982,41 @@ Stage Summary:
   2. 【中】membrane-embed 视角优化：膜板正交视角下呈「斜插」观感（VLM 反馈）——可改 view 为主轴正交预设或 turn 微调让板面正对读者；脂板透明度可再降（VLM 反馈「颜色过于鲜艳竞争注意力」）
   3. 【中】pore 分析精化：轴向手动覆写（pore axis z，对主轴≠孔轴的结构如倾斜结晶取向）；收缩点残基归属标注（最近原子→残基名标 3D label）
   4. 【低】模板第二梯队（r71 建议②）：DNA-蛋白复合物/两态构象对比/表面静电/mutation 高亮——pore/membrane 已铺好「分析命令入模板」的路
+
+---
+Task ID: r73
+Agent: main
+Task: 用户点名 bug 修复——「开新会话时之前保存的视角也出现在新会话中」+ 拉取远端最新代码（r63–r72 十一轮成果入本地）+ 会话语义体系重构（书签/场景 = 会话上下文）
+
+Work Log:
+- 【拉取最新代码】本地停滞 r62 且 ahead 1（用户上传图片提交 aad7083）——核实本地 r62 与远端 f2ebaa1 树一致（42 文件 0 插删仅模式位）→ reset --hard origin/main 快进至 3dbbdb9（r72）+ 图片文件实已在远端树（cherry-pick 报 nothing to commit 实证）→ 本地远端完全同步；重启 dev server 编译 ✓
+- 【bug 根因定位】views-store.ts 头注释自述设计意图「与会话存档解耦——清空结构不清空书签，**跨刷新/跨会话保留**」：视角书签（molvision-views-v1）与场景书签（molvision-scenes-v1）各自独立 localStorage 持久化，ViewBar/SceneBar 挂载即 hydrate 无条件复活。用户刷新后跳过欢迎页「继续上次会话」卡直接加载新结构（= 用户心智的「开新会话」）→ 旧书签凭空出现且无从辨别来源。顺带揭发：newSession() 只清 views 漏清 scenes（日志却声称「书签已清空」）
+- 【修复架构：会话边界体系】书签/场景重新定性为**会话上下文**：
+  · session.ts 模块级 sessionBoundaryHandled 标志（run 级）+ markSessionBoundary()（restoreSession/importSessionFile/mergeSessionFile/newSession 四处调用）
+  · 新导出 beginFreshSessionIfSkipped()：本 run 首次结构加载且未跨越任何会话边界 → 判定为「跳过恢复开新会话」→ 清孤儿 views+scenes（其宿主存档即将被 autosave 覆盖，保留只会泄漏）+ 双语日志交代（「已开始新会话：清除上个会话遗留的 N 个视角书签 · M 个场景快照」）；单次判定（标志置位后不再触发——本 run 内后续保存的书签不会被第二次加载误清）
+  · 接线点 loader.loadStructureText（所有结构加载入口的汇点：fetchPdbId/loadFiles 结构文件/.json 退回/命令 paste 全经此）；create/split_chains/morph 四处 addStructure 直调均要求已有结构（everHadStructures=true 时判定早已越过）审计安全
+  · saveSession()：views+scenes 入档（SessionData 新增 scenes 字段；未 hydrate 先读 localStorage——ViewBar 挂载前的 autosave 也不丢书签）
+  · restoreSession()：从存档恢复书签/场景（importBookmarks/importScenes 替换语义——存档是保存时刻的权威快照；旧存档无此二字段不动本地键向后兼容）+「已随会话恢复：N 个视角书签 · M 个场景快照」日志
+  · newSession()：补 useSceneStore.clearScenes()（修漏清）+ 日志文案「书签/场景/时间轴/密度图已清空」
+  · exportSessionFile：文件携带 views+scenes；importSessionFile：统一走 restoreSession（删除原重复 importBookmarks 块）；mergeSessionFile：mergeScenes 追加（重名跳过，与 mergeBookmarks 同构）
+  · scene-store 新增 importScenes（替换+校验+截断）/mergeScenes（追加+重名跳过+id 去重），复用既有 validScene 校验
+- 【E2E 五场景（agent-browser r73-qa 会话）】
+  · 场景 1（核心 bug）✓：1CRN 加载 → view save ×2 + scene save → session save → reload → 恢复卡在位（不点）→ 直接点 4HHB 示例卡 → 断言全过：「New session started: cleared 2 view bookmarks · 1 scene snapshot」日志在位 + molvision-views-v1/molvision-scenes-v1 两键 null + ViewBar 无卡片 + 4HHB 正常加载
+  · 场景 2 ✓：同 setup（书签命名 alpha-helix/top-view）→ reload → 点「继续上次会话」→ 结构恢复 + 书签 2 个（名称正确）+ 场景 1 个恢复 + 「已随会话恢复」链路
+  · 场景 3 ✓：session new 命令 → views/scenes/session 三键全 null + 结构全关（含本轮补的 scenes 清理）
+  · 场景 4（等价覆盖）：importSessionFile 与 restoreSession 同路径（写 KEY → restoreSession 恢复），场景 2 已验；mergeScenes 与 mergeBookmarks 同构 + tsc 保障
+  · 场景 5 ✓：view save file-test → ViewBar 卡片渲染 + Shift+1 跳转派发 + 第二次 load 4hhb 后 file-test 仍在（单次判定语义实证，无误清）
+  · console 全程零错误；VLM 终审：「workbench renders correctly…no error messages…properly aligned. No rendering artifacts」
+- 【门禁】guards 66→74（+8：判定函数/接线/存档携带/恢复带回/补清场景/导入合并/恢复日志/孤儿清理日志；两处阈值按行计数语义校正——zh/en 同行的 tt() 模板 grep -c 计 1 行）；smoke 4/4；lint 0；tsc src 0 错；dev.log 全 200
+- 【E2E 方法论坑（新入档）】①React 受控 input 必须用 HTMLInputElement.prototype 的 native setter + input 事件（直接 .value= 赋值被 value tracker 吞）；②同一 eval 栈内 setState 后立即 click，submitId 闭包读到旧 state（React 18 自动批处理）——输入与提交必须分两次 eval；③命令行面板 toggle 后 input 尚未挂载（sleep 1 偶发不足，sleep 2 稳）；④console 输出区虚拟化——日志断言优先走 localStorage 键状态（键 null 是权威判据）
+- 【用户报告路径澄清】「开新会话」最贴近的入口是刷新/重开应用后跳过恢复卡直接加载（原设计书签无条件复活）；session new 命令路径本就清书签（但漏清场景，本轮补）；Agent 面板「新建会话」是 AI 上下文概念（不动工作台状态，语义正确保持）
+
+Stage Summary:
+- 交付：会话边界体系——书签/场景定性为会话上下文（随存档保存恢复 + 跳过恢复开新会话清孤儿 + newSession 补清场景 + 文件导入合并全链路携带），用户点名的「新会话泄漏旧视角」根因修复
+- 顺带修复：newSession 漏清场景书签（日志与行为不符的潜伏不一致）；scene-store 获得 import/merge 能力（对齐 views-store 既有能力面）
+- 架构资产：sessionBoundaryHandled run 级标志 + beginFreshSessionIfSkipped 单次判定（loadStructureText 汇点接线——新加载入口天然继承语义）；「孤儿数据」概念（宿主存档将被 autosave 覆盖的遗留 localStorage 数据）
+- 下一轮建议（按优先级）：
+  1. 【高】r72 建议①模板参数化适配仍未做：用户结构无对应链/配体时命令部分失效——应用前结构特征探测（链数/有无 hetero）+ 智能降级提示或链重映射
+  2. 【中】欢迎页表单 E2E 探针路径（React 受控+批处理双坑）可固化进冒烟脚本（native setter + 分步 eval 模板已验证）
+  3. 【中】autosave 触发面扩展：view save/scene save 后 900ms 防抖存档不含书签变化（当前靠 beforeunload 兜底）——可在两 store 的 persist 后调度一次轻量 saveSession
+  4. 【低】membrane-embed 视角优化与 pore 轴向覆写（r72 建议②③顺延）

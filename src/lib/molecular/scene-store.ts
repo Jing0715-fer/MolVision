@@ -1,7 +1,10 @@
 // PyMOL 式场景快照（Scene）：相机 + 表示法 + 链隔离 + 环境设置一起保存/召回。
 // 与视角书签（views-store，仅相机）互补——书签回答「从哪看」，场景回答「看什么、怎么显示」。
 // 召回时按结构名匹配恢复 reps/显隐/链隔离；结构未加载则跳过并在结果中报告。
-// localStorage 独立持久化（molvision-scenes-v1），跨刷新/跨会话保留。
+// localStorage 持久化（molvision-scenes-v1），但**属于会话上下文**（r73 语义修正）：
+// · 随会话存档一并保存/恢复（saveSession / restoreSession）
+// · 「新建会话」或「跳过恢复直接加载新结构」时视为孤儿数据一并清空
+//   ——其宿主会话存档即将被 autosave 覆盖，保留只会泄漏到新会话
 import { create } from 'zustand'
 import { tt } from '@/i18n'
 import { engineRef, useMolStore } from './store'
@@ -81,6 +84,10 @@ interface ScenesState {
   clearScenes: () => void
   /** 循环切换（step=1 下一个 / -1 上一个；无场景或全部不可召回返回 false） */
   cycleScene: (step: 1 | -1) => boolean
+  /** 从会话存档/文件导入场景（替换当前全部，校验+截断；返回导入数） */
+  importScenes: (list: unknown) => number
+  /** 合并导入场景（追加到现有，重名跳过；返回新增数） */
+  mergeScenes: (list: unknown) => number
 }
 
 /** 当前工作台状态 → 快照体（不含 id/名/缩略图） */
@@ -346,6 +353,48 @@ export const useSceneStore = create<ScenesState>((set, get) => ({
     const idx = scenes.findIndex(x => x.id === activeSceneId)
     const next = idx < 0 ? (step > 0 ? 0 : scenes.length - 1) : (idx + step + scenes.length) % scenes.length
     return get().recallScene(scenes[next].id).ok
+  },
+
+  importScenes: list => {
+    if (!Array.isArray(list)) return 0
+    const scenes: MolScene[] = []
+    for (const x of list) {
+      const sc = validScene(x)
+      if (!sc) continue
+      scenes.push(sc)
+      if (scenes.length >= MAX_SCENES) break
+    }
+    if (scenes.length) persist(scenes)
+    else { try { localStorage.removeItem(KEY) } catch { /* ignore */ } }
+    set({ scenes, activeSceneId: null, hydrated: true })
+    return scenes.length
+  },
+
+  mergeScenes: list => {
+    if (!Array.isArray(list)) return 0
+    if (!get().hydrated) get().hydrate()
+    const existing = get().scenes
+    const names = new Set(existing.map(x => x.name))
+    const ids = new Set(existing.map(x => x.id))
+    const added: MolScene[] = []
+    for (const x of list) {
+      const sc = validScene(x)
+      if (!sc) continue
+      if (existing.length + added.length >= MAX_SCENES) break
+      // 重名/重 id 跳过（同名场景大概率是同一快照；重新生成 id 避免冲突）
+      if (names.has(sc.name) || ids.has(sc.id)) continue
+      let id = sc.id
+      while (ids.has(id)) id = `${sc.id}-${Math.random().toString(36).slice(2, 6)}`
+      ids.add(id)
+      names.add(sc.name)
+      added.push({ ...sc, id })
+    }
+    if (added.length) {
+      const next = [...existing, ...added]
+      persist(next)
+      set({ scenes: next })
+    }
+    return added.length
   },
 }))
 

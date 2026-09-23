@@ -4,7 +4,7 @@ import { tt, loc, type DualText } from '@/i18n'
 import { detectFormat, parseStructure } from './parser'
 import { useMolStore, engineRef } from './store'
 import { textRegistry } from './text-registry'
-import { saveSession, importSessionFile } from './session'
+import { saveSession, importSessionFile, beginFreshSessionIfSkipped } from './session'
 import { loadMapBuffer } from './map-load'
 import { whenEngineReady } from './engine-ready'
 
@@ -74,6 +74,10 @@ export async function fetchPdbId(idRaw: string): Promise<void> {
 }
 
 export function loadStructureText(text: string, name: string, format?: 'pdb' | 'cif') {
+  // 会话边界判定（r73）：本 run 首次结构加载且未跨越过任何会话边界（恢复/导入/合并/
+  // 新建）→ 用户跳过「继续上次会话」直接开干 = 开新会话 → 清除遗留书签/场景（孤儿数据）。
+  // 挂在此汇点：fetchPdbId / loadFiles 结构文件 / 命令 paste / .json 退回解析全部经此。
+  beginFreshSessionIfSkipped()
   const fmt = format ?? detectFormat(text, name)
   // 大结构预扫描（parse 前快速护栏：毫秒级行计数，主线程不卡）
   const atomCount = countAtomRecords(text)
