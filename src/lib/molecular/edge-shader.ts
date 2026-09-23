@@ -103,10 +103,18 @@ export const EdgeShader = {
 
     void main() {
       // 背景/几何体分离：几何体走完整显示变换（ACES+sRGB），背景像素还原为用户设定色
-      // （直接渲染路径的 glClear 不经色调映射，两条路径背景行为保持一致）
+      // （直接渲染路径的 glClear 不经色调映射，两条路径背景行为保持一致）。
+      // 【双重判定】仅当「深度=背景 且 颜色≈背景色」才还原：透明叠加层（密度图等值面/选择高亮/
+      // 氢键与接触标记）不写深度但贡献颜色——旧版纯深度判定把它们整体还原成背景色（视觉上凭空消失），
+      // 而亮度边缘检测又在它们的色彩边界上留下描边 → 导出图出现「空心鬼环」（用户反馈的小圆球伪影）。
+      // 颜色比对在 linear 域进行（rt1 存线性色；uBgColor 为 sRGB 分量，pow 2.2 近似解码），
+      // 阔值 0.012（≈白底 3 个 sRGB 色阶）——足够紧以保留叠加层，足够松以覆盖清屏色的精确等值。
       vec4 base = texture2D(tDiffuse, vUv);
       float bgC = isBg(vUv);
-      vec3 col = mix(displayTransform(base.rgb), uBgColor, bgC);
+      vec3 bgLin = pow(uBgColor, vec3(2.2));
+      float colorIsBg = all(lessThanEqual(abs(base.rgb - bgLin), vec3(0.012))) ? 1.0 : 0.0;
+      float restore = bgC * colorIsBg;
+      vec3 col = mix(displayTransform(base.rgb), uBgColor, restore);
 
       if (uOutlineOn < 0.5) {
         gl_FragColor = vec4(col, base.a);

@@ -148,7 +148,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
   { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
-  { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+超采样，异步+进度提示）', example: 'ray 1920' },
+  { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+1.5× 真超采样抗锯齿：内部高分辨率渲染后高质量降采样）', example: 'ray 1920' },
   { cmd: 'svg [宽px]', desc: '矢量图导出（CPU 投影，无限缩放不失真；可入稿 Illustrator/Inkscape）', example: 'svg 2400' },
   { cmd: 'axes on|off', desc: '视口坐标轴指示器（点击轴端对齐视角）', example: 'axes off' },
   { cmd: 'fps on|off', desc: '状态栏性能指示器（FPS/绘制调用/三角形）', example: 'fps on' },
@@ -427,8 +427,26 @@ export function runCommand(raw: string): void {
       return ok('已显示氢原子')
     }
     if (repAlias === 'waters' || repAlias === 'water') {
-      useMolStore.getState().updateSettings({ hideWater: false })
-      return ok('已显示水分子')
+      const st = useMolStore.getState()
+      st.updateSettings({ hideWater: false })
+      // 默认 water rep 是 lines——而晶体水的孤立氧无键可画（lines 渲染不出任何几何），
+      // 直接切 hideWater 开关什么都看不见（旧版“已显示水分子”实则无视觉变化）。
+      // 转为小球显示（0.33Å 氧球，ChimeraX/PyMOL nonbonded 风格）：看得见、可拾取、可 hide。
+      let converted = 0
+      let added = 0
+      for (const entry of st.structures) {
+        const waterRep = entry.reps.find(r => r.selection === 'water' || /^resn\s+HOH$/i.test(r.selection))
+        if (waterRep) {
+          if (waterRep.type === 'lines') {
+            st.updateRep(entry.id, waterRep.id, { type: 'ballstick', ballScale: 1.5 })
+            converted++
+          }
+        } else {
+          st.addRep(entry.id, { type: 'ballstick', selection: 'water', ballScale: 1.5 })
+          added++
+        }
+      }
+      return ok(`已显示水分子${converted ? `（${converted} 个结构的水 rep 已转为小球显示）` : added ? `（新增小球 rep）` : ''}——hide waters 隐藏`)
     }
     const repType = REP_ALIASES[repAlias]
     if (!repType) return err(`未知表示法 "${headWords[0]}"。可用: ${Object.keys(REP_ALIASES).slice(0, 7).join(', ')}…`)
@@ -1416,7 +1434,7 @@ export function runCommand(raw: string): void {
   }
 
   if (cmd === 'ray') {
-    // PyMOL ray 风格静帧：软阴影 + 1.5× 超采样，导出高清 PNG
+    // PyMOL ray 风格静帧：软阴影 + 1.5× 真超采样（内部高分辨率渲染→高质量降采样=全场景抗锯齿）
     // 异步化：先弹进度 toast 再渲染（双 rAF 让提示先绘制），避免长时间无反馈的「假死」观感
     const eng = engineRef.current
     if (!eng) return err('引擎未就绪')
@@ -1428,7 +1446,7 @@ export function runCommand(raw: string): void {
     }
     const s = useMolStore.getState()
     const tid = 'ray-render'
-    ok('Ray 渲染已启动（PCF 软阴影 + 1.5× 超采样）——完成后自动导出 PNG，期间界面可能短暂停顿')
+    ok('Ray 渲染已启动（PCF 软阴影 + 1.5× 真超采样抗锯齿）——完成后自动导出 PNG，期间界面可能短暂停顿')
     toast.loading('Ray 渲染中…', { id: tid, description: '软阴影 + 超采样静帧渲染，大场景需数秒' })
     void (async () => {
       // 双 rAF：确保 loading toast 先绘制到屏幕，再进入阻塞渲染
@@ -1436,7 +1454,7 @@ export function runCommand(raw: string): void {
       // 相机动画落位等待：view from / 视角书签过渡期间直接 ray 会把中途帧（旧构图）渲染进静帧
       for (let i = 0; i < 25 && eng.isCameraAnimating(); i++) await new Promise<void>(r => setTimeout(r, 100))
       try {
-        const r = eng.rayRender({ width })
+        const r = await eng.rayRender({ width })
         if (!r.url) {
           toast.error('Ray 渲染失败', { id: tid, description: '画布尺寸限制——试试更小的宽度' })
           useMolStore.getState().appendLog('err', 'Ray 渲染失败（画布尺寸限制——试试更小的宽度）')
@@ -1447,8 +1465,8 @@ export function runCommand(raw: string): void {
         a.download = `${s.structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
         a.click()
         const ms = r.ms.toFixed(0)
-        toast.success(`Ray 完成：${r.w}×${r.h} px`, { id: tid, description: `耗时 ${ms} ms · PNG 已导出` })
-        useMolStore.getState().appendLog('out', `Ray 渲染完成：${r.w}×${r.h} px（PCF 软阴影 + 1.5× 内部超采样）· ${ms} ms——已导出 PNG`)
+        toast.success(`Ray 完成：${r.w}×${r.h} px`, { id: tid, description: `耗时 ${ms} ms · 真超采样抗锯齿 · PNG 已导出` })
+        useMolStore.getState().appendLog('out', `Ray 渲染完成：${r.w}×${r.h} px（PCF 软阴影 + 1.5× 真超采样：内部高分辨率渲染后降采样，全场景抗锯齿）· ${ms} ms——已导出 PNG`)
       } catch {
         toast.error('Ray 渲染失败', { id: tid, description: '显存或画布尺寸限制——试试更小的宽度' })
         useMolStore.getState().appendLog('err', 'Ray 渲染失败（显存或画布尺寸限制——试试更小的宽度）')

@@ -3872,14 +3872,25 @@ export class MolEngine {
       this.scene.fog = null
       this.renderer.setClearColor(0x000000, 0)
       this.renderer.render(this.scene, this.activeCamera)
-    } else if (this.settings?.ssao && this.composer) {
-      // 开启 AO 时截图也走 composer（保持视觉一致；尺寸同步防 FBO 不完整）
-      const cw = Math.round(w * scale)
-      const ch = Math.round(h * scale)
-      this.composer.setPixelRatio(1)
-      this.composer.setSize(cw, ch)
-      this.syncDepthTextureSize(cw, ch)
-      this.composer.render()
+    } else if ((this.settings?.ssao && !this.gtaoFailed) || (this.settings?.outline && !this.edgeFailed)) {
+      // 开启 AO / 轮廓线时截图走 composer（与视口渲染路径一致；尺寸同步防 FBO 不完整）
+      this.ensureComposer()
+      if (this.composer) {
+        const cw = Math.round(w * scale)
+        const ch = Math.round(h * scale)
+        this.composer.setPixelRatio(1)
+        this.composer.setSize(cw, ch)
+        this.syncDepthTextureSize(cw, ch)
+        // 轮廓线 uniforms 同步到截图尺寸（否则沿用视口分辨率 → 描边粗细在截图中失准）；
+        // 粗细按截图/视口像素比等比补偿（与 ray 超采样补偿同式，WYSIWYG）
+        if (this.edgePass) {
+          const thicknessScale = Math.max(1, Math.min(4, cw / Math.max(1, w * prevRatio)))
+          this.syncEdgePass(cw, ch, thicknessScale)
+        }
+        this.composer.render()
+      } else {
+        this.renderer.render(this.scene, this.activeCamera)
+      }
     } else {
       this.renderer.render(this.scene, this.activeCamera)
     }
@@ -3896,10 +3907,10 @@ export class MolEngine {
   }
 
   /**
-   * PyMOL ray 风格高质量静帧渲染：软阴影（PCFSoft 2048²）+ 超采样 + 场景包围盒自适应阴影相机。
-   * 同步渲染（大场景可能阻塞数秒）；完成后恢复全部状态（阴影/光照/画布尺寸），返回 PNG dataURL。
+   * PyMOL ray 风格高质量静帧渲染：软阴影（PCFSoft 2048²）+ 真超采样（内部 ss× 渲染后高质量降采样）+
+   * 场景包围盒自适应阴影相机。大场景可能阻塞数秒；完成后恢复全部状态（阴影/光照/画布尺寸），返回 PNG dataURL。
    */
-  rayRender(opts: { width?: number; supersample?: number; transparent?: boolean } = {}): { url: string; w: number; h: number; ms: number } {
+  async rayRender(opts: { width?: number; supersample?: number; transparent?: boolean } = {}): Promise<{ url: string; w: number; h: number; ms: number }> {
     const t0 = performance.now()
     const cw = this.container.clientWidth || 800
     const ch = this.container.clientHeight || 600
@@ -3964,33 +3975,37 @@ export class MolEngine {
     // 阴影期间抬一点环境光抵消投影变暗，压一点填充光突出阴影层次
     this.ambientLight.intensity = prevAmbIntensity + 0.18
     this.fillLight.intensity = Math.max(0.1, prevFillIntensity * 0.7)
-    // 地面接触阴影接影板（ShadowMaterial 仅在阴影处看得到；渲染后移除）
-    // —— 分子悬浮在纯色背景中，没有接影面投不出可见阴影；PyMOL ray 输出的底部暗影即由此产生
-    const groundY = center.y - radius * 1.15
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(radius * 4, radius * 4),
-      new THREE.ShadowMaterial({ opacity: 0.32, color: 0x1a2e35 }),
-    )
-    ground.rotation.x = -Math.PI / 2
-    ground.position.set(center.x, groundY, center.z)
-    ground.receiveShadow = true
-    this.scene.add(ground)
+    // PyMOL ray 语义：阴影落在分子自身与分子之间（螺旋互投影/配体投口袋），无接影地平面。
+    // 旧版曾在此添加 ShadowMaterial 接影板 emulate「底部暗影」——但透明平面写深度后
+    // 与 composer 路径相容性差（边缘检测把它当几何体 → ACES 映射成灰色矩形 + Sobel 描出硬边框，
+    // 即用户反馈的「看到了 box 的边界」），且平面自身被误标 castShadow 产生自阴影噪声，已移除。
 
-    // 全场景 mesh 开投射/接收阴影（线条与 sprite 不参与）；material.needsUpdate 触发含阴影 shader 重编译
+    // 阴影投射/接收者限定为分子 rep（含对称伴侣克隆）；测量线/氢键/接触标记/密度图/高亮球
+    // 不参与投射（旧版全场景 traverse 会把它们一并标 castShadow——标记球在阴影图上留下小黑斑）
     const touched: THREE.Object3D[] = []
     const mats = new Set<THREE.Material>()
-    this.scene.traverse(o => {
-      const m = o as THREE.Mesh | THREE.InstancedMesh
-      if ((m as THREE.Mesh).isMesh || (m as THREE.InstancedMesh).isInstancedMesh) {
-        if (!m.visible) return
-        m.castShadow = true
-        m.receiveShadow = true
-        touched.push(m)
-        const mm = m.material
-        if (Array.isArray(mm)) mm.forEach(x => mats.add(x))
-        else if (mm) mats.add(mm)
+    const markShadowCasters = (root: THREE.Object3D) => {
+      root.traverse(o => {
+        const m = o as THREE.Mesh | THREE.InstancedMesh
+        if ((m as THREE.Mesh).isMesh || (m as THREE.InstancedMesh).isInstancedMesh) {
+          if (!m.visible) return
+          m.castShadow = true
+          m.receiveShadow = true
+          touched.push(m)
+          const mm = m.material
+          if (Array.isArray(mm)) mm.forEach(x => mats.add(x))
+          else if (mm) mats.add(mm)
+        }
+      })
+    }
+    for (const [id, view] of this.views) {
+      for (const rv of view.reps.values()) {
+        if (!rv.build.group.visible) continue
+        markShadowCasters(rv.build.group)
       }
-    })
+      const sym = this.symmetryGroups.get(id)
+      if (sym) markShadowCasters(sym)
+    }
     for (const m of mats) m.needsUpdate = true
 
     // —— 超采样渲染 ——
@@ -4035,12 +4050,35 @@ export class MolEngine {
         this.renderer.render(this.scene, this.activeCamera)
       }
       // toDataURL 必须在恢复尺寸前读取（setSize 会清空画布）
-      url = this.renderer.domElement.toDataURL('image/png')
+      const hiUrl = this.renderer.domElement.toDataURL('image/png')
+      // —— 真超采样（SSAA）：内部以 ss 倍分辨率渲染，高质量降采样回目标尺寸 ——
+      // 旧实现直接导出高分辨率画布（文件名却标目标尺寸），超采样倍率从未真正发挥抗锯齿作用——
+      // 导出图像素级锯齿与未超采样完全一致（用户反馈「清晰度比较低」的根因）。
+      // 降采样后：边缘阶梯破 1.5× 重采样平滑，导出尺寸与文件名/返回值诚实一致。
+      if (ss > 1.001 && hiUrl) {
+        const src = new Image()
+        await new Promise<void>((res, rej) => {
+          src.onload = () => res()
+          src.onerror = () => rej(new Error('ssaa-decode'))
+          src.src = hiUrl
+        })
+        const off = document.createElement('canvas')
+        off.width = targetW
+        off.height = targetH
+        const octx = off.getContext('2d')
+        if (octx) {
+          octx.imageSmoothingEnabled = true
+          octx.imageSmoothingQuality = 'high'
+          octx.drawImage(src, 0, 0, targetW, targetH)
+          url = off.toDataURL('image/png')
+        } else {
+          url = hiUrl
+        }
+      } else {
+        url = hiUrl
+      }
     } finally {
       // —— 恢复现场（无论渲染成败） ——
-      this.scene.remove(ground)
-      ground.geometry.dispose()
-      ;(ground.material as THREE.Material).dispose()
       for (const o of touched) { o.castShadow = false; o.receiveShadow = false }
       for (const m of mats) m.needsUpdate = true
       this.renderer.shadowMap.enabled = prevShadowEnabled

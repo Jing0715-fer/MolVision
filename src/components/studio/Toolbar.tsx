@@ -161,7 +161,7 @@ export function Toolbar() {
     }
   }
 
-  // Ray 级静帧：先提示再渲染（同步阻塞数秒，让 toast 先上屏）
+  // Ray 级静帧：先提示再渲染（内部高分辨率渲染+降采样可能阻塞数秒，让 toast 先上屏）
   const rayCapture = () => {
     const eng = engineRef.current
     if (!eng) return
@@ -169,19 +169,21 @@ export function Toolbar() {
       toast.error('场景为空——先加载结构再渲染')
       return
     }
-    toast.info('Ray 渲染中…', { description: 'PCF 软阴影 + 1.5× 超采样，大场景可能需要数秒' })
+    toast.info('Ray 渲染中…', { description: 'PCF 软阴影 + 1.5× 真超采样抗锯齿，大场景可能需要数秒' })
     setTimeout(() => {
-      try {
-        const r = eng.rayRender({})
-        if (!r.url) throw new Error('empty')
-        const a = document.createElement('a')
-        a.href = r.url
-        a.download = `${structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
-        a.click()
-        toast.success('Ray 渲染已导出', { description: `${r.w}×${r.h} px · 软阴影 + 超采样 · ${r.ms.toFixed(0)} ms` })
-      } catch {
-        toast.error('Ray 渲染失败（试试更小尺寸或命令行 ray <宽>）')
-      }
+      void (async () => {
+        try {
+          const r = await eng.rayRender({})
+          if (!r.url) throw new Error('empty')
+          const a = document.createElement('a')
+          a.href = r.url
+          a.download = `${structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
+          a.click()
+          toast.success('Ray 渲染已导出', { description: `${r.w}×${r.h} px · 软阴影 + 真超采样抗锯齿 · ${r.ms.toFixed(0)} ms` })
+        } catch {
+          toast.error('Ray 渲染失败（试试更小尺寸或命令行 ray <宽>）')
+        }
+      })()
     }, 80)
   }
 
