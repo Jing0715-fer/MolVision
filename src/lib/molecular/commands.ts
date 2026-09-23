@@ -228,23 +228,27 @@ function runIsolateCommand(raw: string, parts: string[], ok: (m: string) => void
   const keep = chainGroupsOf(data, ev.indices)
   if (!keep.size) return err('选择为空')
   // 同链 ID 连带保留：选择命中配体链组（如 chain A 的 HEM）时，同 ID 的蛋白链组（chain A 聚合部分）
-  // 自动并入保留集——「分析链 A 的配体」应该看到链 A 蛋白 + 配体，而不是孤零零一个 HEM。
-  // 水/其他链组不连带（噪声）；只有蛋白/核酸链组才值得连带保留。
+  // 与水链组（chain A 晶体水——口袋环境的组成部分，配体附近常有介导互作的结合水）自动并入保留集
+  // ——「分析链 A 的配体」应该看到链 A 蛋白 + 配体 + 链 A 的水，而不是孤零零一个 HEM，
+  // 也不是把四聚体全部链的水都留着（r58：口袋分析时水分子必须跟随链隔离收缩到单链）。
   const keepIds = new Set([...keep].map(g => data.chains[g].id.trim().toUpperCase()))
   const linked: number[] = []
   for (let g = 0; g < data.chains.length; g++) {
     if (keep.has(g)) continue
     const c = data.chains[g]
     const isPolymer = c.type === 'protein' || c.type === 'nucleic'
-    if (isPolymer && keepIds.has(c.id.trim().toUpperCase())) { keep.add(g); linked.push(g) }
+    const isWater = c.type === 'water'
+    if ((isPolymer || isWater) && keepIds.has(c.id.trim().toUpperCase())) { keep.add(g); linked.push(g) }
   }
   const hidden: number[] = []
   for (let g = 0; g < data.chains.length; g++) if (!keep.has(g)) hidden.push(g)
   if (!hidden.length) return ok('选择已覆盖全部链——无需隔离（所有链都在显示中）')
   s.setChainHidden(s.activeId, hidden)
   const total = data.chains.length
-  const linkedNote = linked.length ? `（含同 ID 蛋白链组 ${chainGroupLabels(entry, linked).join('、')}——配体所在链的聚合部分自动连带）` : ''
-  return ok(`已隔离：保留 ${chainGroupLabels(entry, keep).join('、')}${linkedNote}，隐藏其余 ${hidden.length}/${total} 个链组——多链蛋白分析单链配体时非常实用（isolate off 恢复）`)
+  const waterKept = [...keep].filter(g => data.chains[g].type === 'water').length
+  const linkedNote = linked.length ? `（含同链 ID 连带：${chainGroupLabels(entry, linked).join('、')}——配体所在链的聚合部分与晶体水自动保留）` : ''
+  const waterNote = waterKept ? `；保留 ${waterKept} 个同链水组（口袋结合水跟随隔离）` : ''
+  return ok(`已隔离：保留 ${chainGroupLabels(entry, keep).join('、')}${linkedNote}，隐藏其余 ${hidden.length}/${total} 个链组${waterNote}——多链蛋白分析单链配体时非常实用（isolate off 恢复）`)
 }
 
 function runChainsCommand(raw: string, parts: string[], ok: (m: string) => void, err: (m: string) => void): void {
@@ -432,13 +436,15 @@ export function runCommand(raw: string): void {
       // 默认 water rep 是 lines——而晶体水的孤立氧无键可画（lines 渲染不出任何几何），
       // 直接切 hideWater 开关什么都看不见（旧版“已显示水分子”实则无视觉变化）。
       // 转为小球显示（0.33Å 氧球，ChimeraX/PyMOL nonbonded 风格）：看得见、可拾取、可 hide。
+      // 口袋预设的受限水 rep（water and within N of (ligand)）也在这里扩为全水——
+      // show waters 的语义就是“显示所有水”，不与受限范围叠加重复几何。
       let converted = 0
       let added = 0
       for (const entry of st.structures) {
-        const waterRep = entry.reps.find(r => r.selection === 'water' || /^resn\s+HOH$/i.test(r.selection))
+        const waterRep = entry.reps.find(r => r.selection === 'water' || /^resn\s+HOH$/i.test(r.selection) || /^water\s+and\b/i.test(r.selection))
         if (waterRep) {
-          if (waterRep.type === 'lines') {
-            st.updateRep(entry.id, waterRep.id, { type: 'ballstick', ballScale: 1.5 })
+          if (waterRep.type === 'lines' || waterRep.selection !== 'water') {
+            st.updateRep(entry.id, waterRep.id, { type: 'ballstick', selection: 'water', ballScale: 1.5 })
             converted++
           }
         } else {
@@ -716,7 +722,10 @@ export function runCommand(raw: string): void {
     if (p) {
       useMolStore.getState().applyPreset(name)
       if (name === 'publication') {
-        return ok('已应用预设: 出版级互作——配体碳鲜绿单一色 · 口袋残基按到配体距离紫→粉渐变（杂原子元素色）· 智能主链（仅氢键参与者的主链 O/N 显示）。建议配 hbonds on 3.4 in byres(within 4.5 of (ligand)) and not water：氢键虚线出现时，参与互作的主链原子自动补显')
+        return ok('已应用预设: 出版级互作——配体碳鲜绿单一色 · 口袋残基按到配体距离紫→粉渐变（杂原子元素色，主链+侧链完整显示）· 配体 6Å 内晶体水小球·已自动聚焦口袋。建议配 hbonds on 3.4 in byres(within 4.5 of (ligand)) and not water：氢键虚线是互作图的专业细节')
+      }
+      if (name === 'bindingsite') {
+        return ok('已应用预设: 结合口袋——口袋残基完整球棍（元素色）· 配体 6Å 内晶体水小球·已自动聚焦口袋')
       }
       return ok(`已应用预设: ${p.label}`)
     }

@@ -13,6 +13,10 @@ import {
 
 /** 重型结构数据（typed arrays）放在非响应式注册表中 */
 export const dataRegistry = new Map<string, StructureData>()
+// QA 诊断钩子：浏览器控制台经 window.__molData 探查结构数据（与 __molEngine 同模式）
+if (typeof window !== 'undefined') {
+  ;(window as unknown as Record<string, unknown>).__molData = dataRegistry
+}
 
 /** 引擎引用（非响应式） */
 export const engineRef: { current: import('./engine').MolEngine | null } = { current: null }
@@ -158,6 +162,71 @@ function defaultRepsFor(data: StructureData): RepConfig[] {
   return [{ ...defaultRep('ballstick', 'all', 'element') }]
 }
 
+/** 口袋类预设（bindingsite/publication）的自动聚焦：相机缓动到「配体 + 4.5Å 口袋残基」特写。
+ *  远距多拷贝配体（四聚体 4×HEM 均布）时挑离当前相机目标最近的单个实例——全部入框会拉回全景；
+ *  无配体结构（纯蛋白/核酸）退化为普通预设，不动相机。
+ *  引擎未挂载（欢迎页命令链窗口）时跳过——agent 口袋流程总有 view from/zoom 收尾接管相机。 */
+function focusPocketAfterPreset(structureId: string) {
+  const eng = engineRef.current
+  if (!eng) return
+  const data = dataRegistry.get(structureId)
+  if (!data) return
+  const named = buildNamedMasks(structureId, data)
+  const lig = evaluateSelection('ligand', { structure: data, named })
+  if (lig.error || !lig.mask) return
+  const ligIdx = maskToIndices(lig.mask)
+  if (!ligIdx.length) return
+  // 配体按残基分实例（每个 HEM/配体分子一个残基）
+  const byRes = new Map<number, number[]>()
+  for (const i of ligIdx) {
+    const ri = data.atomResidue[i]
+    const arr = byRes.get(ri)
+    if (arr) arr.push(i)
+    else byRes.set(ri, [i])
+  }
+  const insts = [...byRes.values()]
+  const pos = data.atoms.positions
+  // 实例质心两两距离：远距拷贝（>25Å，如四聚体 4×HEM）→ 只取离相机目标最近的实例
+  let chosen = insts
+  if (insts.length > 1) {
+    const cents = insts.map(idx => {
+      let cx = 0, cy = 0, cz = 0
+      for (const i of idx) { cx += pos[i * 3]; cy += pos[i * 3 + 1]; cz += pos[i * 3 + 2] }
+      return [cx / idx.length, cy / idx.length, cz / idx.length] as const
+    })
+    let spread = 0
+    for (let a = 0; a < cents.length; a++) for (let b = a + 1; b < cents.length; b++) {
+      spread = Math.max(spread, Math.hypot(cents[a][0] - cents[b][0], cents[a][1] - cents[b][1], cents[a][2] - cents[b][2]))
+    }
+    if (spread > 25) {
+      const t = eng.getCameraState().target
+      let best = 0, bestD = Infinity
+      cents.forEach((c, k) => {
+        const d = Math.hypot(c[0] - t[0], c[1] - t[1], c[2] - t[2])
+        if (d < bestD) { bestD = d; best = k }
+      })
+      chosen = [insts[best]]
+    }
+  }
+  // 口袋集群 = 配体实例原子 ∪ 4.5Å 球内邻域原子（口袋残基完整入画）
+  const seen = new Set<number>()
+  const pocket: number[] = []
+  const radius2 = 4.5 * 4.5
+  for (const inst of chosen) {
+    for (const i of inst) {
+      if (seen.has(i)) continue
+      seen.add(i); pocket.push(i)
+      for (const j of data.grid.queryRadius(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2], 4.5, pos)) {
+        if (seen.has(j)) continue
+        const dx = pos[j * 3] - pos[i * 3], dy = pos[j * 3 + 1] - pos[i * 3 + 1], dz = pos[j * 3 + 2] - pos[i * 3 + 2]
+        if (dx * dx + dy * dy + dz * dz <= radius2) { seen.add(j); pocket.push(j) }
+      }
+    }
+  }
+  if (pocket.length < 4) return
+  eng.fitView([{ structureId, indices: pocket }], { buffer: 2.5 })
+}
+
 export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }> = {
   cartoon: {
     label: 'Cartoon 经典',
@@ -181,7 +250,11 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
   },
   surface: {
     label: '分子表面',
-    reps: () => [{ ...defaultRep('surface', 'all', 'chain') }],
+    // 表面只算聚合物：配体以球棍独立显示（否则被表面完全包埋，口袋不可见）
+    reps: () => [
+      { ...defaultRep('surface', 'polymer', 'chain') },
+      { ...defaultRep('ballstick', 'ligand', 'element') },
+    ],
   },
   bindingsite: {
     label: '结合口袋',
@@ -189,6 +262,9 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
       { ...defaultRep('cartoon', 'polymer', 'chain') },
       // byres：口袋残基展开为完整残基（主链+侧链）——只有 within 球内的部分原子会令侧链残缺
       { ...defaultRep('ballstick', 'byres(within 4.5 of (ligand))', 'element') },
+      // 口袋晶体水：仅显示配体 6Å 邻域内的水（小球 0.33Å，ChimeraX nonbonded 风格）——
+      // 不带范围的全水 rep 会把整个晶格的溶剂都画出来（四聚体全貌时噪声极大）
+      { ...defaultRep('ballstick', 'water and within 6 of (ligand)', 'element'), ballScale: 1.5 },
     ],
   },
   publication: {
@@ -196,15 +272,18 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
     reps: () => [
       { ...defaultRep('cartoon', 'polymer', 'chain') },
       // pocket 方案：配体碳鲜绿 + 口袋残基碳按到配体距离紫→粉渐变（杂原子元素色）；
-      // 棍棒几何同时启用智能主链——仅氢键参与者的主链 O/N 显示，其余主链原子不进几何
+      // 残基按 byres 展开为完整残基（主链+侧链一起显示）——出版互作图不裁切残基
       { ...defaultRep('ballstick', 'byres(within 4.5 of (ligand)) and not water', 'pocket') },
+      { ...defaultRep('ballstick', 'water and within 6 of (ligand)', 'element'), ballScale: 1.5 },
     ],
   },
   hybrid: {
     label: '混合风格',
+    // SS 着色卡通 + 全结构化学键线（骨架抽象与化学细节同屏）+ 配体球棍
     reps: () => [
       { ...defaultRep('cartoon', 'polymer', 'ss') },
-      { ...defaultRep('sticks', 'backbone', 'residue') },
+      { ...defaultRep('lines', 'polymer', 'element') },
+      { ...defaultRep('ballstick', 'ligand', 'element') },
     ],
   },
   putty: {
@@ -364,6 +443,9 @@ export const useMolStore = create<MolState>()((set, get) => ({
     })
     // 预设同时清理颜色覆盖（colorOverrides 会盖住所有 rep 的配色方案——
     // 之前 color 命令烘焙的逐原子色若不清理，preset 后卡通带仍被旧色污染）
+    // 口袋类预设自动聚焦：全景视角下口袋球棍集群几乎不可见——「结合口袋/出版互作」
+    // 的预期就是看到口袋特写（快速风格按钮与 preset 命令共用此路径）
+    if (preset === 'bindingsite' || preset === 'publication') focusPocketAfterPreset(entry.id)
   },
 
   applyColor: (target) => {

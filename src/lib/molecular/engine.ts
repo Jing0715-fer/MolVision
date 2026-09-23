@@ -13,7 +13,7 @@ import { AnaglyphEffect } from 'three/examples/jsm/effects/AnaglyphEffect.js'
 import { marchingCubes } from './marching-cubes'
 import { mateTransforms, orthoMatrix, symOpsFor, type CrystalCell } from './symmetry'
 import { computeAtomColors } from './colors'
-import { elementInfo, BACKBONE_ATOMS } from './chemistry'
+import { elementInfo } from './chemistry'
 import {
   buildCartoon, buildLines, buildSpheres, buildSticks, buildSurface,
   type Pickable, type RepBuild,
@@ -266,11 +266,6 @@ export class MolEngine {
   private hbondPending = new Map<string, string>()
   /** 最近一次 updateHBonds 的 state（异步结果到达时重渲用） */
   private lastHbondState: Parameters<MolEngine['sync']>[0] | null = null
-  /** 当前实际渲染的氢键端点原子集（口袋方案智能主链用：参与氢键互作的主链 N/O 才显示 stick）。
- *  值为範围过滤+链隔离过滤后真正画到屏上的虚线端点——hbonds off 时清空 */
-  private hbondShown = new Map<string, Set<number>>()
-  /** hbondShown 集合的版本号（变更时递增，进入 rep 哈希触发口袋 rep 重建） */
-  private hbondShownRev = new Map<string, number>()
   // SASA / ΔSASA 计算 Web Worker（大结构异步）
   private sasaWorker: Worker | null = null
   private sasaWorkerFailed = false
@@ -1500,10 +1495,7 @@ export class MolEngine {
         }
       }
       for (const rep of entry.reps) {
-        // 口袋方案 rep 的哈希附加氢键端点集版本：hbonds 计算完成/范围变化 → 参与氢键的主链原子
-        // 增减 → 需要重建几何（其余 rep 不受影响，避免无谓重建）
-        const hbSig = rep.colorScheme === 'pocket' ? (this.hbondShownRev.get(entry.id) ?? 0) : 0
-        const hash = JSON.stringify([rep, entry.rev, filtersKey, hbSig])
+        const hash = JSON.stringify([rep, entry.rev, filtersKey])
         const existing = view.reps.get(rep.id)
         if (existing && existing.hash === hash) continue
         if (existing) {
@@ -1551,8 +1543,6 @@ export class MolEngine {
         this.symmetryGroups.delete(id)
         this.hbondCache.delete(id)
         this.hbondPending.delete(id)
-        this.hbondShown.delete(id)
-        this.hbondShownRev.delete(id)
         this.sasaPending.delete(id)
         if (this.pendingSasaBake === id) this.pendingSasaBake = null
         // SASA 结果归属结构被移除 → 清空面板数据
@@ -1599,35 +1589,6 @@ export class MolEngine {
     this.hasContent = this.views.size > 0
   }
 
-  /** 记录某结构当前真正渲染的氢键端点集；返回集合是否发生变化（变化时递增版本号） */
-  private noteShownHbonds(structureId: string, atoms: Iterable<number> | null): boolean {
-    const old = this.hbondShown.get(structureId)
-    if (atoms === null) {
-      if (!old) return false
-      this.hbondShown.delete(structureId)
-    } else {
-      const next = new Set(atoms)
-      if (old && old.size === next.size) {
-        let same = true
-        for (const a of next) { if (!old.has(a)) { same = false; break } }
-        if (same) return false
-      }
-      if (next.size === 0 && !old) return false
-      if (next.size === 0) this.hbondShown.delete(structureId)
-      else this.hbondShown.set(structureId, next)
-    }
-    this.hbondShownRev.set(structureId, (this.hbondShownRev.get(structureId) ?? 0) + 1)
-    return true
-  }
-
-  /** 氢键参与集变化后唤醒口袋方案 rep（bump visualRev 触发 sync 重建；无口袋 rep 时零开销） */
-  private wakePocketReps() {
-    const st = useMolStore.getState()
-    if (st.structures.some(x => x.reps.some(r => r.colorScheme === 'pocket'))) {
-      useMolStore.setState(s => ({ visualRev: s.visualRev + 1 }))
-    }
-  }
-
   /** 氢键网络检测与虚线渲染（大结构经 Web Worker 异步）；全局网络仅虚线，
    *  端点球仅选择集范围（hbondSelOnly）时显示 */
   private updateHBonds(state: Parameters<MolEngine['sync']>[0]) {
@@ -1643,19 +1604,12 @@ export class MolEngine {
     const s = state.settings
     if (!s.showHBonds) {
       this.hbondPending.clear()
-      // 氢键关闭 → 参与集清零（口袋方案的主链 N/O 随之隐藏）
-      let cleared = false
-      for (const id of [...this.hbondShown.keys()]) {
-        if (this.noteShownHbonds(id, null)) cleared = true
-      }
-      if (cleared) this.wakePocketReps()
       useHBondStore.getState().setStats(0, 0, false)
       useHBondStore.getState().setComputing(false)
       useHBondStore.getState().setPairs([])
       return
     }
     let total = 0, waterTotal = 0
-    let shownChanged = false
     // 活动结构的残基对汇总（分析面板表格）
     const activeId = useMolStore.getState().activeId
     const pairMap = new Map<string, { donorRes: number; acceptorRes: number; minDist: number; count: number }>()
@@ -1705,8 +1659,6 @@ export class MolEngine {
         hbonds = hbonds.filter(hb => !hiddenGroups.has(cg[hb.donor]) && !hiddenGroups.has(cg[hb.acceptor]))
       }
       if (!hbonds.length) {
-        // 范围内无氢键 → 参与集清零（主链回退隐藏）
-        if (this.noteShownHbonds(entry.id, [])) shownChanged = true
         continue
       }
       // 上限保护
@@ -1726,8 +1678,6 @@ export class MolEngine {
         endPts.push(from, hb.acceptor)
         if (data.residues[data.atomResidue[hb.donor]].water || data.residues[data.atomResidue[hb.acceptor]].water) waterN++
       }
-      // 记录当前真正画到屏上的氢键端点集（口袋方案智能主链：参与互作的主链 N/O 才显示）
-      if (this.noteShownHbonds(entry.id, endPts)) shownChanged = true
       // 残基对汇总（仅活动结构——表格与选择/聚焦联动）
       if (entry.id === activeId) {
         for (const hb of draw) {
@@ -1779,8 +1729,6 @@ export class MolEngine {
     }
     useHBondStore.getState().setStats(total, waterTotal, true)
     useHBondStore.getState().setComputing(this.hbondPending.size > 0)
-    // 参与集变化 → 口袋 rep 需要重建（仅当存在口袋方案 rep 时才 bump，避免无谓重渲）
-    if (shownChanged) this.wakePocketReps()
     // 距离最近优先，上限 300 行（表格可用性保护）
     const pairs: HBondPairSummary[] = activeId
       ? [...pairMap.values()]
@@ -3046,19 +2994,6 @@ export class MolEngine {
         if (settings.hideWater && data.residues[data.atomResidue[i]].water) mask[i] = 0
       }
     }
-    // 口袋方案智能主链：棍棒类 rep 不显示主链原子——除非该原子参与当前渲染的氢键互作
-    //（主链 O/N 是氢键供受体，参与互作时球棍+虚线一起出现；C/CA 等其余主链原子一律不进棍棒几何，
-    //  侧链从 CB 起漂在卡通带上方——出版互作图的标准干净画法）
-    if (rep.colorScheme === 'pocket' && (rep.type === 'ballstick' || rep.type === 'sticks' || rep.type === 'lines')) {
-      const shown = this.hbondShown.get(entry.id)
-      for (let i = 0; i < mask.length; i++) {
-        if (!mask[i]) continue
-        if (!data.residues[data.atomResidue[i]].polymer) continue
-        if (!BACKBONE_ATOMS.has(data.atoms.names[i])) continue
-        if (shown?.has(i)) continue
-        mask[i] = 0
-      }
-    }
     const atomIdx: number[] = []
     for (let i = 0; i < mask.length; i++) if (mask[i]) atomIdx.push(i)
     // 颜色
@@ -3113,11 +3048,8 @@ export class MolEngine {
       p.mesh.userData.enginePick = { pick: p, structureId: entry.id }
     }
     view.repContainer.add(build.group)
-    // 存储哈希与 sync() 侧计算保持一致（含 hbSig——否则口袋 rep 永不命中缓存逐帧重建）
-    {
-      const hbSig = rep.colorScheme === 'pocket' ? (this.hbondShownRev.get(entry.id) ?? 0) : 0
-      view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, filtersKey, hbSig]), build })
-    }
+    // 存储哈希与 sync() 侧计算保持一致（否则 rep 永不命中缓存逐帧重建）
+    view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, filtersKey]), build })
     this.pickablesCache = null
     // 材质统一挂裁剪平面；同时应用当前高光设置（新建材质也遵循 specular 开关）
     build.group.traverse(o => {

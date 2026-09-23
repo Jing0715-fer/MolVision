@@ -23,11 +23,11 @@ export const SCENE_PRESETS: Record<string, ScenePreset> = {
     commands: [
       'preset cartoon',
       'bg white',
-      'outline on 1.1 1.8',
+      'outline on 0.5 1',
       'set fog off',
       'orient',
     ],
-    after: '导出图像 → Ray 级渲染可获得软阴影出版图',
+    after: '导出图像 → Ray 级渲染可获得软阴影出版图；描边 0.5/1 为 VLM 实测最优值',
   },
   popular: {
     key: 'popular',
@@ -45,14 +45,13 @@ export const SCENE_PRESETS: Record<string, ScenePreset> = {
   pocket: {
     key: 'pocket',
     label: '口袋特写',
-    desc: '蛋白卡通 + 结合位点棍棒，镜头推入口袋',
+    desc: '口袋完整残基棍棒 + 晶体水，镜头推入并正对开口',
     icon: 'target',
     commands: [
       'preset bindingsite',
-      'orient',
-      'zoom within 5 of (ligand), 8',
+      'view from ligand',
     ],
-    after: '可继续「show surface, within 6 of (ligand)」叠加口袋表面',
+    after: 'preset bindingsite 已自动聚焦口袋（多配体挑最近实例），view from ligand 把开口转向相机；可继续「show surface, within 6 of (ligand)」叠加口袋表面',
   },
   clean: {
     key: 'clean',

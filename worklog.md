@@ -2037,3 +2037,44 @@ Stage Summary:
 - 交付质量：VLM 严格档 8.5/10「发表级技术标准」；数值探针全部通过（灰平面 60507→8px、高亮存活 10%→100%）
 - 未解决与风险：①用户旧会话的密度图若仍开着，修复后溶剂峰孤岛会「正常显示」为半透明灰蓝小块（而非鬼环）——这是正确行为，用户可用 map isolevel 调 σ 或 map off 关闭；附回复中说明 ②真 SSAA 后导出尺寸=目标尺寸（3600 大图不再默认给出），需要更大图用 ray 3200/4096 ③SSAA 1.5× 单步降采样对 2× 以上倍率可用多步优化（当前上限 2× 无需）
 - 下一阶段建议：①用户侧确认旧会话渲染观感 ②ray 透明导出（ray 2400 transparent）暴露 engine 参数 ③密度图孤岛点击查看 σ 值（教育性）④VLM 配额恢复后补 map+ray 组合真图终审
+
+---
+Task ID: r58-recovery
+Agent: general-purpose
+Task: r58 收尾验证（主线程 Bash 故障期间接管）
+
+Work Log:
+- 【环境恢复确认】Bash 工具恢复正常（echo test-ok）；dev server 端口 3000 存活（GET / → 200）；dev.log tail 无编译错误（仅有主线程改动期间一次 Fast Refresh full reload 的历史 warning，之后连续 ✓ Compiled 且页面正常渲染）
+- 【lint】cd /home/z/my-project && bun run lint → 0 errors 0 warnings（输出仅 "$ eslint ."，无任何诊断行）
+- 【agent-browser 会话】旧会话仍存活（get title → MolVision 工作台），4HHB 已加载（结构面板显示 4,779 原子/801 残基/12 链），无需重新走示例按钮
+- 【命令行打开方式】按任务指引用 window.dispatchEvent(Backquote keydown) 未触发命令行（合成事件 dispatch 在 window 上不会冒泡到 document 的监听器）；改点工具栏「命令行」按钮（ref e25）成功打开，可见 input placeholder 含 "load 4hhb"；在 window 上安装 __runCmd 助手（原生 value setter + input 事件 + Enter keydown，React 受控输入标准路径）执行命令
+- 【E2E-1：preset publication】3 rep 完全符合预期：cartoon (polymer) / ballstick (byres(within 4.5 of (ligand)) and not water) 957 原子（91 口袋残基完整，智能主链过滤已移除）/ ballstick (water and within 6 of (ligand)) 26 原子；camDist=38Å，落在 25-60 特写区间（focusPocketAfterPreset 生效，非全景 ~170）✓
+- 【E2E-2：isolate (resn HEM and chain A)】4 秒后探针：口袋 rep 224 原子、口袋水 rep 5 原子，逐原子 chainId 统计 100% 来自链 A（isolate 连带保留同链水链组生效，水不再跨链残留）✓
+- 【E2E-3：isolate off】口袋 rep 恢复 957 原子、口袋水 rep 恢复 26 原子，链分布回到 A/B/C/D 四链全量 ✓；camDist 保持 38（isolate off 不重置相机，符合语义）
+- 【console 检查】整个验证会话零运行时错误（仅 HMR/Fast Refresh 日志）
+- 【无修复项】r58 全部代码改动（engine.ts 删智能主链 / store.ts PRESETS 重设计+focusPocketAfterPreset+__molData QA 钩子 / commands.ts isolate 水链组连带+show waters 口袋水扩全水 / route.ts 规则 15 直 isolate+规则 17/18 文案 / scenes.ts 场景预设）在真实浏览器链路验证下行为与设计意图一致，未发现需要修的 bug
+
+Stage Summary:
+- 验证结果全绿：lint 0/0；E2E 三步（preset publication 口袋特写 3 rep / isolate 链 A 后口袋水纯链 A 5 原子 / isolate off 恢复 26 原子四链）全部通过；console 零错误；r58 主线程交付的改动无需返工
+- 沙箱经验：合成 KeyboardEvent dispatch 到 window 不会冒泡到 document 级监听器（打开命令行面板这类全局快捷键应改点工具栏按钮）；探针链统计用 data.residues[data.atomResidue[ai]].chainId 逐原子判定，pickable.atomMap 可直接 for..of 迭代
+- 遗留风险：①SwiftShader 灰球渲染为已知环境缺陷（真实 GPU 不受影响），本轮全部走引擎数据探针断言未受影响 ②主线程已验证过的 show waters/hbonds/surface/hybrid 分支本轮未重跑（探针路径同构，风险低）③r58 正式 worklog 节（主线程视角）尚未写入，与本 recovery 节互补
+- 下一步：主线程 git commit/push（本 agent 按约定未做任何 git 操作）
+
+---
+Task ID: r58
+Agent: main
+Task: 用户反馈三问题：①预设/快速风格互作分析侧链显示不完整（好像只显示参与互作的原子）②分析口袋蛋白只显示对称多聚体一个但水分子还是四聚体全在 ③预设风格需继续打磨
+
+Work Log:
+- 【问题①根因】引擎探针实锤：preset publication 口袋 rep 91/91 残基全部缺失主链 N/CA/C/O——r51「智能主链」过滤在氢键未开时抹掉全部主链（开了也永缺 CA/C），残基剩悬浮侧链碎片，用户观感即「侧链残缺、只显示参与互作的原子」
+- 【问题①修复】整体移除智能主链机制（engine.ts hbondShown/noteShownHbonds/wakePocketReps/hbSig 全删）：口袋 rep 完整残基（主链+侧链），修复后 91/91 残基原子完整
+- 【问题②根因】isolate 连带保留只含蛋白/核酸链组（水链组两个极端：全隐藏或预设外全显）；口袋预设本身无水 rep——看到的水来自全结构 water rep 四链全在
+- 【问题②修复】isolate 同链 ID 连带扩展到水链组（A 蛋白+配体+晶体水一体保留）；bindingsite/publication 新增「water and within 6 of (ligand)」受限口袋水 rep（0.33Å 小球）；show waters 把受限水 rep 扩为全水不叠加重复
+- 【问题③打磨】surface=聚合物表面+配体球棍独立（原 all 表面包埋配体）；hybrid 重定义=SS 卡通+化学键线+配体球棍（原 backbone 棍与卡通纯重叠）；bindingsite/publication 自动聚焦口袋（focusPocketAfterPreset：多配体远距拷贝挑最近实例不拉回全景，无配体不动相机）；pocket 场景预设=preset bindingsite + view from ligand；publication 场景描边对齐 VLM 实测 0.5/1；agent 规则 15 从「提议 isolate」改「直接 isolate」、17/18/COMMAND_REF 去智能主链加水语义
+- 【E2E】数据探针全绿：publication 口袋 957 原子 91/91 完整+26 口袋水+相机 37.6Å 特写；isolate (resn HEM and chain A) 后水 5 原子 100% 链 A；isolate off 恢复；show waters 转 221 全水；hbonds in 虚线 988 顶点无回归；surface 配体 578 原子；hybrid 3 rep；lint 0/0；tsc src 零错
+- 【沙箱经验】主线程 Bash 两度故障由子代理接管；SwiftShader 下 VLM 球棍判断不可信（r51 结论再验证），断言全走数据探针
+
+Stage Summary:
+- 三问题全部根因修复；agent 教育同步（直接 isolate/完整残基/水语义）
+- 遗留：口袋水 6Å 固定半径；VLM 视觉终审受 SwiftShader 限制待用户预览确认
+- 下阶段建议：用户侧确认观感/序列条 compact mode/ray OOM 守卫/agent 记忆面板
