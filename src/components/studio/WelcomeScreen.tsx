@@ -73,13 +73,13 @@ export function WelcomeScreen() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_65%_at_50%_42%,transparent_38%,color-mix(in_oklab,var(--foreground)_3.5%,transparent)_100%)] dark:hidden" />
         <svg
           viewBox="0 0 480 480"
-          className="welcome-orbit h-[min(76vh,600px,92vw)] w-[min(76vh,600px,92vw)] text-foreground/[0.095] dark:text-foreground/[0.06] [mask-image:radial-gradient(circle,transparent_18%,black_52%,black_64%,transparent_86%)]"
+          className="welcome-orbit h-[min(76vh,600px,92vw)] w-[min(76vh,600px,92vw)] text-foreground/[0.075] dark:text-foreground/[0.055] [mask-image:radial-gradient(circle,transparent_18%,black_52%,black_64%,transparent_86%)]"
         >
           <g fill="none" stroke="currentColor" strokeWidth="1">
             <ellipse cx="240" cy="240" rx="232" ry="88" />
             <ellipse cx="240" cy="240" rx="232" ry="88" transform="rotate(60 240 240)" />
             <ellipse cx="240" cy="240" rx="232" ry="88" transform="rotate(120 240 240)" />
-            <polygon points="240,12 437.5,126 437.5,354 240,468 42.5,354 42.5,126" strokeDasharray="3 5" />
+            <polygon points="240,12 437.5,126 437.5,354 240,468 42.5,354 42.5,126" strokeOpacity="0.55" />
           </g>
           {/* 轨道电子：沿最外椭圆巡航（SVG 原生 animateMotion；reduced-motion 由 UA 策略停用） */}
           <circle r="2.5" className="fill-primary">
@@ -143,8 +143,8 @@ export function WelcomeScreen() {
           <div className="welcome-in mt-5 flex items-center gap-2" style={{ animationDelay: '185ms' }}>
             <span className="flex items-center gap-1.5 rounded-full border border-foreground/[0.16] dark:border-white/15 px-2.5 py-[3.5px]">
               <span className="led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-              <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                v1.4 · Engine Ready
+              <span className="font-mono text-[9px] font-semibold tracking-[0.12em] text-muted-foreground">
+                v1.4 · WebGL 引擎就绪
               </span>
             </span>
           </div>
@@ -157,11 +157,9 @@ export function WelcomeScreen() {
             className="load-sep welcome-in flex w-full items-center gap-2.5 mt-10"
             style={{ animationDelay: '240ms' }}
           >
-            <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
-            <span className="h-[3px] w-[3px] rotate-45 bg-muted-foreground/60" />
+            <span className="h-px flex-1 bg-foreground/[0.14] dark:bg-foreground/[0.13]" />
             <span className="mol-micro text-muted-foreground">加载结构</span>
-            <span className="h-[3px] w-[3px] rotate-45 bg-muted-foreground/60" />
-            <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
+            <span className="h-px flex-1 bg-foreground/[0.14] dark:bg-foreground/[0.13]" />
           </div>
 
           <form
@@ -283,21 +281,20 @@ export function WelcomeScreen() {
         <AgentPanel float />
       </div>
 
-      {/* 墨色仪表底座（待机遥测读数 + 版本/版权 + 主题/GitHub） */}
+      {/* 墨色仪表底座（待机遥测读数 + 版本/版权 + 主题/GitHub）
+          r56：读数分级重整——品牌热白高亮，状态常规，提示暗色；去除机器日志式简写（SYS OK/ENGINE WEBGL） */}
       <footer className="instrument-bar relative z-10 flex h-9 shrink-0 items-center gap-3 px-4">
-        <span className="status-micro">MolVision v1.4</span>
+        <span className="status-val font-bold tracking-wide" style={{ color: 'var(--status-hot)' }}>MolVision <span className="opacity-70">v1.4</span></span>
         <span className="status-sep" />
         <span className="status-val flex items-center gap-1.5">
           <span className="led-dot led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-          待机 STANDBY
+          待机 · 等待结构加载
         </span>
-        <span className="status-sep" />
-        <span className="status-val hidden sm:block">SYS OK</span>
-        <span className="status-sep hidden sm:block" />
-        <span className="status-val hidden md:block">ENGINE WEBGL</span>
         <span className="status-sep hidden md:block" />
-        <span className="status-val hidden lg:block">© 2026</span>
+        <span className="status-val hidden md:block">WebGL 引擎</span>
         <span className="status-sep hidden lg:block" />
+        <span className="status-val hidden lg:block">© 2026</span>
+        <span className="status-sep hidden xl:block" />
         <span className="status-val hidden truncate text-[color:var(--status-dim)] xl:block">
           拖放 PDB / CIF / .molvision 文件即可加载 · ⌘K 命令面板 · ⌘J AI 助手
         </span>

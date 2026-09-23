@@ -25,18 +25,19 @@ export function chainColor(index: number): THREE.Color {
 }
 
 const RESIDUE_COLORS: Record<ResidueClass, string> = {
-  nonpolar: '#f2c46d',
-  polar: '#8fd694',
-  positive: '#4fb3c6',
-  negative: '#e05d5d',
-  aromatic: '#c39bd3',
-  cysteine: '#ffec8b',
-  proline: '#c7b3e5',
-  glycine: '#c9cdd4',
-  nucleic: '#7ac9c0',
-  water: '#7a9cc9',
-  ligand: '#e8a0bf',
-  unknown: '#b8bcc4',
+  // r56：整体降饱和 ~15%（保色相语义前提下从「糖果感」收敛到 Jalview Taylor 式沉稳色板）
+  nonpolar: '#e6c179',
+  polar: '#96c6a4',
+  positive: '#62b1c2',
+  negative: '#d97b76',
+  aromatic: '#b4a1cf',
+  cysteine: '#e9d787',
+  proline: '#b7aad9',
+  glycine: '#c5cad2',
+  nucleic: '#7fc0b7',
+  water: '#85a2c3',
+  ligand: '#dfa8bc',
+  unknown: '#b6bbc4',
 }
 
 export function residueClassColor(resName: string): THREE.Color {
@@ -44,7 +45,7 @@ export function residueClassColor(resName: string): THREE.Color {
 }
 
 const NA_BASE_COLORS: Record<string, string> = {
-  A: '#9ad97a', G: '#f2c46d', C: '#4fb3c6', T: '#e05d5d', U: '#e05d5d',
+  A: '#9ccd87', G: '#e6c179', C: '#62b1c2', T: '#d97b76', U: '#d97b76',
 }
 
 export function naBaseColor(resName: string): THREE.Color | null {
@@ -54,7 +55,7 @@ export function naBaseColor(resName: string): THREE.Color | null {
   return null
 }
 
-const SS_COLORS = { H: '#ff5e5b', E: '#ffd166', L: '#9aa3ad' } as const
+const SS_COLORS = { H: '#e2777c', E: '#e3c27c', L: '#a4adb6' } as const
 
 /** B 因子渐变停靠点（蓝→青→绿→黄→红；t∈[0,1] 归一化 B 值）——图例卡与着色共用 */
 export const BFACTOR_STOPS: [number, string][] = [

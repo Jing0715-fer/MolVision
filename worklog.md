@@ -1988,3 +1988,25 @@ Stage Summary:
 - 交付（合并对账后净增量）：①AI 助手多会话管理（chat-store 会话化演进，API 零破坏，busy 执行链保护）②八浮层仪器化（teal/半透明/渐变家族 → 实底 + mol-elevate + primary）③相机缓动三处补全（fitView+buffer/orient/resetView + set_view——r54 的书签 slerp 之外把「聚焦/对齐/归位/恢复」四类跳变全部收口）④collectFitPoints 链显隐过滤（r50 遗漏的取景层）⑤zoom 缓冲冲突修复
 - 关键决策：放弃 r55 初版 disable/enable 命令与重复 store API（r50 isolate/chains 已覆盖且更成熟）；session 恢复保持 r54 瞬时决策不动；八样式文件经「r43 后远端零改动」验证后原样迁移
 - 未解决与风险：①agent「只保留链A」类需求语义执行仍不完整（LLM 只 disable/isolate B 未隔离 C/D——下轮在 SYSTEM_PROMPT 补「只保留链 X ⇒ isolate (chain X)」显式句式映射）②headless rAF 节流下相机中间帧不可采样（已用 anim 标志+精确落位替代取证）③r55-work-backup 分支保留一轮后可删
+
+---
+Task ID: r56
+Agent: main
+Task: 用户需求：继续打磨项目整体 UI 美观度，完成后 push（VLM 审计驱动）
+
+Work Log:
+- 【用户原话】「继续打磨项目整体ui美观度，完成后push」
+- 【审计基线】VLM（glm-5v-turbo 严格档）对四表面首轮审计：欢迎页 6.5 / 主工作台 5.5 / 代理商面板 / 命令面板——与早轮宽松模型的 9.2 分不可比，本轮以该严格档为基线做增量验证
+- 【设计 token 层（globals.css）】主色去塑料感：chroma 0.145→0.115、hue 163(翡翠)→168(青碧)、明度 0.596→0.578（浅色）；深色 0.17→0.128；ring 双主题同步；mol-btn-primary/welcome-cta 内阴影 hue 引用同步 168
+- 【生化配色专业化（colors.ts）】RESIDUE_COLORS 12 色整体降饱和 ~15%（保色相语义，从糖果感收敛到 Jalview Taylor 式沉稳）+ NA_BASE_COLORS 5 色 + SS_COLORS 3 色——3D 着色与序列条共用同源色板，全应用一致收敛
+- 【欢迎页】①版本徽章文案「v1.4 · Engine Ready」→「v1.4 · WebGL 引擎就绪」（去赛博朋克腔，中英混排 tracking 0.12em）②底部分组重整：去「SYS OK」「ENGINE WEBGL」机器日志式简写；品牌「MolVision v1.4」status-hot 高亮分三级（品牌亮/状态常/提示暗）③分隔符现代化：去菱形装饰点（Web 1.0 感），hairline 0.18→0.14 更克制 ④背景轨道线浅色 0.095→0.075 / 深色 0.06→0.055，虚线六边形改实线 strokeOpacity 0.55（去贴纸感）
+- 【StructuresPanel】①统计行从 4 个散落徽章改为单条仪器读数带（bg-muted/45 底 + 点分隔 + 统一 tabular-nums 9.5px——修「数据飘在空中」）②关闭 X 对比度提升（/70 opacity-70→全值）③链/分子行 label 列宽统一 w-5→w-6 ④数值层级强化（res/at 计数 font-semibold text-foreground/75，与 muted 标签拉开对比）
+- 【E2E 验证】agent-browser 全链路：加载 4HHB→命令面板⌘K 开关→AI 助手面板开→结构卡 X 关闭→欢迎页回归；console 零错误（仅 Fast Refresh 日志）；lint 0/0 + tsc src 零错；CommandDialog z-50 fixed 层级核查无遮挡 bug（VLM 误报）
+- 【VLM 复审增量（严格档）】欢迎页 6.5→8.5（最终深色）/8.0（浅色）；主工作台 5.5→9.0（深色首轮复审）/8.5（浅色+深色复检）；AI 助手面板 8.5；命令面板 8.0——四表面全部进入 8+ 档
+- 【沙箱经验】①VLM 对静态截图无法感知 hover/focus 交互动效（welcome-cta 已有 translateY+brightness），此类批评需代码层核实而非盲改②同屏 3D SwiftShader 灰渲染仍拖累主工作台观感分（真实 GPU 不受影响）③「背景过淡」与「背景过重」跨轮互斥批评属主观带，取中间值即可不必反复横跳④eval 派发 React 受控点击用 .click() 直调 + 600ms Promise 延时等待 AlertDialog 挂载
+
+Stage Summary:
+- 交付净增量：①主色/生化色板双收敛（teal 化 + 降饱和，全应用 3D 与 UI 一致）②欢迎页文案与底部分组专业化③结构卡统计读数带 + 链行数值层级
+- 验证：lint 0/0 / tsc src 0 / console 0 / 四表面 VLM 严格档全 8+（欢迎 8.5、工作台 9.0/8.5、助手 8.5、面板 8.0）
+- 未解决与风险：①剩余 VLM 批评均属像素级主观带（如状态栏密度 vs 呼吸感互斥）②序列格白字对比度 2.45:1 为历史基线（大号粗字可接受，如需 WCAG AA 需再压色板明度）③浅色欢迎页背景 8/10（中间值策略）
+- 下一阶段建议：①序列 compact mode（超大蛋白 backlog）②ray OOM 守卫③agent 记忆可视化面板④弹窗体系 VLM 审计（r46 遗留）

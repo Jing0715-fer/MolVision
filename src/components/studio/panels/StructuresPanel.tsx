@@ -329,28 +329,28 @@ export function StructuresPanel() {
               </button>
               <button
                 onClick={() => closeStructureWithUndo(st)}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-70 transition hover:bg-destructive/10 hover:text-destructive hover:opacity-100"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
                 title={`关闭 ${st.name}（8 秒内可撤销）`}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
             {!collapsed.has(st.name) && (
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                <span className="rounded-[3px] border border-border/80 bg-transparent px-1.5 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
-                  {st.summary.atoms.toLocaleString()} 原子
-                </span>
-                <span className="rounded-[3px] border border-border/80 bg-transparent px-1.5 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
-                  {st.summary.residues.toLocaleString()} 残基
-                </span>
+              /* r56：统计行从散落徽章改为单条仪器读数带（点分隔 + 统一 tabular-nums，消除「数据飘在空中」） */
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-md bg-muted/45 px-2 py-[5px] font-mono text-[9.5px] leading-none tabular-nums text-muted-foreground dark:bg-white/[0.04]">
+                <span>{st.summary.atoms.toLocaleString()} 原子</span>
+                <span aria-hidden className="text-muted-foreground/30">·</span>
+                <span>{st.summary.residues.toLocaleString()} 残基</span>
+                <span aria-hidden className="text-muted-foreground/30">·</span>
+                <span>{st.summary.chains} 链</span>
                 {st.meta.resolution && (
-                  <span className="rounded-[3px] border border-border/80 bg-transparent px-1.5 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
-                    {st.meta.resolution} Å
-                  </span>
+                  <>
+                    <span aria-hidden className="text-muted-foreground/30">·</span>
+                    <span>{st.meta.resolution} Å</span>
+                  </>
                 )}
-                <span className="rounded-[3px] border border-border/80 bg-transparent px-1.5 py-px font-mono text-[9px] tabular-nums text-muted-foreground">
-                  {st.loadMs < 1 ? '<1' : st.loadMs.toFixed(0)} ms
-                </span>
+                <span aria-hidden className="text-muted-foreground/30">·</span>
+                <span className="text-muted-foreground/75">{st.loadMs < 1 ? '<1' : st.loadMs.toFixed(0)} ms</span>
               </div>
             )}
             {collapsed.has(st.name) && st.summary.atoms > 0 && (
@@ -449,7 +449,7 @@ export function StructuresPanel() {
                         title={`选择此配体分子 ${m.label}（${m.atoms} 原子）· 双击聚焦${m.residues.length > 1 ? ` · 跨 ${m.residues.length} 个残基` : ''}`}
                       >
                         <span className="h-3.5 w-1 shrink-0 rounded-full opacity-80" style={{ background: c.color }} />
-                        <span className="w-5 shrink-0 font-mono text-xs font-bold">{label}</span>
+                        <span className="w-6 shrink-0 font-mono text-xs font-bold">{label}</span>
                         {dupId && (
                           <span className="shrink-0 rounded bg-muted px-1 font-mono text-[9px] leading-4 text-muted-foreground">#{i + 1}</span>
                         )}
@@ -457,7 +457,7 @@ export function StructuresPanel() {
                         <span className="min-w-0 truncate rounded border border-border bg-transparent px-1.5 font-mono text-[10px] font-semibold text-amber-700 dark:text-amber-400" title={`${m.label}（${m.atoms} 原子）`}>
                           {m.label}
                         </span>
-                        <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/70">{m.atoms} at</span>
+                        <span className="ml-auto shrink-0 font-mono text-[10px] font-semibold tabular-nums text-foreground/75">{m.atoms} at</span>
                       </button>
                       <QuickColorPopover
                         label={`配体 ${m.label}`}
@@ -521,7 +521,7 @@ export function StructuresPanel() {
                       )}
                       <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
                       <span className="shrink-0 text-[10px] text-muted-foreground">{CHAIN_TYPE_LABEL[c.type]}</span>
-                      <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/70">
+                      <span className="ml-auto shrink-0 font-mono text-[10px] font-semibold tabular-nums text-foreground/75">
                         {c.residues > 0 && `${c.residues} res`}
                       </span>
                     </button>
