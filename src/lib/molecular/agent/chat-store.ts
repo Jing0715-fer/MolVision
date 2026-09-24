@@ -10,6 +10,7 @@
 // AgentPanel / 欢迎页浮层等既有消费零改动。会话切换/新建/删除在 busy 期间拒绝——
 // 保护执行链完整性（与模块级 store 的动机同源）。
 import { create } from 'zustand'
+import { tt } from '@/i18n'
 import { AGENT_CHAT_KEY, AGENT_CHAT_MAX, AGENT_VISUAL_KEY, type AgentChatMessage, type AgentCmdRecord } from './protocol'
 
 /** 忙碌阶段（思考 → 流式生成 → 执行 → 视觉自查） */
@@ -50,7 +51,7 @@ function normalizeMsgs(list: AgentChatMessage[]): AgentChatMessage[] {
     image: undefined,
     commands: m.commands?.map(c =>
       c.status === 'running' || c.status === 'pending'
-        ? { ...c, status: 'error' as const, output: '页面刷新时被中断，可重新执行' }
+        ? { ...c, status: 'error' as const, output: tt({ zh: '页面刷新时被中断，可重新执行', en: 'Interrupted by page refresh — you can re-run it' }) }
         : c,
     ),
   }))
@@ -66,7 +67,7 @@ function validSession(x: unknown): AgentSession | null {
   if (typeof s?.id !== 'string' || typeof s?.title !== 'string' || !Array.isArray(s.messages)) return null
   return {
     id: s.id,
-    title: s.title || '未命名会话',
+    title: s.title || tt({ zh: '未命名会话', en: 'Untitled session' }),
     autoTitle: s.autoTitle !== false,
     createdAt: typeof s.createdAt === 'number' ? s.createdAt : Date.now(),
     updatedAt: typeof s.updatedAt === 'number' ? s.updatedAt : Date.now(),
@@ -97,7 +98,7 @@ function loadSessions(): AgentSession[] {
             const first = msgs.find(m => m.role === 'user')
             return [{
               id: sid(),
-              title: first ? titleFrom(first.content) : '导入的历史对话',
+              title: first ? titleFrom(first.content) : tt({ zh: '导入的历史对话', en: 'Imported chat history' }),
               autoTitle: true,
               createdAt: Date.now(),
               updatedAt: Date.now(),
@@ -138,7 +139,7 @@ function retitle(s: AgentSession): AgentSession {
 }
 
 function newSessionObj(): AgentSession {
-  return { id: sid(), title: '新会话', autoTitle: true, createdAt: Date.now(), updatedAt: Date.now(), messages: [] }
+  return { id: sid(), title: tt({ zh: '新会话', en: 'New session' }), autoTitle: true, createdAt: Date.now(), updatedAt: Date.now(), messages: [] }
 }
 
 interface AgentChatState {
@@ -212,7 +213,7 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => ({
   clearMsgs: () => set(s => {
     const sess = s.sessions.find(x => x.id === s.activeId)
     if (!sess) return {}
-    const next = { ...sess, messages: [], title: '新会话', autoTitle: true, updatedAt: Date.now() }
+    const next = { ...sess, messages: [], title: tt({ zh: '新会话', en: 'New session' }), autoTitle: true, updatedAt: Date.now() }
     return {
       sessions: s.sessions.map(x => (x.id === next.id ? next : x)),
       msgs: next.messages,
@@ -269,8 +270,8 @@ if (typeof window !== 'undefined') {
 /** 相对时间（会话列表用）：刚刚 / N 分钟前 / HH:mm / MM-DD HH:mm */
 export function sessionTimeLabel(ts: number): string {
   const d = Date.now() - ts
-  if (d < 60_000) return '刚刚'
-  if (d < 3_600_000) return `${Math.floor(d / 60_000)} 分钟前`
+  if (d < 60_000) return tt({ zh: '刚刚', en: 'just now' })
+  if (d < 3_600_000) return tt({ zh: `${Math.floor(d / 60_000)} 分钟前`, en: `${Math.floor(d / 60_000)} min ago` })
   const now = new Date()
   const t = new Date(ts)
   const hm = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`

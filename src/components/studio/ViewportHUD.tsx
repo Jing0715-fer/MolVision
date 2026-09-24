@@ -5,8 +5,10 @@
 import { RotateCw, Waves } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { REP_LABELS } from '@/lib/molecular/types'
+import { useI18n } from '@/i18n'
 
 export function ViewportHUD() {
+  const { t } = useI18n()
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   const spin = useMolStore(s => s.settings.spin)
@@ -26,7 +28,7 @@ export function ViewportHUD() {
       {rep && (
         <>
           <span aria-hidden className="h-2 w-px bg-foreground/15" />
-          <span>{REP_LABELS[rep.type] ?? rep.type}</span>
+          <span>{t(REP_LABELS[rep.type] ?? rep.type)}</span>
         </>
       )}
       {(spin || rock) && (
@@ -34,8 +36,8 @@ export function ViewportHUD() {
           <span aria-hidden className="h-2 w-px bg-foreground/15" />
           <span className="flex items-center gap-1 font-bold text-primary">
             {spin
-              ? <><RotateCw className="h-2.5 w-2.5 animate-spin [animation-duration:2.5s]" /> SPIN · S 停止</>
-              : <><Waves className="h-2.5 w-2.5" /> ROCK · R 停止</>}
+              ? <><RotateCw className="h-2.5 w-2.5 animate-spin [animation-duration:2.5s]" /> {t({ zh: 'SPIN · S 停止', en: 'SPIN · S to stop' })}</>
+              : <><Waves className="h-2.5 w-2.5" /> {t({ zh: 'ROCK · R 停止', en: 'ROCK · R to stop' })}</>}
           </span>
         </>
       )}

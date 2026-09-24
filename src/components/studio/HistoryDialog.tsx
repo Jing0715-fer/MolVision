@@ -13,6 +13,7 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import { useI18n, tt } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 /** 高亮搜索命中片段 */
@@ -30,6 +31,7 @@ function Matched({ text, q }: { text: string; q: string }) {
 }
 
 export function HistoryDialog() {
+  const { t } = useI18n()
   const open = useMolStore(s => s.ui.historyOpen)
   const setUi = useMolStore(s => s.setUi)
   const [history, setHistory] = useState<string[]>(() => loadCmdHistory())
@@ -46,8 +48,8 @@ export function HistoryDialog() {
   // 打开时聚焦搜索框 + 清空上次搜索
   useEffect(() => {
     if (!open) return
-    const t = setTimeout(() => searchRef.current?.focus(), 60)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => searchRef.current?.focus(), 60)
+    return () => clearTimeout(timer)
   }, [open])
 
   const q = query.trim().toLowerCase()
@@ -69,9 +71,9 @@ export function HistoryDialog() {
   const copy = async (cmd: string) => {
     try {
       await navigator.clipboard.writeText(cmd)
-      toast.success('已复制到剪贴板')
+      toast.success(tt({ zh: '已复制到剪贴板', en: 'Copied to clipboard' }))
     } catch {
-      toast.error('复制失败（浏览器权限）')
+      toast.error(tt({ zh: '复制失败（浏览器权限）', en: 'Copy failed (browser permission)' }))
     }
   }
 
@@ -88,7 +90,7 @@ export function HistoryDialog() {
         <button
           onClick={() => run(cmd)}
           className="min-w-0 flex-1 text-left font-mono text-[11px] leading-snug tabular-nums text-foreground/85 transition hover:text-foreground"
-          title="点击执行（并打开控制台查看输出）"
+          title={t({ zh: '点击执行（并打开控制台查看输出）', en: 'Click to run (opens the console to show output)' })}
         >
           <Matched text={cmd} q={q} />
         </button>
@@ -99,21 +101,21 @@ export function HistoryDialog() {
               'flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-accent',
               isPinned ? 'text-amber-500' : 'text-muted-foreground/60 hover:text-amber-500',
             )}
-            title={isPinned ? '取消置顶' : '置顶（常用工作流）'}
+            title={isPinned ? t({ zh: '取消置顶', en: 'Unpin' }) : t({ zh: '置顶（常用工作流）', en: 'Pin (frequent workflows)' })}
           >
             <Star className={cn('h-3 w-3', isPinned && 'fill-current')} />
           </button>
           <button
             onClick={() => fill(cmd)}
             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-accent hover:text-foreground"
-            title="填入控制台输入行编辑"
+            title={t({ zh: '填入控制台输入行编辑', en: 'Fill into the console input line for editing' })}
           >
             <PencilLine className="h-3 w-3" />
           </button>
           <button
             onClick={() => copy(cmd)}
             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-accent hover:text-foreground"
-            title="复制命令"
+            title={t({ zh: '复制命令', en: 'Copy command' })}
           >
             <Copy className="h-3 w-3" />
           </button>
@@ -131,19 +133,19 @@ export function HistoryDialog() {
         <DialogHeader className="gap-1.5 border-b border-border px-4 pb-2.5 pt-3.5">
           <DialogTitle className="flex items-center gap-2 text-sm">
             <History className="h-4 w-4 text-muted-foreground" />
-            命令历史
+            {t({ zh: '命令历史', en: 'Command history' })}
             <span className="font-mono text-[10px] font-normal tabular-nums text-muted-foreground">
-              {q ? `${matchCount}/${total}` : `${total} 条`}
+              {q ? `${matchCount}/${total}` : t({ zh: `${total} 条`, en: `${total} entries` })}
             </span>
             {pins.length > 0 && (
               <span className="flex items-center gap-1 font-mono text-[10px] font-normal tabular-nums text-muted-foreground">
-                <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />{pins.length} 置顶
+                <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />{t({ zh: `${pins.length} 置顶`, en: `${pins.length} pinned` })}
               </span>
             )}
             <span className="mol-micro ml-auto mr-9 text-muted-foreground">HISTORY</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            完整历史（新 → 旧，上限 200 条跨会话保存）——点击<span className="text-foreground/80">执行</span>、铅笔<span className="text-foreground/80">填入编辑</span>、星标<span className="text-foreground/80">置顶常用</span>。
+            {t({ zh: '完整历史（新 → 旧，上限 200 条跨会话保存）——点击', en: 'Full history (newest → oldest, capped at 200 entries, kept across sessions) — click to ' })}<span className="text-foreground/80">{t({ zh: '执行', en: 'run' })}</span>{t({ zh: '、铅笔', en: ', pencil to ' })}<span className="text-foreground/80">{t({ zh: '填入编辑', en: 'fill & edit' })}</span>{t({ zh: '、星标', en: ', star to ' })}<span className="text-foreground/80">{t({ zh: '置顶常用', en: 'pin frequent' })}</span>{t({ zh: '。', en: '.' })}
           </DialogDescription>
         </DialogHeader>
 
@@ -159,7 +161,7 @@ export function HistoryDialog() {
                 if (e.key === 'Escape') setQuery('')
                 if (e.key === 'Enter' && (pinned[0] ?? rest[0])) run(pinned[0] ?? rest[0])
               }}
-              placeholder="搜索历史命令…（Enter 执行首个匹配）"
+              placeholder={t({ zh: '搜索历史命令…（Enter 执行首个匹配）', en: 'Search history… (Enter runs the first match)' })}
               className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted-foreground/40"
               spellCheck={false}
               autoComplete="off"
@@ -174,13 +176,13 @@ export function HistoryDialog() {
             <button
               onClick={() => {
                 clearCmdHistory()
-                toast.success('命令历史已清空', { description: '最近命令徽章与 Ctrl+R 搜索同步清除（置顶保留）' })
+                toast.success(tt({ zh: '命令历史已清空', en: 'Command history cleared' }), { description: tt({ zh: '最近命令徽章与 Ctrl+R 搜索同步清除（置顶保留）', en: 'Recent chips and the Ctrl+R search are cleared too (pins kept)' }) })
               }}
               className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 text-[10px] font-medium text-muted-foreground transition hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
-              title="清空全部历史（置顶命令保留）"
+              title={t({ zh: '清空全部历史（置顶命令保留）', en: 'Clear all history (pinned commands kept)' })}
             >
               <Trash2 className="h-3 w-3" />
-              清空
+              {t({ zh: '清空', en: 'Clear' })}
             </button>
           )}
         </div>
@@ -190,18 +192,18 @@ export function HistoryDialog() {
           {total === 0 ? (
             <div className="flex flex-col items-center gap-2 py-10 text-center">
               <History className="h-8 w-8 text-muted-foreground/25" />
-              <p className="text-xs text-muted-foreground">暂无历史命令——在控制台跑几条命令（load 4hhb / preset cartoon …）后这里会记录</p>
+              <p className="text-xs text-muted-foreground">{t({ zh: '暂无历史命令——在控制台跑几条命令（load 4hhb / preset cartoon …）后这里会记录', en: 'No history yet — run a few commands in the console (load 4hhb / preset cartoon …) and they will show up here' })}</p>
             </div>
           ) : matchCount === 0 ? (
             <div className="py-10 text-center text-xs text-muted-foreground">
-              没有匹配「{query}」的历史命令
+              {t({ zh: `没有匹配「${query}」的历史命令`, en: `No history matching "${query}"` })}
             </div>
           ) : (
             <>
               {pinned.length > 0 && (
                 <div className="mb-1.5">
                   <div className="mol-micro flex items-center gap-1.5 px-2 pb-1.5 text-muted-foreground">
-                    <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> 置顶
+                    <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> {t({ zh: '置顶', en: 'Pinned' })}
                   </div>
                   <div className="space-y-0.5">
                     {pinned.map(cmd => <Row key={`p-${cmd}`} cmd={cmd} pinnedRow />)}
@@ -212,7 +214,7 @@ export function HistoryDialog() {
                 <div>
                   {pinned.length > 0 && (
                     <div className="mol-micro flex items-center gap-1.5 px-2 pb-1.5 text-muted-foreground/70">
-                      <ArrowUpRight className="h-2.5 w-2.5" /> 全部历史
+                      <ArrowUpRight className="h-2.5 w-2.5" /> {t({ zh: '全部历史', en: 'All history' })}
                     </div>
                   )}
                   <div className="space-y-0.5">
@@ -220,7 +222,7 @@ export function HistoryDialog() {
                   </div>
                   {rest.length > 120 && (
                     <p className="px-2 pt-1.5 text-[10px] text-muted-foreground/60">
-                      仅显示最近 120 条（共 {rest.length}）——输入关键词精确定位
+                      {t({ zh: `仅显示最近 120 条（共 ${rest.length}）——输入关键词精确定位`, en: `Showing the latest 120 of ${rest.length} — type a keyword to narrow down` })}
                     </p>
                   )}
                 </div>
@@ -231,13 +233,13 @@ export function HistoryDialog() {
 
         <DialogFooter className="flex-row items-center gap-3 border-t border-border px-4 py-2.5">
           <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
-            <Play className="h-2.5 w-2.5" />点击行 = 执行
+            <Play className="h-2.5 w-2.5" />{t({ zh: '点击行 = 执行', en: 'click a row = run' })}
           </span>
           <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
-            <Star className="h-2.5 w-2.5" />置顶常用工作流
+            <Star className="h-2.5 w-2.5" />{t({ zh: '置顶常用工作流', en: 'pin frequent workflows' })}
           </span>
           <span className="ml-auto hidden text-[10px] text-muted-foreground/60 sm:inline">
-            控制台内 <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Ctrl+R</kbd> 快速搜索
+            {t({ zh: '控制台内', en: 'Inside the console:' })} <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Ctrl+R</kbd> {t({ zh: '快速搜索', en: 'quick search' })}
           </span>
         </DialogFooter>
       </DialogContent>

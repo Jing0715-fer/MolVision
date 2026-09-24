@@ -1,5 +1,6 @@
 // ============================================================================
-// ccp4.ts —— CCP4/MRC 电子密度图（map）解析器（零依赖、纯 TypeScript）
+// ccp4.ts —— CCP4/MRC 电子密度图（map）解析器（零三方依赖、纯 TypeScript；
+// 仅主线程使用——错误文案经 tt() 双语化）
 // ----------------------------------------------------------------------------
 // 用途：解析 CCP4 MAP / MRC 密度图二进制（1024 字节头 + 体素数据），输出规范化
 //       (x,y,z) 晶轴序的 Float32Array 体素场，供 marching-cubes.ts 提取等值面、
@@ -43,6 +44,8 @@
 // 晶胞参数非法、数据不足（截断）/数据长度不符（多余字节）、体素数组无法分配。
 // ============================================================================
 
+import { tt } from '@/i18n'
+
 /** 解析成功的 CCP4/MRC 密度图（全部已规范化为晶轴 (x,y,z) 序） */
 export interface Ccp4Map {
   dims: [number, number, number]      // 规范化 (x,y,z) 轴序后采样数
@@ -67,7 +70,7 @@ const MAX_DIM = 4096
 export function parseCcp4(buffer: ArrayBuffer): Ccp4Map | { error: string } {
   // ── 0) 最小长度：需读到 word55（字节 216..219）──
   if (buffer.byteLength < 224) {
-    return { error: `文件过短：仅 ${buffer.byteLength} 字节（CCP4 头部至少需 224 字节）` }
+    return { error: tt({ zh: `文件过短：仅 ${buffer.byteLength} 字节（CCP4 头部至少需 224 字节）`, en: `File too short: only ${buffer.byteLength} bytes (CCP4 header requires at least 224 bytes)` }) }
   }
 
   // ── 1) word53 "MAP " 校验兼字节序判别（字符串不随数值端序变化，反转形态即大端）──
@@ -77,7 +80,7 @@ export function parseCcp4(buffer: ArrayBuffer): Ccp4Map | { error: string } {
   const isPamRev = tag[0] === 0x20 && tag[1] === 0x50 && tag[2] === 0x41 && tag[3] === 0x4d // " PAM"（整字反转）
   const isPamLit = tag[0] === 0x50 && tag[1] === 0x41 && tag[2] === 0x4d && tag[3] === 0x20 // "PAM "（字面大端标记）
   if (!isMapLe && !isPamRev && !isPamLit) {
-    return { error: 'word53 校验失败：非 "MAP "（亦非大端 " PAM"/"PAM "），不是 CCP4/MRC 密度图' }
+    return { error: tt({ zh: 'word53 校验失败：非 "MAP "（亦非大端 " PAM"/"PAM "），不是 CCP4/MRC 密度图', en: 'word53 check failed: not "MAP " (nor big-endian " PAM"/"PAM ") — not a CCP4/MRC map' }) }
   }
   const le = isMapLe // "MAP " → 小端；反转形态 → 大端（等效于全字字节序转换后继续）
 
@@ -101,11 +104,11 @@ export function parseCcp4(buffer: ArrayBuffer): Ccp4Map | { error: string } {
 
   // ── 3) 逐项校验 ──
   if (mode !== 0 && mode !== 1 && mode !== 2) {
-    return { error: `不支持的 MODE ${mode}（仅支持 0=int8、1=int16、2=float32）` }
+    return { error: tt({ zh: `不支持的 MODE ${mode}（仅支持 0=int8、1=int16、2=float32）`, en: `Unsupported MODE ${mode} (only 0=int8, 1=int16, 2=float32 are supported)` }) }
   }
   for (const n of nStor) {
     if (!(n > 0) || n > MAX_DIM) {
-      return { error: `采样数非法：NX/NY/NZ=${nStor[0]}/${nStor[1]}/${nStor[2]}（各须在 1..${MAX_DIM}）` }
+      return { error: tt({ zh: `采样数非法：NX/NY/NZ=${nStor[0]}/${nStor[1]}/${nStor[2]}（各须在 1..${MAX_DIM}）`, en: `Invalid sampling counts: NX/NY/NZ=${nStor[0]}/${nStor[1]}/${nStor[2]} (each must be 1..${MAX_DIM})` }) }
     }
   }
   // 存储轴（列/行/节）→ 晶轴（0=x,1=y,2=z），须为 1/2/3 的排列
@@ -113,24 +116,24 @@ export function parseCcp4(buffer: ArrayBuffer): Ccp4Map | { error: string } {
   let axisMask = 0
   for (const ax of axOf) {
     if (ax < 0 || ax > 2) {
-      return { error: `轴序非法：MAPC/MAPR/MAPS=${mapc}/${mapr}/${maps}（各须为 1/2/3）` }
+      return { error: tt({ zh: `轴序非法：MAPC/MAPR/MAPS=${mapc}/${mapr}/${maps}（各须为 1/2/3）`, en: `Invalid axis mapping: MAPC/MAPR/MAPS=${mapc}/${mapr}/${maps} (each must be 1/2/3)` }) }
     }
     axisMask |= 1 << ax
   }
   if (axisMask !== 0b111) {
-    return { error: `轴序非法：MAPC/MAPR/MAPS=${mapc}/${mapr}/${maps}（须为 1/2/3 的排列）` }
+    return { error: tt({ zh: `轴序非法：MAPC/MAPR/MAPS=${mapc}/${mapr}/${maps}（须为 1/2/3 的排列）`, en: `Invalid axis mapping: MAPC/MAPR/MAPS=${mapc}/${mapr}/${maps} (must be a permutation of 1/2/3)` }) }
   }
   if (nsymbt < 0) {
-    return { error: `NSYMBT=${nsymbt} 为负，文件头损坏` }
+    return { error: tt({ zh: `NSYMBT=${nsymbt} 为负，文件头损坏`, en: `NSYMBT=${nsymbt} is negative — corrupted file header` }) }
   }
   const dataOffset = 1024 + nsymbt // 数据起始（头 1024 字节 + 附加对称记录）
   if (buffer.byteLength < dataOffset) {
-    return { error: `数据偏移 1024+NSYMBT=${dataOffset} 超出文件长度 ${buffer.byteLength}` }
+    return { error: tt({ zh: `数据偏移 1024+NSYMBT=${dataOffset} 超出文件长度 ${buffer.byteLength}`, en: `Data offset 1024+NSYMBT=${dataOffset} exceeds file length ${buffer.byteLength}` }) }
   }
   const [a, b, c, alphaD, betaD, gammaD] = cell
   if (!(a > 0) || !(b > 0) || !(c > 0) ||
       !(alphaD > 0 && alphaD < 180) || !(betaD > 0 && betaD < 180) || !(gammaD > 0 && gammaD < 180)) {
-    return { error: `晶胞参数非法：a/b/c=${a}/${b}/${c}，α/β/γ=${alphaD}/${betaD}/${gammaD}` }
+    return { error: tt({ zh: `晶胞参数非法：a/b/c=${a}/${b}/${c}，α/β/γ=${alphaD}/${betaD}/${gammaD}`, en: `Invalid unit cell: a/b/c=${a}/${b}/${c}, α/β/γ=${alphaD}/${betaD}/${gammaD}` }) }
   }
   // 正交化基向量（详见文件头推导）
   const rad = Math.PI / 180
@@ -139,13 +142,13 @@ export function parseCcp4(buffer: ArrayBuffer): Ccp4Map | { error: string } {
   const cg = Math.cos(gammaD * rad)
   const sg = Math.sin(gammaD * rad)
   if (sg < 1e-9) {
-    return { error: `晶胞角 γ=${gammaD} 过于退化（sinγ≈0），无法正交化` }
+    return { error: tt({ zh: `晶胞角 γ=${gammaD} 过于退化（sinγ≈0），无法正交化`, en: `Unit-cell angle γ=${gammaD} is too degenerate (sinγ≈0) — cannot orthogonalize` }) }
   }
   const cX = c * cb
   const cY = (c * (ca - cb * cg)) / sg
   const cZ2 = c * c - cX * cX - cY * cY
   if (cZ2 <= 0) {
-    return { error: '晶胞参数不合理：α/β/γ 无法构成有效晶胞（c 的 z 分量平方为负）' }
+    return { error: tt({ zh: '晶胞参数不合理：α/β/γ 无法构成有效晶胞（c 的 z 分量平方为负）', en: 'Implausible unit cell: α/β/γ cannot form a valid cell (negative squared z-component of c)' }) }
   }
   // 数据长度校验（体素数 × 每体素字节数；mode0=1、mode1=2、mode2=4）
   const bps = mode === 0 ? 1 : mode === 1 ? 2 : 4
@@ -153,10 +156,10 @@ export function parseCcp4(buffer: ArrayBuffer): Ccp4Map | { error: string } {
   const needBytes = nvox * bps
   const remaining = buffer.byteLength - dataOffset
   if (remaining < needBytes) {
-    return { error: `数据不足：需 ${needBytes} 字节（${nvox} 体素 × ${bps} 字节），实际仅剩 ${remaining} 字节——文件被截断` }
+    return { error: tt({ zh: `数据不足：需 ${needBytes} 字节（${nvox} 体素 × ${bps} 字节），实际仅剩 ${remaining} 字节——文件被截断`, en: `Insufficient data: need ${needBytes} bytes (${nvox} voxels × ${bps} bytes), only ${remaining} remain — file truncated` }) }
   }
   if (remaining > needBytes) {
-    return { error: `数据长度不符：剩余 ${remaining} 字节 ≠ 预期 ${needBytes} 字节（多出 ${remaining - needBytes} 字节）` }
+    return { error: tt({ zh: `数据长度不符：剩余 ${remaining} 字节 ≠ 预期 ${needBytes} 字节（多出 ${remaining - needBytes} 字节）`, en: `Data length mismatch: ${remaining} bytes remain ≠ expected ${needBytes} bytes (${remaining - needBytes} extra)` }) }
   }
 
   // ── 4) 存储轴 → 晶轴重排（dims、起点），并求分数原点/步长 ──
@@ -180,7 +183,7 @@ export function parseCcp4(buffer: ArrayBuffer): Ccp4Map | { error: string } {
   try {
     out = new Float32Array(nvox)
   } catch {
-    return { error: `体素数 ${nvox} 过大，无法分配密度数组（${nvox * 4} 字节）` }
+    return { error: tt({ zh: `体素数 ${nvox} 过大，无法分配密度数组（${nvox * 4} 字节）`, en: `Voxel count ${nvox} too large to allocate the density array (${nvox * 4} bytes)` }) }
   }
   const outStride = [1, dims[0], dims[0] * dims[1]] // 晶轴 x/y/z 的输出步长（x 最快）
   const isIdentity = axOf[0] === 0 && axOf[1] === 1 && axOf[2] === 2

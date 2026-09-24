@@ -8,20 +8,21 @@ import { useMapStore } from '@/lib/molecular/map-store'
 import { fetchAndComputeMap, removeMap, setMapLook, loadMapBuffer } from '@/lib/molecular/map-load'
 import type { MapKind } from '@/lib/molecular/sffourier'
 import { useMolStore, dataRegistry } from '@/lib/molecular/store'
+import { useI18n, type DualText } from '@/i18n'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 
-const MODES: { key: 'mesh' | 'surface' | 'both'; label: string; icon: typeof Grid3x3 }[] = [
-  { key: 'mesh', label: '网格', icon: Grid3x3 },
-  { key: 'surface', label: '面', icon: Box },
-  { key: 'both', label: '叠加', icon: Layers },
+const MODES: { key: 'mesh' | 'surface' | 'both'; label: DualText; icon: typeof Grid3x3 }[] = [
+  { key: 'mesh', label: { zh: '网格', en: 'Mesh' }, icon: Grid3x3 },
+  { key: 'surface', label: { zh: '面', en: 'Surface' }, icon: Box },
+  { key: 'both', label: { zh: '叠加', en: 'Both' }, icon: Layers },
 ]
 
-const KINDS: { key: MapKind; label: string; hint: string }[] = [
-  { key: '2fofc', label: '2Fo−Fc', hint: '常规电子密度（骨架走向）' },
-  { key: 'fofc', label: 'Fo−Fc', hint: '差图（模型缺失/错位诊断）' },
+const KINDS: { key: MapKind; label: string; hint: DualText }[] = [
+  { key: '2fofc', label: '2Fo−Fc', hint: { zh: '常规电子密度（骨架走向）', en: 'Conventional electron density (backbone trace)' } },
+  { key: 'fofc', label: 'Fo−Fc', hint: { zh: '差图（模型缺失/错位诊断）', en: 'Difference map (diagnoses missing/misplaced model)' } },
 ]
 
 /** σ 滑块节流 hook：等值面重建需重跑 marching cubes（裁剪网格 ~0.5-2s），
@@ -53,6 +54,7 @@ export function useIsoThrottle(key: 'iso' | 'isoNeg') {
 }
 
 export function MapsPanel() {
+  const { t } = useI18n()
   const info = useMapStore(s => s.info)
   const computing = useMapStore(s => s.computing)
   const computeMsg = useMapStore(s => s.computeMsg)
@@ -82,7 +84,7 @@ export function MapsPanel() {
 
   return (
     <div className="pb-4">
-      <SectionTitle>电子密度图</SectionTitle>
+      <SectionTitle>{t({ zh: '电子密度图', en: 'Electron density map' })}</SectionTitle>
       <div className="space-y-2.5 px-3">
         {/* 图类型选择 */}
         <div className="flex h-8 items-center rounded-md border border-border bg-background p-0.5">
@@ -94,7 +96,7 @@ export function MapsPanel() {
                 // 已有图时切换类型 → 直接用当前/输入 ID 重算
                 if (idInput || activePdbId) doFetch(idInput || activePdbId || '', k.key)
               }}
-              title={k.hint}
+              title={t(k.hint)}
               className={cn(
                 'flex h-7 flex-1 items-center justify-center gap-1 rounded font-mono text-[11px] font-semibold transition',
                 kind === k.key
@@ -114,9 +116,9 @@ export function MapsPanel() {
             value={idInput}
             onChange={e => setIdInput(e.target.value.toUpperCase())}
             onKeyDown={e => { if (e.key === 'Enter') doFetch(idInput, kind) }}
-            placeholder="PDB 编号（如 3EKJ）"
+            placeholder={t({ zh: 'PDB 编号（如 3EKJ）', en: 'PDB ID (e.g. 3EKJ)' })}
             className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 font-mono text-xs uppercase tracking-wider outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
-            aria-label="PDB 编号"
+            aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
           />
           <button
             onClick={() => doFetch(idInput, kind)}
@@ -124,7 +126,7 @@ export function MapsPanel() {
             className="mol-btn-primary flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
           >
             {computing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">合成</span>
+            <span className="hidden sm:inline">{t({ zh: '合成', en: 'Compute' })}</span>
           </button>
         </div>
         {activePdbId && !idInput && (
@@ -133,7 +135,7 @@ export function MapsPanel() {
             disabled={computing}
             className="w-full rounded-md border border-dashed border-border bg-muted/50 px-2 py-1.5 text-left text-[11px] text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:opacity-50"
           >
-            用当前结构 <span className="font-mono font-semibold text-foreground">{activePdbId}</span> 的结构因子合成 {kind === 'fofc' ? 'Fo−Fc 差图' : '2Fo−Fc 图'}
+            {t({ zh: '用当前结构 ', en: 'Compute ' })}<span className="font-mono font-semibold text-foreground">{activePdbId}</span>{t({ zh: ` 的结构因子合成 ${kind === 'fofc' ? 'Fo−Fc 差图' : '2Fo−Fc 图'}`, en: ` from its structure factors — ${kind === 'fofc' ? 'Fo−Fc difference map' : '2Fo−Fc map'}` })}
           </button>
         )}
         <button
@@ -141,7 +143,7 @@ export function MapsPanel() {
           className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           <Upload className="mr-1.5 inline h-3.5 w-3.5" />
-          导入 CCP4 / MRC 地图文件…
+          {t({ zh: '导入 CCP4 / MRC 地图文件…', en: 'Import CCP4 / MRC map file…' })}
         </button>
         <input
           ref={fileRef}
@@ -153,15 +155,14 @@ export function MapsPanel() {
         {computing && (
           <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-2.5 py-2 text-[11px] text-amber-600 dark:text-amber-400">
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-            <span className="truncate">{computeMsg || '计算中…'}</span>
+            <span className="truncate">{computeMsg || t({ zh: '计算中…', en: 'Computing…' })}</span>
           </div>
         )}
         {!info && !computing && (
           <PanelHint>
-            从 RCSB 沉积的结构因子（SF mmCIF）实时计算电子密度：原子模型提供相位，观测振幅提供强度，
-            3D FFT 合成后以等值面/网格叠加在结构上（对标 PyMOL isomesh / ChimeraX volume）。
-            <span className="mt-1 block">2Fo−Fc 看骨架走向；<span className="font-medium text-primary">Fo−Fc 差图</span>诊断模型问题——绿峰=密度有而模型缺（该建而未建），红峰=模型有而密度无（放错位置）。计算在 Web Worker 中进行，页面不卡顿。</span>
-            需要结构有沉积结构因子（3EKJ / 1AKI / 5NIT 等均可）。
+            {t({ zh: '从 RCSB 沉积的结构因子（SF mmCIF）实时计算电子密度：原子模型提供相位，观测振幅提供强度，3D FFT 合成后以等值面/网格叠加在结构上（对标 PyMOL isomesh / ChimeraX volume）。', en: 'Computes electron density live from RCSB-deposited structure factors (SF mmCIF): the atomic model supplies phases, observed amplitudes supply magnitudes; a 3D FFT synthesis is overlaid on the structure as isosurface/mesh (à la PyMOL isomesh / ChimeraX volume).' })}
+            <span className="mt-1 block">{t({ zh: '2Fo−Fc 看骨架走向；', en: '2Fo−Fc shows the backbone trace; ' })}<span className="font-medium text-primary">{t({ zh: 'Fo−Fc 差图', en: 'Fo−Fc difference map' })}</span>{t({ zh: '诊断模型问题——绿峰=密度有而模型缺（该建而未建），红峰=模型有而密度无（放错位置）。计算在 Web Worker 中进行，页面不卡顿。', en: 'diagnoses model problems — green peaks = density without model (should be built), red peaks = model without density (misplaced). Computation runs in a Web Worker; the page stays responsive.' })}</span>
+            {t({ zh: '需要结构有沉积结构因子（3EKJ / 1AKI / 5NIT 等均可）。', en: 'The structure needs deposited structure factors (3EKJ / 1AKI / 5NIT all work).' })}
           </PanelHint>
         )}
       </div>
@@ -173,16 +174,16 @@ export function MapsPanel() {
               <button
                 onClick={() => setMapLook({ visible: !info.visible })}
                 className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
-                title={info.visible ? '隐藏密度图' : '显示密度图'}
-                aria-label={info.visible ? '隐藏密度图' : '显示密度图'}
+                title={info.visible ? t({ zh: '隐藏密度图', en: 'Hide map' }) : t({ zh: '显示密度图', en: 'Show map' })}
+                aria-label={info.visible ? t({ zh: '隐藏密度图', en: 'Hide map' }) : t({ zh: '显示密度图', en: 'Show map' })}
               >
                 {info.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
               </button>
               <button
                 onClick={() => removeMap()}
                 className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                title="移除密度图"
-                aria-label="移除密度图"
+                title={t({ zh: '移除密度图', en: 'Remove map' })}
+                aria-label={t({ zh: '移除密度图', en: 'Remove map' })}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -194,8 +195,8 @@ export function MapsPanel() {
             {/* 差图图例（正负独立 σ 时显示 +x/−y） */}
             {info.difference && (
               <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[10px]">
-                <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: info.color }} />正峰 · 模型缺失</span>
-                <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: info.negColor }} />负峰 · 模型多余</span>
+                <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: info.color }} />{t({ zh: '正峰 · 模型缺失', en: 'Positive · model missing' })}</span>
+                <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: info.negColor }} />{t({ zh: '负峰 · 模型多余', en: 'Negative · model surplus' })}</span>
                 <span className="ml-auto font-mono tabular-nums text-muted-foreground">
                   {Math.abs(info.iso - info.isoNeg) < 1e-6
                     ? `±${info.iso.toFixed(1)}σ`
@@ -206,17 +207,17 @@ export function MapsPanel() {
 
             {/* 信息卡 */}
             <div className="grid grid-cols-2 gap-1 rounded-md border border-border bg-muted/40 p-2 text-[10px] tabular-nums leading-relaxed">
-              <div className="text-muted-foreground">来源</div>
-              <div className="text-right font-medium">{info.source === 'sf' ? (info.difference ? '结构因子 Fo−Fc' : '结构因子 2Fo−Fc') : 'CCP4 文件'}</div>
-              <div className="text-muted-foreground">网格</div>
+              <div className="text-muted-foreground">{t({ zh: '来源', en: 'Source' })}</div>
+              <div className="text-right font-medium">{info.source === 'sf' ? (info.difference ? t({ zh: '结构因子 Fo−Fc', en: 'Structure factors Fo−Fc' }) : t({ zh: '结构因子 2Fo−Fc', en: 'Structure factors 2Fo−Fc' })) : t({ zh: 'CCP4 文件', en: 'CCP4 file' })}</div>
+              <div className="text-muted-foreground">{t({ zh: '网格', en: 'Grid' })}</div>
               <div className="text-right font-mono">{info.dims.map(d => d.toLocaleString()).join('×')}</div>
-              <div className="text-muted-foreground">体素</div>
+              <div className="text-muted-foreground">{t({ zh: '体素', en: 'Voxel' })}</div>
               <div className="text-right font-mono">{info.voxel.map(v => v.toFixed(2)).join('×')} Å</div>
-              <div className="text-muted-foreground">三角形</div>
+              <div className="text-muted-foreground">{t({ zh: '三角形', en: 'Triangles' })}</div>
               <div className="text-right font-mono">{info.triangles.toLocaleString()}{info.truncated ? '+' : ''}</div>
               <div className="text-muted-foreground">rms</div>
               <div className="text-right font-mono">{info.rms.toFixed(4)}</div>
-              <div className="text-muted-foreground">计算耗时</div>
+              <div className="text-muted-foreground">{t({ zh: '计算耗时', en: 'Compute time' })}</div>
               <div className="text-right font-mono">{info.ms.toFixed(0)} ms</div>
             </div>
 
@@ -227,7 +228,7 @@ export function MapsPanel() {
                   <div className="mb-1 flex items-center justify-between text-[11px]">
                     <span className="flex items-center gap-1.5 text-muted-foreground">
                       <span className="h-2 w-2 rounded-full" style={{ background: info.color }} />
-                      正峰 σ（模型缺失）
+                      {t({ zh: '正峰 σ（模型缺失）', en: 'Positive σ (model missing)' })}
                     </span>
                     <span className="font-mono font-semibold tabular-nums" style={{ color: info.color }}>+{(posIso.drag ?? info.iso).toFixed(2)}</span>
                   </div>
@@ -235,14 +236,14 @@ export function MapsPanel() {
                     value={[posIso.drag ?? info.iso]}
                     min={1} max={8} step={0.05}
                     onValueChange={v => posIso.onDrag(v[0])}
-                    aria-label="正峰 σ 级别"
+                    aria-label={t({ zh: '正峰 σ 级别', en: 'Positive σ level' })}
                   />
                 </div>
                 <div>
                   <div className="mb-1 flex items-center justify-between text-[11px]">
                     <span className="flex items-center gap-1.5 text-muted-foreground">
                       <span className="h-2 w-2 rounded-full" style={{ background: info.negColor }} />
-                      负峰 σ（模型多余）
+                      {t({ zh: '负峰 σ（模型多余）', en: 'Negative σ (model surplus)' })}
                     </span>
                     <span className="font-mono font-semibold tabular-nums" style={{ color: info.negColor }}>−{(negIso.drag ?? info.isoNeg).toFixed(2)}</span>
                   </div>
@@ -250,20 +251,20 @@ export function MapsPanel() {
                     value={[negIso.drag ?? info.isoNeg]}
                     min={1} max={8} step={0.05}
                     onValueChange={v => negIso.onDrag(v[0])}
-                    aria-label="负峰 σ 级别"
+                    aria-label={t({ zh: '负峰 σ 级别', en: 'Negative σ level' })}
                   />
                 </div>
                 <div className="flex justify-between text-[9px] text-muted-foreground/70">
-                  <span>±2σ 宽松</span><span>±3σ 常规</span><span>±5σ+ 强信号</span>
+                  <span>{t({ zh: '±2σ 宽松', en: '±2σ loose' })}</span><span>{t({ zh: '±3σ 常规', en: '±3σ conventional' })}</span><span>{t({ zh: '±5σ+ 强信号', en: '±5σ+ strong signal' })}</span>
                 </div>
                 <p className="text-[9px] leading-relaxed text-muted-foreground/60">
-                  拖动已节流（250ms 重建）；正负峰可分开调级（命令 <code className="rounded bg-muted px-1">map isolevel pos 3 / neg 2.5</code>）。
+                  {t({ zh: '拖动已节流（250ms 重建）；正负峰可分开调级（命令 ', en: 'Dragging is throttled (250 ms rebuilds); positive/negative levels adjust independently (command ' })}<code className="rounded bg-muted px-1">map isolevel pos 3 / neg 2.5</code>{t({ zh: '）。', en: ').' })}
                 </p>
               </div>
             ) : (
               <div>
                 <div className="mb-1.5 flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground">等值面级别（σ）</span>
+                  <span className="text-muted-foreground">{t({ zh: '等值面级别（σ）', en: 'Isosurface level (σ)' })}</span>
                   <span className="font-mono font-semibold tabular-nums text-foreground">{(posIso.drag ?? info.iso).toFixed(2)} σ</span>
                 </div>
                 <Slider
@@ -272,9 +273,9 @@ export function MapsPanel() {
                   onValueChange={v => posIso.onDrag(v[0])}
                 />
                 <div className="mt-1 flex justify-between text-[9px] text-muted-foreground/70">
-                  <span>1σ 噪声级</span><span>1.5–2σ 骨架</span><span>3σ+ 强峰</span>
+                  <span>{t({ zh: '1σ 噪声级', en: '1σ noise level' })}</span><span>{t({ zh: '1.5–2σ 骨架', en: '1.5–2σ backbone' })}</span><span>{t({ zh: '3σ+ 强峰', en: '3σ+ strong peaks' })}</span>
                 </div>
-                <p className="mt-0.5 text-[9px] text-muted-foreground/60">拖动已节流（250ms 重建一次等值面）</p>
+                <p className="mt-0.5 text-[9px] text-muted-foreground/60">{t({ zh: '拖动已节流（250ms 重建一次等值面）', en: 'Dragging is throttled (one isosurface rebuild per 250 ms)' })}</p>
               </div>
             )}
 
@@ -292,7 +293,7 @@ export function MapsPanel() {
                   )}
                 >
                   <m.icon className="h-3.5 w-3.5" />
-                  {m.label}
+                  {t(m.label)}
                 </button>
               ))}
             </div>
@@ -304,8 +305,8 @@ export function MapsPanel() {
                 value={info.color}
                 onChange={e => setMapLook({ color: e.target.value })}
                 className="h-7 w-10 shrink-0 cursor-pointer rounded-md border border-border bg-background p-0.5"
-                title={info.difference ? '正峰颜色（绿）' : '密度图颜色'}
-                aria-label={info.difference ? '正峰颜色' : '密度图颜色'}
+                title={info.difference ? t({ zh: '正峰颜色（绿）', en: 'Positive peak color (green)' }) : t({ zh: '密度图颜色', en: 'Map color' })}
+                aria-label={info.difference ? t({ zh: '正峰颜色', en: 'Positive peak color' }) : t({ zh: '密度图颜色', en: 'Map color' })}
               />
               {info.difference && (
                 <input
@@ -313,34 +314,34 @@ export function MapsPanel() {
                   value={info.negColor}
                   onChange={e => setMapLook({ negColor: e.target.value })}
                   className="h-7 w-10 shrink-0 cursor-pointer rounded-md border border-border bg-background p-0.5"
-                  title="负峰颜色（红）"
-                  aria-label="负峰颜色"
+                  title={t({ zh: '负峰颜色（红）', en: 'Negative peak color (red)' })}
+                  aria-label={t({ zh: '负峰颜色', en: 'Negative peak color' })}
                 />
               )}
               <div className="flex-1">
                 <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span>不透明度</span><span className="font-mono tabular-nums">{Math.round(info.opacity * 100)}%</span>
+                  <span>{t({ zh: '不透明度', en: 'Opacity' })}</span><span className="font-mono tabular-nums">{Math.round(info.opacity * 100)}%</span>
                 </div>
                 <Slider
                   value={[info.opacity]}
                   min={0.05} max={1} step={0.05}
-                  aria-label="不透明度"
+                  aria-label={t({ zh: '不透明度', en: 'Opacity' })}
                   onValueChange={v => setMapLook({ opacity: v[0] })}
                 />
               </div>
             </div>
 
             <div className="flex items-center justify-between rounded-md border border-border px-2.5 py-2">
-              <span className="text-xs text-muted-foreground">可见（map show / hide）</span>
+              <span className="text-xs text-muted-foreground">{t({ zh: '可见（map show / hide）', en: 'Visible (map show / hide)' })}</span>
               <Switch checked={info.visible} onCheckedChange={v => setMapLook({ visible: v })} />
             </div>
           </div>
           <PanelHint>
             {info.difference
-              ? <>差图等值面为 <span className="font-medium">正/负双面</span>（绿=mean+σ·rms、红=mean−σ·rms），σ 可分别调整——晶体学惯例正 ±3σ、负峰噪声大时常调低到 2-2.5σ 增强错位信号可见性。绿峰处应补建原子、红峰处应删移模型。切换表示法到球棍（预设 2）逐残基检查拟合。
-                {activeHasCrystal ? '' : '当前结构无 CRYST1 晶胞记录。'}</>
-              : <>等值面为绝对级别 mean + σ·rms；建议把表示法切到球棍（预设 2）并降低 σ 到 1.0–1.5 检查局部拟合。
-                裁剪（slab）同样作用于密度图。{activeHasCrystal ? '' : '当前结构无 CRYST1 晶胞记录。'}</>}
+              ? <>{t({ zh: '差图等值面为 ', en: 'The difference-map isosurface is ' })}<span className="font-medium">{t({ zh: '正/负双面', en: 'two-sided positive/negative' })}</span>{t({ zh: '（绿=mean+σ·rms、红=mean−σ·rms），σ 可分别调整——晶体学惯例正 ±3σ、负峰噪声大时常调低到 2-2.5σ 增强错位信号可见性。绿峰处应补建原子、红峰处应删移模型。切换表示法到球棍（预设 2）逐残基检查拟合。', en: ' (green = mean + σ·rms, red = mean − σ·rms) with independently adjustable σ — crystallographic convention is +3σ; noisy negative peaks are often lowered to 2–2.5σ to make misfit signals visible. Build atoms at green peaks; delete or move the model at red peaks. Switch the representation to ball-and-stick (preset 2) to check the fit residue by residue.' })}
+                {activeHasCrystal ? '' : t({ zh: '当前结构无 CRYST1 晶胞记录。', en: ' This structure has no CRYST1 unit-cell record.' })}</>
+              : <>{t({ zh: '等值面为绝对级别 mean + σ·rms；建议把表示法切到球棍（预设 2）并降低 σ 到 1.0–1.5 检查局部拟合。裁剪（slab）同样作用于密度图。', en: 'The isosurface is at the absolute level mean + σ·rms; switch the representation to ball-and-stick (preset 2) and lower σ to 1.0–1.5 to check the local fit. Slab clipping also applies to the map.' })}
+                {activeHasCrystal ? '' : t({ zh: '当前结构无 CRYST1 晶胞记录。', en: 'This structure has no CRYST1 unit-cell record.' })}</>}
           </PanelHint>
         </>
       )}

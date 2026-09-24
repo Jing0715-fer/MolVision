@@ -1,17 +1,18 @@
 // 共享类型定义
 import type { ColorScheme } from './colors'
 import type { ChainType } from './parser'
+import type { DualText } from '@/i18n'
 
 export type RepType = 'cartoon' | 'putty' | 'ballstick' | 'sticks' | 'spacefill' | 'lines' | 'surface'
 
-export const REP_LABELS: Record<RepType, string> = {
-  cartoon: 'Cartoon 带状',
-  putty: 'Putty B 因子管',
-  ballstick: '球棍',
-  sticks: '棍状',
-  spacefill: '空间填充',
-  lines: '线框',
-  surface: '分子表面',
+export const REP_LABELS: Record<RepType, DualText> = {
+  cartoon: { zh: 'Cartoon 带状', en: 'Cartoon ribbon' },
+  putty: { zh: 'Putty B 因子管', en: 'Putty B-factor tube' },
+  ballstick: { zh: '球棍', en: 'Ball-and-stick' },
+  sticks: { zh: '棍状', en: 'Sticks' },
+  spacefill: { zh: '空间填充', en: 'Space fill' },
+  lines: { zh: '线框', en: 'Wireframe' },
+  surface: { zh: '分子表面', en: 'Surface' },
 }
 
 export interface RepConfig {

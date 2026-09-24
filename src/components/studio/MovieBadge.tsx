@@ -5,8 +5,10 @@
 import { Film, Square } from 'lucide-react'
 import { useMovieStore, stopMovie } from '@/lib/molecular/movie'
 import { useTourStore } from '@/lib/molecular/tour-store'
+import { useI18n } from '@/i18n'
 
 export function MovieBadge() {
+  const { t } = useI18n()
   const playing = useMovieStore(s => s.playing)
   const seg = useMovieStore(s => s.seg)
   const total = useMovieStore(s => s.total)
@@ -27,18 +29,18 @@ export function MovieBadge() {
         </span>
         <div className="flex flex-col leading-tight">
           <span className="text-[11px] font-semibold text-foreground">
-            movie · {name ?? `视角 ${seg + 1}`}
+            movie · {name ?? t({ zh: `视角 ${seg + 1}`, en: `View ${seg + 1}` })}
           </span>
           <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-            段 {seg + 1}/{total} · 第 {round}/{loops} 轮 · {(duration / 1000).toFixed(1)}s/视角
+            {t({ zh: `段 ${seg + 1}/${total} · 第 ${round}/${loops} 轮 · ${(duration / 1000).toFixed(1)}s/视角`, en: `Seg ${seg + 1}/${total} · round ${round}/${loops} · ${(duration / 1000).toFixed(1)}s/view` })}
           </span>
         </div>
         <button
           onClick={stopMovie}
           className="flex h-6 items-center gap-1 rounded-full bg-primary px-2 text-[10px] font-semibold text-primary-foreground transition hover:opacity-90"
-          title="停止序列播放（Esc）"
+          title={t({ zh: '停止序列播放（Esc）', en: 'Stop playback (Esc)' })}
         >
-          <Square className="h-3 w-3 fill-current" /> 停止
+          <Square className="h-3 w-3 fill-current" /> {t({ zh: '停止', en: 'Stop' })}
         </button>
       </div>
       {/* 段进度条 */}

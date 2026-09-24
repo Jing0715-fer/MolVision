@@ -2,6 +2,7 @@
 // 开始演示时快照设置；结束/中止时还原演示期间被改动的键——
 // 避免 tour 中的 hbonds on / slab 等演示态泄漏到用户工作区（「一加载结构就冒绿色虚线」根因）
 import { create } from 'zustand'
+import { tt } from '@/i18n'
 import { findTour, type TourDef } from './tours'
 import { useMolStore } from './store'
 import type { Settings } from './types'
@@ -64,8 +65,8 @@ function restoreTouched(): string[] {
 function endTour(set: (partial: Partial<TourState>) => void) {
   const restored = restoreTouched()
   useMolStore.getState().appendLog('out', restored.length
-    ? `■ 演示已结束，已还原演示前设置（${restored.join('、')}）`
-    : '■ 演示已结束')
+    ? tt({ zh: `■ 演示已结束，已还原演示前设置（${restored.join('、')}）`, en: `■ Tour ended, settings restored to pre-tour state (${restored.join(', ')})` })
+    : tt({ zh: '■ 演示已结束', en: '■ Tour ended' }))
   settingsSnapshot = null
   touchedKeys = new Set()
   unsubSettings?.()
@@ -80,7 +81,7 @@ async function runStep(tour: TourDef, idx: number): Promise<void> {
     await step.run()
     // 部分步骤发射后不管（void exec）；命令落地由订阅捕获，无需在此 diff
   } catch (e) {
-    useMolStore.getState().appendLog('err', `演示步骤执行失败：${e instanceof Error ? e.message : String(e)}`)
+    useMolStore.getState().appendLog('err', tt({ zh: `演示步骤执行失败：${e instanceof Error ? e.message : String(e)}`, en: `Tour step failed: ${e instanceof Error ? e.message : String(e)}` }))
   }
 }
 
@@ -94,7 +95,10 @@ export const useTourStore = create<TourState>((set, get) => ({
     if (!tour) return false
     watchSettings()
     set({ tour, stepIdx: 0, busy: true })
-    useMolStore.getState().appendLog('out', `▶ 开始演示「${tour.title}」（${tour.steps.length} 步，约 ${tour.minutes} 分钟）——←/→ 切换步骤，Esc 结束（结束后自动还原演示前设置）`)
+    useMolStore.getState().appendLog('out', tt({
+      zh: `▶ 开始演示「${tt(tour.title)}」（${tour.steps.length} 步，约 ${tour.minutes} 分钟）——←/→ 切换步骤，Esc 结束（结束后自动还原演示前设置）`,
+      en: `▶ Tour "${tt(tour.title)}" started (${tour.steps.length} steps, about ${tour.minutes} min) — ←/→ to step, Esc to end (settings restored automatically afterwards)`,
+    }))
     await runStep(tour, 0)
     if (get().tour === tour && get().stepIdx === 0) set({ busy: false })
     return true

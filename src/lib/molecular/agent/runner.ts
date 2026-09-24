@@ -2,6 +2,7 @@
 // 与命令行/命令面板共用 runCommand（同一条代码路径，行为一致、可审计）。
 import { runCommand } from '../commands'
 import { useMolStore } from '../store'
+import { tt } from '@/i18n'
 import type { AgentCmdRecord } from './protocol'
 
 /**
@@ -101,7 +102,7 @@ export async function execAgentCmd(cmd: string): Promise<AgentCmdRecord> {
   try {
     runCommand(cmd)
   } catch (e) {
-    return { cmd, status: 'error', output: e instanceof Error ? e.message : '执行异常' }
+    return { cmd, status: 'error', output: e instanceof Error ? e.message : tt({ zh: '执行异常', en: 'Execution error' }) }
   }
   const grab = () => {
     const logs = useMolStore.getState().consoleLog
@@ -122,13 +123,13 @@ export async function execAgentCmd(cmd: string): Promise<AgentCmdRecord> {
         break
       }
     }
-    return { cmd, status: hasErr() ? 'error' : 'ok', output: grab() || '已加载' }
+    return { cmd, status: hasErr() ? 'error' : 'ok', output: grab() || tt({ zh: '已加载', en: 'Loaded' }) }
   }
 
   const first = grab()
   if (ASYNC_PREFIXES.has(head) && !first) {
     await new Promise(r => setTimeout(r, 700))
-    return { cmd, status: hasErr() ? 'error' : 'ok', output: grab() || '已受理（后台进行中）' }
+    return { cmd, status: hasErr() ? 'error' : 'ok', output: grab() || tt({ zh: '已受理（后台进行中）', en: 'Accepted (running in the background)' }) }
   }
   return { cmd, status: hasErr() ? 'error' : 'ok', output: first || undefined }
 }

@@ -1,5 +1,6 @@
 // 结构加载：RCSB API 代理 / 本地文件
 import { toast } from 'sonner'
+import { tt, type DualText } from '@/i18n'
 import { detectFormat, parseStructure } from './parser'
 import { useMolStore, engineRef } from './store'
 import { textRegistry } from './text-registry'
@@ -7,35 +8,35 @@ import { saveSession, importSessionFile } from './session'
 import { loadMapBuffer } from './map-load'
 import { whenEngineReady } from './engine-ready'
 
-export const EXAMPLE_STRUCTURES: { id: string; title: string; desc: string }[] = [
-  { id: '1CRN', title: 'Crambin', desc: '小蛋白 · 327 原子 · 高分辨率' },
-  { id: '4HHB', title: '血红蛋白', desc: '四聚体 · 血红素辅基' },
-  { id: '1UBQ', title: '泛素', desc: '经典 β-grasp 折叠' },
-  { id: '1D3Z', title: '泛素 NMR', desc: 'ensemble · 10 构象动画' },
-  { id: '1AKI', title: '溶菌酶', desc: '酶 · 129 残基' },
-  { id: '1BNA', title: 'B-DNA', desc: '双链 DNA 十二聚体' },
-  { id: '6LU7', title: 'SARS-CoV-2 主蛋白酶', desc: '药物靶点 · 二聚体' },
+export const EXAMPLE_STRUCTURES: { id: string; title: DualText; desc: DualText }[] = [
+  { id: '1CRN', title: { zh: 'Crambin', en: 'Crambin' }, desc: { zh: '小蛋白 · 327 原子 · 高分辨率', en: 'Small protein · 327 atoms · high resolution' } },
+  { id: '4HHB', title: { zh: '血红蛋白', en: 'Hemoglobin' }, desc: { zh: '四聚体 · 血红素辅基', en: 'Tetramer · heme cofactors' } },
+  { id: '1UBQ', title: { zh: '泛素', en: 'Ubiquitin' }, desc: { zh: '经典 β-grasp 折叠', en: 'Classic β-grasp fold' } },
+  { id: '1D3Z', title: { zh: '泛素 NMR', en: 'Ubiquitin NMR' }, desc: { zh: 'ensemble · 10 构象动画', en: 'ensemble · 10-conformer animation' } },
+  { id: '1AKI', title: { zh: '溶菌酶', en: 'Lysozyme' }, desc: { zh: '酶 · 129 残基', en: 'Enzyme · 129 residues' } },
+  { id: '1BNA', title: { zh: 'B-DNA', en: 'B-DNA' }, desc: { zh: '双链 DNA 十二聚体', en: 'Double-stranded DNA dodecamer' } },
+  { id: '6LU7', title: { zh: 'SARS-CoV-2 主蛋白酶', en: 'SARS-CoV-2 Main Protease' }, desc: { zh: '药物靶点 · 二聚体', en: 'Drug target · dimer' } },
 ]
 
 export async function fetchPdbId(idRaw: string): Promise<void> {
   const id = idRaw.trim().toUpperCase()
   const store = useMolStore.getState()
   if (!/^[0-9][A-Z0-9]{3}$/.test(id)) {
-    toast.error(`无效的 PDB 编号: "${id}"（应为 4 位字符，如 4HHB）`)
+    toast.error(tt({ zh: `无效的 PDB 编号: "${id}"（应为 4 位字符，如 4HHB）`, en: `Invalid PDB ID: "${id}" (expected 4 characters, e.g. 4HHB)` }))
     return
   }
-  useMolStore.setState({ loading: true, loadingMsg: `正在从 RCSB 获取 ${id}…` })
+  useMolStore.setState({ loading: true, loadingMsg: tt({ zh: `正在从 RCSB 获取 ${id}…`, en: `Fetching ${id} from RCSB…` }) })
   try {
     const res = await fetch(`/api/pdb/${id}`)
     if (!res.ok) {
-      throw new Error(`获取失败 (${res.status})`)
+      throw new Error(tt({ zh: `获取失败 (${res.status})`, en: `Fetch failed (${res.status})` }))
     }
     const format = (res.headers.get('x-mol-format') as 'pdb' | 'cif') ?? 'pdb'
     const text = await res.text()
-    if (!text || text.length < 100) throw new Error('返回内容为空')
+    if (!text || text.length < 100) throw new Error(tt({ zh: '返回内容为空', en: 'Empty response' }))
     loadStructureText(text, id, format)
   } catch (e) {
-    toast.error(`加载 ${id} 失败：${e instanceof Error ? e.message : String(e)}`)
+    toast.error(tt({ zh: `加载 ${id} 失败：${e instanceof Error ? e.message : String(e)}`, en: `Failed to load ${id}: ${e instanceof Error ? e.message : String(e)}` }))
     useMolStore.setState({ loading: false, loadingMsg: '' })
   }
   void store
@@ -43,7 +44,7 @@ export async function fetchPdbId(idRaw: string): Promise<void> {
 
 export function loadStructureText(text: string, name: string, format?: 'pdb' | 'cif') {
   const fmt = format ?? detectFormat(text, name)
-  useMolStore.setState({ loading: true, loadingMsg: `正在解析 ${name}…` })
+  useMolStore.setState({ loading: true, loadingMsg: tt({ zh: `正在解析 ${name}…`, en: `Parsing ${name}…` }) })
   // 延迟到下一帧，让 loading UI 先渲染
   requestAnimationFrame(() => {
     try {
@@ -51,7 +52,7 @@ export function loadStructureText(text: string, name: string, format?: 'pdb' | '
       const data = parseStructure(text, name, fmt)
       const ms = performance.now() - t0
       if (data.atoms.count === 0) {
-        throw new Error('文件中没有可识别的原子记录（ATOM/HETATM）')
+        throw new Error(tt({ zh: '文件中没有可识别的原子记录（ATOM/HETATM）', en: 'No recognizable atom records (ATOM/HETATM) in the file' }))
       }
       const store = useMolStore.getState()
       const displayName = data.meta.pdbId ?? name
@@ -66,12 +67,18 @@ export function loadStructureText(text: string, name: string, format?: 'pdb' | '
           engineRef.current?.fitView()
         })
       })
-      toast.success(`已加载 ${displayName}`, {
-        description: `${data.atoms.count.toLocaleString()} 原子 · ${data.residues.length.toLocaleString()} 残基 · ${data.chains.length} 条链 · 解析 ${ms < 1 ? '<1' : ms.toFixed(0)} ms${id ? '' : ''}`,
+      toast.success(tt({ zh: `已加载 ${displayName}`, en: `Loaded ${displayName}` }), {
+        description: tt({
+          zh: `${data.atoms.count.toLocaleString()} 原子 · ${data.residues.length.toLocaleString()} 残基 · ${data.chains.length} 条链 · 解析 ${ms < 1 ? '<1' : ms.toFixed(0)} ms`,
+          en: `${data.atoms.count.toLocaleString()} atoms · ${data.residues.length.toLocaleString()} residues · ${data.chains.length} chains · parsed in ${ms < 1 ? '<1' : ms.toFixed(0)} ms`,
+        }),
       })
-      useMolStore.getState().appendLog('out', `已加载 ${displayName}：${data.atoms.count} 原子，${data.residues.length} 残基，${data.chains.length} 链`)
+      useMolStore.getState().appendLog('out', tt({
+        zh: `已加载 ${displayName}：${data.atoms.count} 原子，${data.residues.length} 残基，${data.chains.length} 链`,
+        en: `Loaded ${displayName}: ${data.atoms.count} atoms, ${data.residues.length} residues, ${data.chains.length} chains`,
+      }))
     } catch (e) {
-      toast.error(`解析失败：${e instanceof Error ? e.message : String(e)}`)
+      toast.error(tt({ zh: `解析失败：${e instanceof Error ? e.message : String(e)}`, en: `Parse failed: ${e instanceof Error ? e.message : String(e)}` }))
       useMolStore.setState({ loading: false, loadingMsg: '' })
     }
   })
@@ -84,7 +91,7 @@ export function loadFiles(files: FileList | File[]) {
     if (/\.(ccp4|map|mrc|dsn6|omap)$/i.test(lower)) {
       const reader = new FileReader()
       reader.onload = () => loadMapBuffer(reader.result as ArrayBuffer, file.name.replace(/\.[^.]+$/, ''))
-      reader.onerror = () => toast.error(`读取地图文件失败: ${file.name}`)
+      reader.onerror = () => toast.error(tt({ zh: `读取地图文件失败: ${file.name}`, en: `Failed to read map file: ${file.name}` }))
       reader.readAsArrayBuffer(file)
       continue
     }
@@ -94,9 +101,9 @@ export function loadFiles(files: FileList | File[]) {
         try {
           const n = await importSessionFile(file)
           if (n > 0) {
-            toast.success('会话已导入', { description: `${n} 个结构 · 表示法与相机视角已还原（来自 ${file.name}）` })
+            toast.success(tt({ zh: '会话已导入', en: 'Session imported' }), { description: tt({ zh: `${n} 个结构 · 表示法与相机视角已还原（来自 ${file.name}）`, en: `${n} ${n === 1 ? 'structure' : 'structures'} · representations & camera restored (from ${file.name})` }) })
           } else {
-            toast.error('会话文件中没有可恢复的结构', { description: file.name })
+            toast.error(tt({ zh: '会话文件中没有可恢复的结构', en: 'No recoverable structures in the session file' }), { description: file.name })
           }
         } catch (e) {
           // .json 可能其实是普通结构文件（罕见命名）——退回按结构解析
@@ -105,7 +112,7 @@ export function loadFiles(files: FileList | File[]) {
             loadStructureText(text, file.name.replace(/\.[^.]+$/, ''), undefined)
             return
           }
-          toast.error('导入会话失败', { description: e instanceof Error ? e.message : String(e) })
+          toast.error(tt({ zh: '导入会话失败', en: 'Failed to import session' }), { description: e instanceof Error ? e.message : String(e) })
         }
       })()
       continue
@@ -115,7 +122,7 @@ export function loadFiles(files: FileList | File[]) {
       const text = String(reader.result ?? '')
       loadStructureText(text, file.name.replace(/\.(pdb|ent|cif|mmcif|txt)$/i, ''))
     }
-    reader.onerror = () => toast.error(`读取文件失败: ${file.name}`)
+    reader.onerror = () => toast.error(tt({ zh: `读取文件失败: ${file.name}`, en: `Failed to read file: ${file.name}` }))
     reader.readAsText(file)
   }
 }

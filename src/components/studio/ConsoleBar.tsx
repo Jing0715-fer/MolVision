@@ -12,6 +12,7 @@ import {
   appendCmdHistory, clearCmdHistory, FILL_CMD_EVENT, loadCmdHistory, subscribeCmdHistory, HISTORY_MAX,
 } from '@/lib/molecular/cmd-history'
 import { cn } from '@/lib/utils'
+import { useI18n, tt, type DualText } from '@/i18n'
 import { FadeEdge } from './FadeEdge'
 
 /** 最近命令徽章数 */
@@ -21,22 +22,22 @@ const LOG_HEIGHT_CLASS: Record<string, string> = {
   normal: 'h-36',
   tall: 'h-56',
 }
-const LOG_HEIGHT_LABEL: Record<string, string> = {
-  compact: '紧凑',
-  normal: '标准',
-  tall: '加高',
+const LOG_HEIGHT_LABEL: Record<string, DualText> = {
+  compact: { zh: '紧凑', en: 'Compact' },
+  normal: { zh: '标准', en: 'Normal' },
+  tall: { zh: '加高', en: 'Tall' },
 }
 
-const KIND_META: Record<CompletionKind, { icon: typeof Terminal; cls: string; label: string }> = {
-  cmd: { icon: TerminalSquare, cls: 'text-primary', label: '命令' },
-  sub: { icon: CornerDownRight, cls: 'text-muted-foreground', label: '子命令' },
-  struct: { icon: Boxes, cls: 'text-muted-foreground', label: '结构' },
-  sel: { icon: Filter, cls: 'text-amber-600 dark:text-amber-400', label: '选择' },
-  rep: { icon: Shapes, cls: 'text-muted-foreground', label: '表示法' },
-  color: { icon: Palette, cls: 'text-rose-600 dark:text-rose-400', label: '颜色' },
-  value: { icon: ChevronRight, cls: 'text-muted-foreground', label: '值' },
-  preset: { icon: Sparkles, cls: 'text-muted-foreground', label: '预设' },
-  tour: { icon: Wand2, cls: 'text-muted-foreground', label: '演示' },
+const KIND_META: Record<CompletionKind, { icon: typeof Terminal; cls: string; label: DualText }> = {
+  cmd: { icon: TerminalSquare, cls: 'text-primary', label: { zh: '命令', en: 'Command' } },
+  sub: { icon: CornerDownRight, cls: 'text-muted-foreground', label: { zh: '子命令', en: 'Subcommand' } },
+  struct: { icon: Boxes, cls: 'text-muted-foreground', label: { zh: '结构', en: 'Structure' } },
+  sel: { icon: Filter, cls: 'text-amber-600 dark:text-amber-400', label: { zh: '选择', en: 'Selection' } },
+  rep: { icon: Shapes, cls: 'text-muted-foreground', label: { zh: '表示法', en: 'Representation' } },
+  color: { icon: Palette, cls: 'text-rose-600 dark:text-rose-400', label: { zh: '颜色', en: 'Color' } },
+  value: { icon: ChevronRight, cls: 'text-muted-foreground', label: { zh: '值', en: 'Value' } },
+  preset: { icon: Sparkles, cls: 'text-muted-foreground', label: { zh: '预设', en: 'Preset' } },
+  tour: { icon: Wand2, cls: 'text-muted-foreground', label: { zh: '演示', en: 'Tour' } },
 }
 
 function KindBadge({ kind }: { kind: CompletionKind }) {
@@ -60,6 +61,7 @@ function MatchedText({ text, frag }: { text: string; frag: string }) {
 }
 
 export function ConsoleBar() {
+  const { t } = useI18n()
   const ui = useMolStore(s => s.ui)
   const setUi = useMolStore(s => s.setUi)
   const consoleLog = useMolStore(s => s.consoleLog)
@@ -100,7 +102,7 @@ export function ConsoleBar() {
   const clearHistory = () => {
     clearCmdHistory()
     setHistIdx(-1)
-    toast.success('命令历史已清空', { description: '最近命令徽章与 Ctrl+R 搜索同步清除' })
+    toast.success(tt({ zh: '命令历史已清空', en: 'Command history cleared' }), { description: tt({ zh: '最近命令徽章与 Ctrl+R 搜索同步清除', en: 'Recent chips and Ctrl+R search history also cleared' }) })
   }
 
   // 共享历史订阅：HistoryDialog 执行/置顶/清空 → 控制台箭头与 Ctrl+R 即时同步
@@ -291,28 +293,29 @@ export function ConsoleBar() {
 
   const frag = completions ? input.slice(completions.from, completions.to) : ''
   const hint = completions?.hint ?? null
+  const heightLabel = t(LOG_HEIGHT_LABEL[consoleHeight] ?? LOG_HEIGHT_LABEL.normal)
 
   return (
     <div className="mol-elevate absolute inset-x-0 bottom-0 z-30 border-t border-border bg-card">
       <div className="flex h-8 items-center gap-2 border-b border-border/60 px-3">
         <Terminal className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-        <span className="mol-micro shrink-0 text-foreground/75">命令行</span>
-        <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">Tab 补全 · ↑↓ 历史 · Ctrl+R 搜索 · 徽章快跑 · help 查看命令</span>
+        <span className="mol-micro shrink-0 text-foreground/75">{t({ zh: '命令行', en: 'Command line' })}</span>
+        <span className="min-w-0 truncate text-[10px] text-muted-foreground/60">{t({ zh: 'Tab 补全 · ↑↓ 历史 · Ctrl+R 搜索 · 徽章快跑 · help 查看命令', en: 'Tab complete · ↑↓ history · Ctrl+R search · quick chips · help for commands' })}</span>
         <button
           onClick={() => setUi({ historyOpen: true })}
           className="ml-auto flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
-          title={`命令历史面板（全量列表 + 搜索 + 置顶，${HISTORY_MAX} 条上限）`}
+          title={t({ zh: `命令历史面板（全量列表 + 搜索 + 置顶，${HISTORY_MAX} 条上限）`, en: `Command history panel (full list + search + pin, max ${HISTORY_MAX})` })}
         >
           <ScrollText className="h-3 w-3" />
-          历史
+          {t({ zh: '历史', en: 'History' })}
         </button>
         <button
           onClick={cycleHeight}
           className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
-          title={`控制台高度：${LOG_HEIGHT_LABEL[consoleHeight] ?? '标准'}（点击切换）`}
+          title={t({ zh: `控制台高度：${heightLabel}（点击切换）`, en: `Console height: ${heightLabel} (click to cycle)` })}
         >
           <ChevronsUpDown className="h-3 w-3" />
-          {LOG_HEIGHT_LABEL[consoleHeight] ?? '标准'}
+          {heightLabel}
         </button>
         <button
           onClick={() => setUi({ consoleOpen: false })}
@@ -336,7 +339,7 @@ export function ConsoleBar() {
       {/* 最近命令徽章：点击执行 · 右键填入编辑（历史去重前 6 条） */}
       {recentChips.length > 0 && (
         <div className="flex items-center gap-1.5 px-2 pt-1">
-          <span className="flex shrink-0 items-center gap-1 text-muted-foreground/60" title="最近命令（点击执行 · 右键填入编辑）">
+          <span className="flex shrink-0 items-center gap-1 text-muted-foreground/60" title={t({ zh: '最近命令（点击执行 · 右键填入编辑）', en: 'Recent commands (click to run · right-click to edit)' })}>
             <History className="h-3 w-3" />
           </span>
           <FadeEdge className="gap-1">
@@ -354,7 +357,7 @@ export function ConsoleBar() {
                   inputRef.current?.focus()
                 }}
                 className="max-w-[220px] shrink-0 truncate rounded-md border border-border bg-transparent px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
-                title={`${h}\n左键执行 · 右键填入输入行编辑`}
+                title={t({ zh: `${h}\n左键执行 · 右键填入输入行编辑`, en: `${h}\nClick to run · right-click to edit in the input line` })}
               >
                 {h.length > 26 ? `${h.slice(0, 24)}…` : h}
               </button>
@@ -363,7 +366,7 @@ export function ConsoleBar() {
           <button
             onClick={clearHistory}
             className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition hover:bg-destructive/10 hover:text-destructive"
-            title="清空命令历史（最近徽章 + Ctrl+R 搜索记录）"
+            title={t({ zh: '清空命令历史（最近徽章 + Ctrl+R 搜索记录）', en: 'Clear command history (recent chips + Ctrl+R search)' })}
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -384,11 +387,11 @@ export function ConsoleBar() {
         <div className="relative mx-2">
           <div className="mol-elevate-lg absolute inset-x-0 bottom-full mb-1 overflow-hidden rounded-lg border border-border bg-popover">
             <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-2.5 py-1.5">
-              <span className="mol-micro tabular-nums text-muted-foreground">{completions.items.length} 个候选</span>
+              <span className="mol-micro tabular-nums text-muted-foreground">{t({ zh: `${completions.items.length} 个候选`, en: `${completions.items.length} candidates` })}</span>
               <span className="mol-micro flex items-center gap-1 text-muted-foreground/70">
-                <kbd className="rounded border border-border/70 bg-background px-1 font-mono text-[9px]">Tab</kbd>补全
-                <kbd className="rounded border border-border/70 bg-background px-1 font-mono text-[9px]">↑↓</kbd>切换
-                <kbd className="rounded border border-border/70 bg-background px-1 font-mono text-[9px]">Esc</kbd>关闭
+                <kbd className="rounded border border-border/70 bg-background px-1 font-mono text-[9px]">Tab</kbd>{t({ zh: '补全', en: 'complete' })}
+                <kbd className="rounded border border-border/70 bg-background px-1 font-mono text-[9px]">↑↓</kbd>{t({ zh: '切换', en: 'navigate' })}
+                <kbd className="rounded border border-border/70 bg-background px-1 font-mono text-[9px]">Esc</kbd>{t({ zh: '关闭', en: 'close' })}
               </span>
             </div>
             <div ref={listRef} className="mol-scroll max-h-44 overflow-y-auto py-1">
@@ -421,13 +424,13 @@ export function ConsoleBar() {
           <span className="min-w-0 max-w-[30%] shrink truncate font-mono font-semibold text-foreground/80">{rSearch.query || '·'}</span>
           <span className="shrink-0 text-muted-foreground/50">→</span>
           <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
-            {rCur ? <MatchedText text={rCur} frag={rSearch.query.trim()} /> : <span className="italic text-muted-foreground/60">无匹配历史</span>}
+            {rCur ? <MatchedText text={rCur} frag={rSearch.query.trim()} /> : <span className="italic text-muted-foreground/60">{t({ zh: '无匹配历史', en: 'no matching history' })}</span>}
           </span>
           <span className="shrink-0 tabular-nums text-muted-foreground/70">{rMatches.length ? `${Math.min(rSearch.idx + 1, rMatches.length)}/${rMatches.length}` : '0'}</span>
           <span className="hidden shrink-0 items-center gap-1 text-muted-foreground/60 lg:flex">
-            <kbd className="rounded border border-border/70 bg-muted px-1 font-mono text-[9px]">Ctrl+R</kbd>下一条
-            <kbd className="rounded border border-border/70 bg-muted px-1 font-mono text-[9px]">↵</kbd>执行
-            <kbd className="rounded border border-border/70 bg-muted px-1 font-mono text-[9px]">Esc</kbd>编辑
+            <kbd className="rounded border border-border/70 bg-muted px-1 font-mono text-[9px]">Ctrl+R</kbd>{t({ zh: '下一条', en: 'next' })}
+            <kbd className="rounded border border-border/70 bg-muted px-1 font-mono text-[9px]">↵</kbd>{t({ zh: '执行', en: 'run' })}
+            <kbd className="rounded border border-border/70 bg-muted px-1 font-mono text-[9px]">Esc</kbd>{t({ zh: '编辑', en: 'edit' })}
           </span>
         </div>
       )}
@@ -444,7 +447,7 @@ export function ConsoleBar() {
           value={input}
           onChange={onChange}
           onKeyDown={onKeyDown}
-          placeholder={rSearch.active ? '输入关键词过滤历史…' : 'load 4hhb · select site = within 5 of resn HEM · color red site · show cartoon …'}
+          placeholder={rSearch.active ? t({ zh: '输入关键词过滤历史…', en: 'Type to filter history…' }) : 'load 4hhb · select site = within 5 of resn HEM · color red site · show cartoon …'}
           className={cn(
             'min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted-foreground/40',
           )}

@@ -10,9 +10,11 @@ import { toast } from 'sonner'
 import { MAX_SCENES, useSceneStore, type MolScene } from '@/lib/molecular/scene-store'
 import { useMolStore } from '@/lib/molecular/store'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useI18n, tt } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 export function SceneBar() {
+  const { t } = useI18n()
   const structures = useMolStore(s => s.structures)
   const scenes = useSceneStore(s => s.scenes)
   const activeSceneId = useSceneStore(s => s.activeSceneId)
@@ -42,20 +44,22 @@ export function SceneBar() {
       toast.error(r.error)
       return
     }
-    toast.success(r.updated ? `已更新场景「${r.scene.name}」` : `已保存场景「${r.scene.name}」`, {
-      description: '相机 + 表示法 + 链隔离 + 环境一体快照 · 再次保存同名可覆盖',
+    toast.success(tt(r.updated
+      ? { zh: `已更新场景「${r.scene.name}」`, en: `Scene "${r.scene.name}" updated` }
+      : { zh: `已保存场景「${r.scene.name}」`, en: `Scene "${r.scene.name}" saved` }), {
+      description: tt({ zh: '相机 + 表示法 + 链隔离 + 环境一体快照 · 再次保存同名可覆盖', en: 'Camera + representations + chain isolation + environment in one snapshot · save again with the same name to overwrite' }),
     })
   }
 
   const recall = (sc: MolScene) => {
     const r = recallScene(sc.id)
     if (!r.ok) {
-      toast.error(r.error, { description: '场景按结构名恢复——先加载对应结构' })
+      toast.error(r.error, { description: tt({ zh: '场景按结构名恢复——先加载对应结构', en: 'Scenes restore by structure name — load the structure first' }) })
       return
     }
     setFlashId(sc.id)
     window.setTimeout(() => setFlashId(prev => (prev === sc.id ? null : prev)), 900)
-    useMolStore.getState().appendLog('out', `已召回场景「${sc.name}」——恢复 ${r.restored} 个结构的显示状态${r.cameraApplied ? ' + 相机' : ''}${r.missing.length ? `（未加载跳过：${r.missing.join('、')}）` : ''}`)
+    useMolStore.getState().appendLog('out', tt({ zh: `已召回场景「${sc.name}」——恢复 ${r.restored} 个结构的显示状态${r.cameraApplied ? ' + 相机' : ''}${r.missing.length ? `（未加载跳过：${r.missing.join('、')}）` : ''}`, en: `Scene "${sc.name}" recalled — restored display state for ${r.restored} structure(s)${r.cameraApplied ? ' + camera' : ''}${r.missing.length ? ` (skipped unloaded: ${r.missing.join(', ')})` : ''}` }))
   }
 
   const cardW = isMobile ? 'w-[76px]' : 'w-[104px]'
@@ -66,8 +70,8 @@ export function SceneBar() {
         {/* 左：保存新场景 */}
         <button
           onClick={save}
-          title="快照当前状态为新场景（相机 + 表示法 + 链隔离 + 环境）"
-          aria-label="保存当前状态为场景"
+          title={t({ zh: '快照当前状态为新场景（相机 + 表示法 + 链隔离 + 环境）', en: 'Snapshot current state as a new scene (camera + representations + chain isolation + environment)' })}
+          aria-label={t({ zh: '保存当前状态为场景', en: 'Save current state as a scene' })}
           disabled={scenes.length >= MAX_SCENES}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 active:scale-95"
         >
@@ -76,9 +80,9 @@ export function SceneBar() {
 
         {/* 轮播左箭头 */}
         <button
-          onClick={() => { if (!cycleScene(-1)) toast.error('切换失败——场景结构未加载？') }}
-          title="上一个场景"
-          aria-label="上一个场景"
+          onClick={() => { if (!cycleScene(-1)) toast.error(tt({ zh: '切换失败——场景结构未加载？', en: 'Switch failed — are the scene structures loaded?' })) }}
+          title={t({ zh: '上一个场景', en: 'Previous scene' })}
+          aria-label={t({ zh: '上一个场景', en: 'Previous scene' })}
           className="flex h-9 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground/80 transition hover:bg-accent hover:text-foreground active:scale-95"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -96,7 +100,7 @@ export function SceneBar() {
               renaming={renamingId === sc.id}
               renameRef={renameRef}
               onRecall={() => recall(sc)}
-              onDelete={() => { deleteScene(sc.id); toast.success(`已删除场景「${sc.name}」`) }}
+              onDelete={() => { deleteScene(sc.id); toast.success(tt({ zh: `已删除场景「${sc.name}」`, en: `Scene "${sc.name}" deleted` })) }}
               onRenameStart={() => setRenamingId(sc.id)}
               onRenameCommit={name => { renameScene(sc.id, name); setRenamingId(null) }}
             />
@@ -105,9 +109,9 @@ export function SceneBar() {
 
         {/* 轮播右箭头 */}
         <button
-          onClick={() => { if (!cycleScene(1)) toast.error('切换失败——场景结构未加载？') }}
-          title="下一个场景"
-          aria-label="下一个场景"
+          onClick={() => { if (!cycleScene(1)) toast.error(tt({ zh: '切换失败——场景结构未加载？', en: 'Switch failed — are the scene structures loaded?' })) }}
+          title={t({ zh: '下一个场景', en: 'Next scene' })}
+          aria-label={t({ zh: '下一个场景', en: 'Next scene' })}
           className="flex h-9 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground/80 transition hover:bg-accent hover:text-foreground active:scale-95"
         >
           <ChevronRight className="h-4 w-4" />
@@ -131,8 +135,9 @@ function SceneCard({
   onRenameStart: () => void
   onRenameCommit: (name: string) => void
 }) {
+  const { t, locale } = useI18n()
   const [draft, setDraft] = useState(sc.name)
-  const time = new Date(sc.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  const time = new Date(sc.createdAt).toLocaleTimeString(locale === 'en' ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' })
 
   return (
     <div
@@ -146,9 +151,9 @@ function SceneCard({
       )}
     >
       {/* 缩略图（点击召回） */}
-      <button onClick={onRecall} className="block w-full" title={`召回场景「${sc.name}」（${time} · ${sc.structures.length} 结构）——相机/表示法/链隔离/环境整体恢复`}>
+      <button onClick={onRecall} className="block w-full" title={t({ zh: `召回场景「${sc.name}」（${time} · ${sc.structures.length} 结构）——相机/表示法/链隔离/环境整体恢复`, en: `Recall scene "${sc.name}" (${time} · ${sc.structures.length} structures) — camera/representations/chain isolation/environment restored together` })}>
         {sc.thumb ? (
-          <img src={sc.thumb} alt={`场景「${sc.name}」缩略图`} className="block aspect-[8/5] w-full bg-black/10 object-cover" draggable={false} />
+          <img src={sc.thumb} alt={t({ zh: `场景「${sc.name}」缩略图`, en: `Scene "${sc.name}" thumbnail` })} className="block aspect-[8/5] w-full bg-black/10 object-cover" draggable={false} />
         ) : (
           <div className="flex aspect-[8/5] w-full items-center justify-center bg-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground/60" />
@@ -164,8 +169,8 @@ function SceneCard({
       {/* 删除按钮（悬停浮现） */}
       <button
         onClick={onDelete}
-        title="删除此场景"
-        aria-label={`删除场景「${sc.name}」`}
+        title={t({ zh: '删除此场景', en: 'Delete this scene' })}
+        aria-label={t({ zh: `删除场景「${sc.name}」`, en: `Delete scene "${sc.name}"` })}
         className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/65 text-white opacity-0 transition group-hover:opacity-100 hover:bg-red-500"
       >
         <Trash2 className="h-3 w-3" />
@@ -190,11 +195,11 @@ function SceneCard({
         ) : (
           <button
             onDoubleClick={() => { setDraft(sc.name); onRenameStart() }}
-            title="双击重命名"
+            title={t({ zh: '双击重命名', en: 'Double-click to rename' })}
             className="w-full truncate text-left font-mono text-[10px] font-medium leading-tight text-foreground/90"
           >
             {sc.name}
-            <span className="ml-1 font-mono text-[8px] text-muted-foreground/70">{sc.structures.length}构</span>
+            <span className="ml-1 font-mono text-[8px] text-muted-foreground/70">{t({ zh: `${sc.structures.length}构`, en: `${sc.structures.length} str` })}</span>
           </button>
         )}
       </div>

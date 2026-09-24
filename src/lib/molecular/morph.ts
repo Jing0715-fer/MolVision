@@ -6,6 +6,7 @@ import type { StructureData } from './parser'
 import { subsetStructure } from './parser'
 import { extractAllSequences, alignSequences, superposeStructures, quatToMatrix } from './superpose'
 import { refineMorphFrames, type RefineStats } from './morph-refine'
+import { tt } from '@/i18n'
 
 export interface MorphResult {
   ok: boolean
@@ -185,7 +186,7 @@ export function buildMorph(A: StructureData, B: StructureData, name: string, ste
 
   const match = matchStructureAtoms(A, B)
   if (!match.pairs.length) {
-    return fail('两结构没有可匹配的原子：请确认是同源蛋白（序列相似），或完全相同的结构（同 PDB 不同构象）')
+    return fail(tt({ zh: '两结构没有可匹配的原子：请确认是同源蛋白（序列相似），或完全相同的结构（同 PDB 不同构象）', en: 'The two structures have no matchable atoms: make sure they are homologous proteins (similar sequences) or the exact same structure (same PDB, different conformations)' }))
   }
   const atomPairs = match.pairs
   const strategy = match.strategy
@@ -205,7 +206,7 @@ export function buildMorph(A: StructureData, B: StructureData, name: string, ste
   try {
     sub = subsetStructure(A, idxA, name)
   } catch (e) {
-    return fail(`子结构构建失败：${e instanceof Error ? e.message : String(e)}`)
+    return fail(tt({ zh: `子结构构建失败：${e instanceof Error ? e.message : String(e)}`, en: `Sub-structure construction failed: ${e instanceof Error ? e.message : String(e)}` }))
   }
   // subset 的原子序 = idxA 升序；重建 atomPairs → 子结构索引映射
   const sorted = [...idxA].sort((a, b) => a - b)
@@ -261,8 +262,8 @@ export function buildMultiMorph(sources: StructureData[], name: string, steps = 
   const fail = (msg: string): MultiMorphResult => ({
     ok: false, error: msg, matchedAtoms: 0, matchedResidues: 0, matchedChains: [], frames: 0, knots: 0, rmsds: [], strategy: 'sequence',
   })
-  if (sources.length < 2) return fail('至少需要 2 个构象（多态 morph 建议 3+ 个）')
-  if (sources.length > 8) return fail('构象态过多（上限 8 个）——请减少输入结构')
+  if (sources.length < 2) return fail(tt({ zh: '至少需要 2 个构象（多态 morph 建议 3+ 个）', en: 'At least 2 conformations are required (3+ recommended for multi-state morph)' }))
+  if (sources.length > 8) return fail(tt({ zh: '构象态过多（上限 8 个）——请减少输入结构', en: 'Too many conformer states (limit is 8) — reduce the input structures' }))
 
   const A = sources[0]
   const rest = sources.slice(1)
@@ -271,7 +272,7 @@ export function buildMultiMorph(sources: StructureData[], name: string, steps = 
   const matches = rest.map(X => matchStructureAtoms(A, X))
   for (let i = 0; i < matches.length; i++) {
     if (!matches[i].pairs.length) {
-      return fail(`第 ${i + 2} 个构象（${rest[i].name || '未命名'}）无法与第 1 个构象匹配：不是同源蛋白，也非完全相同的结构`)
+      return fail(tt({ zh: `第 ${i + 2} 个构象（${rest[i].name || '未命名'}）无法与第 1 个构象匹配：不是同源蛋白，也非完全相同的结构`, en: `Conformation ${i + 2} (${rest[i].name || 'unnamed'}) cannot be matched with the first one: not homologous proteins and not the exact same structure` }))
     }
   }
 
@@ -279,7 +280,7 @@ export function buildMultiMorph(sources: StructureData[], name: string, steps = 
   const perX = matches.map(m => new Map<number, number>(m.pairs.map(([a, x]) => [a, x] as const)))
   const kept = [...perX[0].keys()].filter(a => perX.every(mp => mp.has(a)))
   if (kept.length < 3) {
-    return fail(`各构象间共同匹配的原子太少（${kept.length} 个）——构象序列差异过大或序列覆盖不足`)
+    return fail(tt({ zh: `各构象间共同匹配的原子太少（${kept.length} 个）——构象序列差异过大或序列覆盖不足`, en: `Too few atoms shared across all conformers (${kept.length}) — the conformer series is too divergent or sequence coverage is insufficient` }))
   }
   const sortedKept = [...kept].sort((a, b) => a - b)
   const n = sortedKept.length
@@ -302,7 +303,7 @@ export function buildMultiMorph(sources: StructureData[], name: string, steps = 
   try {
     sub = subsetStructure(A, sortedKept, name)
   } catch (e) {
-    return fail(`子结构构建失败：${e instanceof Error ? e.message : String(e)}`)
+    return fail(tt({ zh: `子结构构建失败：${e instanceof Error ? e.message : String(e)}`, en: `Sub-structure construction failed: ${e instanceof Error ? e.message : String(e)}` }))
   }
   const mapAtoSub = new Map<number, number>()
   sortedKept.forEach((ai, si) => mapAtoSub.set(ai, si))

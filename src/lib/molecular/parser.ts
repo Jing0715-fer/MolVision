@@ -1,4 +1,5 @@
 // PDB / mmCIF 解析器 → StructureData（原子、残基、链、键、二级结构、晶胞）
+import { tt } from '@/i18n'
 import {
   AMINO_ACIDS, NUCLEIC_ACIDS, WATERS, SUGAR_LIKE, elementFromAtomName, elementInfo,
 } from './chemistry'
@@ -754,8 +755,8 @@ function buildStructure(raw: RawAtoms): StructureData {
  */
 export function subsetStructure(src: StructureData, indices: readonly number[], name: string): StructureData {
   const uniq = [...new Set(indices)].sort((a, b) => a - b)
-  if (!uniq.length) throw new Error('选择为空，无法创建子结构')
-  if (uniq.some(i => i < 0 || i >= src.atoms.count)) throw new Error('原子索引越界')
+  if (!uniq.length) throw new Error(tt({ zh: '选择为空，无法创建子结构', en: 'Selection is empty — cannot create a sub-structure' }))
+  if (uniq.some(i => i < 0 || i >= src.atoms.count)) throw new Error(tt({ zh: '原子索引越界', en: 'Atom index out of range' }))
   const a = src.atoms
   const x: number[] = [], y: number[] = [], z: number[] = []
   const serial: number[] = [], names: string[] = [], elements: string[] = [], resNames: string[] = []
@@ -770,7 +771,7 @@ export function subsetStructure(src: StructureData, indices: readonly number[], 
   }
   const out = buildStructure({
     name, format: src.format, pdbId: src.meta.pdbId,
-    title: `${src.meta.title} — 子集 ${uniq.length}`, method: '', resolution: null,
+    title: tt({ zh: `${src.meta.title} — 子集 ${uniq.length}`, en: `${src.meta.title} — subset ${uniq.length}` }), method: '', resolution: null,
     x, y, z, serial, names, elements, resNames, resSeqs, iCodes, chainIds,
     bfactors, occupancies, heteroFlags,
     conects: [], helixRanges: [], sheetRanges: [],

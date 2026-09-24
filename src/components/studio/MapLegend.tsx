@@ -9,14 +9,15 @@ import { useCallback, useRef, useState } from 'react'
 import { useMapStore } from '@/lib/molecular/map-store'
 import { setMapLook } from '@/lib/molecular/map-load'
 import { useMolStore } from '@/lib/molecular/store'
+import { useI18n, type DualText } from '@/i18n'
 import { useIsoThrottle } from './panels/MapsPanel'
 import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'
 
-const MODES: { key: 'mesh' | 'surface' | 'both'; label: string; icon: typeof Grid3x3 }[] = [
-  { key: 'mesh', label: '网格', icon: Grid3x3 },
-  { key: 'surface', label: '面', icon: Box },
-  { key: 'both', label: '叠加', icon: Layers },
+const MODES: { key: 'mesh' | 'surface' | 'both'; label: DualText; icon: typeof Grid3x3 }[] = [
+  { key: 'mesh', label: { zh: '网格', en: 'Mesh' }, icon: Grid3x3 },
+  { key: 'surface', label: { zh: '面', en: 'Surface' }, icon: Box },
+  { key: 'both', label: { zh: '叠加', en: 'Both' }, icon: Layers },
 ]
 
 /** 拖离停靠位后的自由位置持久化键（视口坐标） */
@@ -43,6 +44,7 @@ function savePos(p: FreePos | null) {
 }
 
 export function MapLegend() {
+  const { t } = useI18n()
   const info = useMapStore(s => s.info)
   // 控制台打开时隐藏（底部命令行覆盖层遮挡图例区）
   const consoleOpen = useMolStore(s => s.ui.consoleOpen)
@@ -104,7 +106,7 @@ export function MapLegend() {
         'pointer-events-auto w-52 select-none rounded-lg border border-border bg-card p-2 mol-elevate transition-opacity',
         !info.visible && 'opacity-60',
       )}
-      aria-label="密度图 σ 控制"
+      aria-label={t({ zh: '密度图 σ 控制', en: 'Map σ control' })}
     >
       {/* 拖拽把手：按住拖动移位 · 双击归位 */}
       <div
@@ -114,8 +116,8 @@ export function MapLegend() {
         onDoubleClick={onHandleDoubleClick}
         role="separator"
         aria-orientation="horizontal"
-        aria-label="拖动移动密度图控制卡（双击归位）"
-        title="按住拖动移位 · 双击归位"
+        aria-label={t({ zh: '拖动移动密度图控制卡（双击归位）', en: 'Drag to move the map control card (double-click to reset)' })}
+        title={t({ zh: '按住拖动移位 · 双击归位', en: 'Hold and drag to move · double-click to reset' })}
         className={cn(
           '-mx-2 -mt-2 mb-1 flex h-4 cursor-grab touch-none items-center justify-center rounded-t-lg text-muted-foreground/50 transition-colors hover:bg-accent/60 hover:text-muted-foreground active:cursor-grabbing',
           free && 'text-primary/60',
@@ -129,9 +131,9 @@ export function MapLegend() {
         <span
           className="h-2 w-2 shrink-0 rounded-full border border-black/20"
           style={{ background: info.color }}
-          title={info.difference
-            ? `正峰色（模型缺失信号，+σ 滑块绿）· 负峰为 ${info.negColor}（模型多余信号，−σ 滑块红）`
-            : `等值面颜色 ${info.color}`}
+          title={t(info.difference
+            ? { zh: `正峰色（模型缺失信号，+σ 滑块绿）· 负峰为 ${info.negColor}（模型多余信号，−σ 滑块红）`, en: `Positive peak color (model missing signal, +σ slider green) · negative is ${info.negColor} (model excess signal, −σ slider red)` }
+            : { zh: `等值面颜色 ${info.color}`, en: `Isosurface color ${info.color}` })}
           aria-hidden
         />
         <span
@@ -141,12 +143,12 @@ export function MapLegend() {
           {info.name}
         </span>
         <span className="shrink-0 rounded bg-muted/80 px-1 font-mono text-[9px] leading-4 text-muted-foreground">
-          {info.source === 'sf' ? (info.difference ? 'Fo−Fc' : '2Fo−Fc') : '文件'}
+          {info.source === 'sf' ? (info.difference ? 'Fo−Fc' : '2Fo−Fc') : t({ zh: '文件', en: 'File' })}
         </span>
         <button
           onClick={() => setMapLook({ visible: !info.visible })}
-          aria-label={info.visible ? '隐藏密度图（map hide）' : '显示密度图（map show）'}
-          title={info.visible ? '隐藏等值面（map hide）' : '显示等值面（map show）'}
+          aria-label={info.visible ? t({ zh: '隐藏密度图（map hide）', en: 'Hide map (map hide)' }) : t({ zh: '显示密度图（map show）', en: 'Show map (map show)' })}
+          title={info.visible ? t({ zh: '隐藏等值面（map hide）', en: 'Hide isosurfaces (map hide)' }) : t({ zh: '显示等值面（map show）', en: 'Show isosurfaces (map show)' })}
           className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           {info.visible
@@ -171,7 +173,7 @@ export function MapLegend() {
               'flex-1',
               info.difference && '[&_[data-slot=slider-range]]:bg-emerald-500 [&_[data-slot=slider-thumb]]:border-emerald-500',
             )}
-            aria-label={info.difference ? '正峰 σ 级别（模型缺失信号）' : '等值面 σ 级别'}
+            aria-label={info.difference ? t({ zh: '正峰 σ 级别（模型缺失信号）', en: 'Positive peak σ level (model missing signal)' }) : t({ zh: '等值面 σ 级别', en: 'Isosurface σ level' })}
           />
           <span
             className={cn(
@@ -193,7 +195,7 @@ export function MapLegend() {
               step={0.05}
               onValueChange={v => neg.onDrag(v[0])}
               className="flex-1 [&_[data-slot=slider-range]]:bg-rose-500 [&_[data-slot=slider-thumb]]:border-rose-500"
-              aria-label="负峰 σ 级别（模型多余信号）"
+              aria-label={t({ zh: '负峰 σ 级别（模型多余信号）', en: 'Negative peak σ level (model excess signal)' })}
             />
             <span className="w-11 shrink-0 text-right font-mono text-[9px] font-semibold tabular-nums text-rose-600 dark:text-rose-400">
               −{negVal.toFixed(2)}
@@ -217,12 +219,12 @@ export function MapLegend() {
             )}
           >
             <m.icon className="h-2.5 w-2.5" />
-            {m.label}
+            {t(m.label)}
           </button>
         ))}
         <span
           className="ml-auto shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground/80"
-          title={`等值面三角形${info.truncated ? '（已截断）' : ''}`}
+          title={t({ zh: `等值面三角形${info.truncated ? '（已截断）' : ''}`, en: `Isosurface triangles${info.truncated ? ' (truncated)' : ''}` })}
         >
           {info.triangles.toLocaleString()}△{info.truncated ? '+' : ''}
         </span>

@@ -1,6 +1,7 @@
 // 会话持久化：结构源文本 + reps + 设置 + 相机 + 密度图设置 → localStorage 保存/恢复
 // 密度图栅格本身不入档（数十 MB）；存 SF 来源与外观参数，恢复时自动重算（Worker）
 import { dataRegistry, engineRef, useMolStore } from './store'
+import { tt } from '@/i18n'
 import { parseStructure } from './parser'
 import { defaultSettings, type RepConfig, type Settings, type RigidTransform } from './types'
 import { textRegistry } from './text-registry'
@@ -185,7 +186,7 @@ export function restoreSession(): number {
       // 重放叠合变换（在 addStructure 前应用，使摘要/包围盒反映变换后坐标）
       if (ss.transform) {
         applyRigidTransform(parsed, ss.transform.quat, ss.transform.translation)
-        useMolStore.getState().appendLog('out', `已重放叠合变换：${ss.name}`)
+        useMolStore.getState().appendLog('out', tt({ zh: `已重放叠合变换：${ss.name}`, en: `Replayed superposition transform: ${ss.name}` }))
       }
       const store = useMolStore.getState()
       const id = store.addStructure(parsed, ss.name, 0)
@@ -249,17 +250,23 @@ export function restoreSession(): number {
     const m = data.map
     const host = useMolStore.getState().structures.find(x => x.meta.pdbId === m.pdbId)
       ?? (useMolStore.getState().structures.length === 1 ? useMolStore.getState().structures[0] : undefined)
-    useMolStore.getState().appendLog('out', `正在恢复电子密度图（${m.pdbId} ${m.kind === 'fofc' ? 'Fo−Fc' : '2Fo−Fc'}）——结构因子重拉 + Worker 重算，稍候…`)
+    useMolStore.getState().appendLog('out', tt({
+      zh: `正在恢复电子密度图（${m.pdbId} ${m.kind === 'fofc' ? 'Fo−Fc' : '2Fo−Fc'}）——结构因子重拉 + Worker 重算，稍候…`,
+      en: `Restoring electron density map (${m.pdbId} ${m.kind === 'fofc' ? 'Fo−Fc' : '2Fo−Fc'}) — re-fetching structure factors + Worker recompute, please wait…`,
+    }))
     void fetchAndComputeMap(m.pdbId, m.kind, {
       iso: m.iso, isoNeg: m.isoNeg, mode: m.mode,
       color: m.color, negColor: m.negColor, opacity: m.opacity, visible: m.visible,
     }, host?.id)
   }
-  useMolStore.getState().appendLog('out', `已恢复上次会话：${restored} 个结构`)
+  useMolStore.getState().appendLog('out', tt({ zh: `已恢复上次会话：${restored} 个结构`, en: `Last session restored: ${restored} ${restored === 1 ? 'structure' : 'structures'}` }))
   // 旧存档带着氢键网络总开关恢复时：已强制关闭（分析叠加层不随会话自动恢复），
   // 给出明确交代与重开路径——彻底断绝「一加载就冒绿线且来源不明」
   if (archivedHBondsOn) {
-    useMolStore.getState().appendLog('out', '已自动关闭存档中的氢键网络显示（分析叠加不随会话恢复，且已归位为「仅选择集」模式）。按 B 键可随时重新开启。')
+    useMolStore.getState().appendLog('out', tt({
+      zh: '已自动关闭存档中的氢键网络显示（分析叠加不随会话恢复，且已归位为「仅选择集」模式）。按 B 键可随时重新开启。',
+      en: 'H-bond network display saved in the archive was turned off automatically (analysis overlays are not restored with a session, and the mode was reset to "selection only"). Press B to re-enable at any time.',
+    }))
   }
   return restored
 }
@@ -296,7 +303,7 @@ export function newSession(): number {
       a.download = `molvision-newsession-${Date.now()}.webm`
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 5000)
-      useMolStore.getState().appendLog('out', '新建会话前已保存未完成的录制（WebM 自动下载）')
+      useMolStore.getState().appendLog('out', tt({ zh: '新建会话前已保存未完成的录制（WebM 自动下载）', en: 'Saved the in-progress recording before starting a new session (WebM auto-download)' }))
     })
   }
   // 3) 密度图
@@ -323,8 +330,8 @@ export function newSession(): number {
     useMolStore.getState().bumpVisual()
   })
   useMolStore.getState().appendLog('out', closed > 0
-    ? `已新建会话（关闭 ${closed} 个结构 · 书签/时间轴/密度图已清空）`
-    : '已新建会话（清空书签/时间轴/密度图）')
+    ? tt({ zh: `已新建会话（关闭 ${closed} 个结构 · 书签/时间轴/密度图已清空）`, en: `New session started (closed ${closed} ${closed === 1 ? 'structure' : 'structures'} · bookmarks/timeline/map cleared)` })
+    : tt({ zh: '已新建会话（清空书签/时间轴/密度图）', en: 'New session started (bookmarks/timeline/map cleared)' }))
   return closed
 }
 
@@ -373,13 +380,13 @@ export async function importSessionFile(file: File): Promise<number> {
   const text = await file.text()
   let data: (SessionData & { format?: string }) | null = null
   try { data = JSON.parse(text) as SessionData & { format?: string } } catch {
-    throw new Error('文件不是有效的 JSON')
+    throw new Error(tt({ zh: '文件不是有效的 JSON', en: 'File is not valid JSON' }))
   }
   if (!data || data.format !== SESSION_FILE_FORMAT || data.version !== 1 || !Array.isArray(data.structures)) {
-    throw new Error('不是有效的 MolVision 会话文件（.molvision）')
+    throw new Error(tt({ zh: '不是有效的 MolVision 会话文件（.molvision）', en: 'Not a valid MolVision session file (.molvision)' }))
   }
   if (!data.structures.some(s => s.text)) {
-    throw new Error('会话文件中没有包含结构数据（可能导出时被裁剪）')
+    throw new Error(tt({ zh: '会话文件中没有包含结构数据（可能导出时被裁剪）', en: 'The session file contains no structure data (possibly trimmed during export)' }))
   }
   // 替换模式：清空现有结构后恢复
   const store = useMolStore.getState()
@@ -390,7 +397,7 @@ export async function importSessionFile(file: File): Promise<number> {
   if (Array.isArray(data.views)) {
     const n = useViewsStore.getState().importBookmarks(data.views)
     if (n > 0) {
-      useMolStore.getState().appendLog('out', `已导入 ${n} 个视角书签（来自会话文件）`)
+      useMolStore.getState().appendLog('out', tt({ zh: `已导入 ${n} 个视角书签（来自会话文件）`, en: `Imported ${n} view bookmarks (from the session file)` }))
     }
   }
   return restored
@@ -407,13 +414,13 @@ export async function mergeSessionFile(file: File): Promise<number> {
   const text = await file.text()
   let data: (SessionData & { format?: string }) | null = null
   try { data = JSON.parse(text) as SessionData & { format?: string } } catch {
-    throw new Error('文件不是有效的 JSON')
+    throw new Error(tt({ zh: '文件不是有效的 JSON', en: 'File is not valid JSON' }))
   }
   if (!data || data.format !== SESSION_FILE_FORMAT || data.version !== 1 || !Array.isArray(data.structures)) {
-    throw new Error('不是有效的 MolVision 会话文件（.molvision）')
+    throw new Error(tt({ zh: '不是有效的 MolVision 会话文件（.molvision）', en: 'Not a valid MolVision session file (.molvision)' }))
   }
   if (!data.structures.some(s => s.text)) {
-    throw new Error('会话文件中没有包含结构数据（可能导出时被裁剪）')
+    throw new Error(tt({ zh: '会话文件中没有包含结构数据（可能导出时被裁剪）', en: 'The session file contains no structure data (possibly trimmed during export)' }))
   }
 
   const store = useMolStore.getState()
@@ -477,14 +484,14 @@ export async function mergeSessionFile(file: File): Promise<number> {
   // 视角书签合并（追加，重名跳过）
   if (Array.isArray(data.views)) {
     const n = useViewsStore.getState().mergeBookmarks(data.views)
-    if (n > 0) useMolStore.getState().appendLog('out', `已合并 ${n} 个视角书签（重名跳过）`)
+    if (n > 0) useMolStore.getState().appendLog('out', tt({ zh: `已合并 ${n} 个视角书签（重名跳过）`, en: `Merged ${n} view bookmarks (duplicates skipped)` }))
   }
 
   // 合并后快照到本地存档（含原有 + 新增结构）
   saveSession()
   useMolStore.getState().appendLog('out', added > 0
-    ? `已合并会话（来自 ${file.name}）：新增 ${added} 个结构（名称冲突已自动编号）`
-    : `会话合并完成，但文件中没有可恢复的结构（${file.name}）`)
+    ? tt({ zh: `已合并会话（来自 ${file.name}）：新增 ${added} 个结构（名称冲突已自动编号）`, en: `Session merged (from ${file.name}): ${added} ${added === 1 ? 'structure' : 'structures'} added (name conflicts auto-numbered)` })
+    : tt({ zh: `会话合并完成，但文件中没有可恢复的结构（${file.name}）`, en: `Session merge finished, but the file has no recoverable structures (${file.name})` }))
   return added
 }
 
@@ -492,12 +499,15 @@ export async function mergeSessionFile(file: File): Promise<number> {
 export function sessionInfo(): string {
   try {
     const raw = localStorage.getItem(KEY)
-    if (!raw) return '无会话存档'
+    if (!raw) return tt({ zh: '无会话存档', en: 'No session archive' })
     const d = JSON.parse(raw) as SessionData
     const age = Math.round((Date.now() - d.savedAt) / 1000)
-    return `存档时间 ${age < 60 ? age + ' 秒前' : Math.round(age / 60) + ' 分钟前'}，${d.structures.length} 个结构${d.camera ? '，含相机' : ''}`
+    return tt({
+      zh: `存档时间 ${age < 60 ? age + ' 秒前' : Math.round(age / 60) + ' 分钟前'}，${d.structures.length} 个结构${d.camera ? '，含相机' : ''}`,
+      en: `Saved ${age < 60 ? age + ' s' : Math.round(age / 60) + ' min'} ago, ${d.structures.length} ${d.structures.length === 1 ? 'structure' : 'structures'}${d.camera ? ', with camera' : ''}`,
+    })
   } catch {
-    return '会话存档损坏'
+    return tt({ zh: '会话存档损坏', en: 'Session archive corrupted' })
   }
 }
 

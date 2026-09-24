@@ -3,6 +3,7 @@
 // 召回时按结构名匹配恢复 reps/显隐/链隔离；结构未加载则跳过并在结果中报告。
 // localStorage 独立持久化（molvision-scenes-v1），跨刷新/跨会话保留。
 import { create } from 'zustand'
+import { tt } from '@/i18n'
 import { engineRef, useMolStore } from './store'
 import { whenEngineReady } from './engine-ready'
 import type { RepConfig } from './types'
@@ -190,7 +191,7 @@ export const useSceneStore = create<ScenesState>((set, get) => ({
     const s = get()
     if (!s.hydrated) s.hydrate()
     const st = useMolStore.getState()
-    if (!st.structures.length) return { ok: false, error: '当前没有结构——场景快照需要可保存的显示状态' }
+    if (!st.structures.length) return { ok: false, error: tt({ zh: '当前没有结构——场景快照需要可保存的显示状态', en: 'No structures loaded — a scene snapshot needs display state to save' }) }
     const trimmed = (name ?? '').trim().slice(0, 40)
     const body = snapshotCurrent()
     // 重名 → 原位更新（保留 id/时间；PyMOL scene update 语义）
@@ -206,11 +207,11 @@ export const useSceneStore = create<ScenesState>((set, get) => ({
       return { ok: true, scene, updated: true }
     }
     if (get().scenes.length >= MAX_SCENES) {
-      return { ok: false, error: `场景已达上限（${MAX_SCENES}）——先 scene del 删除不再需要的场景` }
+      return { ok: false, error: tt({ zh: `场景已达上限（${MAX_SCENES}）——先 scene del 删除不再需要的场景`, en: `Scene limit reached (${MAX_SCENES}) — use scene del to remove scenes you no longer need` }) }
     }
     const scene: MolScene = {
       id: `sc${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      name: trimmed || `场景 ${get().scenes.length + 1}`,
+      name: trimmed || tt({ zh: `场景 ${get().scenes.length + 1}`, en: `Scene ${get().scenes.length + 1}` }),
       createdAt: Date.now(),
       thumb: null,
       ...body,
@@ -224,9 +225,9 @@ export const useSceneStore = create<ScenesState>((set, get) => ({
   updateScene: idOrIndex => {
     const list = get().scenes
     const target = typeof idOrIndex === 'number' ? list[idOrIndex] : list.find(x => x.id === idOrIndex)
-    if (!target) return { ok: false, error: '找不到场景' }
+    if (!target) return { ok: false, error: tt({ zh: '找不到场景', en: 'Scene not found' }) }
     const st = useMolStore.getState()
-    if (!st.structures.length) return { ok: false, error: '当前没有结构——无法更新场景' }
+    if (!st.structures.length) return { ok: false, error: tt({ zh: '当前没有结构——无法更新场景', en: 'No structures loaded — cannot update the scene' }) }
     const body = snapshotCurrent()
     const scene: MolScene = { ...target, ...body }
     set(state => ({ scenes: state.scenes.map(x => (x.id === target.id ? scene : x)), activeSceneId: target.id }))
@@ -238,10 +239,10 @@ export const useSceneStore = create<ScenesState>((set, get) => ({
   recallScene: (idOrIndex, animated = true) => {
     const list = get().scenes
     const sc = typeof idOrIndex === 'number' ? list[idOrIndex] : list.find(x => x.id === idOrIndex)
-    if (!sc) return { ok: false, error: '找不到场景' }
+    if (!sc) return { ok: false, error: tt({ zh: '找不到场景', en: 'Scene not found' }) }
     const store = useMolStore.getState()
     if (!store.structures.length) {
-      return { ok: false, error: '当前没有结构——场景按结构名恢复（先 load 对应结构）' }
+      return { ok: false, error: tt({ zh: '当前没有结构——场景按结构名恢复（先 load 对应结构）', en: 'No structures loaded — scenes restore by structure name (load the structure first)' }) }
     }
     // ① 环境设置（一次性 patch，一次 visualRev bump）
     store.updateSettings({

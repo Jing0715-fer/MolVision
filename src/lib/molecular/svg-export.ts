@@ -4,6 +4,7 @@
 // 颜色与 3D 视图一致：computeAtomColors（线性）→ sRGB hex，叠加 colorOverrides。
 // surface 表示法为等值面几何（无原子级对应原语），导出时跳过并在返回值中列出。
 import * as THREE from 'three'
+import { tt } from '@/i18n'
 import { computeAtomColors } from './colors'
 import { elementInfo } from './chemistry'
 import { evaluateSelection } from './selection'
@@ -46,8 +47,8 @@ export function buildSvgExport(opts: { width?: number } = {}): SvgExportResult {
   const t0 = performance.now()
   const s = useMolStore.getState()
   const eng = engineRef.current
-  if (!eng) return { ok: false, error: '引擎未就绪', width: 0, height: 0, items: 0, skippedSurfaces: [], ms: 0 }
-  if (!s.structures.length) return { ok: false, error: '场景为空——先加载结构（load <PDB编号>）', width: 0, height: 0, items: 0, skippedSurfaces: [], ms: 0 }
+  if (!eng) return { ok: false, error: tt({ zh: '引擎未就绪', en: 'Engine not ready' }), width: 0, height: 0, items: 0, skippedSurfaces: [], ms: 0 }
+  if (!s.structures.length) return { ok: false, error: tt({ zh: '场景为空——先加载结构（load <PDB编号>）', en: 'Scene is empty — load a structure first (load <PDB ID>)' }), width: 0, height: 0, items: 0, skippedSurfaces: [], ms: 0 }
 
   const width = Math.max(320, Math.min(4096, Math.round(opts.width ?? 1600)))
   // 保持视口纵横比
@@ -191,13 +192,13 @@ export function buildSvgExport(opts: { width?: number } = {}): SvgExportResult {
   }
 
   if (!prims.length) {
-    return { ok: false, error: '没有可导出的内容（表面表示法不支持矢量导出，试试 cartoon/球棍/线框）', width, height, items: 0, skippedSurfaces, ms: performance.now() - t0 }
+    return { ok: false, error: tt({ zh: '没有可导出的内容（表面表示法不支持矢量导出，试试 cartoon/球棍/线框）', en: 'Nothing to export (surface representations do not support vector export — try cartoon / ball-and-stick / wireframe)' }), width, height, items: 0, skippedSurfaces, ms: performance.now() - t0 }
   }
 
   prims.sort((a, b) => b.z - a.z)
 
   // 页脚：结构名 + 原子数 + 署名（出版友好）
-  const names = s.structures.filter(x => x.visible).map(x => `${x.name}（${x.summary.atoms.toLocaleString()} 原子）`).join(' · ')
+  const names = s.structures.filter(x => x.visible).map(x => tt({ zh: `${x.name}（${x.summary.atoms.toLocaleString()} 原子）`, en: `${x.name} (${x.summary.atoms.toLocaleString()} atoms)` })).join(' · ')
   const now = new Date()
   const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const bg = s.settings.background || '#ffffff'
@@ -212,7 +213,7 @@ export function buildSvgExport(opts: { width?: number } = {}): SvgExportResult {
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     `<title>${escapeXml(names)}</title>`,
-    `<desc>MolVision 矢量导出 · ${escapeXml(names)} · ${dateStr}</desc>`,
+    `<desc>${tt({ zh: 'MolVision 矢量导出', en: 'MolVision vector export' })} · ${escapeXml(names)} · ${dateStr}</desc>`,
     `<rect width="${width}" height="${height}" fill="${bg}"/>`,
     `<g stroke-linejoin="round">`,
     ...prims.map(p => p.svg),

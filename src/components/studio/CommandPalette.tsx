@@ -12,7 +12,7 @@ import {
   Maximize, RotateCcw, Zap, Camera, Download, Save, FilePlus2,
 } from 'lucide-react'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
-import { COMMAND_HELP, runCommand } from '@/lib/molecular/commands'
+import { COMMAND_HELP, commandCmd, runCommand } from '@/lib/molecular/commands'
 import { exportSessionFile, newSession, saveSession } from '@/lib/molecular/session'
 import {
   appendCmdHistory, dispatchFillCmd, pinnedCmdsSnapshot, cmdHistorySnapshot, emptyCmdSnapshot, subscribeCmdHistory,
@@ -20,15 +20,16 @@ import {
 import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
 } from '@/components/ui/command'
+import { useI18n, tt, type TranslateInput } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 /** 面板项统一模型 */
 interface PaletteItem {
   id: string
   /** 显示名 */
-  label: string
+  label: TranslateInput
   /** 描述（过滤关键词兼作用） */
-  desc: string
+  desc: TranslateInput
   /** Enter 实际执行的命令（raw） */
   run: string
   /** Tab 填入控制台的编辑起点（默认 = run 的首词） */
@@ -39,6 +40,9 @@ interface PaletteItem {
 
 /** 取示例命令的可执行首段（「·」分隔的多示例取第一段） */
 const firstExample = (ex: string) => ex.split('·')[0].trim()
+
+/** cmdk 过滤 value 扁平化：DualText 两种语言都参与搜索（命令名本身是英文） */
+const flat = (x: TranslateInput): string => (typeof x === 'string' ? x : `${x.zh} ${x.en}`)
 
 /** 命令分类图标与配色（与 ConsoleBar 补全弹层同构：primary=结构域 · amber=选择语义 · 其余 muted） */
 function commandIcon(cmd: string): { icon: React.ComponentType<{ className?: string }>; cls: string } {
@@ -61,28 +65,29 @@ function commandIcon(cmd: string): { icon: React.ComponentType<{ className?: str
 /** 静态快速动作（对话框/面板入口） */
 const QUICK_ACTIONS_STATIC: PaletteItem[] = [
   {
-    id: 'qa-agent', label: 'AI 助手', desc: '自然语言指挥工作台 · Ctrl+J',
+    id: 'qa-agent', label: { zh: 'AI 助手', en: 'AI assistant' }, desc: { zh: '自然语言指挥工作台 · Ctrl+J', en: 'Natural-language control · Ctrl+J' },
     run: '', fill: '',
     icon: Bot, iconCls: 'text-primary',
   },
   {
-    id: 'qa-load', label: '加载结构…', desc: '打开加载对话框（PDB ID / 文件 / 示例）',
+    id: 'qa-load', label: { zh: '加载结构…', en: 'Load structure…' }, desc: { zh: '打开加载对话框（PDB ID / 文件 / 示例）', en: 'Open the load dialog (PDB ID / file / examples)' },
     run: '', fill: '',
     icon: FolderOpen, iconCls: 'text-primary',
   },
   {
-    id: 'qa-help', label: '帮助与快捷键', desc: '打开帮助文档',
+    id: 'qa-help', label: { zh: '帮助与快捷键', en: 'Help & shortcuts' }, desc: { zh: '打开帮助文档', en: 'Open the help documentation' },
     run: '', fill: '',
     icon: HelpCircle, iconCls: 'text-muted-foreground',
   },
   {
-    id: 'qa-history', label: '命令历史面板', desc: '全量历史 · 搜索 · 置顶管理',
+    id: 'qa-history', label: { zh: '命令历史面板', en: 'Command history panel' }, desc: { zh: '全量历史 · 搜索 · 置顶管理', en: 'Full history · search · pinning' },
     run: 'history', fill: 'history',
     icon: History, iconCls: 'text-muted-foreground',
   },
 ]
 
 export function CommandPalette() {
+  const { t, locale } = useI18n()
   const open = useMolStore(s => s.ui.paletteOpen)
   const setUi = useMolStore(s => s.setUi)
   const structures = useMolStore(s => s.structures)
@@ -111,65 +116,68 @@ export function CommandPalette() {
   const quickActions = useMemo<PaletteItem[]>(() => [
     ...QUICK_ACTIONS_STATIC,
     {
-      id: 'qa-fit', label: '适配视图', desc: '缩放到整个分子 · 快捷键 F',
+      id: 'qa-fit', label: { zh: '适配视图', en: 'Fit view' }, desc: { zh: '缩放到整个分子 · 快捷键 F', en: 'Zoom to the whole molecule · shortcut F' },
       run: '', fill: 'zoom ',
       icon: Maximize, iconCls: 'text-muted-foreground',
     },
     {
-      id: 'qa-reset', label: '复位视角', desc: '回到默认正视图',
+      id: 'qa-reset', label: { zh: '复位视角', en: 'Reset view' }, desc: { zh: '回到默认正视图', en: 'Return to the default front view' },
       run: '', fill: 'orient ',
       icon: RotateCcw, iconCls: 'text-muted-foreground',
     },
     {
-      id: 'qa-hbond', label: settings.showHBonds ? '隐藏氢键网络' : '显示氢键网络',
-      desc: settings.showHBonds ? '青色虚线叠加 · 快捷键 B' : '青色虚线叠加 · 快捷键 B · 默认仅选集相关',
+      id: 'qa-hbond',
+      label: settings.showHBonds ? { zh: '隐藏氢键网络', en: 'Hide H-bond network' } : { zh: '显示氢键网络', en: 'Show H-bond network' },
+      desc: settings.showHBonds
+        ? { zh: '青色虚线叠加 · 快捷键 B', en: 'Teal dashed overlay · shortcut B' }
+        : { zh: '青色虚线叠加 · 快捷键 B · 默认仅选集相关', en: 'Teal dashed overlay · shortcut B · selection-only by default' },
       run: '', fill: 'hbonds ',
       icon: Zap, iconCls: 'text-muted-foreground',
     },
     {
-      id: 'qa-shot', label: '导出截图 PNG', desc: '当前视口 · 2× 分辨率 · 透明可后接 bg',
+      id: 'qa-shot', label: { zh: '导出截图 PNG', en: 'Export PNG snapshot' }, desc: { zh: '当前视口 · 2× 分辨率 · 透明可后接 bg', en: 'Current viewport · 2× resolution · pair with bg for transparency' },
       run: '', fill: 'png ',
       icon: Camera, iconCls: 'text-muted-foreground',
     },
     {
-      id: 'qa-session-save', label: '保存会话', desc: '结构/表示法/设置入档（刷新恢复）',
+      id: 'qa-session-save', label: { zh: '保存会话', en: 'Save session' }, desc: { zh: '结构/表示法/设置入档（刷新恢复）', en: 'Structures/reps/settings persisted (restored on refresh)' },
       run: '', fill: 'session ',
       icon: Save, iconCls: 'text-muted-foreground',
     },
     {
-      id: 'qa-session-export', label: '导出会话文件', desc: '.molvision 归档 · 可分享',
+      id: 'qa-session-export', label: { zh: '导出会话文件', en: 'Export session file' }, desc: { zh: '.molvision 归档 · 可分享', en: '.molvision archive · shareable' },
       run: '', fill: 'session ',
       icon: Download, iconCls: 'text-muted-foreground',
     },
     {
-      id: 'qa-session-new', label: '新建会话', desc: '清空全部结构与状态',
+      id: 'qa-session-new', label: { zh: '新建会话', en: 'New session' }, desc: { zh: '清空全部结构与状态', en: 'Clear all structures and state' },
       run: '', fill: 'session ',
       icon: FilePlus2, iconCls: 'text-muted-foreground',
     },
   ], [settings.showHBonds])
 
   const allItems = useMemo<PaletteItem[]>(() => {
-    // 全部命令（示例命令可直接执行）
+    // 全部命令（示例命令可直接执行；label 随界面语言取 cmd/cmdEn）
     const cmds: PaletteItem[] = COMMAND_HELP.map(h => {
       const { icon, cls } = commandIcon(h.cmd)
       const run = firstExample(h.example) || h.cmd
-      return { id: 'cmd:' + h.cmd, label: h.cmd, desc: h.desc, run, fill: h.cmd.split(/[\s|<[]/)[0], icon, iconCls: cls }
+      return { id: 'cmd:' + h.cmd, label: commandCmd(h), desc: h.desc, run, fill: h.cmd.split(/[\s|<[]/)[0], icon, iconCls: cls }
     })
     // 快速动作
     return [...quickActions, ...cmds]
-  }, [quickActions])
+  }, [quickActions, locale])
 
   const recentItems = useMemo<PaletteItem[]>(() => {
     return [...new Set(history.slice().reverse())].slice(0, 8).map((cmd, i) => {
       const { icon, cls } = commandIcon(cmd)
-      return { id: `recent:${i}:${cmd}`, label: cmd, desc: '最近使用', run: cmd, icon, iconCls: cls }
+      return { id: `recent:${i}:${cmd}`, label: cmd, desc: { zh: '最近使用', en: 'Recent' }, run: cmd, icon, iconCls: cls }
     })
   }, [history])
 
   const pinnedItems = useMemo<PaletteItem[]>(() => {
     return pinned.map(cmd => {
       const { icon, cls } = commandIcon(cmd)
-      return { id: `pin:${cmd}`, label: cmd, desc: '已置顶', run: cmd, icon, iconCls: cls }
+      return { id: `pin:${cmd}`, label: cmd, desc: { zh: '已置顶', en: 'Pinned' }, run: cmd, icon, iconCls: cls }
     })
   }, [pinned])
 
@@ -177,8 +185,8 @@ export function CommandPalette() {
     if (structures.length < 2) return []
     return structures.map(st => ({
       id: `st:${st.id}`,
-      label: `切换到 ${st.name}`,
-      desc: `${st.summary.atoms.toLocaleString()} 原子 · ${st.summary.chains} 链${st.id === activeId ? ' · 当前活动' : ''}`,
+      label: { zh: `切换到 ${st.name}`, en: `Switch to ${st.name}` },
+      desc: { zh: `${st.summary.atoms.toLocaleString()} 原子 · ${st.summary.chains} 链${st.id === activeId ? ' · 当前活动' : ''}`, en: `${st.summary.atoms.toLocaleString()} atoms · ${st.summary.chains} chains${st.id === activeId ? ' · active' : ''}` },
       run: `activate ${st.name}`,
       fill: 'activate ',
       icon: Boxes,
@@ -213,30 +221,30 @@ export function CommandPalette() {
           a.href = url
           a.download = `${structures[0]?.name ?? 'molvision'}@2x.png`
           a.click()
-          toast.success('截图已导出（2× 分辨率）')
+          toast.success(tt({ zh: '截图已导出（2× 分辨率）', en: 'Snapshot exported (2× resolution)' }))
           appendCmdHistory('png 2')
-        } catch { toast.error('截图失败') }
+        } catch { toast.error(tt({ zh: '截图失败', en: 'Snapshot failed' })) }
       })
       return
     }
     if (item.id === 'qa-session-save') {
       requestAnimationFrame(() => {
-        if (saveSession()) toast.success('会话已保存', { description: '刷新后自动恢复' })
-        else toast.error('保存失败——场景为空')
+        if (saveSession()) toast.success(tt({ zh: '会话已保存', en: 'Session saved' }), { description: tt({ zh: '刷新后自动恢复', en: 'Restores automatically on refresh' }) })
+        else toast.error(tt({ zh: '保存失败——场景为空', en: 'Save failed — empty scene' }))
       })
       return
     }
     if (item.id === 'qa-session-export') {
       requestAnimationFrame(() => {
-        if (exportSessionFile()) toast.success('会话已导出', { description: '文件已开始下载' })
-        else toast.error('导出失败——场景为空或结构过大')
+        if (exportSessionFile()) toast.success(tt({ zh: '会话已导出', en: 'Session exported' }), { description: tt({ zh: '文件已开始下载', en: 'File download started' }) })
+        else toast.error(tt({ zh: '导出失败——场景为空或结构过大', en: 'Export failed — empty scene or structure too large' }))
       })
       return
     }
     if (item.id === 'qa-session-new') {
       requestAnimationFrame(() => {
-        if (structures.length) { newSession(); toast.success('已新建会话') }
-        else toast.info('当前就是空会话')
+        if (structures.length) { newSession(); toast.success(tt({ zh: '已新建会话', en: 'New session created' })) }
+        else toast.info(tt({ zh: '当前就是空会话', en: 'Already an empty session' }))
       })
       return
     }
@@ -259,17 +267,17 @@ export function CommandPalette() {
   const renderItem = (item: PaletteItem) => (
     <CommandItem
       key={item.id}
-      value={`${item.label} ${item.desc}`}
+      value={`${flat(item.label)} ${flat(item.desc)}`}
       onSelect={() => execute(item)}
       data-palette-id={item.id}
       className="gap-2.5"
     >
       <item.icon className={cn('h-4 w-4 shrink-0', item.iconCls)} />
-      <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{item.label}</span>
-      <span className="hidden max-w-[45%] shrink-0 truncate text-[11px] text-muted-foreground/70 sm:inline">{item.desc}</span>
+      <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{t(item.label)}</span>
+      <span className="hidden max-w-[45%] shrink-0 truncate text-[11px] text-muted-foreground/70 sm:inline">{t(item.desc)}</span>
       <span className="ml-1 hidden shrink-0 items-center gap-1.5 md:flex">
-        <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground" title="执行">↵</kbd>
-        <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground" title="填入命令行编辑">Tab</kbd>
+        <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground" title={t({ zh: '执行', en: 'Run' })}>↵</kbd>
+        <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground" title={t({ zh: '填入命令行编辑', en: 'Fill into the command line to edit' })}>Tab</kbd>
       </span>
     </CommandItem>
   )
@@ -291,52 +299,52 @@ export function CommandPalette() {
     <CommandDialog
       open={open}
       onOpenChange={setOpen}
-      title="命令面板"
-      description="搜索并执行命令，或填入命令行编辑"
+      title={t({ zh: '命令面板', en: 'Command palette' })}
+      description={t({ zh: '搜索并执行命令，或填入命令行编辑', en: 'Search and run commands, or fill into the command line to edit' })}
       className="mol-elevate-lg sm:max-w-xl"
     >
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-xs font-semibold">命令面板</span>
+        <span className="text-xs font-semibold">{t({ zh: '命令面板', en: 'Command palette' })}</span>
         <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">Ctrl+K</kbd>
         <span className="mol-micro ml-auto mr-9 text-muted-foreground">COMMAND PALETTE</span>
       </div>
       <CommandInput
-        placeholder="搜索命令、最近使用或结构…（Enter 执行 · Tab 填入编辑）"
+        placeholder={t({ zh: '搜索命令、最近使用或结构…（Enter 执行 · Tab 填入编辑）', en: 'Search commands, recent items, or structures… (Enter to run · Tab to edit)' })}
         onKeyDown={onInputKeyDown}
         className="font-mono text-[13px]"
       />
       <CommandList className="mol-scroll max-h-[380px]">
-        <CommandEmpty className="py-6 text-center text-xs text-muted-foreground">没有匹配的命令</CommandEmpty>
+        <CommandEmpty className="py-6 text-center text-xs text-muted-foreground">{t({ zh: '没有匹配的命令', en: 'No matching commands' })}</CommandEmpty>
         {pinnedItems.length > 0 && (
-          <CommandGroup heading="置顶（常用工作流）">
+          <CommandGroup heading={t({ zh: '置顶（常用工作流）', en: 'Pinned (common workflows)' })}>
             {pinnedItems.map(renderItem)}
           </CommandGroup>
         )}
         {recentItems.length > 0 && (
-          <CommandGroup heading="最近使用">
+          <CommandGroup heading={t({ zh: '最近使用', en: 'Recent' })}>
             {recentItems.map(renderItem)}
           </CommandGroup>
         )}
         {structureItems.length > 0 && (
-          <CommandGroup heading="结构切换">
+          <CommandGroup heading={t({ zh: '结构切换', en: 'Switch structure' })}>
             {structureItems.map(renderItem)}
           </CommandGroup>
         )}
         <CommandSeparator />
-        <CommandGroup heading="全部命令（Enter 执行示例 · Tab 进命令行带补全编辑）">
+        <CommandGroup heading={t({ zh: '全部命令（Enter 执行示例 · Tab 进命令行带补全编辑）', en: 'All commands (Enter runs the example · Tab opens in the command line with completion)' })}>
           {allItems.map(renderItem)}
         </CommandGroup>
       </CommandList>
       <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[10px] text-muted-foreground/70">
         <span className="flex min-w-0 items-center gap-1 truncate">
           <Star className="h-3 w-3 shrink-0 text-amber-500/70" />
-          在命令历史面板可置顶常用命令（命令行 `` 或 history）
+          {t({ zh: '在命令历史面板可置顶常用命令（命令行 `` 或 history）', en: 'Pin frequently used commands in the history panel (`` or history in the command line)' })}
         </span>
         <span className="flex shrink-0 items-center gap-1">
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↑↓</kbd>导航
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↵</kbd>执行
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Tab</kbd>编辑
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Esc</kbd>关闭
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↑↓</kbd>{t({ zh: '导航', en: 'navigate' })}
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↵</kbd>{t({ zh: '执行', en: 'run' })}
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Tab</kbd>{t({ zh: '编辑', en: 'edit' })}
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Esc</kbd>{t({ zh: '关闭', en: 'close' })}
         </span>
       </div>
     </CommandDialog>

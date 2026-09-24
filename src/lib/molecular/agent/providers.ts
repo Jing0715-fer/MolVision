@@ -8,6 +8,26 @@
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { cookies, headers } from 'next/headers'
+import { LOCALE_COOKIE, type DualText, type Locale } from '@/i18n/locales'
+
+/** 请求级语言检测（与 api 路由同规则）：cookie > Accept-Language —— 仅在请求上下文内有效
+ *  （本模块只被 API 路由 import）；无请求上下文（工具脚本）时回退 zh */
+async function reqLocale(): Promise<Locale> {
+  try {
+    const stored = (await cookies()).get(LOCALE_COOKIE)?.value
+    if (stored === 'en' || stored === 'zh') return stored
+    const accept = (await headers()).get('accept-language')?.toLowerCase() ?? ''
+    return accept.startsWith('en') ? 'en' : 'zh'
+  } catch {
+    return 'zh'
+  }
+}
+
+/** 服务端双语文案选择（错误消息等） */
+function bt(locale: Locale, zh: string, en: string): string {
+  return locale === 'en' ? en : zh
+}
 
 export type ProviderCategory = 'builtin' | 'global' | 'cn' | 'aggregator' | 'local' | 'custom'
 
@@ -21,6 +41,8 @@ export interface ProviderModel {
 export interface ProviderProfile {
   id: string
   displayName: string
+  /** 英文界面显示名（缺省回落 displayName） */
+  displayNameEn?: string
   /** 1-2 字符短标签（UI 徽章用） */
   label: string
   /** 分类：builtin 内置 | global 国际 | cn 国内 | aggregator 聚合 | local 本地 | custom 自定义 */
@@ -41,17 +63,17 @@ export interface ProviderProfile {
   docsUrl: string
   /** 官网（设置页品牌链接） */
   website: string
-  /** 额外说明（设置页展示） */
-  note?: string
+  /** 额外说明（设置页展示，双语；服务端仅透传对象，展示语言由客户端决定） */
+  note?: DualText
 }
 
-export const CATEGORY_META: Record<ProviderCategory, { name: string; hint: string }> = {
-  builtin: { name: '内置', hint: '沙箱自带，免配置' },
-  global: { name: '国际平台', hint: 'OpenAI / Anthropic / Google 等' },
-  cn: { name: '国内平台', hint: 'DeepSeek / 通义 / Kimi 等' },
-  aggregator: { name: '聚合网关', hint: '一个 Key 通达多家模型' },
-  local: { name: '本地推理', hint: 'Ollama / LM Studio 等' },
-  custom: { name: '自定义端点', hint: '任意 OpenAI 兼容网关' },
+export const CATEGORY_META: Record<ProviderCategory, { name: DualText; hint: DualText }> = {
+  builtin: { name: { zh: '内置', en: 'Built-in' }, hint: { zh: '沙箱自带，免配置', en: 'Bundled with the sandbox, zero config' } },
+  global: { name: { zh: '国际平台', en: 'Global platforms' }, hint: { zh: 'OpenAI / Anthropic / Google 等', en: 'OpenAI / Anthropic / Google, etc.' } },
+  cn: { name: { zh: '国内平台', en: 'CN platforms' }, hint: { zh: 'DeepSeek / 通义 / Kimi 等', en: 'DeepSeek / Qwen / Kimi, etc.' } },
+  aggregator: { name: { zh: '聚合网关', en: 'Aggregators' }, hint: { zh: '一个 Key 通达多家模型', en: 'One key reaches many providers' } },
+  local: { name: { zh: '本地推理', en: 'Local inference' }, hint: { zh: 'Ollama / LM Studio 等', en: 'Ollama / LM Studio, etc.' } },
+  custom: { name: { zh: '自定义端点', en: 'Custom endpoints' }, hint: { zh: '任意 OpenAI 兼容网关', en: 'Any OpenAI-compatible gateway' } },
 }
 
 export const PROVIDER_CATALOG: ProviderProfile[] = [
@@ -72,7 +94,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
     website: 'https://z.ai',
-    note: '沙箱内置 SDK 直连，无需 API Key；视觉自查始终走此通道',
+    note: { zh: '沙箱内置 SDK 直连，无需 API Key；视觉自查始终走此通道', en: 'Built-in sandbox SDK direct connection — no API Key needed; visual self-review always goes through this channel' },
   },
   // ———— 国际平台 ————
   {
@@ -114,7 +136,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://console.anthropic.com/settings/keys',
     website: 'https://anthropic.com',
-    note: '原生 /v1/models 列表可自动检测；走 OpenAI 兼容 /chat/completions',
+    note: { zh: '原生 /v1/models 列表可自动检测；走 OpenAI 兼容 /chat/completions', en: 'Native /v1/models list can be auto-detected; chat goes through the OpenAI-compatible /chat/completions' },
   },
   {
     id: 'google',
@@ -132,7 +154,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://aistudio.google.com/apikey',
     website: 'https://ai.google.dev',
-    note: 'AI Studio 免费额度可观，Flash 系列适合高频调用',
+    note: { zh: 'AI Studio 免费额度可观，Flash 系列适合高频调用', en: 'AI Studio free tier is generous; the Flash series suits high-frequency calls' },
   },
   {
     id: 'xai',
@@ -186,7 +208,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://console.groq.com/keys',
     website: 'https://groq.com',
-    note: 'LPU 推理芯片——生成速度业界第一梯队，免费额度慷慨',
+    note: { zh: 'LPU 推理芯片——生成速度业界第一梯队，免费额度慷慨', en: 'LPU inference chips — top-tier generation speed with a generous free tier' },
   },
   {
     id: 'cohere',
@@ -204,7 +226,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://dashboard.cohere.com/api-keys',
     website: 'https://cohere.com',
-    note: 'OpenAI 兼容层（/compatibility/v1）',
+    note: { zh: 'OpenAI 兼容层（/compatibility/v1）', en: 'OpenAI compatibility layer (/compatibility/v1)' },
   },
   {
     id: 'perplexity',
@@ -223,7 +245,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://www.perplexity.ai/settings/api',
     website: 'https://perplexity.ai',
-    note: '带联网检索的在线模型',
+    note: { zh: '带联网检索的在线模型', en: 'Online models with built-in web search' },
   },
   {
     id: 'together',
@@ -292,7 +314,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://cloud.cerebras.ai',
     website: 'https://cerebras.ai',
-    note: '晶圆级引擎（WSE）推理，tokens/s 极高',
+    note: { zh: '晶圆级引擎（WSE）推理，tokens/s 极高', en: 'Wafer-scale engine (WSE) inference with very high tokens/s' },
   },
   {
     id: 'nvidia',
@@ -310,7 +332,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://build.nvidia.com',
     website: 'https://build.nvidia.com',
-    note: 'build.nvidia.com 每模型每小时有免费额度',
+    note: { zh: 'build.nvidia.com 每模型每小时有免费额度', en: 'build.nvidia.com offers a free per-model hourly quota' },
   },
   {
     id: 'githubmodels',
@@ -329,7 +351,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://github.com/marketplace/models',
     website: 'https://github.com/marketplace/models',
-    note: 'API Key 填 GitHub PAT（fine-grained，无需任何权限勾选）',
+    note: { zh: 'API Key 填 GitHub PAT（fine-grained，无需任何权限勾选）', en: 'Use a GitHub PAT as the API Key (fine-grained, no permission scopes needed)' },
   },
   // ———— 国内平台 ————
   {
@@ -347,11 +369,11 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://platform.deepseek.com/api_keys',
     website: 'https://deepseek.com',
-    note: '国内性价比标杆，结构生物学知识扎实',
+    note: { zh: '国内性价比标杆，结构生物学知识扎实', en: 'Best value among CN providers; solid structural-biology knowledge' },
   },
   {
     id: 'qwen',
-    displayName: '通义千问 Qwen',
+    displayName: '通义千问 Qwen', displayNameEn: 'Qwen (Alibaba Tongyi)',
     label: 'QW',
     category: 'cn',
     brand: '#6b4fd8',
@@ -369,7 +391,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'moonshot',
-    displayName: '月之暗面 Kimi',
+    displayName: '月之暗面 Kimi', displayNameEn: 'Moonshot Kimi',
     label: 'KI',
     category: 'cn',
     brand: '#0e9c8f',
@@ -386,7 +408,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'zhipu',
-    displayName: '智谱 GLM',
+    displayName: '智谱 GLM', displayNameEn: 'Zhipu GLM',
     label: 'ZP',
     category: 'cn',
     brand: '#2f56d9',
@@ -404,7 +426,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'doubao',
-    displayName: '火山方舟 豆包',
+    displayName: '火山方舟 豆包', displayNameEn: 'Volcano Ark Doubao',
     label: 'DB',
     category: 'cn',
     brand: '#1f6ff0',
@@ -418,7 +440,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://console.volcengine.com/ark',
     website: 'https://www.volcengine.com/product/doubao',
-    note: '字节系；新用户每模型有免费额度',
+    note: { zh: '字节系；新用户每模型有免费额度', en: 'ByteDance; free per-model quota for new users' },
   },
   {
     id: 'minimax',
@@ -439,7 +461,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'hunyuan',
-    displayName: '腾讯混元',
+    displayName: '腾讯混元', displayNameEn: 'Tencent Hunyuan',
     label: 'HY',
     category: 'cn',
     brand: '#1a52c4',
@@ -456,7 +478,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'baichuan',
-    displayName: '百川智能',
+    displayName: '百川智能', displayNameEn: 'Baichuan',
     label: 'BC',
     category: 'cn',
     brand: '#e5623a',
@@ -473,7 +495,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'stepfun',
-    displayName: '阶跃星辰',
+    displayName: '阶跃星辰', displayNameEn: 'StepFun',
     label: 'SF',
     category: 'cn',
     brand: '#dd4a41',
@@ -490,7 +512,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'lingyi',
-    displayName: '零一万物 Yi',
+    displayName: '零一万物 Yi', displayNameEn: '01.AI Yi',
     label: 'YI',
     category: 'cn',
     brand: '#2c3138',
@@ -507,7 +529,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'baidu',
-    displayName: '百度千帆',
+    displayName: '百度千帆', displayNameEn: 'Baidu Qianfan',
     label: 'QF',
     category: 'cn',
     brand: '#2736c4',
@@ -524,7 +546,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'spark',
-    displayName: '讯飞星火',
+    displayName: '讯飞星火', displayNameEn: 'iFlytek Spark',
     label: 'SP',
     category: 'cn',
     brand: '#1266d8',
@@ -541,7 +563,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
   },
   {
     id: 'modelscope',
-    displayName: '魔搭 ModelScope',
+    displayName: '魔搭 ModelScope', displayNameEn: 'ModelScope',
     label: 'MS',
     category: 'cn',
     brand: '#6d4ae0',
@@ -555,7 +577,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://modelscope.cn/my/myaccesstoken',
     website: 'https://modelscope.cn',
-    note: '阿里达摩院开源社区，多数开源模型免费推理额度',
+    note: { zh: '阿里达摩院开源社区，多数开源模型免费推理额度', en: 'Alibaba DAMO open-source community; free inference quota for most open models' },
   },
   {
     id: 'gitee',
@@ -573,7 +595,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://ai.gitee.com/dashboard/settings/tokens',
     website: 'https://ai.gitee.com',
-    note: '开源中国出品，大量模型免费调用',
+    note: { zh: '开源中国出品，大量模型免费调用', en: 'By OSChina; many models free to call' },
   },
   // ———— 聚合网关 ————
   {
@@ -594,11 +616,11 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://openrouter.ai/keys',
     website: 'https://openrouter.ai',
-    note: '一个 Key 聚合全主流模型（含免费款 :free）',
+    note: { zh: '一个 Key 聚合全主流模型（含免费款 :free）', en: 'One key aggregates all mainstream models (including :free variants)' },
   },
   {
     id: 'siliconflow',
-    displayName: '硅基流动 SiliconFlow',
+    displayName: '硅基流动 SiliconFlow', displayNameEn: 'SiliconFlow',
     label: 'SI',
     category: 'aggregator',
     brand: '#2749d0',
@@ -613,12 +635,12 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://cloud.siliconflow.cn/account/ak',
     website: 'https://siliconflow.cn',
-    note: '聚合国内主流开源模型，注册送额度',
+    note: { zh: '聚合国内主流开源模型，注册送额度', en: 'Aggregates mainstream CN open-source models; signup bonus credits' },
   },
   // ———— 本地推理 ————
   {
     id: 'ollama',
-    displayName: 'Ollama（本地）',
+    displayName: 'Ollama（本地）', displayNameEn: 'Ollama (local)',
     label: 'OL',
     category: 'local',
     brand: '#2b2b2e',
@@ -628,11 +650,11 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     models: [],
     docsUrl: 'https://ollama.com',
     website: 'https://ollama.com',
-    note: '本机运行 Ollama 后可用；API Key 随意填（如 ollama）。模型列表自动检测',
+    note: { zh: '本机运行 Ollama 后可用；API Key 随意填（如 ollama）。模型列表自动检测', en: 'Available once Ollama runs locally; fill in any API Key (e.g. ollama). Model list auto-detected' },
   },
   {
     id: 'lmstudio',
-    displayName: 'LM Studio（本地）',
+    displayName: 'LM Studio（本地）', displayNameEn: 'LM Studio (local)',
     label: 'LM',
     category: 'local',
     brand: '#0f6f6b',
@@ -642,12 +664,12 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     models: [],
     docsUrl: 'https://lmstudio.ai',
     website: 'https://lmstudio.ai',
-    note: '本地桌面版；API Key 随意填。模型列表自动检测',
+    note: { zh: '本地桌面版；API Key 随意填。模型列表自动检测', en: 'Local desktop app; fill in any API Key. Model list auto-detected' },
   },
   // ———— 自定义 ————
   {
     id: 'custom',
-    displayName: '自定义兼容端点',
+    displayName: '自定义兼容端点', displayNameEn: 'Custom compatible endpoint',
     label: '⌘',
     category: 'custom',
     brand: '#6f6f76',
@@ -657,7 +679,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     models: [],
     docsUrl: '',
     website: '',
-    note: '任意兼容 /chat/completions 的网关（vLLM / one-api / 内网代理等）',
+    note: { zh: '任意兼容 /chat/completions 的网关（vLLM / one-api / 内网代理等）', en: 'Any /chat/completions-compatible gateway (vLLM / one-api / intranet proxy, etc.)' },
   },
 ]
 
@@ -915,7 +937,7 @@ export async function chatCompletionOnce(
   messages: ChatMessage[],
   opts: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<string> {
-  const { baseURL, apiKey, headers, model } = prepareRequest(providerId)
+  const { baseURL, apiKey, headers, model, locale } = await prepareRequest(providerId)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000)
   const onAbort = () => controller.abort()
@@ -929,7 +951,7 @@ export async function chatCompletionOnce(
     })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      throw new Error(`${providerId} HTTP ${res.status}：${body.slice(0, 300)}`)
+      throw new Error(bt(locale, `${providerId} HTTP ${res.status}：${body.slice(0, 300)}`, `${providerId} HTTP ${res.status}: ${body.slice(0, 300)}`))
     }
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
     return data.choices?.[0]?.message?.content ?? ''
@@ -945,7 +967,7 @@ export async function chatCompletionStream(
   messages: ChatMessage[],
   opts: { onDelta?: (piece: string) => void; signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<string> {
-  const { baseURL, apiKey, headers, model } = prepareRequest(providerId)
+  const { baseURL, apiKey, headers, model, locale } = await prepareRequest(providerId)
   const res = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
@@ -954,9 +976,9 @@ export async function chatCompletionStream(
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`${providerId} HTTP ${res.status}：${body.slice(0, 300)}`)
+    throw new Error(bt(locale, `${providerId} HTTP ${res.status}：${body.slice(0, 300)}`, `${providerId} HTTP ${res.status}: ${body.slice(0, 300)}`))
   }
-  if (!res.body) throw new Error(`${providerId} 无响应体`)
+  if (!res.body) throw new Error(bt(locale, `${providerId} 无响应体`, `${providerId} returned no response body`))
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buf = ''
@@ -983,19 +1005,20 @@ export async function chatCompletionStream(
   return full
 }
 
-/** 组装认证请求头 + 校验配置完备 */
-function prepareRequest(providerId: string): { baseURL: string; apiKey: string; headers: Record<string, string>; model: string } {
+/** 组装认证请求头 + 校验配置完备（async：错误文案需请求级 locale） */
+async function prepareRequest(providerId: string): Promise<{ baseURL: string; apiKey: string; headers: Record<string, string>; model: string; locale: Locale }> {
+  const locale = await reqLocale()
   const profile = getProviderProfile(providerId)
-  if (!profile) throw new Error(`未知供应商：${providerId}`)
+  if (!profile) throw new Error(bt(locale, `未知供应商：${providerId}`, `Unknown provider: ${providerId}`))
   const baseURL = resolveBaseURL(providerId)
-  if (!baseURL) throw new Error(`供应商 ${profile.displayName} 未配置 Base URL`)
+  if (!baseURL) throw new Error(bt(locale, `Provider ${profile.displayNameEn ?? profile.displayName} has no Base URL configured`, `Provider ${profile.displayName} has no Base URL configured`))
   const apiKey = resolveApiKey(providerId)
-  if (!apiKey) throw new Error(`供应商 ${profile.displayName} 未配置 API Key（设置页或环境变量 ${profile.apiKeyEnv}）`)
+  if (!apiKey) throw new Error(bt(locale, `Provider ${profile.displayNameEn ?? profile.displayName} has no API Key configured (settings page or env var ${profile.apiKeyEnv})`, `Provider ${profile.displayName} has no API Key configured (settings page or env var ${profile.apiKeyEnv})`))
   const model = resolveModel(providerId)
-  if (!model) throw new Error(`供应商 ${profile.displayName} 未配置模型`)
+  if (!model) throw new Error(bt(locale, `Provider ${profile.displayNameEn ?? profile.displayName} has no model configured`, `Provider ${profile.displayName} has no model configured`))
   const headers: Record<string, string> = {
     [profile.authHeader ?? 'Authorization']: `${profile.authPrefix ?? 'Bearer '}${apiKey}`,
     ...(profile.extraHeaders ?? {}),
   }
-  return { baseURL: baseURL.replace(/\/$/, ''), apiKey, headers, model }
+  return { baseURL: baseURL.replace(/\/$/, ''), apiKey, headers, model, locale }
 }

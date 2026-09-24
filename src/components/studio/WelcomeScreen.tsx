@@ -14,9 +14,11 @@ import {
   Bot, FileUp, FolderOpen, Github, Loader2, Moon, Sun,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
+import { useI18n, tt } from '@/i18n'
 import { EXAMPLE_STRUCTURES, fetchPdbId, loadFiles } from '@/lib/molecular/loader'
 import { SessionResumeSlot } from './SessionResumeCard'
 import { AgentPanel } from './AgentPanel'
+import { LanguageToggle } from './LanguageToggle'
 
 /** 欢迎页示例精选（6 个均衡覆盖小蛋白/酶/四聚体/DNA/药物靶点；完整列表在加载对话框） */
 const WELCOME_EXAMPLES = EXAMPLE_STRUCTURES.filter(ex => ex.id !== '1D3Z')
@@ -28,6 +30,7 @@ const MINI_ORBIT_A = 'M 18.2 10 A 8.2 3.1 0 1 1 1.8 10 A 8.2 3.1 0 1 1 18.2 10'
 const MINI_ORBIT_B = 'M 14.1 17.1 A 8.2 3.1 60 1 1 5.9 2.9 A 8.2 3.1 60 1 1 14.1 17.1'
 
 export function WelcomeScreen() {
+  const { t } = useI18n()
   const { resolvedTheme, setTheme } = useTheme()
   const loading = useMolStore(s => s.loading)
   const loadingMsg = useMolStore(s => s.loadingMsg)
@@ -47,7 +50,7 @@ export function WelcomeScreen() {
     const v = id.trim().toUpperCase()
     if (!v) return
     if (!/^[0-9][A-Z0-9]{3}$/.test(v)) {
-      toast.error('PDB 编号为 4 位字符（如 4HHB、1CRN）')
+      toast.error(tt({ zh: 'PDB 编号为 4 位字符（如 4HHB、1CRN）', en: 'PDB ID is 4 characters (e.g. 4HHB, 1CRN)' }))
       return
     }
     void fetchPdbId(v)
@@ -136,7 +139,7 @@ export function WelcomeScreen() {
             Molecular Visualization Studio
           </div>
           <p className="welcome-in mt-2.5 text-[11px] leading-relaxed text-muted-foreground" style={{ animationDelay: '150ms' }}>
-            在浏览器中探索蛋白质 · 核酸 · 配体与电子密度
+            {t({ zh: '在浏览器中探索蛋白质 · 核酸 · 配体与电子密度', en: 'Explore proteins · nucleic acids · ligands & electron density in the browser' })}
           </p>
 
           {/* 版本徽章（正式产品可信度：版本 + 引擎就绪读数） */}
@@ -144,7 +147,7 @@ export function WelcomeScreen() {
             <span className="flex items-center gap-1.5 rounded-full border border-foreground/[0.16] dark:border-white/15 px-2.5 py-[3.5px]">
               <span className="led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
               <span className="font-mono text-[9px] font-semibold tracking-[0.12em] text-muted-foreground">
-                v1.4 · WebGL 引擎就绪
+                v1.4 · {t({ zh: 'WebGL 引擎就绪', en: 'WebGL engine ready' })}
               </span>
             </span>
           </div>
@@ -158,7 +161,7 @@ export function WelcomeScreen() {
             style={{ animationDelay: '240ms' }}
           >
             <span className="h-px flex-1 bg-foreground/[0.14] dark:bg-foreground/[0.13]" />
-            <span className="mol-micro text-muted-foreground">加载结构</span>
+            <span className="mol-micro text-muted-foreground">{t({ zh: '加载结构', en: 'Load structure' })}</span>
             <span className="h-px flex-1 bg-foreground/[0.14] dark:bg-foreground/[0.13]" />
           </div>
 
@@ -172,8 +175,8 @@ export function WelcomeScreen() {
               value={id}
               onChange={e => setId(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
               maxLength={4}
-              placeholder="PDB 编号 · 如 4HHB"
-              aria-label="PDB 编号"
+              placeholder={t({ zh: 'PDB 编号 · 如 4HHB', en: 'PDB ID · e.g. 4HHB' })}
+              aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
               autoComplete="off"
               spellCheck={false}
               className="h-12 w-full min-w-0 flex-1 rounded-md border border-foreground/20 bg-card text-center font-mono text-[15px] font-medium uppercase tracking-[0.28em] text-foreground shadow-[inset_0_1px_2px_oklch(0.25_0.01_80/0.07)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:font-sans placeholder:text-[11.5px] placeholder:font-normal placeholder:tracking-[0.1em] placeholder:text-muted-foreground hover:border-foreground/35 focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_24%,transparent),inset_0_1px_2px_oklch(0.25_0.01_80/0.04)] dark:border-white/[0.16] dark:bg-white/[0.045] dark:shadow-none dark:hover:border-white/25 dark:focus-visible:border-primary dark:focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_26%,transparent)]"
@@ -184,7 +187,7 @@ export function WelcomeScreen() {
               className="welcome-cta flex h-12 shrink-0 select-none items-center gap-2 rounded-md bg-primary px-5 text-[13px] font-semibold text-primary-foreground disabled:pointer-events-none disabled:opacity-40"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              获取结构
+              {t({ zh: '获取结构', en: 'Fetch' })}
             </button>
           </form>
 
@@ -193,11 +196,11 @@ export function WelcomeScreen() {
             {loading ? (
               <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                {loadingMsg || '处理中…'}
+                {loadingMsg || t({ zh: '处理中…', en: 'Processing…' })}
               </span>
             ) : (
               <span className="text-[10px] text-muted-foreground">
-                RCSB Protein Data Bank 实时获取 · 可拖放文件到页面
+                {t({ zh: 'RCSB Protein Data Bank 实时获取 · 可拖放文件到页面', en: 'Fetched live from RCSB PDB · drag & drop files anywhere' })}
               </span>
             )}
           </div>
@@ -210,7 +213,7 @@ export function WelcomeScreen() {
             style={{ animationDelay: '340ms' }}
           >
             <FolderOpen className="h-3.5 w-3.5 text-primary/80 transition-transform duration-200 group-hover:-translate-y-px" />
-            打开本地文件…
+            {t({ zh: '打开本地文件…', en: 'Open local file…' })}
             <span className="font-mono text-[9.5px] font-normal tracking-wide text-muted-foreground/85">
               PDB / CIF / CCP4 / .molvision
             </span>
@@ -229,7 +232,7 @@ export function WelcomeScreen() {
           {/* —— 经典示例（卡片化芯片：ID 主色等宽 + 名称灰阶，悬停浮起） —— */}
           <div className="welcome-in mt-8 flex w-full items-center gap-2.5" style={{ animationDelay: '380ms' }}>
             <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
-            <span className="mol-micro text-muted-foreground">经典示例</span>
+            <span className="mol-micro text-muted-foreground">{t({ zh: '经典示例', en: 'Classic examples' })}</span>
             <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
           </div>
           <div className="welcome-in mt-3.5 flex flex-wrap justify-center gap-2" style={{ animationDelay: '420ms' }}>
@@ -244,7 +247,7 @@ export function WelcomeScreen() {
                   {ex.id}
                 </span>
                 <span className="text-[11px] leading-none text-muted-foreground transition-colors duration-150 group-hover:text-foreground/85">
-                  {ex.title}
+                  {t(ex.title)}
                 </span>
               </button>
             ))}
@@ -263,7 +266,7 @@ export function WelcomeScreen() {
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/12 text-primary transition-transform duration-200 group-hover:scale-105">
               <Bot className="h-3.5 w-3.5" />
             </span>
-            <span className="text-xs font-semibold tracking-wide">AI 助手</span>
+            <span className="text-xs font-semibold tracking-wide">{t({ zh: 'AI 助手', en: 'AI Assistant' })}</span>
             <span className="hidden items-center gap-0.5 font-mono text-[9px] font-medium text-muted-foreground/80 sm:flex">
               <kbd className="rounded border border-border bg-background px-1 py-px leading-none">⌘</kbd>J
             </span>
@@ -288,21 +291,22 @@ export function WelcomeScreen() {
         <span className="status-sep" />
         <span className="status-val flex items-center gap-1.5">
           <span className="led-dot led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-          待机 · 等待结构加载
+          {t({ zh: '待机 · 等待结构加载', en: 'Standby · awaiting structure' })}
         </span>
         <span className="status-sep hidden md:block" />
-        <span className="status-val hidden md:block">WebGL 引擎</span>
+        <span className="status-val hidden md:block">{t({ zh: 'WebGL 引擎', en: 'WebGL engine' })}</span>
         <span className="status-sep hidden lg:block" />
         <span className="status-val hidden lg:block">© 2026</span>
         <span className="status-sep hidden xl:block" />
         <span className="status-val hidden truncate text-[color:var(--status-dim)] xl:block">
-          拖放 PDB / CIF / .molvision 文件即可加载 · ⌘K 命令面板 · ⌘J AI 助手
+          {t({ zh: '拖放 PDB / CIF / .molvision 文件即可加载 · ⌘K 命令面板 · ⌘J AI 助手', en: 'Drop PDB / CIF / .molvision files to load · ⌘K command palette · ⌘J AI assistant' })}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          <LanguageToggle />
           <button
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
             suppressHydrationWarning
-            aria-label="切换深浅主题"
+            aria-label={t({ zh: '切换深浅主题', en: 'Toggle light/dark theme' })}
             className="flex h-7 w-7 items-center justify-center rounded-md text-[color:var(--status-dim)] transition-colors duration-150 hover:bg-white/10 hover:text-[color:var(--status-fg)]"
           >
             <Sun className="h-[15px] w-[15px] hidden dark:block" />
@@ -312,7 +316,7 @@ export function WelcomeScreen() {
             href="https://github.com/Jing0715-fer/MolVision"
             target="_blank"
             rel="noreferrer"
-            aria-label="GitHub 仓库"
+            aria-label={t({ zh: 'GitHub 仓库', en: 'GitHub repository' })}
             className="flex h-7 w-7 items-center justify-center rounded-md text-[color:var(--status-dim)] transition-colors duration-150 hover:bg-white/10 hover:text-[color:var(--status-fg)]"
           >
             <Github className="h-[15px] w-[15px]" />
@@ -325,9 +329,9 @@ export function WelcomeScreen() {
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/[0.92] ring-1 ring-primary/45 ring-inset">
           <div className="flex flex-col items-center gap-2">
             <FileUp className="h-6 w-6 text-primary" />
-            <span className="text-[13px] font-medium">松开以加载文件</span>
+            <span className="text-[13px] font-medium">{t({ zh: '松开以加载文件', en: 'Drop to load files' })}</span>
             <span className="font-mono text-[10px] tracking-wide text-muted-foreground">
-              .pdb / .cif / .ccp4 密度图 / .molvision 会话
+              {t({ zh: '.pdb / .cif / .ccp4 密度图 / .molvision 会话', en: '.pdb / .cif / .ccp4 maps / .molvision sessions' })}
             </span>
           </div>
         </div>

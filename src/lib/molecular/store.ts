@@ -1,5 +1,6 @@
 // Zustand 全局状态：结构、表示法、选择、测量、标签、设置、UI
 import { create } from 'zustand'
+import { tt, useI18nStore, type DualText } from '@/i18n'
 import { chainColor, computeAtomColors, parseCssColor, type ColorScheme } from './colors'
 import { parseStructure, type StructureData } from './parser'
 import { evaluateSelection, maskToIndices } from './selection'
@@ -229,9 +230,9 @@ function focusPocketAfterPreset(structureId: string) {
   eng.fitView([{ structureId, indices: pocket }], { buffer: 2.5 })
 }
 
-export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }> = {
+export const PRESETS: Record<string, { label: DualText; reps: () => RepConfig[] }> = {
   cartoon: {
-    label: 'Cartoon 经典',
+    label: { zh: 'Cartoon 经典', en: 'Classic cartoon' },
     reps: () => [
       { ...defaultRep('cartoon', 'polymer', 'chain') },
       { ...defaultRep('ballstick', 'ligand', 'element') },
@@ -239,19 +240,19 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
     ],
   },
   ballstick: {
-    label: '球棍模型',
+    label: { zh: '球棍模型', en: 'Ball-and-stick' },
     reps: () => [{ ...defaultRep('ballstick', 'all', 'element') }],
   },
   spacefill: {
-    label: '空间填充',
+    label: { zh: '空间填充', en: 'Space fill' },
     reps: () => [{ ...defaultRep('spacefill', 'all', 'element') }],
   },
   wireframe: {
-    label: '线框',
+    label: { zh: '线框', en: 'Wireframe' },
     reps: () => [{ ...defaultRep('lines', 'all', 'element') }],
   },
   surface: {
-    label: '分子表面',
+    label: { zh: '分子表面', en: 'Molecular surface' },
     // 表面只算聚合物：配体以球棍独立显示（否则被表面完全包埋，口袋不可见）
     reps: () => [
       { ...defaultRep('surface', 'polymer', 'chain') },
@@ -259,7 +260,7 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
     ],
   },
   bindingsite: {
-    label: '结合口袋',
+    label: { zh: '结合口袋', en: 'Binding site' },
     reps: () => [
       { ...defaultRep('cartoon', 'polymer', 'chain') },
       // byres：口袋残基展开为完整残基（主链+侧链）——只有 within 球内的部分原子会令侧链残缺
@@ -270,7 +271,7 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
     ],
   },
   publication: {
-    label: '出版级互作',
+    label: { zh: '出版级互作', en: 'Publication interactions' },
     reps: () => [
       { ...defaultRep('cartoon', 'polymer', 'chain') },
       // pocket 方案：配体碳鲜绿 + 口袋残基碳按到配体距离紫→粉渐变（杂原子元素色）；
@@ -280,7 +281,7 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
     ],
   },
   hybrid: {
-    label: '混合风格',
+    label: { zh: '混合风格', en: 'Hybrid style' },
     // SS 着色卡通 + 全结构化学键线（骨架抽象与化学细节同屏）+ 配体球棍
     reps: () => [
       { ...defaultRep('cartoon', 'polymer', 'ss') },
@@ -289,13 +290,20 @@ export const PRESETS: Record<string, { label: string; reps: () => RepConfig[] }>
     ],
   },
   putty: {
-    label: 'Putty B 因子管',
+    label: { zh: 'Putty B 因子管', en: 'Putty B-factor tube' },
     reps: () => [
       { ...defaultRep('putty', 'polymer', 'bfactor') },
       { ...defaultRep('ballstick', 'ligand', 'element') },
       { ...defaultRep('lines', 'water', 'element') },
     ],
   },
+}
+
+/** 引导日志文案：模块初始化早于 I18nProvider 首次 setLocale（en 用户首算会得 zh），
+ *  故订阅 locale 变化重写首条引导日志（time='' 且无 seq 的那条，滚动窗口内有效） */
+const BOOT_LOG: DualText = {
+  zh: 'MolVision 命令行就绪。输入 help 查看命令列表。',
+  en: 'MolVision command line ready. Type help to see the command list.',
 }
 
 export const useMolStore = create<MolState>()((set, get) => ({
@@ -323,7 +331,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
     paletteOpen: false,
     agentOpen: false,
   },
-  consoleLog: [{ type: 'out', text: 'MolVision 命令行就绪。输入 help 查看命令列表。', time: '' }],
+  consoleLog: [{ type: 'out', text: tt(BOOT_LOG), time: '' }],
   everHadStructures: false,
 
   addStructure: (data, name, loadMs) => {
@@ -540,9 +548,9 @@ export const useMolStore = create<MolState>()((set, get) => ({
   selectFromExpr: (expr) => {
     const s = get()
     const entry = s.structures.find(x => x.id === s.activeId)
-    if (!entry) return { count: 0, error: '没有加载结构' }
+    if (!entry) return { count: 0, error: tt({ zh: '没有加载结构', en: 'No structure loaded' }) }
     const data = dataRegistry.get(entry.id)
-    if (!data) return { count: 0, error: '结构数据缺失' }
+    if (!data) return { count: 0, error: tt({ zh: '结构数据缺失', en: 'Structure data missing' }) }
     const named = buildNamedMasks(entry.id, data)
     const res = evaluateSelection(expr, { structure: data, named })
     if (res.error) return { count: 0, error: res.error }
@@ -688,12 +696,12 @@ export const useMolStore = create<MolState>()((set, get) => ({
   recomputeSS: (structureId) => {
     const data = dataRegistry.get(structureId)
     const entry = get().structures.find(x => x.id === structureId)
-    if (!data || !entry) return { helix: 0, strand: 0, loop: 0, error: '结构不存在' }
+    if (!data || !entry) return { helix: 0, strand: 0, loop: 0, error: tt({ zh: '结构不存在', en: 'Structure not found' }) }
     let dssp: import('./dssp').DSSPResult
     try {
       dssp = computeDSSP(data)
     } catch (e) {
-      return { helix: 0, strand: 0, loop: 0, error: e instanceof Error ? e.message : 'DSSP 计算失败' }
+      return { helix: 0, strand: 0, loop: 0, error: e instanceof Error ? e.message : tt({ zh: 'DSSP 计算失败', en: 'DSSP computation failed' }) }
     }
     for (let ri = 0; ri < data.residues.length; ri++) {
       data.residues[ri].ss = dssp.ss[ri] === 1 ? 'H' : dssp.ss[ri] === 2 ? 'E' : 'L'
@@ -719,6 +727,17 @@ export const useMolStore = create<MolState>()((set, get) => ({
 
   bumpVisual: () => set(s => ({ visualRev: s.visualRev + 1 })),
 }))
+
+// 语言切换时重写首条引导日志（SSR 与客户端首渲染均生效：I18nProvider 的 setLocale
+// 在渲染期同步触发订阅，早于 ConsoleBar 读取——无水合闪烁/错配）
+useI18nStore.subscribe((s, prev) => {
+  if (s.locale === prev.locale) return
+  const log = useMolStore.getState().consoleLog
+  const boot = log[0]
+  if (boot && boot.time === '' && boot.seq === undefined) {
+    useMolStore.setState({ consoleLog: [{ ...boot, text: tt(BOOT_LOG) }, ...log.slice(1)] })
+  }
+})
 
 function labelForAtom(data: StructureData, i: number): string {
   const a = data.atoms

@@ -4,6 +4,7 @@
 // 出现条件：活动结构存在可见 putty 表示法、或 bfactor/sasa 配色的可见表示法
 import { useMemo } from 'react'
 import { useMolStore, dataRegistry } from '@/lib/molecular/store'
+import { useI18n } from '@/i18n'
 import { BFACTOR_STOPS, SASA_STOPS, stopsToGradient } from '@/lib/molecular/colors'
 import type { RepConfig } from '@/lib/molecular/types'
 
@@ -29,6 +30,7 @@ function puttyTubePath(width = 128, height = 12): string {
 }
 
 export function ColorLegend() {
+  const { t } = useI18n()
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   // 控制台打开时隐藏（底部命令行覆盖层会遮挡图例，避免残缺显示）
@@ -78,14 +80,14 @@ export function ColorLegend() {
   return (
     <div
       className="pointer-events-none w-44 select-none rounded-lg border border-border bg-card p-2 mol-elevate"
-      aria-label="颜色标尺图例"
+      aria-label={t({ zh: '颜色标尺图例', en: 'Color scale legend' })}
     >
       <div className="mb-1 flex items-center justify-between">
         <span className="text-[10px] font-semibold tracking-wide text-foreground/80">
-          {kind === 'sasa' ? 'SASA 暴露度' : 'B 因子 (Å²)'}
+          {kind === 'sasa' ? t({ zh: 'SASA 暴露度', en: 'SASA exposure' }) : t({ zh: 'B 因子 (Å²)', en: 'B-factor (Å²)' })}
         </span>
         {kind === 'putty' && (
-          <span className="text-[9px] text-muted-foreground/80">putty 管径</span>
+          <span className="text-[9px] text-muted-foreground/80">{t({ zh: 'putty 管径', en: 'putty tube radius' })}</span>
         )}
       </div>
 
@@ -98,13 +100,13 @@ export function ColorLegend() {
       {/* 数值刻度 */}
       <div className="mt-0.5 flex items-baseline justify-between font-mono text-[9px] leading-none text-muted-foreground">
         {kind === 'sasa'
-          ? <><span>埋藏 0%</span><span className="text-[8px]">暴露分数</span><span>100% 暴露</span></>
+          ? <><span>{t({ zh: '埋藏 0%', en: 'buried 0%' })}</span><span className="text-[8px]">{t({ zh: '暴露分数', en: 'exposure' })}</span><span>{t({ zh: '100% 暴露', en: '100% exposed' })}</span></>
           : <>
             <span>{bRange ? bRange.min.toFixed(1) : '—'}</span>
             <span>{bRange ? ((bRange.min + (bRange.cap ?? bRange.max)) / 2).toFixed(0) : ''}</span>
             <span>
               {bRange ? (bRange.cap ?? bRange.max).toFixed(1) : '—'}
-              {bRange?.cap != null && <span className="text-[8px] text-amber-600 dark:text-amber-400" title={`已钳制（实际最大 ${bRange.max.toFixed(0)}+）`}>*</span>}
+              {bRange?.cap != null && <span className="text-[8px] text-amber-600 dark:text-amber-400" title={t({ zh: `已钳制（实际最大 ${bRange.max.toFixed(0)}+）`, en: `clamped (actual max ${bRange.max.toFixed(0)}+)` })}>*</span>}
             </span>
           </>}
       </div>
@@ -123,8 +125,8 @@ export function ColorLegend() {
             <path d={puttyTubePath()} fill="url(#mv-putty-grad)" stroke="rgba(0,0,0,0.18)" strokeWidth="0.4" />
           </svg>
           <div className="mt-0.5 flex items-center justify-between text-[9px] leading-none text-muted-foreground/80">
-            <span>刚性（细）</span>
-            <span>柔性（粗）</span>
+            <span>{t({ zh: '刚性（细）', en: 'rigid (thin)' })}</span>
+            <span>{t({ zh: '柔性（粗）', en: 'flexible (thick)' })}</span>
           </div>
         </>
       )}

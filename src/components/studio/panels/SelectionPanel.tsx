@@ -8,23 +8,25 @@ import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
 import { maskToIndices, evaluateSelection, PRESET_SELECTIONS } from '@/lib/molecular/selection'
 import { buildNamedMasks } from '@/lib/molecular/store'
 import { cn } from '@/lib/utils'
+import { useI18n, tt, type DualText } from '@/i18n'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Input } from '@/components/ui/input'
 
-const QUICK_EXPRS: { expr: string; label: string }[] = [
-  { expr: 'all', label: '全部' },
-  { expr: 'protein', label: '蛋白' },
-  { expr: 'nucleic', label: '核酸' },
-  { expr: 'ligand', label: '配体' },
-  { expr: 'water', label: '水' },
-  { expr: 'metal', label: '金属' },
-  { expr: 'backbone', label: '主链' },
-  { expr: 'sidechain', label: '侧链' },
-  { expr: 'helix', label: '螺旋' },
-  { expr: 'sheet', label: '折叠' },
+const QUICK_EXPRS: { expr: string; label: DualText }[] = [
+  { expr: 'all', label: { zh: '全部', en: 'All' } },
+  { expr: 'protein', label: { zh: '蛋白', en: 'Protein' } },
+  { expr: 'nucleic', label: { zh: '核酸', en: 'Nucleic' } },
+  { expr: 'ligand', label: { zh: '配体', en: 'Ligand' } },
+  { expr: 'water', label: { zh: '水', en: 'Water' } },
+  { expr: 'metal', label: { zh: '金属', en: 'Metal' } },
+  { expr: 'backbone', label: { zh: '主链', en: 'Backbone' } },
+  { expr: 'sidechain', label: { zh: '侧链', en: 'Sidechain' } },
+  { expr: 'helix', label: { zh: '螺旋', en: 'Helix' } },
+  { expr: 'sheet', label: { zh: '折叠', en: 'Sheet' } },
 ]
 
 export function SelectionPanel() {
+  const { t } = useI18n()
   const [expr, setExpr] = useState('')
   const [name, setName] = useState('')
   const selection = useMolStore(s => s.selection)
@@ -60,18 +62,18 @@ export function SelectionPanel() {
     e?.preventDefault()
     if (!expr.trim()) return
     const res = selectFromExpr(expr)
-    if (res.error) toast.error(`选择错误：${res.error}`)
-    else toast.success(`已选择 ${res.count.toLocaleString()} 个原子`)
+    if (res.error) toast.error(`${tt({ zh: '选择错误：', en: 'Selection error: ' })}${res.error}`)
+    else toast.success(tt({ zh: `已选择 ${res.count.toLocaleString()} 个原子`, en: `Selected ${res.count.toLocaleString()} atoms` }))
   }
 
   return (
     <div className="pb-4">
-      <SectionTitle>表达式选择</SectionTitle>
+      <SectionTitle>{t({ zh: '表达式选择', en: 'Selection expression' })}</SectionTitle>
       <form onSubmit={runExpr} className="flex gap-1.5 px-2">
         <Input
           value={expr}
           onChange={e => setExpr(e.target.value)}
-          placeholder="如 chain A and resi 40-80"
+          placeholder={t({ zh: '如 chain A and resi 40-80', en: 'e.g. chain A and resi 40-80' })}
           className="h-8 flex-1 border-border bg-background font-mono text-[11px]"
         />
         <button
@@ -92,25 +94,25 @@ export function SelectionPanel() {
             }}
             className="rounded-md border border-border bg-background px-2.5 py-1 text-[10px] font-medium transition hover:border-primary/40 hover:bg-primary/5"
           >
-            {q.label}
+            {t(q.label)}
           </button>
         ))}
       </div>
 
       {/* 当前选择 */}
-      <SectionTitle>当前选择</SectionTitle>
+      <SectionTitle>{t({ zh: '当前选择', en: 'Current selection' })}</SectionTitle>
       {stats ? (
         <div className="mx-2 rounded-lg border border-primary/60 bg-primary/5 p-3">
           <div className="grid grid-cols-2 gap-y-1.5 text-[11px] tabular-nums">
-            <span className="text-muted-foreground">原子</span>
+            <span className="text-muted-foreground">{t({ zh: '原子', en: 'Atoms' })}</span>
             <span className="text-right font-mono font-semibold">{stats.atoms.toLocaleString()}</span>
-            <span className="text-muted-foreground">残基</span>
+            <span className="text-muted-foreground">{t({ zh: '残基', en: 'Residues' })}</span>
             <span className="text-right font-mono">{stats.residues.toLocaleString()}</span>
-            <span className="text-muted-foreground">链</span>
+            <span className="text-muted-foreground">{t({ zh: '链', en: 'Chains' })}</span>
             <span className="text-right font-mono">{stats.chains}</span>
             {stats.het > 0 && (
               <>
-                <span className="text-muted-foreground">杂原子</span>
+                <span className="text-muted-foreground">{t({ zh: '杂原子', en: 'Hetero atoms' })}</span>
                 <span className="text-right font-mono">{stats.het.toLocaleString()}</span>
               </>
             )}
@@ -123,25 +125,25 @@ export function SelectionPanel() {
               }}
               className="flex h-6.5 items-center gap-1 rounded-md border border-border bg-background px-2 text-[10px] font-medium transition hover:bg-accent"
             >
-              <Crosshair className="h-3 w-3" /> 聚焦
+              <Crosshair className="h-3 w-3" /> {t({ zh: '聚焦', en: 'Focus' })}
             </button>
             <button
               onClick={() => invertSelection()}
               className="flex h-6.5 items-center gap-1 rounded-md border border-border bg-background px-2 text-[10px] font-medium transition hover:bg-accent"
             >
-              反选
+              {t({ zh: '反选', en: 'Invert' })}
             </button>
             <button
               onClick={() => addLabelsForSelection()}
               className="flex h-6.5 items-center gap-1 rounded-md border border-border bg-background px-2 text-[10px] font-medium transition hover:bg-accent"
             >
-              <Tag className="h-3 w-3" /> 标注 (L)
+              <Tag className="h-3 w-3" /> {t({ zh: '标注 (L)', en: 'Label (L)' })}
             </button>
             <button
               onClick={() => setSelection(null, [])}
               className="flex h-6.5 items-center gap-1 rounded-md border border-border bg-background px-2 text-[10px] font-medium transition hover:bg-accent"
             >
-              <X className="h-3 w-3" /> 清除
+              <X className="h-3 w-3" /> {t({ zh: '清除', en: 'Clear' })}
             </button>
           </div>
 
@@ -150,32 +152,32 @@ export function SelectionPanel() {
             <Input
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="命名保存…"
+              placeholder={t({ zh: '命名保存…', en: 'Save as…' })}
               className="h-7 flex-1 border-border bg-background text-[11px]"
             />
             <button
               onClick={() => {
-                if (!name.trim()) return toast.error('请输入名称')
+                if (!name.trim()) return toast.error(tt({ zh: '请输入名称', en: 'Enter a name' }))
                 saveNamedSelection(name.trim())
-                toast.success(`已保存命名选择 "${name.trim()}"`)
+                toast.success(tt({ zh: `已保存命名选择 "${name.trim()}"`, en: `Saved named selection "${name.trim()}"` }))
                 setName('')
               }}
               className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[10px] font-medium transition hover:bg-accent"
             >
-              <BookmarkPlus className="h-3 w-3" /> 保存
+              <BookmarkPlus className="h-3 w-3" /> {t({ zh: '保存', en: 'Save' })}
             </button>
           </div>
         </div>
       ) : (
         <p className="px-3 text-[11px] text-muted-foreground">
-          在 3D 视图中点击残基（Ctrl+点击选单原子，Shift 追加，Alt 移除），或使用上方表达式。
+          {t({ zh: '在 3D 视图中点击残基（Ctrl+点击选单原子，Shift 追加，Alt 移除），或使用上方表达式。', en: 'Click residues in the 3D view (Ctrl+click for single atoms, Shift to add, Alt to remove), or use the expression above.' })}
         </p>
       )}
 
       {/* 命名选择 */}
       {namedSelections.length > 0 && (
         <>
-          <SectionTitle>命名选择</SectionTitle>
+          <SectionTitle>{t({ zh: '命名选择', en: 'Named selections' })}</SectionTitle>
           <div className="space-y-0.5 px-2">
             {namedSelections.map(ns => (
               <div key={ns.name} className="group flex items-center gap-2 rounded-md border-l-2 border-l-[#9c4a4a]/70 px-2 py-1.5 transition hover:bg-accent">
@@ -192,7 +194,7 @@ export function SelectionPanel() {
                   }}
                   className="rounded px-1.5 py-0.5 text-[10px] text-primary transition hover:bg-primary/10"
                 >
-                  选中
+                  {t({ zh: '选中', en: 'Select' })}
                 </button>
                 <button
                   onClick={() => deleteNamedSelection(ns.name)}
@@ -207,7 +209,7 @@ export function SelectionPanel() {
       )}
 
       <PanelHint>
-        语法：<code className="text-[10px]">chain A</code> · <code className="text-[10px]">resi 1-60</code> · <code className="text-[10px]">resn HEM</code> · <code className="text-[10px]">name CA</code> · <code className="text-[10px]">elem Fe</code> · <code className="text-[10px]">within 5 of (…)</code> · <code className="text-[10px]">byres(…)</code>，可用 and / or / not。
+        {t({ zh: '语法：', en: 'Syntax:' })} <code className="text-[10px]">chain A</code> · <code className="text-[10px]">resi 1-60</code> · <code className="text-[10px]">resn HEM</code> · <code className="text-[10px]">name CA</code> · <code className="text-[10px]">elem Fe</code> · <code className="text-[10px]">within 5 of (…)</code> · <code className="text-[10px]">byres(…)</code>{t({ zh: '，可用 and / or / not。', en: ' — combine with and / or / not.' })}
       </PanelHint>
       <div className={cn('hidden', st ? '' : '')} />
     </div>

@@ -15,6 +15,7 @@ import { residueOneLetter } from '@/lib/molecular/chemistry'
 import { readableInk, residueCssColor, ssCssColor } from '@/lib/molecular/colors'
 import { evaluateSelection, maskToIndices } from '@/lib/molecular/selection'
 import type { NamedSelection } from '@/lib/molecular/types'
+import { useI18n, tt, type DualText } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { FadeEdge } from './FadeEdge'
 
@@ -23,10 +24,10 @@ const SEQ_HEIGHT_CLASS: Record<string, string> = {
   normal: 'max-h-40',
   tall: 'max-h-72',
 }
-const SEQ_HEIGHT_LABEL: Record<string, string> = {
-  compact: '紧凑',
-  normal: '标准',
-  tall: '加高',
+const SEQ_HEIGHT_LABEL: Record<string, DualText> = {
+  compact: { zh: '紧凑', en: 'Compact' },
+  normal: { zh: '标准', en: 'Normal' },
+  tall: { zh: '加高', en: 'Tall' },
 }
 
 /** 残基格宽（px）：19px 紧凑密度（原 26px），字母居中 */
@@ -58,6 +59,7 @@ interface DragView {
 }
 
 export function SequenceBar() {
+  const { t } = useI18n()
   const ui = useMolStore(s => s.ui)
   const setUi = useMolStore(s => s.setUi)
   const structures = useMolStore(s => s.structures)
@@ -137,7 +139,7 @@ export function SequenceBar() {
     }
     const hits = resHits.length ? resHits : ligHits
     if (!hits.length) {
-      toast.warning(`未找到「${q}」：试试 残基号（57）、链+号（A57）或配体名（HEM）`)
+      toast.warning(tt({ zh: `未找到「${q}」：试试 残基号（57）、链+号（A57）或配体名（HEM）`, en: `No match for "${q}" — try residue number (57), chain+number (A57), or ligand name (HEM)` }))
       return
     }
     const indices: number[] = []
@@ -148,10 +150,10 @@ export function SequenceBar() {
     useMolStore.getState().setActive(activeId)
     useMolStore.getState().setSelection(activeId, indices)
     setSearchOpen(false)
-    const desc = resHits.length
-      ? `${data.residues[hits[0]].resName}${data.residues[hits[0]].resSeq}（链 ${data.residues[hits[0]].chainId.trim() || '?'}）等 ${hits.length} 个残基`
-      : `${hits.length} 个 ${uq} 残基`
-    toast.success(`已定位并选中 ${desc}`)
+    const firstHit = data.residues[hits[0]]
+    toast.success(tt(resHits.length
+      ? { zh: `已定位并选中 ${firstHit.resName}${firstHit.resSeq}（链 ${firstHit.chainId.trim() || '?'}）等 ${hits.length} 个残基`, en: `Located and selected ${firstHit.resName}${firstHit.resSeq} (chain ${firstHit.chainId.trim() || '?'}) — ${hits.length} residues in total` }
+      : { zh: `已定位并选中 ${hits.length} 个 ${uq} 残基`, en: `Located and selected ${hits.length} ${uq} residues` }))
   }
 
   // ———— 拖拽批量选取：window 级 pointermove/up + Esc 取消（早退前挂载，内部 null 守卫）————
@@ -292,6 +294,8 @@ export function SequenceBar() {
     updateSettings({ sequenceHeight: next })
   }
 
+  const heightLabel = t(SEQ_HEIGHT_LABEL[sequenceHeight] ?? { zh: '标准', en: 'Normal' })
+
   /** 事件委托：从事件目标解析残基格（data-chain/data-k/data-res） */
   const cellFrom = (e: React.PointerEvent | React.MouseEvent) =>
     (e.target as HTMLElement).closest<HTMLElement>('button[data-res]')
@@ -355,26 +359,26 @@ export function SequenceBar() {
   const doSaveBar = () => {
     if (!saveBar || !activeId) return
     const name = saveName.trim()
-    if (!name) return toast.error('请输入选择名称')
+    if (!name) return toast.error(tt({ zh: '请输入选择名称', en: 'Enter a selection name' }))
     saveNamedSelection(name, saveBar.indices, activeId)
-    toast.success(`已保存命名选择 "${name}"（${saveBar.residues} 残基 · ${saveBar.atoms} 原子）`)
+    toast.success(tt({ zh: `已保存命名选择 "${name}"（${saveBar.residues} 残基 · ${saveBar.atoms} 原子）`, en: `Named selection "${name}" saved (${saveBar.residues} residues · ${saveBar.atoms} atoms)` }))
     setSaveBar(null)
     setSaveName('')
   }
 
   const doSaveLib = () => {
     const name = libName.trim()
-    if (!name) return toast.error('请输入选择名称')
-    if (!selection.structureId || !selection.indices.length) return toast.error('当前没有选择')
+    if (!name) return toast.error(tt({ zh: '请输入选择名称', en: 'Enter a selection name' }))
+    if (!selection.structureId || !selection.indices.length) return toast.error(tt({ zh: '当前没有选择', en: 'No current selection' }))
     saveNamedSelection(name)
-    toast.success(`已保存命名选择 "${name}"（${selection.indices.length} 原子）`)
+    toast.success(tt({ zh: `已保存命名选择 "${name}"（${selection.indices.length} 原子）`, en: `Named selection "${name}" saved (${selection.indices.length} atoms)` }))
     setLibName('')
   }
 
   const recallNS = (ns: NamedSelection): boolean => {
     const d = dataRegistry.get(ns.structureId)
     if (!d) {
-      toast.error('结构数据缺失，无法召回')
+      toast.error(tt({ zh: '结构数据缺失，无法召回', en: 'Structure data missing — cannot recall' }))
       return false
     }
     useMolStore.getState().setActive(ns.structureId)
@@ -385,7 +389,7 @@ export function SequenceBar() {
     if (ns.expr) {
       const res = evaluateSelection(ns.expr, { structure: d, named: buildNamedMasks(ns.structureId, d) })
       if (res.error) {
-        toast.error(`召回失败：${res.error}`)
+        toast.error(tt({ zh: `召回失败：${res.error}`, en: `Recall failed: ${res.error}` }))
         return false
       }
       useMolStore.getState().setSelection(ns.structureId, maskToIndices(res.mask))
@@ -400,14 +404,20 @@ export function SequenceBar() {
     if (sel.structureId) engineRef.current?.fitView([{ structureId: sel.structureId, indices: sel.indices }])
   }
 
-  // 拖拽浮动提示内容
-  let tipText = ''
+  // 拖拽浮动提示内容（渲染期双语）
+  let tip: DualText | null = null
   if (dragView && data) {
     const first = data.residues[dragView.chainRes[dragView.lo]]
     const last = data.residues[dragView.chainRes[dragView.hi]]
     if (first && last) {
       const n = dragView.hi - dragView.lo + 1
-      tipText = `${(first.chainId || ' ').trim() || '?'} ${first.resSeq}–${last.resSeq} · ${n} 残基${dragView.mode === 'add' ? ' · 追加' : dragView.mode === 'remove' ? ' · 移除' : ''}`
+      const chain = (first.chainId || ' ').trim() || '?'
+      const modeZh = dragView.mode === 'add' ? ' · 追加' : dragView.mode === 'remove' ? ' · 移除' : ''
+      const modeEn = dragView.mode === 'add' ? ' · add' : dragView.mode === 'remove' ? ' · remove' : ''
+      tip = {
+        zh: `${chain} ${first.resSeq}–${last.resSeq} · ${n} 残基${modeZh}`,
+        en: `${chain} ${first.resSeq}–${last.resSeq} · ${n} residues${modeEn}`,
+      }
     }
   }
 
@@ -420,17 +430,17 @@ export function SequenceBar() {
           className="flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-left text-muted-foreground transition hover:text-foreground"
         >
           <Dna className="h-3 w-3 shrink-0 text-muted-foreground/70" />
-          <span className="mol-micro shrink-0">序列</span>
+          <span className="mol-micro shrink-0">{t({ zh: '序列', en: 'Sequence' })}</span>
           <span className="min-w-0 truncate font-mono text-[9px] tabular-nums text-muted-foreground/60">
-            {st.name} · {polymerChains.length} 条链 · {(data.residues.length).toLocaleString()} 残基
+            {t({ zh: `${st.name} · ${polymerChains.length} 条链 · ${data.residues.length.toLocaleString()} 残基`, en: `${st.name} · ${polymerChains.length} chains · ${data.residues.length.toLocaleString()} residues` })}
           </span>
           {selectedResidues.size > 0 && (
             <span
               className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-primary/15 px-1.5 font-mono text-[9px] font-bold tabular-nums text-primary"
-              title={`当前选择覆盖 ${selectedResidues.size} 个残基（任何来源：拖拽/3D 点击/命令行/AI；Esc 取消选择）`}
+              title={t({ zh: `当前选择覆盖 ${selectedResidues.size} 个残基（任何来源：拖拽/3D 点击/命令行/AI；Esc 取消选择）`, en: `Current selection spans ${selectedResidues.size} residues (any source: drag / 3D click / command line / AI; Esc to clear)` })}
             >
               <span className="h-1 w-1 rounded-full bg-primary" />
-              已选 {selectedResidues.size}
+              {t({ zh: `已选 ${selectedResidues.size}`, en: `${selectedResidues.size} selected` })}
             </span>
           )}
           {visArr && polymerTotal > 0 && (
@@ -439,10 +449,10 @@ export function SequenceBar() {
                 'ml-1 flex shrink-0 items-center gap-1 font-mono text-[9px] font-medium tabular-nums',
                 polymerInView === polymerTotal ? 'text-primary' : 'text-muted-foreground',
               )}
-              title={`视野内 ${polymerInView} / 共 ${polymerTotal} 个聚合物残基（相机移动实时更新）`}
+              title={t({ zh: `视野内 ${polymerInView} / 共 ${polymerTotal} 个聚合物残基（相机移动实时更新）`, en: `${polymerInView} of ${polymerTotal} polymer residues in view (updates live as the camera moves)` })}
             >
               <span className={cn('h-1 w-1 shrink-0 rounded-full', polymerInView === polymerTotal ? 'bg-primary' : 'bg-muted-foreground/50')} />
-              {polymerInView}/{polymerTotal} 视野
+              {t({ zh: `${polymerInView}/${polymerTotal} 视野`, en: `${polymerInView}/${polymerTotal} in view` })}
             </span>
           )}
           <span className="ml-auto shrink-0 text-muted-foreground/70">{ui.sequenceOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}</span>
@@ -459,11 +469,11 @@ export function SequenceBar() {
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                   )}
-                  title={`选择库：保存/召回命名选择（拖拽序列格框选残基后可保存；类似 PyMOL select name, expr）`}
-                  aria-label="打开选择库"
+                  title={t({ zh: '选择库：保存/召回命名选择（拖拽序列格框选残基后可保存；类似 PyMOL select name, expr）', en: 'Selection library: save/recall named selections (drag over sequence cells to box-select residues; like PyMOL select name, expr)' })}
+                  aria-label={t({ zh: '打开选择库', en: 'Open selection library' })}
                 >
                   <Bookmark className="h-3 w-3" />
-                  选择
+                  {t({ zh: '选择', en: 'Select' })}
                   {namedSelections.length > 0 && (
                     <span className="ml-0.5 rounded-full bg-primary px-1 font-mono text-[8px] font-bold leading-[13px] text-primary-foreground">
                       {namedSelections.length}
@@ -474,8 +484,8 @@ export function SequenceBar() {
               <PopoverContent className="w-72 p-2" align="end" side="top">
                 <div className="flex items-center gap-1.5 px-0.5 text-[10px] font-medium text-muted-foreground">
                   <Bookmark className="h-3 w-3" />
-                  选择库
-                  <span className="tabular-nums">{namedSelections.length} 个已保存</span>
+                  {t({ zh: '选择库', en: 'Selection library' })}
+                  <span className="tabular-nums">{t({ zh: `${namedSelections.length} 个已保存`, en: `${namedSelections.length} saved` })}</span>
                 </div>
                 {/* 保存当前选择 */}
                 {selection.structureId === activeId && selection.indices.length > 0 ? (
@@ -484,21 +494,21 @@ export function SequenceBar() {
                       value={libName}
                       onChange={e => setLibName(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') doSaveLib() }}
-                      placeholder={`命名保存当前选择（${selection.indices.length.toLocaleString()} 原子）…`}
+                      placeholder={t({ zh: `命名保存当前选择（${selection.indices.length.toLocaleString()} 原子）…`, en: `Name and save current selection (${selection.indices.length.toLocaleString()} atoms)…` })}
                       className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[11px] outline-none transition focus:border-foreground/30"
-                      aria-label="命名保存当前选择"
+                      aria-label={t({ zh: '命名保存当前选择', en: 'Name and save current selection' })}
                     />
                     <button
                       onClick={doSaveLib}
                       className="flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary px-2 text-[10px] font-medium text-primary-foreground transition hover:opacity-90"
                     >
                       <BookmarkPlus className="h-3 w-3" />
-                      保存
+                      {t({ zh: '保存', en: 'Save' })}
                     </button>
                   </div>
                 ) : (
                   <p className="mt-1 px-0.5 text-[10px] leading-relaxed text-muted-foreground">
-                    当前无选择——在序列上按住鼠标拖拽框选残基，或用命令行 select。
+                    {t({ zh: '当前无选择——在序列上按住鼠标拖拽框选残基，或用命令行 select。', en: 'No current selection — drag over the sequence to box-select residues, or use select in the command line.' })}
                   </p>
                 )}
                 {/* 已保存列表 */}
@@ -511,27 +521,27 @@ export function SequenceBar() {
                           <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium">{ns.name}</span>
                           <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">{ns.count.toLocaleString()} at</span>
                           {stName && ns.structureId !== activeId && (
-                            <span className="max-w-14 shrink-0 truncate text-[9px] text-muted-foreground/70" title={`属于结构 ${stName}`}>{stName}</span>
+                            <span className="max-w-14 shrink-0 truncate text-[9px] text-muted-foreground/70" title={t({ zh: `属于结构 ${stName}`, en: `Belongs to structure ${stName}` })}>{stName}</span>
                           )}
                           <button
                             onClick={() => recallNS(ns)}
                             className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-primary transition hover:bg-primary/10"
-                            title="召回为当前选择"
+                            title={t({ zh: '召回为当前选择', en: 'Recall as current selection' })}
                           >
-                            选中
+                            {t({ zh: '选中', en: 'Select' })}
                           </button>
                           <button
                             onClick={() => focusNS(ns)}
                             className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
-                            title="召回并缩放聚焦"
+                            title={t({ zh: '召回并缩放聚焦', en: 'Recall and zoom to fit' })}
                           >
-                            聚焦
+                            {t({ zh: '聚焦', en: 'Focus' })}
                           </button>
                           <button
                             onClick={() => deleteNamedSelection(ns.name)}
                             className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                            title="删除该命名选择"
-                            aria-label={`删除 ${ns.name}`}
+                            title={t({ zh: '删除该命名选择', en: 'Delete this named selection' })}
+                            aria-label={t({ zh: `删除 ${ns.name}`, en: `Delete ${ns.name}` })}
                           >
                             <Trash2 className="h-3 w-3" />
                           </button>
@@ -542,7 +552,7 @@ export function SequenceBar() {
                 )}
                 {namedSelections.length === 0 && (
                   <p className="mt-1 px-0.5 text-[10px] leading-relaxed text-muted-foreground">
-                    暂无已保存选择。拖拽序列格框选残基后保存（类似 PyMOL 的 select name, expr），后续可一键召回或聚焦。
+                    {t({ zh: '暂无已保存选择。拖拽序列格框选残基后保存（类似 PyMOL 的 select name, expr），后续可一键召回或聚焦。', en: 'No saved selections yet. Box-select residues on the sequence and save (like PyMOL select name, expr), then recall or focus in one click.' })}
                   </p>
                 )}
               </PopoverContent>
@@ -551,11 +561,11 @@ export function SequenceBar() {
               <PopoverTrigger asChild>
                 <button
                   className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
-                  title="搜索定位残基：残基号（57）、链+号（A57）或配体名（HEM）"
-                  aria-label="搜索定位残基"
+                  title={t({ zh: '搜索定位残基：残基号（57）、链+号（A57）或配体名（HEM）', en: 'Locate residue: residue number (57), chain+number (A57), or ligand name (HEM)' })}
+                  aria-label={t({ zh: '搜索定位残基', en: 'Locate residue' })}
                 >
                   <Search className="h-3 w-3" />
-                  定位
+                  {t({ zh: '定位', en: 'Locate' })}
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-60 p-2" align="end" side="top">
@@ -565,11 +575,11 @@ export function SequenceBar() {
                   onKeyDown={e => { if (e.key === 'Enter') doSearch() }}
                   placeholder="57 · A57 · HEM…"
                   autoFocus
-                  aria-label="残基搜索词"
+                  aria-label={t({ zh: '残基搜索词', en: 'Residue search term' })}
                   className="h-7 w-full rounded-md border border-border bg-background px-2 font-mono text-[11px] outline-none transition focus:border-foreground/30"
                 />
                 <p className="mt-1.5 px-0.5 text-[9px] leading-relaxed text-muted-foreground">
-                  Enter 定位：残基号（任意链同号并选）、链字母+号（精确到链）、配体名（如 HEM）。选中后自动滚动到可见位置。
+                  {t({ zh: 'Enter 定位：残基号（任意链同号并选）、链字母+号（精确到链）、配体名（如 HEM）。选中后自动滚动到可见位置。', en: 'Press Enter to locate: residue number (same number in any chain), chain letter + number (exact chain), or ligand name (e.g. HEM). Scrolls the hit into view after selecting.' })}
                 </p>
               </PopoverContent>
             </Popover>
@@ -581,19 +591,21 @@ export function SequenceBar() {
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
-              title={`视口聚焦指示：${seqFocus ? '开（下划线 = 残基在当前相机视野内，切层裁剪同步感知）' : '关（set seq_focus on 开启）'}`}
+              title={t(seqFocus
+                ? { zh: '视口聚焦指示：开（下划线 = 残基在当前相机视野内，切层裁剪同步感知）', en: 'Viewport focus indicator: on (underline = residue within current camera view, syncs with clipping)' }
+                : { zh: '视口聚焦指示：关（set seq_focus on 开启）', en: 'Viewport focus indicator: off (enable with set seq_focus on)' })}
               aria-pressed={seqFocus}
             >
               {seqFocus ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-              聚焦
+              {t({ zh: '聚焦', en: 'Focus' })}
             </button>
             <button
               onClick={cycleHeight}
               className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
-              title={`序列条高度：${SEQ_HEIGHT_LABEL[sequenceHeight] ?? '标准'}（点击切换）`}
+              title={t({ zh: `序列条高度：${heightLabel}（点击切换）`, en: `Sequence bar height: ${heightLabel} (click to cycle)` })}
             >
               <ChevronsUpDown className="h-3 w-3" />
-              {SEQ_HEIGHT_LABEL[sequenceHeight] ?? '标准'}
+              {heightLabel}
             </button>
           </>
         )}
@@ -606,24 +618,24 @@ export function SequenceBar() {
             <div className="mb-1.5 flex flex-wrap items-center gap-1.5 rounded-lg border border-primary/50 bg-primary/[0.06] px-2 py-1.5 shadow-sm">
               <BookmarkPlus className="h-3.5 w-3.5 shrink-0 text-primary" />
               <span className="shrink-0 text-[11px] font-medium">
-                已框选 <span className="font-mono tabular-nums">{saveBar.chainId} {saveBar.from}–{saveBar.to}</span>
+                {t({ zh: '已框选', en: 'Box-selected' })} <span className="font-mono tabular-nums">{saveBar.chainId} {saveBar.from}–{saveBar.to}</span>
               </span>
               <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                {saveBar.residues} 残基 · {saveBar.atoms.toLocaleString()} 原子
+                {t({ zh: `${saveBar.residues} 残基 · ${saveBar.atoms.toLocaleString()} 原子`, en: `${saveBar.residues} residues · ${saveBar.atoms.toLocaleString()} atoms` })}
               </span>
               <input
                 value={saveName}
                 onChange={e => setSaveName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') doSaveBar() }}
-                placeholder="命名保存（如 active_site）…"
+                placeholder={t({ zh: '命名保存（如 active_site）…', en: 'Save as name (e.g. active_site)…' })}
                 className="h-6.5 min-w-28 flex-1 rounded-md border border-border bg-background px-2 text-[11px] outline-none transition focus:border-foreground/30"
-                aria-label="框选范围命名"
+                aria-label={t({ zh: '框选范围命名', en: 'Name the boxed range' })}
               />
               <button
                 onClick={doSaveBar}
                 className="flex h-6.5 shrink-0 items-center gap-1 rounded-md bg-primary px-2.5 text-[10px] font-medium text-primary-foreground transition hover:opacity-90"
               >
-                保存选择
+                {t({ zh: '保存选择', en: 'Save selection' })}
               </button>
               <button
                 onClick={() => {
@@ -632,15 +644,15 @@ export function SequenceBar() {
                   engineRef.current?.fitView([{ structureId: activeId, indices: saveBar.indices }])
                 }}
                 className="flex h-6.5 shrink-0 items-center rounded-md border border-border bg-background px-2 text-[10px] font-medium transition hover:bg-accent"
-                title="重新选中该范围并缩放聚焦"
+                title={t({ zh: '重新选中该范围并缩放聚焦', en: 'Re-select this range and zoom to fit' })}
               >
-                聚焦
+                {t({ zh: '聚焦', en: 'Focus' })}
               </button>
               <button
                 onClick={() => setSaveBar(null)}
                 className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-                title="关闭（不保存）"
-                aria-label="关闭框选保存条"
+                title={t({ zh: '关闭（不保存）', en: 'Close (without saving)' })}
+                aria-label={t({ zh: '关闭框选保存条', en: 'Close box-selection save bar' })}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -652,7 +664,7 @@ export function SequenceBar() {
             <div className="mb-1 flex items-center gap-2 border-b border-dashed border-border/60 pb-2.5 pt-1">
               <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1.5 border-r border-border/60 bg-background pr-1">
                 <FlaskConical className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                <span className="mol-micro text-muted-foreground">配体</span>
+                <span className="mol-micro text-muted-foreground">{t({ zh: '配体', en: 'Ligands' })}</span>
               </span>
               <FadeEdge className="gap-1 pb-0.5">
                 {ligandMolecules.map(m => {
@@ -683,7 +695,10 @@ export function SequenceBar() {
                           : 'border-border bg-transparent text-amber-700 hover:-translate-y-px hover:border-amber-500/50 hover:bg-amber-500/10 dark:text-amber-400',
                         visArr && !molInView && 'opacity-45',
                       )}
-                      title={`${m.label}（链 ${m.chainIds.map(c => c.trim() || '?').join('/')}）· ${m.atoms} 原子${m.residues.length > 1 ? ` · ${m.residues.length} 个残基` : ''}${visArr ? (molInView ? ' · 在视野内' : ' · 视野外') : ''} · 点击选择 · 双击聚焦`}
+                      title={t({
+                        zh: `${m.label}（链 ${m.chainIds.map(c => c.trim() || '?').join('/')}）· ${m.atoms} 原子${m.residues.length > 1 ? ` · ${m.residues.length} 个残基` : ''}${visArr ? (molInView ? ' · 在视野内' : ' · 视野外') : ''} · 点击选择 · 双击聚焦`,
+                        en: `${m.label} (chain ${m.chainIds.map(c => c.trim() || '?').join('/')}) · ${m.atoms} atoms${m.residues.length > 1 ? ` · ${m.residues.length} residues` : ''}${visArr ? (molInView ? ' · in view' : ' · out of view') : ''} · click to select · double-click to focus`,
+                      })}
                     >
                       {m.resNames.length > 1 ? m.label : m.resNames[0]}
                       <span className="ml-0.5 text-[9px] font-normal tabular-nums opacity-60">{r0.chainId.trim()}{r0.resSeq}{m.residues.length > 1 && m.resNames.length === 1 ? '+' : ''}</span>
@@ -709,7 +724,7 @@ export function SequenceBar() {
                       engineRef.current?.fitView([{ structureId: activeId!, indices: useMolStore.getState().selection.indices }])
                     }}
                     className="group flex shrink-0 items-center gap-1 rounded px-0.5 py-0.5 transition hover:bg-accent"
-                    title={`点击选择链 ${chain.id.trim() || '—'}（${(chain.residueIdx || []).length} 残基）· 双击聚焦`}
+                    title={t({ zh: `点击选择链 ${chain.id.trim() || '—'}（${(chain.residueIdx || []).length} 残基）· 双击聚焦`, en: `Click to select chain ${chain.id.trim() || '—'} (${(chain.residueIdx || []).length} residues) · double-click to focus` })}
                   >
                     <span className="h-3.5 w-1 rounded-full opacity-80 transition group-hover:h-4" style={{ background: color }} />
                     <span className="font-mono text-[11px] font-bold leading-none">{chain.id === ' ' ? '—' : chain.id}</span>
@@ -746,7 +761,10 @@ export function SequenceBar() {
                             color={cellColor}
                             ink={readableInk(cellColor)}
                             ss={r.ss}
-                            title={`${r.resName} ${r.resSeq}${r.iCode || ''}（链 ${r.chainId.trim() || '?'} · 序号 ${k + 1}）${r.ss === 'H' ? ' · 螺旋' : r.ss === 'E' ? ' · 折叠' : ''}${visArr ? (cellInView ? ' · 在视野内' : ' · 视野外') : ''}`}
+                            title={t({
+                              zh: `${r.resName} ${r.resSeq}${r.iCode || ''}（链 ${r.chainId.trim() || '?'} · 序号 ${k + 1}）${r.ss === 'H' ? ' · 螺旋' : r.ss === 'E' ? ' · 折叠' : ''}${visArr ? (cellInView ? ' · 在视野内' : ' · 视野外') : ''}`,
+                              en: `${r.resName} ${r.resSeq}${r.iCode || ''} (chain ${r.chainId.trim() || '?'} · #${k + 1})${r.ss === 'H' ? ' · helix' : r.ss === 'E' ? ' · strand' : ''}${visArr ? (cellInView ? ' · in view' : ' · out of view') : ''}`,
+                            })}
                             selected={isSel}
                             preview={!!dragView && dragView.chainIdx === ci && k >= dragView.lo && k <= dragView.hi}
                             previewRemove={dragView?.mode === 'remove'}
@@ -763,16 +781,16 @@ export function SequenceBar() {
             )
           })}
           {polymerChains.length === 0 && (
-            <p className="py-2 text-[11px] text-muted-foreground">该结构不含聚合物链（仅配体/小分子）。</p>
+            <p className="py-2 text-[11px] text-muted-foreground">{t({ zh: '该结构不含聚合物链（仅配体/小分子）。', en: 'This structure has no polymer chains (ligands/small molecules only).' })}</p>
           )}
           <p className="pb-0.5 pt-1 text-[9px] leading-relaxed text-muted-foreground/70">
-            拖拽字母格批量选取（Shift 追加 / Alt 移除 / Esc 取消）· 点击选残基 · 双击聚焦 · 框选后可命名保存进选择库；任何来源的选择（3D 点击 / 命令行 / AI）都会在序列上以绿色蒙层标识
+            {t({ zh: '拖拽字母格批量选取（Shift 追加 / Alt 移除 / Esc 取消）· 点击选残基 · 双击聚焦 · 框选后可命名保存进选择库；任何来源的选择（3D 点击 / 命令行 / AI）都会在序列上以绿色蒙层标识', en: 'Drag letters to box-select (Shift to add / Alt to remove / Esc to cancel) · click to select a residue · double-click to focus · box-selection can be named and saved to the library; selections from any source (3D click / command line / AI) are marked with a green overlay on the sequence' })}
           </p>
         </div>
       )}
 
       {/* 拖拽跟随提示：外层 JS 定位（每帧 transform，无 React 渲染），内层做居中偏移 */}
-      {dragView && tipText && (
+      {dragView && tip && (
         <div
           ref={el => {
             dragTipRef.current = el
@@ -781,8 +799,8 @@ export function SequenceBar() {
           className="pointer-events-none fixed left-0 top-0 z-[60]"
         >
           <div className="-translate-x-1/2 -translate-y-[calc(100%+14px)] whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-popover-foreground shadow-lg">
-            {tipText}
-            <span className="ml-1.5 text-[9px] text-muted-foreground">松开确认</span>
+            {t(tip)}
+            <span className="ml-1.5 text-[9px] text-muted-foreground">{t({ zh: '松开确认', en: 'release to confirm' })}</span>
           </div>
         </div>
       )}

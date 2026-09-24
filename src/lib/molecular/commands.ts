@@ -26,6 +26,7 @@ import { buildSvgExport, downloadSvg } from './svg-export'
 import { clearCmdHistory } from './cmd-history'
 import { whenEngineReady } from './engine-ready'
 import { toast } from 'sonner'
+import { tt, type DualText } from '@/i18n'
 
 /** 数值裁剪（NaN 时取默认值） */
 function clampNum(v: number, min: number, max: number, dflt: number): number {
@@ -106,74 +107,85 @@ function nearestInstance(data: StructureData, indices: number[], eng: NonNullabl
   return best
 }
 
-export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
-  { cmd: 'load|open <id>', desc: '从 RCSB 加载 PDB 结构（ChimeraX open 同义）', example: 'load 4hhb · open 4hhb' },
-  { cmd: 'create <名> = <选择>', desc: '从选择创建新对象', example: 'create pocket = within 5 of resn HEM' },
-  { cmd: 'split_chains', desc: '按链组拆分为多个对象', example: 'split_chains' },
-  { cmd: 'select [name=]expr', desc: '选择原子（可命名；sele=当前选择）', example: 'select site = within 5 of resn HEM' },
-  { cmd: 'spectrum count|b, [彩虹] [选择]', desc: '按属性连续渐变着色（PyMOL 兼容）', example: 'spectrum b, rainbow · spectrum count' },
-  { cmd: 'iterate (选择), 字段…', desc: '遍历选择打印原子属性（只读）', example: 'iterate (chain A and name CA), name resn resi b' },
-  { cmd: 'alter (选择), 属性=值', desc: '修改原子属性（b/q/name）', example: 'alter (resi 100-110), b=b+10' },
-  { cmd: 'show <rep> [sel]', desc: '添加表示法（逗号/空格分隔皆可）', example: 'show ballstick, ligand · show cartoon protein' },
-  { cmd: 'hide <rep> [sel]', desc: '移除匹配的表示法', example: 'hide lines' },
-  { cmd: 'color <方案|颜色> [sel]', desc: '给选择上色（pocket=配体距离渐变）', example: 'color red chain A · color pocket' },
-  { cmd: 'util cbc|cnc|ss|cbss|cbao|cbaw', desc: '实用着色（链/灰/SS卡通/元素+AO/元素+白碳）', example: 'util cbc · util cbss' },
-  { cmd: 'set <项> <值>', desc: '渲染设置（灯光/fov/质量/过渡手感 transition…）', example: 'set ambient 0.5 · set transition cinematic' },
-  { cmd: 'bg <颜色>', desc: '设置背景色', example: 'bg black' },
-  { cmd: 'zoom [sel|in|out|N]', desc: '聚焦选择/推拉镜头（纯数字=ChimeraX 倍率；focus 同义）', example: 'zoom ligand · zoom 2 · focus :HEM' },
-  { cmd: 'turn <x|y|z> <±°>', desc: '旋转视角（x俯仰 y水平 z滚转）', example: 'turn y 30 · turn x -15' },
-  { cmd: 'move <x|y|z> <±Å>', desc: '平移视角（x右 y上 z推拉）', example: 'move z -10 · move x 5' },
-  { cmd: 'view <front|top|left|right|back|bottom|x|y|z>', desc: '正交视角预设（保持距离平滑转）', example: 'view top · view front' },
-  { cmd: 'activate <名|编号>', desc: '切换活动结构（多结构工作流）', example: 'activate 1BQL' },
-  { cmd: 'orient [sel]', desc: '主轴对齐视角（PCA）', example: 'orient chain A' },
-  { cmd: 'get_view / set_view', desc: '视角导出/恢复（JSON）', example: 'get_view' },
-  { cmd: 'view save|go|del|list…', desc: '视角书签（缩略图+平滑跳转，Shift+数字）', example: 'view save 口袋' },
-  { cmd: 'tour [id]|stop', desc: '引导式演示场景（逐步自动操作）', example: 'tour quickstart' },
-  { cmd: 'measure dist|angle|dihedral (选择A) (选择B)…', desc: '选择表达式测量（距离取最近原子对，角度/二面角取质心；3D 标注入测量面板）', example: 'measure dist (resn HEM) (within 5 of resn HEM and protein) · measure clear' },
-  { cmd: 'count_atoms [expr]', desc: '统计原子数', example: 'count_atoms chain A' },
-  { cmd: 'spin on|off', desc: '自动旋转', example: 'spin on' },
-  { cmd: 'rock on|off', desc: '相机摇摆（±26°）', example: 'rock on' },
-  { cmd: 'slab <n>|move <±Å>|center|cap|off', desc: '视向切层（厚度/位置/截面封盖）', example: 'slab 20 · slab move -5 · slab cap off' },
-  { cmd: 'stereo on|off', desc: '红蓝立体渲染', example: 'stereo on' },
-  { cmd: 'symmetry <半径Å>|off', desc: '晶体对称伴侣（CRYST1）', example: 'symmetry 25' },
-  { cmd: 'map fetch <id>|fofc|isolevel pos/neg', desc: '电子密度图（SF→FFT，Worker 零阻塞；结构未加载时自动获取；差图双 σ）', example: 'map fofc 3ekj' },
-  { cmd: 'hbonds on|off [n]', desc: '氢键网络开关/距离', example: 'hbonds on 3.2' },
-  { cmd: 'ssao on|off [r]', desc: '环境光遮蔽开关/半径', example: 'ssao on 3' },
-  { cmd: 'superpose <名> [onto <名>] [chain X to Y]', desc: '结构叠合（序列比对+刚体拟合，可选链对）', example: 'superpose 4HHB onto 1A3N chain A to A' },
-  { cmd: 'dssp', desc: 'DSSP 重算二级结构（含无记录结构）', example: 'dssp' },
-  { cmd: 'contacts <exprA> | <exprB> [n]', desc: '界面接触检测（残基对+连线）', example: 'contacts chain A | chain B 4.0' },
-  { cmd: 'interface <链A> <链B> [n]', desc: '链间界面快捷命令', example: 'interface A B' },
-  { cmd: 'xcontacts <A>:<expr> | <B>:<expr> [n]', desc: '跨结构接触（复合物界面，建议先 superpose）', example: 'xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0' },
-  { cmd: 'sasa [probe] [点数]', desc: '溶剂可及面积计算（Shrake–Rupley）', example: 'sasa 1.4 92' },
-  { cmd: 'bsa', desc: '界面埋藏面积 ΔSASA（需 contacts A/B）', example: 'bsa' },
-  { cmd: 'xbsa', desc: '跨结构界面埋藏面积（需 xcontacts，两结构联合三路 SASA）', example: 'xbsa' },
-  { cmd: 'untransform [名]', desc: '撤销叠合变换回原始位姿', example: 'untransform 1D3Z' },
-  { cmd: 'record start|stop', desc: '录制动画为 WebM 视频', example: 'record start' },
-  { cmd: 'morph <名> = <A> <B> [帧] [norefine]', desc: '构象插值轨迹（自动叠合 + 键长约束/去碰撞精修）', example: 'morph m1 = 1BQL 2LYZ 40 · morph m = 1BQL 2LYZ norefine' },
-  { cmd: 'morph multi <名> = <A> <B> <C>… [帧]', desc: '多态构象样条插值（Catmull-Rom 过 3+ 构象）', example: 'morph multi m = 1BQL 2LYZ 2VB1 60' },
-  { cmd: 'movie play|stop|smooth|hold|edit [秒 轮]', desc: '关键帧巡航（smooth=平滑连续路径录像丝滑 · hold=逐帧驻留 · 无秒数走时间轴；edit 编排）', example: 'movie play smooth 4 2 · movie smooth' },
-  { cmd: 'ensemble play|frame|fps…', desc: 'NMR 构象动画控制', example: 'ensemble play' },
-  { cmd: 'save <名>.pdb [选择]', desc: '导出坐标为 PDB 文件', example: 'save myprot.pdb chain A' },
-  { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
-  { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+1.5× 真超采样抗锯齿：内部高分辨率渲染后高质量降采样）', example: 'ray 1920' },
-  { cmd: 'svg [宽px]', desc: '矢量图导出（CPU 投影，无限缩放不失真；可入稿 Illustrator/Inkscape）', example: 'svg 2400' },
-  { cmd: 'show cell / hide cell', desc: '晶胞盒线框（CRYST1，a红 b绿 c蓝）', example: 'show cell' },
-  { cmd: 'axes on|off', desc: '视口坐标轴指示器（点击轴端对齐视角）', example: 'axes off' },
-  { cmd: 'fps on|off', desc: '状态栏性能指示器（FPS/绘制调用/三角形）', example: 'fps on' },
-  { cmd: 'perf on|off|status|restore', desc: '自动性能模式（低帧率降级/恢复）', example: 'perf status · perf off' },
-  { cmd: 'outline on|off [强度 粗细]', desc: '出版级轮廓线（Sobel 深度+亮度描边；ray 同样生效）', example: 'outline on · outline on 2 2.5' },
-  { cmd: 'session save|export|new|info|clear', desc: '会话存档 / 文件导出 / 新建', example: 'session export · session new' },
-  { cmd: 'history [clear]', desc: '命令历史面板（搜索/置顶/执行；clear 清空）', example: 'history · history clear' },
-  { cmd: 'label on|off', desc: '标记当前选择 / 清除标签', example: 'label on' },
-  { cmd: 'preset <名>', desc: '应用风格预设（含出版级互作）', example: 'preset publication' },
-  { cmd: 'isolate <选择>|off', desc: '链隔离：保留选择所在链隐藏其余（多链蛋白单链配体分析）', example: 'isolate (resn HEM and chain A) · isolate off' },
-  { cmd: 'chains hide|show|list', desc: '链显隐手动控制（同链 ID 多链组全匹配）', example: 'chains hide B+C · chains show all' },
-  { cmd: 'scene save|recall|next|list', desc: '场景快照：相机+表示法+链隔离+环境一体保存切换', example: 'scene save A链口袋 · scene recall A链口袋 · scene next' },
-  { cmd: 'delete <名>', desc: '删除命名选择', example: 'delete site' },
-  { cmd: 'close [名|all]', desc: '关闭结构（默认活动结构）', example: 'close · close all · close 4HHB' },
-  { cmd: 'clear', desc: '移除所有结构（同 close all）', example: 'clear' },
-  { cmd: 'help', desc: '显示帮助', example: 'help' },
+export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; example: string; exampleEn?: string }[] = [
+  { cmd: 'load|open <id>', desc: { zh: '从 RCSB 加载 PDB 结构（ChimeraX open 同义）', en: 'Load PDB structure from RCSB (ChimeraX open synonym)' }, example: 'load 4hhb · open 4hhb' },
+  { cmd: 'create <名> = <选择>', cmdEn: 'create <name> = <selection>', desc: { zh: '从选择创建新对象', en: 'Create a new object from a selection' }, example: 'create pocket = within 5 of resn HEM' },
+  { cmd: 'split_chains', desc: { zh: '按链组拆分为多个对象', en: 'Split into one object per chain group' }, example: 'split_chains' },
+  { cmd: 'select [name=]expr', desc: { zh: '选择原子（可命名；sele=当前选择）', en: 'Select atoms (optionally named; sele = current selection)' }, example: 'select site = within 5 of resn HEM' },
+  { cmd: 'spectrum count|b, [彩虹] [选择]', cmdEn: 'spectrum count|b, [rainbow] [selection]', desc: { zh: '按属性连续渐变着色（PyMOL 兼容）', en: 'Continuous property-based coloring (PyMOL compatible)' }, example: 'spectrum b, rainbow · spectrum count' },
+  { cmd: 'iterate (选择), 字段…', cmdEn: 'iterate (selection), fields…', desc: { zh: '遍历选择打印原子属性（只读）', en: 'Iterate over a selection printing atom properties (read-only)' }, example: 'iterate (chain A and name CA), name resn resi b' },
+  { cmd: 'alter (选择), 属性=值', cmdEn: 'alter (selection), property=value', desc: { zh: '修改原子属性（b/q/name）', en: 'Modify atom properties (b/q/name)' }, example: 'alter (resi 100-110), b=b+10' },
+  { cmd: 'show <rep> [sel]', desc: { zh: '添加表示法（逗号/空格分隔皆可）', en: 'Add a representation (comma or space separated)' }, example: 'show ballstick, ligand · show cartoon protein' },
+  { cmd: 'hide <rep> [sel]', desc: { zh: '移除匹配的表示法', en: 'Remove matching representations' }, example: 'hide lines' },
+  { cmd: 'color <方案|颜色> [sel]', cmdEn: 'color <scheme|color> [sel]', desc: { zh: '给选择上色（pocket=配体距离渐变）', en: 'Color a selection (pocket = ligand-distance gradient)' }, example: 'color red chain A · color pocket' },
+  { cmd: 'util cbc|cnc|ss|cbss|cbao|cbaw', desc: { zh: '实用着色（链/灰/SS卡通/元素+AO/元素+白碳）', en: 'Utility coloring (by-chain / gray / SS cartoon / element+AO / element+white-C)' }, example: 'util cbc · util cbss' },
+  { cmd: 'set <项> <值>', cmdEn: 'set <setting> <value>', desc: { zh: '渲染设置（灯光/fov/质量/过渡手感 transition…）', en: 'Render settings (lighting / fov / quality / transition feel…)' }, example: 'set ambient 0.5 · set transition cinematic' },
+  { cmd: 'bg <颜色>', cmdEn: 'bg <color>', desc: { zh: '设置背景色', en: 'Set background color' }, example: 'bg black' },
+  { cmd: 'zoom [sel|in|out|N]', desc: { zh: '聚焦选择/推拉镜头（纯数字=ChimeraX 倍率；focus 同义）', en: 'Focus selection / dolly camera (bare number = ChimeraX magnification; focus synonym)' }, example: 'zoom ligand · zoom 2 · focus :HEM' },
+  { cmd: 'turn <x|y|z> <±°>', desc: { zh: '旋转视角（x俯仰 y水平 z滚转）', en: 'Rotate view (x pitch, y yaw, z roll)' }, example: 'turn y 30 · turn x -15' },
+  { cmd: 'move <x|y|z> <±Å>', desc: { zh: '平移视角（x右 y上 z推拉）', en: 'Translate view (x right, y up, z dolly)' }, example: 'move z -10 · move x 5' },
+  { cmd: 'view <front|top|left|right|back|bottom|x|y|z>', desc: { zh: '正交视角预设（保持距离平滑转）', en: 'Orthographic view presets (smooth, distance preserved)' }, example: 'view top · view front' },
+  { cmd: 'activate <名|编号>', cmdEn: 'activate <name|index>', desc: { zh: '切换活动结构（多结构工作流）', en: 'Switch active structure (multi-structure workflows)' }, example: 'activate 1BQL' },
+  { cmd: 'orient [sel]', desc: { zh: '主轴对齐视角（PCA）', en: 'Principal-axis aligned view (PCA)' }, example: 'orient chain A' },
+  { cmd: 'get_view / set_view', desc: { zh: '视角导出/恢复（JSON）', en: 'Export/restore camera view (JSON)' }, example: 'get_view' },
+  { cmd: 'view save|go|del|list…', desc: { zh: '视角书签（缩略图+平滑跳转，Shift+数字）', en: 'View bookmarks (thumbnails + smooth jumps, Shift+number)' }, example: 'view save 口袋', exampleEn: 'view save pocket' },
+  { cmd: 'tour [id]|stop', desc: { zh: '引导式演示场景（逐步自动操作）', en: 'Guided demo scenes (stepwise auto-operation)' }, example: 'tour quickstart' },
+  { cmd: 'measure dist|angle|dihedral (选择A) (选择B)…', cmdEn: 'measure dist|angle|dihedral (selectionA) (selectionB)…', desc: { zh: '选择表达式测量（距离取最近原子对，角度/二面角取质心；3D 标注入测量面板）', en: 'Selection-expression measurements (nearest atom pair for distance, centroids for angle/dihedral; 3D labels + measurement panel)' }, example: 'measure dist (resn HEM) (within 5 of resn HEM and protein) · measure clear' },
+  { cmd: 'count_atoms [expr]', desc: { zh: '统计原子数', en: 'Count atoms' }, example: 'count_atoms chain A' },
+  { cmd: 'spin on|off', desc: { zh: '自动旋转', en: 'Auto rotation' }, example: 'spin on' },
+  { cmd: 'rock on|off', desc: { zh: '相机摇摆（±26°）', en: 'Camera rocking (±26°)' }, example: 'rock on' },
+  { cmd: 'slab <n>|move <±Å>|center|cap|off', desc: { zh: '视向切层（厚度/位置/截面封盖）', en: 'Depth clipping (thickness / position / section caps)' }, example: 'slab 20 · slab move -5 · slab cap off' },
+  { cmd: 'stereo on|off', desc: { zh: '红蓝立体渲染', en: 'Red-cyan stereo rendering' }, example: 'stereo on' },
+  { cmd: 'symmetry <半径Å>|off', cmdEn: 'symmetry <radius Å>|off', desc: { zh: '晶体对称伴侣（CRYST1）', en: 'Crystallographic symmetry mates (CRYST1)' }, example: 'symmetry 25' },
+  { cmd: 'map fetch <id>|fofc|isolevel pos/neg', desc: { zh: '电子密度图（SF→FFT，Worker 零阻塞；结构未加载时自动获取；差图双 σ）', en: 'Electron density maps (SF→FFT in a worker, zero blocking; auto-fetch if not loaded; difference map dual σ)' }, example: 'map fofc 3ekj' },
+  { cmd: 'hbonds on|off [n]', desc: { zh: '氢键网络开关/距离', en: 'H-bond network toggle / distance' }, example: 'hbonds on 3.2' },
+  { cmd: 'ssao on|off [r]', desc: { zh: '环境光遮蔽开关/半径', en: 'Ambient occlusion toggle / radius' }, example: 'ssao on 3' },
+  { cmd: 'superpose <名> [onto <名>] [chain X to Y]', cmdEn: 'superpose <name> [onto <name>] [chain X to Y]', desc: { zh: '结构叠合（序列比对+刚体拟合，可选链对）', en: 'Structure superposition (sequence alignment + rigid-body fit, optional chain pair)' }, example: 'superpose 4HHB onto 1A3N chain A to A' },
+  { cmd: 'dssp', desc: { zh: 'DSSP 重算二级结构（含无记录结构）', en: 'DSSP secondary-structure reassignment (incl. structures without records)' }, example: 'dssp' },
+  { cmd: 'contacts <exprA> | <exprB> [n]', desc: { zh: '界面接触检测（残基对+连线）', en: 'Interface contact detection (residue pairs + lines)' }, example: 'contacts chain A | chain B 4.0' },
+  { cmd: 'interface <链A> <链B> [n]', cmdEn: 'interface <chainA> <chainB> [n]', desc: { zh: '链间界面快捷命令', en: 'Inter-chain interface shortcut' }, example: 'interface A B' },
+  { cmd: 'xcontacts <A>:<expr> | <B>:<expr> [n]', desc: { zh: '跨结构接触（复合物界面，建议先 superpose）', en: 'Cross-structure contacts (complex interface; superpose first recommended)' }, example: 'xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0' },
+  { cmd: 'sasa [probe] [点数]', cmdEn: 'sasa [probe] [points]', desc: { zh: '溶剂可及面积计算（Shrake–Rupley）', en: 'Solvent-accessible surface area (Shrake–Rupley)' }, example: 'sasa 1.4 92' },
+  { cmd: 'bsa', desc: { zh: '界面埋藏面积 ΔSASA（需 contacts A/B）', en: 'Interface buried area ΔSASA (requires contacts A/B)' }, example: 'bsa' },
+  { cmd: 'xbsa', desc: { zh: '跨结构界面埋藏面积（需 xcontacts，两结构联合三路 SASA）', en: 'Cross-structure buried area (requires xcontacts; joint 3-way SASA of both structures)' }, example: 'xbsa' },
+  { cmd: 'untransform [名]', cmdEn: 'untransform [name]', desc: { zh: '撤销叠合变换回原始位姿', en: 'Undo superposition transform, restore original pose' }, example: 'untransform 1D3Z' },
+  { cmd: 'record start|stop', desc: { zh: '录制动画为 WebM 视频', en: 'Record animation as WebM video' }, example: 'record start' },
+  { cmd: 'morph <名> = <A> <B> [帧] [norefine]', cmdEn: 'morph <name> = <A> <B> [frames] [norefine]', desc: { zh: '构象插值轨迹（自动叠合 + 键长约束/去碰撞精修）', en: 'Conformational interpolation trajectory (auto superpose + bond-length/clash refinement)' }, example: 'morph m1 = 1BQL 2LYZ 40 · morph m = 1BQL 2LYZ norefine' },
+  { cmd: 'morph multi <名> = <A> <B> <C>… [帧]', cmdEn: 'morph multi <name> = <A> <B> <C>… [frames]', desc: { zh: '多态构象样条插值（Catmull-Rom 过 3+ 构象）', en: 'Multi-state conformational spline (Catmull-Rom through 3+ conformers)' }, example: 'morph multi m = 1BQL 2LYZ 2VB1 60' },
+  { cmd: 'movie play|stop|smooth|hold|edit [秒 轮]', cmdEn: 'movie play|stop|smooth|hold|edit [seconds rounds]', desc: { zh: '关键帧巡航（smooth=平滑连续路径录像丝滑 · hold=逐帧驻留 · 无秒数走时间轴；edit 编排）', en: 'Keyframe cruise (smooth = continuous path, silky recordings · hold = per-frame dwell · no seconds uses the timeline; edit arranges)' }, example: 'movie play smooth 4 2 · movie smooth' },
+  { cmd: 'ensemble play|frame|fps…', desc: { zh: 'NMR 构象动画控制', en: 'NMR ensemble animation control' }, example: 'ensemble play' },
+  { cmd: 'save <名>.pdb [选择]', cmdEn: 'save <name>.pdb [selection]', desc: { zh: '导出坐标为 PDB 文件', en: 'Export coordinates as a PDB file' }, example: 'save myprot.pdb chain A' },
+  { cmd: 'png [倍率]', cmdEn: 'png [scale]', desc: { zh: '截图导出 PNG', en: 'Screenshot export as PNG' }, example: 'png 2' },
+  { cmd: 'ray [宽px]', cmdEn: 'ray [width px]', desc: { zh: 'Ray 级静帧渲染（软阴影+1.5× 真超采样抗锯齿：内部高分辨率渲染后高质量降采样）', en: 'Ray-quality still render (soft shadows + 1.5× true supersampling AA: internal hi-res render then quality downsample)' }, example: 'ray 1920' },
+  { cmd: 'svg [宽px]', cmdEn: 'svg [width px]', desc: { zh: '矢量图导出（CPU 投影，无限缩放不失真；可入稿 Illustrator/Inkscape）', en: 'Vector export (CPU projection, infinitely scalable; ready for Illustrator/Inkscape)' }, example: 'svg 2400' },
+  { cmd: 'show cell / hide cell', desc: { zh: '晶胞盒线框（CRYST1，a红 b绿 c蓝）', en: 'Unit-cell wireframe (CRYST1, a red b green c blue)' }, example: 'show cell' },
+  { cmd: 'axes on|off', desc: { zh: '视口坐标轴指示器（点击轴端对齐视角）', en: 'Viewport axis gizmo (click an axis tip to align the view)' }, example: 'axes off' },
+  { cmd: 'fps on|off', desc: { zh: '状态栏性能指示器（FPS/绘制调用/三角形）', en: 'Status-bar performance indicator (FPS / draw calls / triangles)' }, example: 'fps on' },
+  { cmd: 'perf on|off|status|restore', desc: { zh: '自动性能模式（低帧率降级/恢复）', en: 'Auto performance mode (degrade on low fps / restore)' }, example: 'perf status · perf off' },
+  { cmd: 'outline on|off [强度 粗细]', cmdEn: 'outline on|off [strength thickness]', desc: { zh: '出版级轮廓线（Sobel 深度+亮度描边；ray 同样生效）', en: 'Publication-grade outlines (Sobel depth+brightness edges; applies to ray stills too)' }, example: 'outline on · outline on 2 2.5' },
+  { cmd: 'session save|export|new|info|clear', desc: { zh: '会话存档 / 文件导出 / 新建', en: 'Session archive / file export / new session' }, example: 'session export · session new' },
+  { cmd: 'history [clear]', desc: { zh: '命令历史面板（搜索/置顶/执行；clear 清空）', en: 'Command history panel (search / pin / run; clear empties)' }, example: 'history · history clear' },
+  { cmd: 'label on|off', desc: { zh: '标记当前选择 / 清除标签', en: 'Label current selection / clear labels' }, example: 'label on' },
+  { cmd: 'preset <名>', cmdEn: 'preset <name>', desc: { zh: '应用风格预设（含出版级互作）', en: 'Apply a style preset (incl. publication-grade interactions)' }, example: 'preset publication' },
+  { cmd: 'isolate <选择>|off', cmdEn: 'isolate <selection>|off', desc: { zh: '链隔离：保留选择所在链隐藏其余（多链蛋白单链配体分析）', en: 'Chain isolation: keep chains touched by the selection, hide the rest (single-chain ligand analysis in multi-chain proteins)' }, example: 'isolate (resn HEM and chain A) · isolate off' },
+  { cmd: 'chains hide|show|list', desc: { zh: '链显隐手动控制（同链 ID 多链组全匹配）', en: 'Manual chain visibility control (all groups of a same chain ID matched)' }, example: 'chains hide B+C · chains show all' },
+  { cmd: 'scene save|recall|next|list', desc: { zh: '场景快照：相机+表示法+链隔离+环境一体保存切换', en: 'Scene snapshots: camera + representations + chain isolation + environment saved and restored as one' }, example: 'scene save A链口袋 · scene recall A链口袋 · scene next', exampleEn: 'scene save pocket · scene recall pocket · scene next' },
+  { cmd: 'delete <名>', cmdEn: 'delete <name>', desc: { zh: '删除命名选择', en: 'Delete a named selection' }, example: 'delete site' },
+  { cmd: 'close [名|all]', cmdEn: 'close [name|all]', desc: { zh: '关闭结构（默认活动结构）', en: 'Close structures (active by default)' }, example: 'close · close all · close 4HHB' },
+  { cmd: 'clear', desc: { zh: '移除所有结构（同 close all）', en: 'Remove all structures (same as close all)' }, example: 'clear' },
+  { cmd: 'help', desc: { zh: '显示帮助', en: 'Show help' }, example: 'help' },
 ]
+
+/** 命令语法/示例的当前语言文本（事件时求值）。cmd 与 example 保持 string 类型——CommandPalette
+ *  以其拼接 id、切分图标/填充键、提取可执行示例，翻转 DualText 会破坏跨文件契约；中文占位符与
+ *  含中文的示例名经可选 cmdEn / exampleEn 字段平行携带。desc 为 DualText，消费端 t()/tt() 双态兼容。 */
+export function commandCmd(h: { cmd: string; cmdEn?: string }): string {
+  return tt({ zh: h.cmd, en: h.cmdEn ?? h.cmd })
+}
+
+export function commandExample(h: { example: string; exampleEn?: string }): string {
+  return tt({ zh: h.example, en: h.exampleEn ?? h.example })
+}
 
 /** scene 快照子命令集合（其余词仍是 preset 别名，向后兼容） */
 const SCENE_SUBS = new Set(['save', 'add', 'recall', 'go', 'restore', 'update', 'list', 'ls', 'del', 'rm', 'delete', 'clear', 'next', 'prev'])
@@ -181,12 +193,12 @@ const SCENE_SUBS = new Set(['save', 'add', 'recall', 'go', 'restore', 'update', 
 /** 求值选择表达式并返回原子索引（活动结构；共用路径） */
 function evalActiveSelection(expr: string): { indices: number[]; error?: string } {
   const s = useMolStore.getState()
-  if (!s.activeId) return { indices: [], error: '没有活动结构' }
+  if (!s.activeId) return { indices: [], error: tt({ zh: '没有活动结构', en: 'No active structure' }) }
   const data = dataRegistry.get(s.activeId)
-  if (!data) return { indices: [], error: '结构数据不存在' }
+  if (!data) return { indices: [], error: tt({ zh: '结构数据不存在', en: 'Structure data not found' }) }
   const named = buildNamedMasks(s.activeId, data)
   const r = evaluateSelection(expr, { structure: data, named })
-  if (r.error) return { indices: [], error: `选择错误: ${r.error}` }
+  if (r.error) return { indices: [], error: tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }) }
   return { indices: maskToIndices(r.mask) }
 }
 
@@ -204,10 +216,10 @@ function chainGroupsOf(data: StructureData, indices: number[]): Set<number> {
 
 /** 链组索引 → 人类可读标签（A（蛋白）· B（配体链）…） */
 function chainGroupLabels(entry: { chains: { id: string; type: string }[] }, groups: Iterable<number>): string[] {
-  const TYPE_LABEL: Record<string, string> = { protein: '蛋白', nucleic: '核酸', ligand: '配体', water: '水', other: '其他' }
+  const TYPE_LABEL: Record<string, { zh: string; en: string }> = { protein: { zh: '蛋白', en: 'protein' }, nucleic: { zh: '核酸', en: 'nucleic' }, ligand: { zh: '配体', en: 'ligand' }, water: { zh: '水', en: 'water' }, other: { zh: '其他', en: 'other' } }
   return [...groups].map(g => {
     const c = entry.chains[g]
-    return `${c.id.trim() || '?'}（${TYPE_LABEL[c.type] ?? '其他'}）`
+    return tt({ zh: `${c.id.trim() || '?'}（${(TYPE_LABEL[c.type] ?? TYPE_LABEL.other).zh}）`, en: `${c.id.trim() || '?'} (${(TYPE_LABEL[c.type] ?? TYPE_LABEL.other).en})` })
   })
 }
 
@@ -218,23 +230,23 @@ function runIsolateCommand(raw: string, parts: string[], ok: (m: string) => void
 
   // isolate off / isolate reset：恢复全部链
   if (!rest) {
-    return err('用法: isolate <选择表达式>（保留选择所在链，隐藏其余链）/ isolate off（恢复全部链）')
+    return err(tt({ zh: '用法: isolate <选择表达式>（保留选择所在链，隐藏其余链）/ isolate off（恢复全部链）', en: 'Usage: isolate <selection expression> (keep chains of the selection, hide the rest) / isolate off (show all chains)' }))
   }
   if (rest.toLowerCase() === 'off' || rest.toLowerCase() === 'reset' || rest.toLowerCase() === 'show') {
-    if (!s.activeId) return err('没有活动结构')
+    if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     s.setChainHidden(s.activeId, null)
-    return ok('已恢复显示全部链（隔离解除）')
+    return ok(tt({ zh: '已恢复显示全部链（隔离解除）', en: 'All chains shown (isolation cleared)' }))
   }
 
-  if (!s.activeId) return err('没有活动结构')
+  if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
   const data = dataRegistry.get(s.activeId)
   const entry = s.structures.find(x => x.id === s.activeId)
-  if (!data || !entry) return err('结构数据不存在')
+  if (!data || !entry) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
 
   const ev = evalActiveSelection(rest)
   if (ev.error) return err(ev.error)
   const keep = chainGroupsOf(data, ev.indices)
-  if (!keep.size) return err('选择为空')
+  if (!keep.size) return err(tt({ zh: '选择为空', en: 'Selection is empty' }))
   // 同链 ID 连带保留：选择命中配体链组（如 chain A 的 HEM）时，同 ID 的蛋白链组（chain A 聚合部分）
   // 与水链组（chain A 晶体水——口袋环境的组成部分，配体附近常有介导互作的结合水）自动并入保留集
   // ——「分析链 A 的配体」应该看到链 A 蛋白 + 配体 + 链 A 的水，而不是孤零零一个 HEM，
@@ -250,31 +262,34 @@ function runIsolateCommand(raw: string, parts: string[], ok: (m: string) => void
   }
   const hidden: number[] = []
   for (let g = 0; g < data.chains.length; g++) if (!keep.has(g)) hidden.push(g)
-  if (!hidden.length) return ok('选择已覆盖全部链——无需隔离（所有链都在显示中）')
+  if (!hidden.length) return ok(tt({ zh: '选择已覆盖全部链——无需隔离（所有链都在显示中）', en: 'Selection covers all chains — no isolation needed (all chains already shown)' }))
   s.setChainHidden(s.activeId, hidden)
   const total = data.chains.length
   const waterKept = [...keep].filter(g => data.chains[g].type === 'water').length
-  const linkedNote = linked.length ? `（含同链 ID 连带：${chainGroupLabels(entry, linked).join('、')}——配体所在链的聚合部分与晶体水自动保留）` : ''
-  const waterNote = waterKept ? `；保留 ${waterKept} 个同链水组（口袋结合水跟随隔离）` : ''
-  return ok(`已隔离：保留 ${chainGroupLabels(entry, keep).join('、')}${linkedNote}，隐藏其余 ${hidden.length}/${total} 个链组${waterNote}——多链蛋白分析单链配体时非常实用（isolate off 恢复）`)
+  const linkedNote = linked.length ? tt({ zh: `（含同链 ID 连带：${chainGroupLabels(entry, linked).join('、')}——配体所在链的聚合部分与晶体水自动保留）`, en: ` (incl. same-ID linked: ${chainGroupLabels(entry, linked).join(', ')} — polymer part and crystal waters of the ligand chain kept automatically)` }) : ''
+  const waterNote = waterKept ? tt({ zh: `；保留 ${waterKept} 个同链水组（口袋结合水跟随隔离）`, en: `; kept ${waterKept} same-chain water group(s) (pocket waters follow isolation)` }) : ''
+  return ok(tt({
+    zh: `已隔离：保留 ${chainGroupLabels(entry, keep).join('、')}${linkedNote}，隐藏其余 ${hidden.length}/${total} 个链组${waterNote}——多链蛋白分析单链配体时非常实用（isolate off 恢复）`,
+    en: `Isolated: kept ${chainGroupLabels(entry, keep).join(', ')}${linkedNote}, hid the other ${hidden.length}/${total} chain groups${waterNote} — handy for single-chain ligand analysis in multi-chain proteins (isolate off to restore)`,
+  }))
 }
 
 function runChainsCommand(raw: string, parts: string[], ok: (m: string) => void, err: (m: string) => void): void {
   const sub = (parts[1] ?? '').toLowerCase()
   const s = useMolStore.getState()
-  if (!s.activeId) return err('没有活动结构')
+  if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
   const data = dataRegistry.get(s.activeId)
   const entry = s.structures.find(x => x.id === s.activeId)
-  if (!data || !entry) return err('结构数据不存在')
+  if (!data || !entry) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
   const hidden = entry.hiddenChains ?? []
 
   if (sub === 'list' || sub === 'ls' || !sub) {
-    ok(`链组（${data.chains.length} 个，隐藏 ${hidden.length} 个）：`)
+    ok(tt({ zh: `链组（${data.chains.length} 个，隐藏 ${hidden.length} 个）：`, en: `Chain groups (${data.chains.length} total, ${hidden.length} hidden):` }))
     data.chains.forEach((c, i) => {
       const hid = hidden.includes(i)
-      ok(`  ${hid ? '⊘' : '◉'}  ${String(i).padStart(2)}  ${(c.id.trim() || '?').padEnd(3)} ${c.type === 'protein' ? '蛋白' : c.type === 'nucleic' ? '核酸' : c.type === 'ligand' ? '配体' : c.type === 'water' ? '水' : '其他'}  ${c.residueIdx.length} 残基`)
+      ok(`  ${hid ? '⊘' : '◉'}  ${String(i).padStart(2)}  ${(c.id.trim() || '?').padEnd(3)} ${tt({ zh: c.type === 'protein' ? '蛋白' : c.type === 'nucleic' ? '核酸' : c.type === 'ligand' ? '配体' : c.type === 'water' ? '水' : '其他', en: c.type })}  ${tt({ zh: `${c.residueIdx.length} 残基`, en: `${c.residueIdx.length} residues` })}`)
     })
-    return ok('隐藏：chains hide A+B / chains hide A · 恢复：chains show A / chains show all · 隔离到选择：isolate <选择>')
+    return ok(tt({ zh: '隐藏：chains hide A+B / chains hide A · 恢复：chains show A / chains show all · 隔离到选择：isolate <选择>', en: 'Hide: chains hide A+B / chains hide A · Show: chains show A / chains show all · Isolate to a selection: isolate <selection>' }))
   }
   if (sub === 'show' || sub === 'hide') {
     // chains hide A+B+C / chains show A / chains show all
@@ -283,21 +298,23 @@ function runChainsCommand(raw: string, parts: string[], ok: (m: string) => void,
     const argRest = subLower.startsWith('show') ? arg.slice(4).trim() : subLower.startsWith('hide') ? arg.slice(4).trim() : ''
     if (sub === 'show' && (argRest === 'all' || argRest === '*')) {
       s.setChainHidden(s.activeId, null)
-      return ok('已恢复显示全部链')
+      return ok(tt({ zh: '已恢复显示全部链', en: 'All chains shown' }))
     }
     const ids = argRest.toUpperCase().split(/[+\s,]+/).map(x => x.trim()).filter(Boolean)
-    if (!ids.length) return err('用法: chains hide A+B / chains show A / chains show all（链 ID 不分大小写）')
+    if (!ids.length) return err(tt({ zh: '用法: chains hide A+B / chains show A / chains show all（链 ID 不分大小写）', en: 'Usage: chains hide A+B / chains show A / chains show all (chain IDs case-insensitive)' }))
     // 同一链 ID 可能对应多个链组（蛋白链 A + 配体链 A）——按 ID 匹配全部组
     const groups = data.chains.map((c, i) => ({ id: c.id.trim().toUpperCase(), i })).filter(c => ids.includes(c.id))
-    if (!groups.length) return err(`未找到链 ${ids.join('+')}——可用链：${[...new Set(data.chains.map(c => c.id.trim() || '?'))].join('、')}`)
+    if (!groups.length) return err(tt({ zh: `未找到链 ${ids.join('+')}——可用链：${[...new Set(data.chains.map(c => c.id.trim() || '?'))].join('、')}`, en: `Chain ${ids.join('+')} not found — available: ${[...new Set(data.chains.map(c => c.id.trim() || '?'))].join(', ')}` }))
     const cur = new Set(hidden)
     if (sub === 'hide') groups.forEach(g => cur.add(g.i))
     else groups.forEach(g => cur.delete(g.i))
     s.setChainHidden(s.activeId, cur.size ? [...cur] : null)
-    const verb = sub === 'hide' ? '隐藏' : '恢复'
-    return ok(`已${verb}链 ${ids.join('+')}（${groups.length} 个链组）——当前隐藏 ${cur.size}/${data.chains.length} 个链组`)
+    return ok(tt({
+      zh: `已${sub === 'hide' ? '隐藏' : '恢复'}链 ${ids.join('+')}（${groups.length} 个链组）——当前隐藏 ${cur.size}/${data.chains.length} 个链组`,
+      en: `Chains ${ids.join('+')} ${sub === 'hide' ? 'hidden' : 'shown'} (${groups.length} chain groups) — now ${cur.size}/${data.chains.length} groups hidden`,
+    }))
   }
-  return err('用法: chains list / chains hide <A+B> / chains show <A|all> / chains reset（同 isolate off）')
+  return err(tt({ zh: '用法: chains list / chains hide <A+B> / chains show <A|all> / chains reset（同 isolate off）', en: 'Usage: chains list / chains hide <A+B> / chains show <A|all> / chains reset (same as isolate off)' }))
 }
 
 function runSceneCommand(parts: string[], ok: (m: string) => void, err: (m: string) => void): void {
@@ -310,51 +327,54 @@ function runSceneCommand(parts: string[], ok: (m: string) => void, err: (m: stri
     const r = sc.saveScene(rest || undefined)
     if (!r.ok) return err(r.error)
     return ok(r.updated
-      ? `已更新场景「${r.scene.name}」——相机/表示法/链隔离/环境整体覆盖（结构卡片下方场景条同步刷新）`
-      : `已保存场景「${r.scene.name}」——相机 + 表示法 + 链隔离 + 环境一体快照（缩略图稍后回填；重名再 save 会更新而非新增）`)
+      ? tt({ zh: `已更新场景「${r.scene.name}」——相机/表示法/链隔离/环境整体覆盖（结构卡片下方场景条同步刷新）`, en: `Scene "${r.scene.name}" updated — camera/representations/chain isolation/environment overwritten (scene strip under structure cards refreshes)` })
+      : tt({ zh: `已保存场景「${r.scene.name}」——相机 + 表示法 + 链隔离 + 环境一体快照（缩略图稍后回填；重名再 save 会更新而非新增）`, en: `Scene "${r.scene.name}" saved — one-shot snapshot of camera + representations + chain isolation + environment (thumbnail backfilled later; saving an existing name updates instead of adding)` }))
   }
   if (sub === 'update') {
     const target = rest ? findScene(rest) : undefined
-    if (rest && !target) return err(`找不到场景「${rest}」——scene list 查看`)
+    if (rest && !target) return err(tt({ zh: `找不到场景「${rest}」——scene list 查看`, en: `Scene "${rest}" not found — see scene list` }))
     const r = sc.updateScene(target ? target.id : sc.activeSceneId ?? (sc.scenes.length - 1))
     if (!r.ok) return err(r.error)
-    return ok(`已用当前状态更新场景「${r.scene.name}」`)
+    return ok(tt({ zh: `已用当前状态更新场景「${r.scene.name}」`, en: `Scene "${r.scene.name}" updated with the current state` }))
   }
   if (!sub || sub === 'list' || sub === 'ls') {
-    if (!sc.scenes.length) return ok('暂无场景快照——scene save [名称] 保存当前完整状态（相机+表示法+链隔离+环境；对比 view save 仅存相机）')
-    ok(`场景快照（${sc.scenes.length}/${10}）：`)
+    if (!sc.scenes.length) return ok(tt({ zh: '暂无场景快照——scene save [名称] 保存当前完整状态（相机+表示法+链隔离+环境；对比 view save 仅存相机）', en: 'No scene snapshots yet — scene save [name] stores the full state (camera + representations + chain isolation + environment; view save stores the camera only)' }))
+    ok(tt({ zh: `场景快照（${sc.scenes.length}/${10}）：`, en: `Scene snapshots (${sc.scenes.length}/10):` }))
     sc.scenes.forEach((x, i) => {
-      const t = new Date(x.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      const t = new Date(x.createdAt).toLocaleTimeString(tt({ zh: 'zh-CN', en: 'en-US' }), { hour: '2-digit', minute: '2-digit' })
       const n = x.structures.length
-      ok(`  ${String(i + 1).padEnd(2)}  ${x.name.padEnd(14)} ${t} · ${n} 结构${x.hbondScope ? ' · 氢键范围' : ''}${x.camera ? ' · 相机' : ' · 无相机'}${sc.activeSceneId === x.id ? ' ← 当前' : ''}`)
+      ok(`  ${String(i + 1).padEnd(2)}  ${x.name.padEnd(14)} ${t} · ${tt({ zh: `${n} 结构`, en: `${n} structure(s)` })}${x.hbondScope ? tt({ zh: ' · 氢键范围', en: ' · H-bond scope' }) : ''}${x.camera ? tt({ zh: ' · 相机', en: ' · camera' }) : tt({ zh: ' · 无相机', en: ' · no camera' })}${sc.activeSceneId === x.id ? tt({ zh: ' ← 当前', en: ' ← current' }) : ''}`)
     })
-    return ok('召回：scene <序号|名称>（或 scene recall）；更新：scene update；删除：scene del；轮播：scene next/prev')
+    return ok(tt({ zh: '召回：scene <序号|名称>（或 scene recall）；更新：scene update；删除：scene del；轮播：scene next/prev', en: 'Recall: scene <number|name> (or scene recall); update: scene update; delete: scene del; cycle: scene next/prev' }))
   }
   if (sub === 'del' || sub === 'rm' || sub === 'delete') {
-    if (!rest) return err('用法: scene del <序号|名称>')
+    if (!rest) return err(tt({ zh: '用法: scene del <序号|名称>', en: 'Usage: scene del <number|name>' }))
     const target = findScene(rest)
-    if (!target) return err(`找不到场景「${rest}」——scene list 查看`)
+    if (!target) return err(tt({ zh: `找不到场景「${rest}」——scene list 查看`, en: `Scene "${rest}" not found — see scene list` }))
     sc.deleteScene(target.id)
-    return ok(`已删除场景「${target.name}」`)
+    return ok(tt({ zh: `已删除场景「${target.name}」`, en: `Scene "${target.name}" deleted` }))
   }
   if (sub === 'clear') {
     sc.clearScenes()
-    return ok('已清空所有场景快照')
+    return ok(tt({ zh: '已清空所有场景快照', en: 'All scene snapshots cleared' }))
   }
   if (sub === 'next' || sub === 'prev') {
-    if (!sc.scenes.length) return err('暂无场景——先 scene save 保存')
-    if (!sc.cycleScene(sub === 'next' ? 1 : -1)) return err('召回失败（结构未加载？）——场景按结构名恢复，先 load 对应结构')
-    return ok(`已切换到「${useSceneStore.getState().activeSceneId ? findSceneById(useSceneStore.getState().activeSceneId!)?.name : ''}」`)
+    if (!sc.scenes.length) return err(tt({ zh: '暂无场景——先 scene save 保存', en: 'No scenes yet — save one with scene save first' }))
+    if (!sc.cycleScene(sub === 'next' ? 1 : -1)) return err(tt({ zh: '召回失败（结构未加载？）——场景按结构名恢复，先 load 对应结构', en: 'Recall failed (structure not loaded?) — scenes restore by structure name, load the structure first' }))
+    return ok(tt({ zh: `已切换到「${useSceneStore.getState().activeSceneId ? findSceneById(useSceneStore.getState().activeSceneId!)?.name : ''}」`, en: `Switched to "${useSceneStore.getState().activeSceneId ? findSceneById(useSceneStore.getState().activeSceneId!)?.name : ''}"` }))
   }
   // scene <序号|名称> / scene recall <序号|名称>
   const arg = sub === 'recall' || sub === 'go' || sub === 'restore' ? rest : parts.slice(1).join(' ').trim()
-  if (!arg) return err('用法: scene save [名] | scene <序号|名> | scene update | scene del <名> | scene next/prev | scene list')
+  if (!arg) return err(tt({ zh: '用法: scene save [名] | scene <序号|名> | scene update | scene del <名> | scene next/prev | scene list', en: 'Usage: scene save [name] | scene <number|name> | scene update | scene del <name> | scene next/prev | scene list' }))
   const target = findScene(arg)
-  if (!target) return err(`找不到场景「${arg}」——scene list 查看`)
+  if (!target) return err(tt({ zh: `找不到场景「${arg}」——scene list 查看`, en: `Scene "${arg}" not found — see scene list` }))
   const r = sc.recallScene(target.id)
   if (!r.ok) return err(r.error)
-  const missing = r.missing.length ? `；未加载跳过：${r.missing.join('、')}` : ''
-  return ok(`已召回场景「${target.name}」——恢复 ${r.restored} 个结构的表示法/链隔离/环境${r.cameraApplied ? ' + 相机平滑过渡' : ''}${missing}（scene save 同名可快照当前状态）`)
+  const missing = r.missing.length ? tt({ zh: `；未加载跳过：${r.missing.join('、')}`, en: `; skipped (not loaded): ${r.missing.join(', ')}` }) : ''
+  return ok(tt({
+    zh: `已召回场景「${target.name}」——恢复 ${r.restored} 个结构的表示法/链隔离/环境${r.cameraApplied ? ' + 相机平滑过渡' : ''}${missing}（scene save 同名可快照当前状态）`,
+    en: `Scene "${target.name}" recalled — restored representations/chain isolation/environment for ${r.restored} structure(s)${r.cameraApplied ? ' + smooth camera transition' : ''}${missing} (scene save with the same name snapshots the current state)`,
+  }))
 }
 
 function findScene(arg: string): { id: string; name: string } | undefined {
@@ -384,7 +404,7 @@ export function runCommand(raw: string): void {
   if (cmd.startsWith('~')) {
     const negated = cmd.slice(1)
     if (negated === 'display' || negated === 'show') return runCommand(`hide ${input.slice(cmd.length).trim() || 'all'}`)
-    if (negated === 'label') { useMolStore.getState().clearLabels(); return ok('标签已清除（~label）') }
+    if (negated === 'label') { useMolStore.getState().clearLabels(); return ok(tt({ zh: '标签已清除（~label）', en: 'Labels cleared (~label)' })) }
   }
   // open → load（ChimeraX 加载动词）
   if (cmd === 'open') cmd = 'load'
@@ -410,7 +430,7 @@ export function runCommand(raw: string): void {
   // transparency <n> [target] → set transparency（ChimeraX 透明度）
   if (cmd === 'transparency') {
     const v = parseFloat(parts[1] ?? '')
-    if (isNaN(v) || v < 0 || v > 1) return err('用法：transparency <0-1>（ChimeraX 语义；0=不透明）——等效 set transparency')
+    if (isNaN(v) || v < 0 || v > 1) return err(tt({ zh: '用法：transparency <0-1>（ChimeraX 语义；0=不透明）——等效 set transparency', en: 'Usage: transparency <0-1> (ChimeraX semantics; 0 = opaque) — equivalent to set transparency' }))
     return runCommand(`set transparency ${(1 - v).toFixed(2)}`)
   }
   // 重新计算改写后的分词（open/focus 等改写 cmd 后 parts[0] 保持原词——各分支用 input.slice(parts[0].length) 取参数，
@@ -422,37 +442,37 @@ export function runCommand(raw: string): void {
     if (rest0 && !isNaN(zoomNum) && /^[\d.]+\s*$/.test(rest0)) {
       const factor = Math.max(0.05, Math.min(20, zoomNum))
       whenEngineReady(() => engineRef.current?.dollyCamera(1 / factor))
-      return ok(`ChimeraX 式缩放 ×${factor}（zoom <倍率>；聚焦选择用 zoom <选择> 或 focus <选择>）`)
+      return ok(tt({ zh: `ChimeraX 式缩放 ×${factor}（zoom <倍率>；聚焦选择用 zoom <选择> 或 focus <选择>）`, en: `ChimeraX-style zoom ×${factor} (zoom <factor>; use zoom <selection> or focus <selection> to focus)` }))
     }
   }
   // select add|subtract|intersect <expr>（ChimeraX 选择修饰动词）
   if (cmd === 'select' && ['add', 'subtract', 'intersect'].includes((parts[1] ?? '').toLowerCase())) {
     const mode = (parts[1] ?? '').toLowerCase()
     const expr = input.slice(parts[0].length).trim().slice(mode.length).trim()
-    if (!expr) return err('用法：select add|subtract|intersect <表达式>（ChimeraX 兼容）')
+    if (!expr) return err(tt({ zh: '用法：select add|subtract|intersect <表达式>（ChimeraX 兼容）', en: 'Usage: select add|subtract|intersect <expression> (ChimeraX compatible)' }))
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有加载结构')
+    if (!s.activeId) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
     const data = dataRegistry.get(s.activeId)
-    if (!data) return err('结构数据不存在')
+    if (!data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     const named = buildNamedMasks(s.activeId, data)
     const r = evaluateSelection(expr, { structure: data, named })
-    if (r.error) return err(`选择错误: ${r.error}`)
+    if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
     const idxs = maskToIndices(r.mask)
     if (mode === 'add') {
       s.setSelection(s.activeId, idxs, 'add')
       const total = useMolStore.getState().selection.indices.length
-      return ok(`已追加 ${r.count.toLocaleString()} 原子（select add）→ 当前共 ${total.toLocaleString()}`)
+      return ok(tt({ zh: `已追加 ${r.count.toLocaleString()} 原子（select add）→ 当前共 ${total.toLocaleString()}`, en: `Added ${r.count.toLocaleString()} atoms (select add) → ${total.toLocaleString()} now selected` }))
     }
     if (mode === 'subtract') {
       s.setSelection(s.activeId, idxs, 'remove')
       const total = useMolStore.getState().selection.indices.length
-      return ok(`已移除 ${r.count.toLocaleString()} 原子（select subtract）→ 当前共 ${total.toLocaleString()}`)
+      return ok(tt({ zh: `已移除 ${r.count.toLocaleString()} 原子（select subtract）→ 当前共 ${total.toLocaleString()}`, en: `Removed ${r.count.toLocaleString()} atoms (select subtract) → ${total.toLocaleString()} now selected` }))
     }
     // intersect：当前选择 ∩ 新表达式（手动求交）
     const cur = new Set(s.selection.structureId === s.activeId ? s.selection.indices : [])
     const inter = idxs.filter(i => cur.has(i))
     s.setSelection(s.activeId, inter)
-    return ok(`交集 ${inter.length.toLocaleString()} 原子（select intersect）`)
+    return ok(tt({ zh: `交集 ${inter.length.toLocaleString()} 原子（select intersect）`, en: `Intersection: ${inter.length.toLocaleString()} atoms (select intersect)` }))
   }
   // measure distance/angle/dihedral 无括号 ChimeraX 形式：measure distance @CA :42 → 自动包括号
   if ((cmd === 'measure' || cmd === 'dist' || cmd === 'distance') && input.indexOf('(') < 0) {
@@ -475,10 +495,10 @@ export function runCommand(raw: string): void {
   lower = input.toLowerCase()
 
   if (cmd === 'help' || cmd === '?') {
-    ok('可用命令：')
-    for (const h of COMMAND_HELP) ok(`  ${h.cmd.padEnd(22)} ${h.desc}  例: ${h.example}`)
-    ok('选择语法（PyMOL 风格）：chain A / resi 1-60 / resn ALA / name CA / protein / within 5 of (...) / byres(...) / and or not ( )；sele = 当前选择')
-    ok('选择语法（ChimeraX 风格）：/A 链 · :42 残基号 · :HEM 残基名 · @CA 原子 · #1 模型 · & | ~ 与或非 · X zone 5 邻域（如 select #1/A:42@CA zone 5）——两种语法可混用')
+    ok(tt({ zh: '可用命令：', en: 'Available commands:' }))
+    for (const h of COMMAND_HELP) ok(`  ${commandCmd(h).padEnd(22)} ${tt(h.desc)}  ${tt({ zh: '例: ', en: 'e.g. ' })}${commandExample(h)}`)
+    ok(tt({ zh: '选择语法（PyMOL 风格）：chain A / resi 1-60 / resn ALA / name CA / protein / within 5 of (...) / byres(...) / and or not ( )；sele = 当前选择', en: 'Selection syntax (PyMOL style): chain A / resi 1-60 / resn ALA / name CA / protein / within 5 of (...) / byres(...) / and or not ( ); sele = current selection' }))
+    ok(tt({ zh: '选择语法（ChimeraX 风格）：/A 链 · :42 残基号 · :HEM 残基名 · @CA 原子 · #1 模型 · & | ~ 与或非 · X zone 5 邻域（如 select #1/A:42@CA zone 5）——两种语法可混用', en: 'Selection syntax (ChimeraX style): /A chain · :42 residue number · :HEM residue name · @CA atom · #1 model · & | ~ and/or/not · X zone 5 neighborhood (e.g. select #1/A:42@CA zone 5) — the two syntaxes can be mixed' }))
     return
   }
 
@@ -487,15 +507,15 @@ export function runCommand(raw: string): void {
     const sub = (parts[1] ?? '').toLowerCase()
     if (sub === 'clear') {
       clearCmdHistory()
-      return ok('命令历史已清空（最近命令徽章与 Ctrl+R 搜索同步清除；置顶命令保留）')
+      return ok(tt({ zh: '命令历史已清空（最近命令徽章与 Ctrl+R 搜索同步清除；置顶命令保留）', en: 'Command history cleared (recent-command badge and Ctrl+R search cleared too; pinned commands kept)' }))
     }
     useMolStore.getState().setUi({ historyOpen: true })
-    return ok('已打开命令历史面板（搜索过滤 · 星标置顶 · 点击执行 · 铅笔填入编辑）')
+    return ok(tt({ zh: '已打开命令历史面板（搜索过滤 · 星标置顶 · 点击执行 · 铅笔填入编辑）', en: 'Command history panel opened (search filter · star pin · click to run · pencil to fill the input)' }))
   }
 
   if (cmd === 'load' || cmd === 'fetch') {
     const id = parts[1]
-    if (!id || !/^[0-9][a-z0-9]{3}$/i.test(id)) return err('用法: load <4位PDB编号>，如 load 4hhb')
+    if (!id || !/^[0-9][a-z0-9]{3}$/i.test(id)) return err(tt({ zh: '用法: load <4位PDB编号>，如 load 4hhb', en: 'Usage: load <4-char PDB ID>, e.g. load 4hhb' }))
     void import('./loader').then(m => m.fetchPdbId(id))
     return
   }
@@ -515,7 +535,7 @@ export function runCommand(raw: string): void {
       const name = assign[1]
       const expr = assign[2]
       const res = store.selectFromExpr(expr)
-      if (res.error) return err(`选择错误: ${res.error}`)
+      if (res.error) return err(tt({ zh: `选择错误: ${res.error}`, en: `Selection error: ${res.error}` }))
       if (name.toLowerCase() !== 'sele') {
         useMolStore.setState(s => ({
           namedSelections: [...s.namedSelections.filter(n => n.name !== name), {
@@ -523,12 +543,12 @@ export function runCommand(raw: string): void {
           }],
         }))
       }
-      ok(`已选择 ${res.count.toLocaleString()} 个原子 → ${name === 'sele' ? '当前选择' : name}`)
+      ok(tt({ zh: `已选择 ${res.count.toLocaleString()} 个原子 → ${name === 'sele' ? '当前选择' : name}`, en: `${res.count.toLocaleString()} atoms selected → ${name === 'sele' ? 'current selection' : name}` }))
     } else {
-      if (!rest) return err('用法: select <表达式> 或 select <名> = <表达式>')
+      if (!rest) return err(tt({ zh: '用法: select <表达式> 或 select <名> = <表达式>', en: 'Usage: select <expression> or select <name> = <expression>' }))
       const res = store.selectFromExpr(normalized)
-      if (res.error) return err(`选择错误: ${res.error}`)
-      ok(`已选择 ${res.count.toLocaleString()} 个原子`)
+      if (res.error) return err(tt({ zh: `选择错误: ${res.error}`, en: `Selection error: ${res.error}` }))
+      ok(tt({ zh: `已选择 ${res.count.toLocaleString()} 个原子`, en: `${res.count.toLocaleString()} atoms selected` }))
     }
     return
   }
@@ -540,7 +560,7 @@ export function runCommand(raw: string): void {
     const repAlias = (headWords[0] ?? '').toLowerCase()
     if (repAlias === 'hydrogens' || repAlias === 'h') {
       useMolStore.getState().updateSettings({ hideHydrogens: false })
-      return ok('已显示氢原子')
+      return ok(tt({ zh: '已显示氢原子', en: 'Hydrogens shown' }))
     }
     if (repAlias === 'waters' || repAlias === 'water') {
       const st = useMolStore.getState()
@@ -564,20 +584,20 @@ export function runCommand(raw: string): void {
           added++
         }
       }
-      return ok(`已显示水分子${converted ? `（${converted} 个结构的水 rep 已转为小球显示）` : added ? `（新增小球 rep）` : ''}——hide waters 隐藏`)
+      return ok(tt({ zh: `已显示水分子${converted ? `（${converted} 个结构的水 rep 已转为小球显示）` : added ? `（新增小球 rep）` : ''}——hide waters 隐藏`, en: `Waters shown${converted ? ` (water rep switched to small spheres in ${converted} structure(s))` : added ? ' (sphere rep added)' : ''} — hide waters to hide` }))
     }
     // PyMOL show cell：晶胞盒线框
     if (repAlias === 'cell') {
       const st = useMolStore.getState()
       st.updateSettings({ showCell: true })
       const data = st.activeId ? dataRegistry.get(st.activeId) : null
-      const info = data?.crystal ? `（${data.crystal.a.toFixed(1)}×${data.crystal.b.toFixed(1)}×${data.crystal.c.toFixed(1)}Å · ${data.crystal.spaceGroup.trim()}）` : '（当前结构无 CRYST1 晶胞信息——线框不显示）'
-      return ok(`晶胞盒开启 ${info}——a 红 / b 绿 / c 蓝 · hide cell 关闭 · symmetry 20 可生成晶格邻居`)
+      const info = data?.crystal ? tt({ zh: `（${data.crystal.a.toFixed(1)}×${data.crystal.b.toFixed(1)}×${data.crystal.c.toFixed(1)}Å · ${data.crystal.spaceGroup.trim()}）`, en: ` (${data.crystal.a.toFixed(1)}×${data.crystal.b.toFixed(1)}×${data.crystal.c.toFixed(1)} Å · ${data.crystal.spaceGroup.trim()})` }) : tt({ zh: '（当前结构无 CRYST1 晶胞信息——线框不显示）', en: ' (no CRYST1 unit-cell info in this structure — wireframe not shown)' })
+      return ok(tt({ zh: `晶胞盒开启 ${info}——a 红 / b 绿 / c 蓝 · hide cell 关闭 · symmetry 20 可生成晶格邻居`, en: `Unit cell shown ${info} — a red / b green / c blue · hide cell to hide · symmetry 20 generates lattice neighbors` }))
     }
     const repType = REP_ALIASES[repAlias]
-    if (!repType) return err(`未知表示法 "${headWords[0]}"。可用: ${Object.keys(REP_ALIASES).slice(0, 7).join(', ')}…`)
+    if (!repType) return err(tt({ zh: `未知表示法 "${headWords[0]}"。可用: ${Object.keys(REP_ALIASES).slice(0, 7).join(', ')}…`, en: `Unknown representation "${headWords[0]}". Available: ${Object.keys(REP_ALIASES).slice(0, 7).join(', ')}…` }))
     const selExpr = joinSel(headWords.slice(1).join(' '), tail) || 'all'
-    if (!useMolStore.getState().activeId) return err('没有加载结构')
+    if (!useMolStore.getState().activeId) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
     {
       // 选择表达式即时校验（命令行 / agent 失败可感知；面板 UI 添加 rep 不走此路径）
       const s = useMolStore.getState()
@@ -585,11 +605,11 @@ export function runCommand(raw: string): void {
       if (data) {
         const named = buildNamedMasks(s.activeId!, data)
         const probe = evaluateSelection(selExpr, { structure: data, named })
-        if (probe.error) return err(`选择表达式无效: ${probe.error}（"${selExpr}"）`)
+        if (probe.error) return err(tt({ zh: `选择表达式无效: ${probe.error}（"${selExpr}"）`, en: `Invalid selection expression: ${probe.error} ("${selExpr}")` }))
       }
     }
     useMolStore.getState().addRep(useMolStore.getState().activeId!, { type: repType, selection: selExpr })
-    ok(`已添加 ${REP_LABELS[repType]} 表示 (${selExpr})`)
+    ok(tt({ zh: `已添加 ${tt(REP_LABELS[repType])} 表示 (${selExpr})`, en: `${tt(REP_LABELS[repType])} representation added (${selExpr})` }))
     return
   }
 
@@ -600,29 +620,29 @@ export function runCommand(raw: string): void {
     const arg = (headWords[0] ?? '').toLowerCase()
     if (arg === 'hydrogens' || arg === 'h') {
       useMolStore.getState().updateSettings({ hideHydrogens: true })
-      return ok('已隐藏氢原子')
+      return ok(tt({ zh: '已隐藏氢原子', en: 'Hydrogens hidden' }))
     }
     if (arg === 'waters' || arg === 'water') {
       useMolStore.getState().updateSettings({ hideWater: true })
-      return ok('已隐藏水分子')
+      return ok(tt({ zh: '已隐藏水分子', en: 'Waters hidden' }))
     }
     if (arg === 'cell') {
       useMolStore.getState().updateSettings({ showCell: false })
-      return ok('晶胞盒已关闭（show cell 开启）')
+      return ok(tt({ zh: '晶胞盒已关闭（show cell 开启）', en: 'Unit cell hidden (show cell to show)' }))
     }
     const repType = REP_ALIASES[arg]
     const s = useMolStore.getState()
     const entry = s.structures.find(x => x.id === s.activeId)
-    if (!entry) return err('没有加载结构')
+    if (!entry) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
     const selExpr = joinSel(headWords.slice(1).join(' '), tail)
     if (repType) {
       const reps = entry.reps.filter(r => r.type === repType && (!selExpr || r.selection === selExpr))
       for (const r of reps) s.removeRep(entry.id, r.id)
-      return ok(`已移除 ${reps.length} 个 ${REP_LABELS[repType]} 表示`)
+      return ok(tt({ zh: `已移除 ${reps.length} 个 ${tt(REP_LABELS[repType])} 表示`, en: `Removed ${reps.length} ${tt(REP_LABELS[repType])} representation(s)` }))
     }
     // hide 全部
     for (const r of [...entry.reps]) s.removeRep(entry.id, r.id)
-    return ok('已移除全部表示法')
+    return ok(tt({ zh: '已移除全部表示法', en: 'All representations removed' }))
   }
 
   if (cmd === 'color' || cmd === 'colour') {
@@ -633,12 +653,12 @@ export function runCommand(raw: string): void {
     const selExpr = joinSel(headWords.slice(1).join(' '), tail)
     const scheme = SCHEME_ALIASES[target]
     const css = parseCssColor(target)
-    if (!scheme && !css) return err(`未知颜色 "${headWords[0]}"。可用方案: ${Object.keys(SCHEME_ALIASES).join(', ')} 或 #hex / 颜色名`)
+    if (!scheme && !css) return err(tt({ zh: `未知颜色 "${headWords[0]}"。可用方案: ${Object.keys(SCHEME_ALIASES).join(', ')} 或 #hex / 颜色名`, en: `Unknown color "${headWords[0]}". Available schemes: ${Object.keys(SCHEME_ALIASES).join(', ')} or #hex / color names` }))
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有加载结构')
+    if (!s.activeId) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
     if (selExpr) {
       const res = s.selectFromExpr(selExpr)
-      if (res.error) return err(`选择错误: ${res.error}`)
+      if (res.error) return err(tt({ zh: `选择错误: ${res.error}`, en: `Selection error: ${res.error}` }))
     }
     if (scheme === 'sasa') {
       const data = dataRegistry.get(s.activeId)
@@ -649,25 +669,25 @@ export function runCommand(raw: string): void {
         if (!r?.done) {
           // r59-a2 #2 修复：命令路径也要登记烘焙回调（旧版漏掉——worker 完成后从不自动上色）
           eng?.queueSasaBake(s.activeId)
-          return ok('SASA 后台计算中（Web Worker）——完成后将自动按暴露度着色（埋藏蓝紫 → 暴露橙红）')
+          return ok(tt({ zh: 'SASA 后台计算中（Web Worker）——完成后将自动按暴露度着色（埋藏蓝紫 → 暴露橙红）', en: 'SASA computing in background (Web Worker) — will auto-color by exposure when done (buried blue-violet → exposed orange-red)' }))
         }
       }
     }
     s.applyColor(scheme ?? css!)
-    ok(`已上色: ${scheme ? COLOR_SCHEME_LABELS[scheme] : css}${selExpr ? ` (${selExpr})` : ''}`)
+    ok(tt({ zh: `已上色: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}`, en: `Colored: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}` }))
     return
   }
 
   if (cmd === 'reset_colors' || cmd === 'recolor') {
     useMolStore.getState().resetColors(parts[1] ? 'selection' : 'structure')
-    return ok('已重置颜色')
+    return ok(tt({ zh: '已重置颜色', en: 'Colors reset' }))
   }
 
   if (cmd === 'bg' || cmd === 'background') {
     const css = parseCssColor((parts[1] ?? '').toLowerCase())
-    if (!css) return err('用法: bg <#hex 或颜色名>')
+    if (!css) return err(tt({ zh: '用法: bg <#hex 或颜色名>', en: 'Usage: bg <#hex or color name>' }))
     useMolStore.getState().updateSettings({ background: css, backgroundPinned: true })
-    return ok(`背景色 → ${css}`)
+    return ok(tt({ zh: `背景色 → ${css}`, en: `Background color → ${css}` }))
   }
 
   if (cmd === 'zoom' || cmd === 'fit') {
@@ -677,11 +697,11 @@ export function runCommand(raw: string): void {
     if (zoomArg === 'in') {
       // 引擎可能尚未挂载（欢迎页首发 load 后立即 zoom 的命令链）——入队等待，不静默丢失
       whenEngineReady(() => engineRef.current?.dollyCamera(0.72))
-      return ok('已拉近（可连按；zoom <选择> 可聚焦特定部分）')
+      return ok(tt({ zh: '已拉近（可连按；zoom <选择> 可聚焦特定部分）', en: 'Zoomed in (repeatable; zoom <selection> focuses a specific part)' }))
     }
     if (zoomArg === 'out') {
       whenEngineReady(() => engineRef.current?.dollyCamera(1.38))
-      return ok('已拉远（可连按；zoom 无参数回到全量适配）')
+      return ok(tt({ zh: '已拉远（可连按；zoom 无参数回到全量适配）', en: 'Zoomed out (repeatable; bare zoom re-fits everything)' }))
     }
     // 逗号语法 + 可选缓冲距离（PyMOL：zoom ligand, 5 → 聚焦后退 5 Å）
     const { head, tail } = commaSplit(rest)
@@ -693,7 +713,7 @@ export function runCommand(raw: string): void {
       // 旧版走 selectFromExpr 落 setSelection，其后裸 color/util cbc 作用域被静默缩小
       const evalRes = evalActiveSelection(selExpr)
       if (evalRes.error) return err(evalRes.error)
-      if (!evalRes.indices.length) return err(`选择 "${selExpr}" 命中 0 个原子（zoom 需要非空选择）`)
+      if (!evalRes.indices.length) return err(tt({ zh: `选择 "${selExpr}" 命中 0 个原子（zoom 需要非空选择）`, en: `Selection "${selExpr}" matched 0 atoms (zoom needs a non-empty selection)` }))
       const sid = s.activeId!
       const sel = { structureId: sid, indices: evalRes.indices }
       // 多实例均布提示（纯数据层计算，不依赖引擎）：选择覆盖 2~12 个彼此远离的残基拷贝
@@ -715,7 +735,7 @@ export function runCommand(raw: string): void {
           if (minPair > 25) {
             const r0 = zdata.residues[zdata.atomResidue[insts[0].indices[0]]]
             const c0 = r0.chainId.trim() || 'A'
-            spreadNote = `——选择横跨 ${insts.length} 个远距拷贝（${insts.map(i => i.label).slice(0, 4).join('、')}${insts.length > 4 ? '…' : ''}）已全部入框；单拷贝特写：zoom (resn ${r0.resName} and chain ${c0}), 6`
+            spreadNote = tt({ zh: `——选择横跨 ${insts.length} 个远距拷贝（${insts.map(i => i.label).slice(0, 4).join('、')}${insts.length > 4 ? '…' : ''}）已全部入框；单拷贝特写：zoom (resn ${r0.resName} and chain ${c0}), 6`, en: ` — selection spans ${insts.length} distant copies (${insts.map(i => i.label).slice(0, 4).join(', ')}${insts.length > 4 ? '…' : ''}), all framed; single-copy close-up: zoom (resn ${r0.resName} and chain ${c0}), 6` })
           }
         }
       }
@@ -725,48 +745,48 @@ export function runCommand(raw: string): void {
       whenEngineReady(() => {
         if (sel.structureId) engineRef.current?.fitView([{ structureId: sel.structureId, indices: sel.indices }], { buffer: isNaN(buffer) ? 0 : buffer })
       })
-      return ok(`缩放到 ${selExpr}${!isNaN(buffer) && buffer !== 0 ? `（缓冲 ${buffer > 0 ? '+' : ''}${buffer} Å）` : ''}${spreadNote}（平滑过渡）`)
+      return ok(tt({ zh: `缩放到 ${selExpr}${!isNaN(buffer) && buffer !== 0 ? `（缓冲 ${buffer > 0 ? '+' : ''}${buffer} Å）` : ''}${spreadNote}（平滑过渡）`, en: `Zoomed to ${selExpr}${!isNaN(buffer) && buffer !== 0 ? ` (buffer ${buffer > 0 ? '+' : ''}${buffer} Å)` : ''}${spreadNote} (smooth transition)` }))
     }
     whenEngineReady(() => engineRef.current?.fitView())
-    return ok('缩放到全部结构（平滑过渡）')
+    return ok(tt({ zh: '缩放到全部结构（平滑过渡）', en: 'Zoomed to all structures (smooth transition)' }))
   }
 
   if (cmd === 'activate' || cmd === 'use') {
     const s = useMolStore.getState()
     const nameArg = parts[1]
-    if (!nameArg) return err(`用法：activate <结构名或PDB编号>（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
+    if (!nameArg) return err(tt({ zh: `用法：activate <结构名或PDB编号>（可用：${s.structures.map(x => x.name).join('、') || '无'}）`, en: `Usage: activate <structure name or PDB ID> (available: ${s.structures.map(x => x.name).join(', ') || 'none'})` }))
     const q = nameArg.toLowerCase()
     const found = s.structures.find(x =>
       x.name.toLowerCase() === q ||
       x.name.toLowerCase().startsWith(q) ||
       x.meta.pdbId?.toLowerCase() === q)
-    if (!found) return err(`未找到结构 "${nameArg}"（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
+    if (!found) return err(tt({ zh: `未找到结构 "${nameArg}"（可用：${s.structures.map(x => x.name).join('、') || '无'}）`, en: `Structure "${nameArg}" not found (available: ${s.structures.map(x => x.name).join(', ') || 'none'})` }))
     if (found.id !== s.activeId) {
       useMolStore.getState().setActive(found.id)
-      return ok(`活动结构 → ${found.name}（show/hide/color/preset 等命令均作用于它）`)
+      return ok(tt({ zh: `活动结构 → ${found.name}（show/hide/color/preset 等命令均作用于它）`, en: `Active structure → ${found.name} (show/hide/color/preset etc. act on it)` }))
     }
-    return ok(`${found.name} 已是活动结构`)
+    return ok(tt({ zh: `${found.name} 已是活动结构`, en: `${found.name} is already the active structure` }))
   }
 
   if (cmd === 'spin') {
     const arg = (parts[1] ?? 'on').toLowerCase()
     const on = arg === 'on' || arg === '1' || arg === 'true'
     useMolStore.getState().updateSettings({ spin: on, ...(on ? { rock: false } : {}) })
-    return ok(on ? '自动旋转开启（S 切换）' : '自动旋转关闭')
+    return ok(on ? tt({ zh: '自动旋转开启（S 切换）', en: 'Auto rotation on (S toggles)' }) : tt({ zh: '自动旋转关闭', en: 'Auto rotation off' }))
   }
 
   if (cmd === 'rock') {
     const arg = (parts[1] ?? 'on').toLowerCase()
     const on = arg === 'on' || arg === '1' || arg === 'true'
     useMolStore.getState().updateSettings({ rock: on, ...(on ? { spin: false } : {}) })
-    return ok(on ? '相机摇摆开启（±26°，R 切换）' : '相机摇摆关闭')
+    return ok(on ? tt({ zh: '相机摇摆开启（±26°，R 切换）', en: 'Camera rocking on (±26°, R toggles)' }) : tt({ zh: '相机摇摆关闭', en: 'Camera rocking off' }))
   }
 
   if (cmd === 'slab') {
     const arg = (parts[1] ?? '').toLowerCase()
     if (arg === 'off' || arg === '0') {
       useMolStore.getState().updateSettings({ slab: false })
-      return ok('裁剪关闭')
+      return ok(tt({ zh: '裁剪关闭', en: 'Clipping off' }))
     }
     if (arg === 'cap') {
       const sub = (parts[2] ?? '').toLowerCase()
@@ -777,25 +797,25 @@ export function runCommand(raw: string): void {
         : !cur.slabCap
       useMolStore.getState().updateSettings({ slab: true, slabCap: on })
       return ok(on
-        ? `切层截面封盖开启：剖面以平面色填充呈实心（set cap_color 可改色，当前 ${cur.capColor}）`
-        : '切层截面封盖关闭（剖面为开放式空壳）')
+        ? tt({ zh: `切层截面封盖开启：剖面以平面色填充呈实心（set cap_color 可改色，当前 ${cur.capColor}）`, en: `Slab caps on: cross-sections filled solid with the cap color (set cap_color to change; currently ${cur.capColor})` })
+        : tt({ zh: '切层截面封盖关闭（剖面为开放式空壳）', en: 'Slab caps off (open cross-sections)' }))
     }
     if (arg === 'center' || arg === 'reset') {
       useMolStore.getState().updateSettings({ slab: true, slabOffset: 0 })
-      return ok('切层已回到环绕目标中心（偏移 0 Å）')
+      return ok(tt({ zh: '切层已回到环绕目标中心（偏移 0 Å）', en: 'Slab recentered on the orbit target (offset 0 Å)' }))
     }
     if (arg === 'move') {
       const d = parseFloat(parts[2] ?? '')
-      if (isNaN(d) || d === 0) return err('用法：slab move <±Å>（沿视线移动切层中心；正 = 远离相机）')
+      if (isNaN(d) || d === 0) return err(tt({ zh: '用法：slab move <±Å>（沿视线移动切层中心；正 = 远离相机）', en: 'Usage: slab move <±Å> (moves the slab center along the view axis; positive = away from camera)' }))
       const cur = useMolStore.getState().settings
       const off = Math.max(-80, Math.min(80, (cur.slabOffset ?? 0) + d))
       useMolStore.getState().updateSettings({ slab: true, slabOffset: off })
-      return ok(`切层位置 → ${off > 0 ? '+' : ''}${off.toFixed(1)} Å（slab move ${d > 0 ? '+' : ''}${d}）`)
+      return ok(tt({ zh: `切层位置 → ${off > 0 ? '+' : ''}${off.toFixed(1)} Å（slab move ${d > 0 ? '+' : ''}${d}）`, en: `Slab position → ${off > 0 ? '+' : ''}${off.toFixed(1)} Å (slab move ${d > 0 ? '+' : ''}${d})` }))
     }
     const n = parseFloat(arg)
-    if (isNaN(n) || n <= 0) return err('用法：slab <厚度Å> | slab off | slab move <±Å> | slab center | slab cap on|off')
+    if (isNaN(n) || n <= 0) return err(tt({ zh: '用法：slab <厚度Å> | slab off | slab move <±Å> | slab center | slab cap on|off', en: 'Usage: slab <thickness Å> | slab off | slab move <±Å> | slab center | slab cap on|off' }))
     useMolStore.getState().updateSettings({ slab: true, slabThickness: n })
-    return ok(`裁剪厚度 → ${n} Å（切层中心在环绕目标处；slab move ± 调整位置）`)
+    return ok(tt({ zh: `裁剪厚度 → ${n} Å（切层中心在环绕目标处；slab move ± 调整位置）`, en: `Slab thickness → ${n} Å (centered on the orbit target; slab move ± adjusts position)` }))
   }
 
   if (cmd === 'perf') {
@@ -803,34 +823,37 @@ export function runCommand(raw: string): void {
     const s = useMolStore.getState()
     if (arg === 'on') {
       s.updateSettings({ autoPerf: true })
-      return ok('自动性能模式已开启：帧率持续偏低（<15 fps 约 3 秒）时自动关闭后处理并降低分辨率，恢复后自动还原')
+      return ok(tt({ zh: '自动性能模式已开启：帧率持续偏低（<15 fps 约 3 秒）时自动关闭后处理并降低分辨率，恢复后自动还原', en: 'Auto performance mode on: when fps stays low (<15 fps for ~3 s), post-processing is disabled and resolution lowered automatically, restored on recovery' }))
     }
     if (arg === 'off') {
       s.updateSettings({ autoPerf: false })
-      return ok('自动性能模式已关闭（若处于降级状态将立即还原画质设置）')
+      return ok(tt({ zh: '自动性能模式已关闭（若处于降级状态将立即还原画质设置）', en: 'Auto performance mode off (quality settings restored immediately if degraded)' }))
     }
     if (arg === 'restore') {
       const restored = engineRef.current?.perfManualRestore()
-      return restored ? ok('已恢复降级前的画质设置（后处理 / 像素比）') : ok('当前无降级基线，画质保持现状')
+      return restored ? ok(tt({ zh: '已恢复降级前的画质设置（后处理 / 像素比）', en: 'Quality restored to pre-degrade values (post-processing / pixel ratio)' })) : ok(tt({ zh: '当前无降级基线，画质保持现状', en: 'No degrade baseline — quality unchanged' }))
     }
     if (arg === 'status') {
       const st = engineRef.current?.perfStatus()
-      if (!st) return err('引擎未初始化')
-      return ok(`自动性能模式：${st.autoPerf ? '开' : '关'} · 当前帧率 ${st.fps ? st.fps.toFixed(1) : '—'} fps · ${st.degraded ? '降级中（后处理已关、像素比 ×0.6）' : '正常'}${st.autoPerf ? '（perf off / perf restore 可随时手动干预）' : ''}`)
+      if (!st) return err(tt({ zh: '引擎未初始化', en: 'Engine not initialized' }))
+      return ok(tt({
+        zh: `自动性能模式：${st.autoPerf ? '开' : '关'} · 当前帧率 ${st.fps ? st.fps.toFixed(1) : '—'} fps · ${st.degraded ? '降级中（后处理已关、像素比 ×0.6）' : '正常'}${st.autoPerf ? '（perf off / perf restore 可随时手动干预）' : ''}`,
+        en: `Auto performance mode: ${st.autoPerf ? 'on' : 'off'} · current ${st.fps ? st.fps.toFixed(1) : '—'} fps · ${st.degraded ? 'degraded (post-processing off, pixel ratio ×0.6)' : 'normal'}${st.autoPerf ? ' (perf off / perf restore to intervene anytime)' : ''}`,
+      }))
     }
-    return err('用法：perf on|off|status|restore')
+    return err(tt({ zh: '用法：perf on|off|status|restore', en: 'Usage: perf on|off|status|restore' }))
   }
 
   if (cmd === 'label') {
     const arg = (parts[1] ?? 'on').toLowerCase()
     if (arg === 'off' || arg === 'clear') {
       useMolStore.getState().clearLabels()
-      return ok('标签已清除')
+      return ok(tt({ zh: '标签已清除', en: 'Labels cleared' }))
     }
     const s = useMolStore.getState()
-    if (!s.selection.structureId || !s.selection.indices.length) return err('请先选择原子')
+    if (!s.selection.structureId || !s.selection.indices.length) return err(tt({ zh: '请先选择原子', en: 'Select atoms first' }))
     s.addLabelsForSelection()
-    return ok(`已添加 ${s.selection.indices.length} 个标签`)
+    return ok(tt({ zh: `已添加 ${s.selection.indices.length} 个标签`, en: `${s.selection.indices.length} labels added` }))
   }
 
   // ---------- PyMOL 兼容动词（r60：spectrum / iterate / alter / util.cbss / cell） ----------
@@ -846,27 +869,30 @@ export function runCommand(raw: string): void {
       b: 'bfactor', bfactor: 'bfactor', factor: 'bfactor',
     }
     const scheme = ATTRS[attr]
-    if (!scheme) return err(`spectrum 不支持的属性 "${headWords[0]}"。可用: count（链序渐变） / b（B 因子）`)
-    if (scheme === 'uniform') return err('属性错误')
+    if (!scheme) return err(tt({ zh: `spectrum 不支持的属性 "${headWords[0]}"。可用: count（链序渐变） / b（B 因子）`, en: `spectrum does not support property "${headWords[0]}". Available: count (chain-order gradient) / b (B-factor)` }))
+    if (scheme === 'uniform') return err(tt({ zh: '属性错误', en: 'Invalid property' }))
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有加载结构')
+    if (!s.activeId) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
     // 可选自定义起终点色（PyMOL spectrum b, rainbow, blue red）
     const tailWords = tail.split(/\s+/).filter(Boolean)
     let note = ''
     if (tailWords.length >= 2) {
       const c1 = parseCssColor(tailWords[tailWords.length - 2])
       const c2 = parseCssColor(tailWords[tailWords.length - 1])
-      if (c1 && c2) note = `（自定义起终点 ${c1}→${c2} 需「color ${scheme}」配合色板编辑，暂用内置渐变）`
+      if (c1 && c2) note = tt({ zh: `（自定义起终点 ${c1}→${c2} 需「color ${scheme}」配合色板编辑，暂用内置渐变）`, en: ` (custom endpoints ${c1}→${c2} need "color ${scheme}" plus palette editing — using the built-in gradient for now)` })
     }
     // 选择范围（可选）：spectrum b, rainbow, chain A —— 排除属性/配色词后的剩余
     const selWords = tailWords.filter(w => !['rainbow', 'count', 'b', 'bfactor', 'factor'].includes(w.toLowerCase()))
     const selExpr = selWords.join(' ')
     if (selExpr) {
       const res = s.selectFromExpr(selExpr)
-      if (res.error) return err(`选择错误: ${res.error}`)
+      if (res.error) return err(tt({ zh: `选择错误: ${res.error}`, en: `Selection error: ${res.error}` }))
     }
     s.applyColor(scheme)
-    return ok(`已按${scheme === 'bfactor' ? ' B 因子（低蓝 → 高红连续渐变）' : '链序（多链连续渐变）'}上色${note}${selExpr ? `（范围: ${selExpr}）` : ''}——PyMOL spectrum 兼容`)
+    return ok(tt({
+      zh: `已按${scheme === 'bfactor' ? ' B 因子（低蓝 → 高红连续渐变）' : '链序（多链连续渐变）'}上色${note}${selExpr ? `（范围: ${selExpr}）` : ''}——PyMOL spectrum 兼容`,
+      en: `Colored by ${scheme === 'bfactor' ? 'B-factor (low blue → high red continuous gradient)' : 'chain order (continuous gradient across chains)'}${note}${selExpr ? ` (scope: ${selExpr})` : ''} — PyMOL spectrum compatible`,
+    }))
   }
 
   if (cmd === 'iterate') {
@@ -875,19 +901,19 @@ export function runCommand(raw: string): void {
     const { head, tail } = commaSplit(rest)
     const expr = (head || 'all').trim()
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有加载结构')
+    if (!s.activeId) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
     const data = dataRegistry.get(s.activeId)
-    if (!data) return err('结构数据不存在')
+    if (!data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     const named = buildNamedMasks(s.activeId, data)
     const r = evaluateSelection(expr, { structure: data, named })
-    if (r.error) return err(`选择错误: ${r.error}`)
+    if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
     const idx = maskToIndices(r.mask)
-    if (!idx.length) return err(`选择 "${expr}" 命中 0 个原子`)
+    if (!idx.length) return err(tt({ zh: `选择 "${expr}" 命中 0 个原子`, en: `Selection "${expr}" matched 0 atoms` }))
     // 表达式变量（PyMOL 词法子集）：model/name/resn/resi/chain/ss/b/q/elem/index
     const fields = (tail || 'name resn resi chain').split(/[\s,+]+/).filter(Boolean)
     const upper = 20 // 输出上限（防刷屏；PyMOL 无上限但命令行面板有）
     let n = 0
-    ok(`iterate ${expr ? `(${expr})` : '(all)'} —— ${idx.length.toLocaleString()} 原子${idx.length > upper ? `（前 ${upper} 行）` : ''}:`)
+    ok(tt({ zh: `iterate ${expr ? `(${expr})` : '(all)'} —— ${idx.length.toLocaleString()} 原子${idx.length > upper ? `（前 ${upper} 行）` : ''}:`, en: `iterate ${expr ? `(${expr})` : '(all)'} — ${idx.length.toLocaleString()} atoms${idx.length > upper ? ` (first ${upper} rows)` : ''}:` }))
     for (const i of idx) {
       if (n >= upper) break
       const vals: Record<string, string | number> = {
@@ -899,7 +925,7 @@ export function runCommand(raw: string): void {
       const line = fields.filter(f => f in vals).map(f => `${f}=${vals[f]}`).join('  ')
       if (line) { ok(`  ${line}`); n++ }
     }
-    return ok(`（变量可用: index / model / name / resn / resi / chain / ss / b / q / elem——完整输出可 save <file>.pdb 后离线分析）`)
+    return ok(tt({ zh: `（变量可用: index / model / name / resn / resi / chain / ss / b / q / elem——完整输出可 save <file>.pdb 后离线分析）`, en: `(available variables: index / model / name / resn / resi / chain / ss / b / q / elem — for full output, save <file>.pdb and analyze offline)` }))
   }
 
   if (cmd === 'alter') {
@@ -908,22 +934,22 @@ export function runCommand(raw: string): void {
     const { head, tail } = commaSplit(rest)
     const expr = (head || '').trim()
     const assign = tail.match(/^(\w+)\s*=\s*(.+)$/)
-    if (!expr || !assign) return err('用法：alter (选择), 属性=表达式。如 alter (chain A and name CA), b=50 · alter (resn HEM), q=1')
+    if (!expr || !assign) return err(tt({ zh: '用法：alter (选择), 属性=表达式。如 alter (chain A and name CA), b=50 · alter (resn HEM), q=1', en: 'Usage: alter (selection), property=expression. E.g. alter (chain A and name CA), b=50 · alter (resn HEM), q=1' }))
     const field = assign[1].toLowerCase()
     const valExpr = assign[2].trim()
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有加载结构')
+    if (!s.activeId) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
     const data = dataRegistry.get(s.activeId)
-    if (!data) return err('结构数据不存在')
+    if (!data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     const named = buildNamedMasks(s.activeId, data)
     const r = evaluateSelection(expr, { structure: data, named })
-    if (r.error) return err(`选择错误: ${r.error}`)
+    if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
     const idx = maskToIndices(r.mask)
-    if (!idx.length) return err(`选择 "${expr}" 命中 0 个原子`)
-    if (!['b', 'q', 'name'].includes(field)) return err(`alter 暂支持 b / q / name（当前 "${field}"）——改坐标在本工具无意义（叠合/变换有专用命令）`)
+    if (!idx.length) return err(tt({ zh: `选择 "${expr}" 命中 0 个原子`, en: `Selection "${expr}" matched 0 atoms` }))
+    if (!['b', 'q', 'name'].includes(field)) return err(tt({ zh: `alter 暂支持 b / q / name（当前 "${field}"）——改坐标在本工具无意义（叠合/变换有专用命令）`, en: `alter currently supports b / q / name (got "${field}") — editing coordinates is meaningless here (superpose/transform have dedicated commands)` }))
     // 数值表达式：仅允许数值/简单算术（安全边界，不 eval 任意代码）
     if (field !== 'name') {
-      if (!/^[\d.+\-*/()\s]+$/.test(valExpr)) return err(`数值表达式非法 "${valExpr}"（仅数字与 + - * / 括号）`)
+      if (!/^[\d.+\-*/()\s]+$/.test(valExpr)) return err(tt({ zh: `数值表达式非法 "${valExpr}"（仅数字与 + - * / 括号）`, en: `Invalid numeric expression "${valExpr}" (digits and + - * / parentheses only)` }))
     }
     let n = 0
     for (const i of idx) {
@@ -939,18 +965,18 @@ export function runCommand(raw: string): void {
       n++
     }
     useMolStore.getState().bumpVisual()
-    return ok(`已修改 ${n.toLocaleString()} 个原子的 ${field}（putty/spectrum b 可见效果）`)
+    return ok(tt({ zh: `已修改 ${n.toLocaleString()} 个原子的 ${field}（putty/spectrum b 可见效果）`, en: `Modified ${field} on ${n.toLocaleString()} atoms (visible via putty/spectrum b)` }))
   }
 
   if (cmd === 'cell') {
     const arg = (parts[1] ?? '').toLowerCase()
-    if (arg && arg !== 'on' && arg !== 'off' && arg !== '1' && arg !== '0') return err('用法：show cell / hide cell（CRYST1 晶胞盒，a红 b绿 c蓝）')
+    if (arg && arg !== 'on' && arg !== 'off' && arg !== '1' && arg !== '0') return err(tt({ zh: '用法：show cell / hide cell（CRYST1 晶胞盒，a红 b绿 c蓝）', en: 'Usage: show cell / hide cell (CRYST1 unit cell, a red b green c blue)' }))
     const s = useMolStore.getState()
     const on = arg ? ['on', '1'].includes(arg) : !s.settings.showCell
     s.updateSettings({ showCell: on })
     const st = s.activeId ? dataRegistry.get(s.activeId) : null
-    const info = st?.crystal ? `（${st.crystal.a.toFixed(1)}×${st.crystal.b.toFixed(1)}×${st.crystal.c.toFixed(1)}Å ${st.crystal.spaceGroup.trim()}）` : '（当前结构无 CRYST1 晶胞信息）'
-    return ok(on ? `晶胞盒开启 ${info}——a 红 / b 绿 / c 蓝` : '晶胞盒已关闭')
+    const info = st?.crystal ? tt({ zh: `（${st.crystal.a.toFixed(1)}×${st.crystal.b.toFixed(1)}×${st.crystal.c.toFixed(1)}Å ${st.crystal.spaceGroup.trim()}）`, en: ` (${st.crystal.a.toFixed(1)}×${st.crystal.b.toFixed(1)}×${st.crystal.c.toFixed(1)} Å ${st.crystal.spaceGroup.trim()})` }) : tt({ zh: '（当前结构无 CRYST1 晶胞信息）', en: ' (no CRYST1 unit-cell info in this structure)' })
+    return ok(on ? tt({ zh: `晶胞盒开启 ${info}——a 红 / b 绿 / c 蓝`, en: `Unit cell shown ${info} — a red / b green / c blue` }) : tt({ zh: '晶胞盒已关闭', en: 'Unit cell hidden' }))
   }
 
   if (cmd === 'isolate') {
@@ -974,36 +1000,36 @@ export function runCommand(raw: string): void {
       const scene = SCENE_PRESETS[name]
       if (scene) {
         for (const c of scene.commands) runCommand(c)
-        return ok(`已应用场景: ${scene.label}（${scene.commands.length} 条命令）`)
+        return ok(tt({ zh: `已应用场景: ${tt(scene.label)}（${scene.commands.length} 条命令）`, en: `Scene applied: ${tt(scene.label)} (${scene.commands.length} commands)` }))
       }
     }
     const p = PRESETS[name]
     if (p) {
       useMolStore.getState().applyPreset(name)
       if (name === 'publication') {
-        return ok('已应用预设: 出版级互作——配体碳鲜绿单一色 · 口袋残基按到配体距离紫→粉渐变（杂原子元素色，主链+侧链完整显示）· 配体 6Å 内晶体水小球·已自动聚焦口袋。建议配 hbonds on 3.4 in byres(within 4.5 of (ligand)) and not water：氢键虚线是互作图的专业细节')
+        return ok(tt({ zh: '已应用预设: 出版级互作——配体碳鲜绿单一色 · 口袋残基按到配体距离紫→粉渐变（杂原子元素色，主链+侧链完整显示）· 配体 6Å 内晶体水小球·已自动聚焦口袋。建议配 hbonds on 3.4 in byres(within 4.5 of (ligand)) and not water：氢键虚线是互作图的专业细节', en: 'Preset applied: publication-grade interactions — ligand carbons in a single fresh green · pocket residues in a violet→pink gradient by distance to ligand (hetero-atoms in element colors, backbone + side chains fully shown) · crystal waters within 6 Å of the ligand as small spheres · pocket auto-focused. Pair with hbonds on 3.4 in byres(within 4.5 of (ligand)) and not water: H-bond dashes are the professional touch of interaction figures' }))
       }
       if (name === 'bindingsite') {
-        return ok('已应用预设: 结合口袋——口袋残基完整球棍（元素色）· 配体 6Å 内晶体水小球·已自动聚焦口袋')
+        return ok(tt({ zh: '已应用预设: 结合口袋——口袋残基完整球棍（元素色）· 配体 6Å 内晶体水小球·已自动聚焦口袋', en: 'Preset applied: binding site — pocket residues as full ball-and-stick (element colors) · crystal waters within 6 Å of the ligand as small spheres · pocket auto-focused' }))
       }
-      return ok(`已应用预设: ${p.label}`)
+      return ok(tt({ zh: `已应用预设: ${tt(p.label)}`, en: `Preset applied: ${tt(p.label)}` }))
     }
     // preset/style 动词仍可触达场景组合预设（含 publication 场景的完整渲染链）
     const scene = SCENE_PRESETS[name]
     if (scene) {
       for (const c of scene.commands) runCommand(c)
-      return ok(`已应用场景: ${scene.label}（${scene.commands.length} 条命令）`)
+      return ok(tt({ zh: `已应用场景: ${tt(scene.label)}（${scene.commands.length} 条命令）`, en: `Scene applied: ${tt(scene.label)} (${scene.commands.length} commands)` }))
     }
-    return err(`未知预设 "${parts[1]}"。表示法: ${Object.keys(PRESETS).join(', ')} · 场景: ${Object.keys(SCENE_PRESETS).join(', ')}`)
+    return err(tt({ zh: `未知预设 "${parts[1]}"。表示法: ${Object.keys(PRESETS).join(', ')} · 场景: ${Object.keys(SCENE_PRESETS).join(', ')}`, en: `Unknown preset "${parts[1]}". Style presets: ${Object.keys(PRESETS).join(', ')} · scene presets: ${Object.keys(SCENE_PRESETS).join(', ')}` }))
   }
 
   if (cmd === 'delete') {
     const name = parts[1]
-    if (!name) return err('用法: delete <命名选择名>')
+    if (!name) return err(tt({ zh: '用法: delete <命名选择名>', en: 'Usage: delete <named selection name>' }))
     const s = useMolStore.getState()
-    if (!s.namedSelections.find(n => n.name === name)) return err(`未找到命名选择 "${name}"`)
+    if (!s.namedSelections.find(n => n.name === name)) return err(tt({ zh: `未找到命名选择 "${name}"`, en: `Named selection "${name}" not found` }))
     s.deleteNamedSelection(name)
-    return ok(`已删除 ${name}`)
+    return ok(tt({ zh: `已删除 ${name}`, en: `${name} deleted` }))
   }
 
   if (cmd === 'close') {
@@ -1012,9 +1038,9 @@ export function runCommand(raw: string): void {
     const arg = (parts[1] ?? '').toLowerCase()
     if (arg === 'all' || arg === '*') {
       const n = s.structures.length
-      if (!n) return err('当前没有已加载的结构')
+      if (!n) return err(tt({ zh: '当前没有已加载的结构', en: 'No structures loaded' }))
       for (const st of [...s.structures]) s.removeStructure(st.id)
-      return ok(`已关闭全部 ${n} 个结构（书签与时间轴保留；彻底重置用 session new）`)
+      return ok(tt({ zh: `已关闭全部 ${n} 个结构（书签与时间轴保留；彻底重置用 session new）`, en: `Closed all ${n} structures (bookmarks and timeline kept; use session new for a full reset)` }))
     }
     let target = s.structures.find(x => x.id === s.activeId)
     if (arg) {
@@ -1022,19 +1048,19 @@ export function runCommand(raw: string): void {
         x.name.toLowerCase() === arg ||
         x.name.toLowerCase().startsWith(arg) ||
         x.meta.pdbId?.toLowerCase() === arg)
-      if (!target) return err(`未找到结构 "${parts[1]}"（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
+      if (!target) return err(tt({ zh: `未找到结构 "${parts[1]}"（可用：${s.structures.map(x => x.name).join('、') || '无'}）`, en: `Structure "${parts[1]}" not found (available: ${s.structures.map(x => x.name).join(', ') || 'none'})` }))
     }
-    if (!target) return err('没有活动结构（close <名> 指定，或 close all）')
+    if (!target) return err(tt({ zh: '没有活动结构（close <名> 指定，或 close all）', en: 'No active structure (specify close <name>, or close all)' }))
     const atoms = target.summary.atoms
     s.removeStructure(target.id)
-    return ok(`已关闭 ${target.name}（${atoms.toLocaleString()} 原子）。结构卡片 X 按钮关闭时 toast 内可撤销`)
+    return ok(tt({ zh: `已关闭 ${target.name}（${atoms.toLocaleString()} 原子）。结构卡片 X 按钮关闭时 toast 内可撤销`, en: `Closed ${target.name} (${atoms.toLocaleString()} atoms). Undo is available in the toast when closing via the structure card X button` }))
   }
 
   if (cmd === 'clear' || cmd === 'reset') {
     const s = useMolStore.getState()
     const n = s.structures.length
     for (const st of [...s.structures]) s.removeStructure(st.id)
-    return ok(n > 0 ? `已清空所有结构（${n} 个；彻底重置含书签/时间轴用 session new）` : '当前没有已加载的结构')
+    return ok(n > 0 ? tt({ zh: `已清空所有结构（${n} 个；彻底重置含书签/时间轴用 session new）`, en: `Cleared all structures (${n}; use session new to also reset bookmarks/timeline)` }) : tt({ zh: '当前没有已加载的结构', en: 'No structures loaded' }))
   }
 
   if (cmd === 'orient') {
@@ -1045,38 +1071,38 @@ export function runCommand(raw: string): void {
     if (!eng) {
       // 视图切换窗口（欢迎页 load 落地 → MolViewer dynamic 挂载中）：选择先行求值，
       // 相机操作入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
-      if (!s.structures.length) return err('引擎未就绪（先加载结构）')
+      if (!s.structures.length) return err(tt({ zh: '引擎未就绪（先加载结构）', en: 'Engine not ready (load a structure first)' }))
       let refs: { structureId: string; indices: number[] }[] | undefined
       let cnt = 0
       if (rest) {
-        if (!s.activeId) return err('没有活动结构')
+        if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
         const data = dataRegistry.get(s.activeId)
-        if (!data) return err('结构数据不存在')
+        if (!data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
         const named = buildNamedMasks(s.activeId, data)
         const r = evaluateSelection(rest, { structure: data, named })
-        if (r.error) return err(`选择错误: ${r.error}`)
+        if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
         const indices = maskToIndices(r.mask)
-        if (!indices.length) return err('选择为空')
+        if (!indices.length) return err(tt({ zh: '选择为空', en: 'Selection is empty' }))
         refs = [{ structureId: s.activeId, indices }]
         cnt = indices.length
       }
       whenEngineReady(() => engineRef.current?.orient(refs))
-      return ok(cnt ? `已按主轴对齐视角（${cnt.toLocaleString()} 个原子，PCA）` : '已按主轴对齐视角（全部可见结构）')
+      return ok(cnt ? tt({ zh: `已按主轴对齐视角（${cnt.toLocaleString()} 个原子，PCA）`, en: `View aligned to principal axes (${cnt.toLocaleString()} atoms, PCA)` }) : tt({ zh: '已按主轴对齐视角（全部可见结构）', en: 'View aligned to principal axes (all visible structures)' }))
     }
     if (rest) {
-      if (!s.activeId) return err('没有活动结构')
+      if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
       const data = dataRegistry.get(s.activeId)
-      if (!data) return err('结构数据不存在')
+      if (!data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
       const named = buildNamedMasks(s.activeId, data)
       const r = evaluateSelection(rest, { structure: data, named })
-      if (r.error) return err(`选择错误: ${r.error}`)
+      if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
       const indices = maskToIndices(r.mask)
-      if (!indices.length) return err('选择为空')
+      if (!indices.length) return err(tt({ zh: '选择为空', en: 'Selection is empty' }))
       eng.orient([{ structureId: s.activeId, indices }])
-      return ok(`已按主轴对齐视角（${indices.length.toLocaleString()} 个原子，PCA）`)
+      return ok(tt({ zh: `已按主轴对齐视角（${indices.length.toLocaleString()} 个原子，PCA）`, en: `View aligned to principal axes (${indices.length.toLocaleString()} atoms, PCA)` }))
     }
     eng.orient()
-    return ok('已按主轴对齐视角（全部可见结构）')
+    return ok(tt({ zh: '已按主轴对齐视角（全部可见结构）', en: 'View aligned to principal axes (all visible structures)' }))
   }
 
   if (cmd === 'turn') {
@@ -1084,18 +1110,18 @@ export function runCommand(raw: string): void {
     const axis = (parts[1] ?? '').toLowerCase()
     const deg = clampNum(parseFloat(parts[2] ?? ''), -180, 180, NaN)
     if (!/^[xyz]$/.test(axis) || isNaN(deg) || deg === 0) {
-      return err('用法：turn <x|y|z> <±角度°>（x=俯仰 y=水平方位 z=滚转；如 turn y 30、turn x -15）')
+      return err(tt({ zh: '用法：turn <x|y|z> <±角度°>（x=俯仰 y=水平方位 z=滚转；如 turn y 30、turn x -15）', en: 'Usage: turn <x|y|z> <±degrees> (x = pitch, y = yaw, z = roll; e.g. turn y 30, turn x -15)' }))
     }
     const eng = engineRef.current
     if (!eng) {
       // 视图切换窗口：入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
-      if (!useMolStore.getState().structures.length) return err('引擎未就绪（先加载结构）')
+      if (!useMolStore.getState().structures.length) return err(tt({ zh: '引擎未就绪（先加载结构）', en: 'Engine not ready (load a structure first)' }))
       whenEngineReady(() => engineRef.current?.turnCamera(axis as 'x' | 'y' | 'z', deg))
     } else {
       eng.turnCamera(axis as 'x' | 'y' | 'z', deg)
     }
-    const axisName = axis === 'x' ? '水平屏轴（俯仰）' : axis === 'y' ? '竖直屏轴（水平方位）' : '视线轴（滚转）'
-    return ok(`视角旋转：绕${axisName} ${deg > 0 ? '+' : ''}${deg}°（turn 反向可退回）`)
+    const axisName = axis === 'x' ? tt({ zh: '水平屏轴（俯仰）', en: 'horizontal screen axis (pitch)' }) : axis === 'y' ? tt({ zh: '竖直屏轴（水平方位）', en: 'vertical screen axis (yaw)' }) : tt({ zh: '视线轴（滚转）', en: 'view axis (roll)' })
+    return ok(tt({ zh: `视角旋转：绕${axisName} ${deg > 0 ? '+' : ''}${deg}°（turn 反向可退回）`, en: `View rotated: ${deg > 0 ? '+' : ''}${deg}° about the ${axisName} (turn back the other way to undo)` }))
   }
 
   if (cmd === 'move') {
@@ -1103,47 +1129,47 @@ export function runCommand(raw: string): void {
     const axis = (parts[1] ?? '').toLowerCase()
     const d = clampNum(parseFloat(parts[2] ?? ''), -200, 200, NaN)
     if (!/^[xyz]$/.test(axis) || isNaN(d) || d === 0) {
-      return err('用法：move <x|y|z> <±Å>（x=右移 y=上移 z=推拉；如 move z -10 拉近）')
+      return err(tt({ zh: '用法：move <x|y|z> <±Å>（x=右移 y=上移 z=推拉；如 move z -10 拉近）', en: 'Usage: move <x|y|z> <±Å> (x = right, y = up, z = dolly; e.g. move z -10 to move closer)' }))
     }
     const eng = engineRef.current
     if (!eng) {
       // 视图切换窗口：入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
-      if (!useMolStore.getState().structures.length) return err('引擎未就绪（先加载结构）')
+      if (!useMolStore.getState().structures.length) return err(tt({ zh: '引擎未就绪（先加载结构）', en: 'Engine not ready (load a structure first)' }))
       whenEngineReady(() => engineRef.current?.moveCamera(axis as 'x' | 'y' | 'z', d))
     } else {
       eng.moveCamera(axis as 'x' | 'y' | 'z', d)
     }
-    const axisName = axis === 'x' ? '水平右移' : axis === 'y' ? '竖直上移' : d > 0 ? '推远' : '拉近'
-    return ok(`视角平移：${axisName} ${d > 0 ? '+' : ''}${d} Å`)
+    const axisName = axis === 'x' ? tt({ zh: '水平右移', en: 'right' }) : axis === 'y' ? tt({ zh: '竖直上移', en: 'up' }) : d > 0 ? tt({ zh: '推远', en: 'pushed away' }) : tt({ zh: '拉近', en: 'pulled closer' })
+    return ok(tt({ zh: `视角平移：${axisName} ${d > 0 ? '+' : ''}${d} Å`, en: `View translated: ${axisName} ${d > 0 ? '+' : ''}${d} Å` }))
   }
 
   if (cmd === 'get_view') {
     const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
+    if (!eng) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
     const st = eng.getCameraState()
     ok(JSON.stringify(st))
-    return ok('↑ 复制此 JSON，用 set_view <JSON> 可恢复该视角（支持跨会话）')
+    return ok(tt({ zh: '↑ 复制此 JSON，用 set_view <JSON> 可恢复该视角（支持跨会话）', en: '↑ Copy this JSON and restore the view later with set_view <JSON> (works across sessions)' }))
   }
 
   if (cmd === 'set_view') {
     const rest = input.slice(parts[0].length).trim()
-    if (!rest) return err('用法：set_view {"pos":[..],"target":[..],"up":[..]}（JSON 来自 get_view）')
+    if (!rest) return err(tt({ zh: '用法：set_view {"pos":[..],"target":[..],"up":[..]}（JSON 来自 get_view）', en: 'Usage: set_view {"pos":[..],"target":[..],"up":[..]} (JSON from get_view)' }))
     let parsed: { pos?: number[]; target?: number[]; up?: number[]; fov?: number; ortho?: boolean }
     try {
       parsed = JSON.parse(rest) as typeof parsed
     } catch {
-      return err('JSON 解析失败——请粘贴 get_view 输出的完整 JSON')
+      return err(tt({ zh: 'JSON 解析失败——请粘贴 get_view 输出的完整 JSON', en: 'JSON parse failed — paste the full JSON printed by get_view' }))
     }
     const eng = engineRef.current
     if (!eng) {
       // 视图切换窗口：入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
-      if (!useMolStore.getState().structures.length) return err('引擎未就绪（先加载结构）')
+      if (!useMolStore.getState().structures.length) return err(tt({ zh: '引擎未就绪（先加载结构）', en: 'Engine not ready (load a structure first)' }))
       whenEngineReady(() => engineRef.current?.animateCameraTo(parsed))
-      return ok('视角已恢复（平滑过渡）')
+      return ok(tt({ zh: '视角已恢复（平滑过渡）', en: 'View restored (smooth transition)' }))
     }
     // r55：与 view 书签跳转同一路径（up 球面 slerp + 极点豁免 + 过渡手感三档）——录像不跳变
     eng.animateCameraTo(parsed)
-    return ok('视角已恢复（平滑过渡）')
+    return ok(tt({ zh: '视角已恢复（平滑过渡）', en: 'View restored (smooth transition)' }))
   }
 
   if (cmd === 'view' || cmd === 'views' || cmd === 'bookmark') {
@@ -1154,15 +1180,15 @@ export function runCommand(raw: string): void {
     if (sub === 'from') {
       const selExpr = input.slice(parts[0].length).trim().replace(/^from\s+/i, '').replace(/,/g, ' ').trim()
       const s = useMolStore.getState()
-      if (!selExpr) return err('用法：view from <选择>（如 view from ligand / view from (resn HEM and chain A)）——从选择方向观察，口袋开口正对相机')
-      if (!s.activeId) return err('没有活动结构')
+      if (!selExpr) return err(tt({ zh: '用法：view from <选择>（如 view from ligand / view from (resn HEM and chain A)）——从选择方向观察，口袋开口正对相机', en: 'Usage: view from <selection> (e.g. view from ligand / view from (resn HEM and chain A)) — look from the direction of the selection, pocket opening facing the camera' }))
+      if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
       const data = dataRegistry.get(s.activeId)
-      if (!data) return err('结构数据不存在')
+      if (!data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
       const named = buildNamedMasks(s.activeId, data)
       const r = evaluateSelection(selExpr, { structure: data, named })
-      if (r.error) return err(`选择错误: ${r.error}`)
+      if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
       const indices = maskToIndices(r.mask)
-      if (!indices.length) return err('选择为空')
+      if (!indices.length) return err(tt({ zh: '选择为空', en: 'Selection is empty' }))
       const sid = s.activeId
       const eng = engineRef.current
       if (!eng) {
@@ -1175,88 +1201,88 @@ export function runCommand(raw: string): void {
           const inst = nearestInstance(data, indices, e)
           if (inst) e.viewFrom([{ structureId: sid!, indices: inst.indices }])
         })
-        return ok(`视角 → 从「${selExpr}」方向观察（选择在前景、开口正对相机，17° 仰角增加纵深）`)
+        return ok(tt({ zh: `视角 → 从「${selExpr}」方向观察（选择在前景、开口正对相机，17° 仰角增加纵深）`, en: `View → looking from "${selExpr}" (selection in the foreground, opening facing the camera, 17° elevation for depth)` }))
       }
       if (eng.viewFrom([{ structureId: sid!, indices }])) {
-        return ok(`视角 → 从「${selExpr}」方向观察（选择在前景、开口正对相机，17° 仰角增加纵深）`)
+        return ok(tt({ zh: `视角 → 从「${selExpr}」方向观察（选择在前景、开口正对相机，17° 仰角增加纵深）`, en: `View → looking from "${selExpr}" (selection in the foreground, opening facing the camera, 17° elevation for depth)` }))
       }
       // 多配体兑底：选择质心贴近结构中心（如 ligand 覆盖 4 个 HEM 均布）→ 自动挑离相机目标最近的配体实例重试
       const inst = nearestInstance(data, indices, eng)
       if (inst && eng.viewFrom([{ structureId: s.activeId, indices: inst.indices }])) {
-        return ok(`视角 → 从「${selExpr}」方向观察——多配体均布已自动聚焦 ${inst.label}（选择在前景、开口正对相机）`)
+        return ok(tt({ zh: `视角 → 从「${selExpr}」方向观察——多配体均布已自动聚焦 ${inst.label}（选择在前景、开口正对相机）`, en: `View → looking from "${selExpr}" — evenly distributed ligands auto-focused on ${inst.label} (selection in the foreground, opening facing the camera)` }))
       }
-      return err('选择贴近结构中心、方向无意义（多配体均布或深埋）——先 zoom (resn XXX and chain A), 6 聚焦单个配体，再 view from (resn XXX and chain A)（口袋正对相机）')
+      return err(tt({ zh: '选择贴近结构中心、方向无意义（多配体均布或深埋）——先 zoom (resn XXX and chain A), 6 聚焦单个配体，再 view from (resn XXX and chain A)（口袋正对相机）', en: 'Selection is near the structure center — direction is meaningless (evenly distributed ligands or deeply buried). First zoom (resn XXX and chain A), 6 to focus a single ligand, then view from (resn XXX and chain A) (pocket facing the camera)' }))
     }
     // 正交视角预设（先于书签跳转判定——与书签名不冲突）：view front/top/left/right/back/bottom/x/y/z
-    const AXIS_VIEW_LABELS: Record<string, string> = {
-      front: '正面', back: '背面', top: '俯视', bottom: '仰视', left: '左视', right: '右视',
-      x: '右视（沿 X 轴）', y: '俯视（沿 Y 轴）', z: '正面（沿 Z 轴）',
+    const AXIS_VIEW_LABELS: Record<string, { zh: string; en: string }> = {
+      front: { zh: '正面', en: 'front' }, back: { zh: '背面', en: 'back' }, top: { zh: '俯视', en: 'top' }, bottom: { zh: '仰视', en: 'bottom' }, left: { zh: '左视', en: 'left' }, right: { zh: '右视', en: 'right' },
+      x: { zh: '右视（沿 X 轴）', en: 'right (along X)' }, y: { zh: '俯视（沿 Y 轴）', en: 'top (along Y)' }, z: { zh: '正面（沿 Z 轴）', en: 'front (along Z)' },
     }
     if (AXIS_VIEW_LABELS[sub]) {
       const eng = engineRef.current
       if (!eng) {
         // 视图切换窗口：入队等待冲刷（与 zoom 同语义）；空场景引擎永不来 → 诚实报错
-        if (!useMolStore.getState().structures.length) return err('引擎未就绪（先加载结构）')
+        if (!useMolStore.getState().structures.length) return err(tt({ zh: '引擎未就绪（先加载结构）', en: 'Engine not ready (load a structure first)' }))
         whenEngineReady(() => engineRef.current?.setAxisView(sub))
-        return ok(`视角 → ${AXIS_VIEW_LABELS[sub]}（保持目标点与距离，平滑过渡）`)
+        return ok(tt({ zh: `视角 → ${tt(AXIS_VIEW_LABELS[sub])}（保持目标点与距离，平滑过渡）`, en: `View → ${tt(AXIS_VIEW_LABELS[sub])} (target and distance kept, smooth transition)` }))
       }
-      if (!eng.setAxisView(sub)) return err('引擎未就绪')
-      return ok(`视角 → ${AXIS_VIEW_LABELS[sub]}（保持目标点与距离，平滑过渡）`)
+      if (!eng.setAxisView(sub)) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
+      return ok(tt({ zh: `视角 → ${tt(AXIS_VIEW_LABELS[sub])}（保持目标点与距离，平滑过渡）`, en: `View → ${tt(AXIS_VIEW_LABELS[sub])} (target and distance kept, smooth transition)` }))
     }
     if (!sub || sub === 'list' || sub === 'ls') {
-      if (!vs.bookmarks.length) return ok('暂无视角书签——view save [名称] 保存当前视角（或快捷键 V）；view front/top/left/right 转正交视角；view from ligand 从配体方向观察')
-      ok(`视角书签（${vs.bookmarks.length}/${MAX_BOOKMARKS}）：`)
+      if (!vs.bookmarks.length) return ok(tt({ zh: '暂无视角书签——view save [名称] 保存当前视角（或快捷键 V）；view front/top/left/right 转正交视角；view from ligand 从配体方向观察', en: 'No view bookmarks yet — view save [name] saves the current view (or hotkey V); view front/top/left/right switches to orthographic views; view from ligand looks from the ligand direction' }))
+      ok(tt({ zh: `视角书签（${vs.bookmarks.length}/${MAX_BOOKMARKS}）：`, en: `View bookmarks (${vs.bookmarks.length}/${MAX_BOOKMARKS}):` }))
       vs.bookmarks.forEach((b, i) => {
-        const t = new Date(b.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+        const t = new Date(b.createdAt).toLocaleTimeString(tt({ zh: 'zh-CN', en: 'en-US' }), { hour: '2-digit', minute: '2-digit' })
         ok(`  ${String(i + 1).padEnd(2)}  ${b.name.padEnd(16)} ${t}${i < 9 ? '  ⇧' + (i + 1) : ''}`)
       })
-      return ok('跳转：view <序号|名称> / Shift+数字键；删除：view del <序号|名称>；清空：view clear')
+      return ok(tt({ zh: '跳转：view <序号|名称> / Shift+数字键；删除：view del <序号|名称>；清空：view clear', en: 'Jump: view <number|name> / Shift+number; delete: view del <number|name>; clear all: view clear' }))
     }
     if (sub === 'save' || sub === 'add' || sub === 'snap') {
       const name = parts.slice(2).join(' ').trim() || undefined
       const bm = vs.addBookmark(name)
-      if (!bm) return err(`书签已达上限（${MAX_BOOKMARKS}）——先 view del 删除不再需要的书签`)
+      if (!bm) return err(tt({ zh: `书签已达上限（${MAX_BOOKMARKS}）——先 view del 删除不再需要的书签`, en: `Bookmark limit reached (${MAX_BOOKMARKS}) — delete unneeded ones with view del first` }))
       const idx = useViewsStore.getState().bookmarks.length
-      return ok(`已保存视角书签「${bm.name}」${idx < 9 ? `（Shift+${idx} 或 view ${idx} 跳转）` : ''}`)
+      return ok(tt({ zh: `已保存视角书签「${bm.name}」${idx < 9 ? `（Shift+${idx} 或 view ${idx} 跳转）` : ''}`, en: `View bookmark "${bm.name}" saved${idx < 9 ? ` (Shift+${idx} or view ${idx} to jump)` : ''}` }))
     }
     if (sub === 'clear') {
       vs.clearBookmarks()
-      return ok('已清空所有视角书签')
+      return ok(tt({ zh: '已清空所有视角书签', en: 'All view bookmarks cleared' }))
     }
     if (sub === 'del' || sub === 'rm' || sub === 'delete') {
       const arg = parts.slice(2).join(' ').trim()
-      if (!arg) return err('用法：view del <序号|名称>')
+      if (!arg) return err(tt({ zh: '用法：view del <序号|名称>', en: 'Usage: view del <number|name>' }))
       const n = Number(arg)
       const target = Number.isInteger(n) && n >= 1 ? vs.bookmarks[n - 1] : vs.bookmarks.find(b => b.name.toLowerCase() === arg.toLowerCase())
-      if (!target) return err(`找不到书签「${arg}」`)
+      if (!target) return err(tt({ zh: `找不到书签「${arg}」`, en: `Bookmark "${arg}" not found` }))
       vs.removeBookmark(target.id)
-      return ok(`已删除视角书签「${target.name}」`)
+      return ok(tt({ zh: `已删除视角书签「${target.name}」`, en: `View bookmark "${target.name}" deleted` }))
     }
     // view <序号|名称> / view go <序号|名称>：跳转（平滑过渡；名称可含空格）
     const arg = (sub === 'go' || sub === 'goto' || sub === 'jump' ? parts.slice(2).join(' ') : parts.slice(1).join(' ')).trim()
-    if (!arg) return err('用法：view save [名称] | view <序号|名称> | view del <序号|名称> | view clear')
+    if (!arg) return err(tt({ zh: '用法：view save [名称] | view <序号|名称> | view del <序号|名称> | view clear', en: 'Usage: view save [name] | view <number|name> | view del <number|name> | view clear' }))
     const n = Number(arg)
     const target = Number.isInteger(n) && n >= 1 ? vs.bookmarks[n - 1] : vs.bookmarks.find(b => b.name.toLowerCase() === arg.toLowerCase())
-    if (!target) return err(`找不到书签「${arg}」——view list 查看现有书签`)
+    if (!target) return err(tt({ zh: `找不到书签「${arg}」——view list 查看现有书签`, en: `Bookmark "${arg}" not found — view list shows existing bookmarks` }))
     vs.restoreBookmark(target.id)
-    return ok(`已跳转到视角书签「${target.name}」`)
+    return ok(tt({ zh: `已跳转到视角书签「${target.name}」`, en: `Jumped to view bookmark "${target.name}"` }))
   }
 
   if (cmd === 'tour' || cmd === 'demo') {
     const sub = (parts[1] ?? '').toLowerCase()
     if (sub === 'stop' || sub === 'exit' || sub === 'quit') {
       useTourStore.getState().stop()
-      return ok('演示已结束')
+      return ok(tt({ zh: '演示已结束', en: 'Tour ended' }))
     }
     if (!sub || sub === 'list' || sub === 'ls') {
-      ok('引导式演示场景（逐步讲解 + 自动执行，←/→ 切换、Esc 结束）：')
-      for (const t of TOURS) ok(`  ${t.id.padEnd(14)} ${t.title}（${t.steps.length} 步 · ≈${t.minutes} 分钟）`)
-      return ok('启动：tour <id>，如 tour quickstart；工具栏「演示」菜单同样可启动')
+      ok(tt({ zh: '引导式演示场景（逐步讲解 + 自动执行，←/→ 切换、Esc 结束）：', en: 'Guided tours (step-by-step narration + auto-execution, ←/→ to step, Esc to end):' }))
+      for (const t of TOURS) ok(`  ${t.id.padEnd(14)} ${tt(t.title)}${tt({ zh: `（${t.steps.length} 步 · ≈${t.minutes} 分钟）`, en: ` (${t.steps.length} steps · ≈${t.minutes} min)` })}`)
+      return ok(tt({ zh: '启动：tour <id>，如 tour quickstart；工具栏「演示」菜单同样可启动', en: 'Start: tour <id>, e.g. tour quickstart; the toolbar "Tours" menu works too' }))
     }
     const t = findTour(sub)
-    if (!t) return err(`未知演示「${sub}」——tour 查看可用场景`)
+    if (!t) return err(tt({ zh: `未知演示「${sub}」——tour 查看可用场景`, en: `Unknown tour "${sub}" — run tour to list available tours` }))
     void useTourStore.getState().start(t.id)
-    return ok(`▶ 开始演示「${t.title}」——顶部引导卡片亮起，按 → 键继续`)
+    return ok(tt({ zh: `▶ 开始演示「${tt(t.title)}」——顶部引导卡片亮起，按 → 键继续`, en: `▶ Tour "${tt(t.title)}" started — guide card lit at the top, press → to continue` }))
   }
 
   if (cmd === 'count_atoms' || cmd === 'count') {
@@ -1268,33 +1294,33 @@ export function runCommand(raw: string): void {
         if (!x.visible) continue
         n += dataRegistry.get(x.id)?.atoms.count ?? 0
       }
-      return ok(`可见结构共 ${n.toLocaleString()} 个原子（${s.structures.filter(x => x.visible).length} 个对象）`)
+      return ok(tt({ zh: `可见结构共 ${n.toLocaleString()} 个原子（${s.structures.filter(x => x.visible).length} 个对象）`, en: `${n.toLocaleString()} atoms in visible structures (${s.structures.filter(x => x.visible).length} objects)` }))
     }
-    if (!s.activeId) return err('没有活动结构')
+    if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const data = dataRegistry.get(s.activeId)
-    if (!data) return err('结构数据不存在')
+    if (!data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     const named = buildNamedMasks(s.activeId, data)
     const r = evaluateSelection(rest, { structure: data, named })
-    if (r.error) return err(`选择错误: ${r.error}`)
-    return ok(`选择包含 ${r.count.toLocaleString()} 个原子（不改变当前选择）`)
+    if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
+    return ok(tt({ zh: `选择包含 ${r.count.toLocaleString()} 个原子（不改变当前选择）`, en: `Selection contains ${r.count.toLocaleString()} atoms (current selection unchanged)` }))
   }
 
   if (cmd === 'create') {
     // create <名> = <选择>：从选择创建新对象（PyMOL 核心工作流）
     const rest = input.slice(parts[0].length).trim()
     const m = rest.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/)
-    if (!m) return err('用法：create <新对象名> = <选择表达式>，如 create pocket = within 5 of resn HEM')
+    if (!m) return err(tt({ zh: '用法：create <新对象名> = <选择表达式>，如 create pocket = within 5 of resn HEM', en: 'Usage: create <new object name> = <selection expression>, e.g. create pocket = within 5 of resn HEM' }))
     const name = m[1]
     const expr = m[2].trim()
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有活动结构')
+    if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const data = dataRegistry.get(s.activeId)
     const entry = s.structures.find(x => x.id === s.activeId)
-    if (!data || !entry) return err('结构数据不存在')
+    if (!data || !entry) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     const named = buildNamedMasks(s.activeId, data)
     const r = evaluateSelection(expr, { structure: data, named })
-    if (r.error) return err(`选择错误: ${r.error}`)
-    if (r.count === 0) return err('选择为空（0 个原子）')
+    if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
+    if (r.count === 0) return err(tt({ zh: '选择为空（0 个原子）', en: 'Selection is empty (0 atoms)' }))
     const indices = maskToIndices(r.mask)
     try {
       const t0 = performance.now()
@@ -1303,22 +1329,22 @@ export function runCommand(raw: string): void {
       const id = useMolStore.getState().addStructure(sub, name, ms)
       // 生成 PDB 文本登记（会话持久化用；坐标为当前世界坐标）
       textRegistry.set(id, structureToPdbText(sub))
-      useMolStore.getState().appendLog('out', `已创建对象 ${name}：${sub.atoms.count.toLocaleString()} 原子 · ${sub.residues.length} 残基 · ${ms.toFixed(0)} ms（源：${entry.name}）`)
-      return ok(`对象 "${name}" 已创建（${r.count.toLocaleString()} 原子）——可用 show/color 独立控制，已自动登记进会话存档`)
+      useMolStore.getState().appendLog('out', tt({ zh: `已创建对象 ${name}：${sub.atoms.count.toLocaleString()} 原子 · ${sub.residues.length} 残基 · ${ms.toFixed(0)} ms（源：${entry.name}）`, en: `Object ${name} created: ${sub.atoms.count.toLocaleString()} atoms · ${sub.residues.length} residues · ${ms.toFixed(0)} ms (from: ${entry.name})` }))
+      return ok(tt({ zh: `对象 "${name}" 已创建（${r.count.toLocaleString()} 原子）——可用 show/color 独立控制，已自动登记进会话存档`, en: `Object "${name}" created (${r.count.toLocaleString()} atoms) — control independently with show/color; registered in the session archive` }))
     } catch (e) {
-      return err(`创建失败：${e instanceof Error ? e.message : String(e)}`)
+      return err(tt({ zh: `创建失败：${e instanceof Error ? e.message : String(e)}`, en: `Create failed: ${e instanceof Error ? e.message : String(e)}` }))
     }
   }
 
   if (cmd === 'split_chains' || cmd === 'splitchains') {
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有活动结构')
+    if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const data = dataRegistry.get(s.activeId)
     const entry = s.structures.find(x => x.id === s.activeId)
-    if (!data || !entry) return err('结构数据不存在')
+    if (!data || !entry) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     const groups = data.chains.filter(c => c.type !== 'water')
-    if (!groups.length) return err('没有非水链组可拆分')
-    if (groups.length > 24) return err(`链组过多（${groups.length}）——请先用 create 缩小结构再拆分`)
+    if (!groups.length) return err(tt({ zh: '没有非水链组可拆分', en: 'No non-water chain groups to split' }))
+    if (groups.length > 24) return err(tt({ zh: `链组过多（${groups.length}）——请先用 create 缩小结构再拆分`, en: `Too many chain groups (${groups.length}) — use create to shrink the structure first, then split` }))
     // 重名链 ID 加序号（4HHB 同 ID 多组场景）
     const seen = new Map<string, number>()
     let created = 0
@@ -1339,34 +1365,34 @@ export function runCommand(raw: string): void {
         // 单链失败不阻断
       }
     }
-    return ok(`已拆分为 ${created} 个对象（跳过 ${skippedWater} 个水链组；重名链 ID 已加 # 序号）——对象在结构面板中独立可控`)
+    return ok(tt({ zh: `已拆分为 ${created} 个对象（跳过 ${skippedWater} 个水链组；重名链 ID 已加 # 序号）——对象在结构面板中独立可控`, en: `Split into ${created} objects (skipped ${skippedWater} water chain groups; duplicate chain IDs suffixed with #) — objects are independently controllable in the structure panel` }))
   }
 
   if (cmd === 'util') {
     const sub = (parts[1] ?? '').toLowerCase()
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有活动结构')
+    if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const entry = s.structures.find(x => x.id === s.activeId)
     const data = entry ? dataRegistry.get(s.activeId) : null
-    if (!entry || !data) return err('结构数据不存在')
+    if (!entry || !data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     if (sub === 'cbc' || sub === 'chain') {
       s.applyColor('chain')
-      return ok('已按链着色（util.cbc）')
+      return ok(tt({ zh: '已按链着色（util.cbc）', en: 'Colored by chain (util.cbc)' }))
     }
     if (sub === 'cnc') {
       s.applyColor('#b7bcc3')
-      return ok('已整体灰化（util.cnc）')
+      return ok(tt({ zh: '已整体灰化（util.cnc）', en: 'Colored overall gray (util.cnc)' }))
     }
     if (sub === 'ss') {
       s.applyColor('ss')
-      return ok('已按二级结构着色（util.ss：螺旋红 · 折叠黄 · 环灰）')
+      return ok(tt({ zh: '已按二级结构着色（util.ss：螺旋红 · 折叠黄 · 环灰）', en: 'Colored by secondary structure (util.ss: helix red · sheet yellow · loop gray)' }))
     }
     if (sub === 'cbss') {
       // PyMOL util.cbss： cartoons 按二级结构（螺旋红折叠黄环灰）+ 其余元素色——最常用的卡通配色
       s.applyColor('ss')
       const st = useMolStore.getState()
       const e2 = st.structures.find(x => x.id === st.activeId)
-      if (!e2) return err('结构数据不存在')
+      if (!e2) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
       const scope = st.selection.structureId === e2.id && st.selection.indices.length ? new Set(st.selection.indices) : null
       const overrides = { ...e2.colorOverrides }
       // SS 配色只写 polymer 残基；非聚合物原子（配体/水/离子）回元素色
@@ -1382,21 +1408,21 @@ export function runCommand(raw: string): void {
         structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
         visualRev: s2.visualRev + 1,
       }))
-      return ok(`已 util.cbss：卡通按二级结构（螺旋红 · 折叠黄 · 环灰），配体/水/离子 ${n.toLocaleString()} 原子回元素灰基色——PyMOL 经典组合`)
+      return ok(tt({ zh: `已 util.cbss：卡通按二级结构（螺旋红 · 折叠黄 · 环灰），配体/水/离子 ${n.toLocaleString()} 原子回元素灰基色——PyMOL 经典组合`, en: `util.cbss: cartoons by secondary structure (helix red · sheet yellow · loop gray), ${n.toLocaleString()} ligand/water/ion atoms back to element gray base — the classic PyMOL combo` }))
     }
     if (sub === 'cbao') {
       // PyMOL util.cbao：元素色 + 环境光遮蔽提示（本工具 ao 即 ssao）——PyMOL 用户迁移最顺手的「立体感一键」
       s.applyColor('element')
       const st = useMolStore.getState()
       if (!st.settings.ssao) st.updateSettings({ ssao: true })
-      return ok('已 util.cbao：元素配色 + 环境光遮蔽开启（PyMOL 的 ambient occlusion——立体感提升；ssao off 关闭）')
+      return ok(tt({ zh: '已 util.cbao：元素配色 + 环境光遮蔽开启（PyMOL 的 ambient occlusion——立体感提升；ssao off 关闭）', en: 'util.cbao: element coloring + ambient occlusion on (PyMOL-style AO — adds depth; ssao off to disable)' }))
     }
     if (sub === 'cbaw' || sub === 'cbac') {
       // 元素着色 + 碳改白/灰（PyMOL 论文图风格：白底黑碳）
       s.applyColor('element')
       const st = useMolStore.getState()
       const e2 = st.structures.find(x => x.id === st.activeId)
-      if (!e2) return err('结构数据不存在')
+      if (!e2) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
       const scope = st.selection.structureId === e2.id && st.selection.indices.length ? new Set(st.selection.indices) : null
       const overrides = { ...e2.colorOverrides }
       const hex = sub === 'cbaw' ? '#f7f8fa' : '#a9aeb5'
@@ -1411,15 +1437,15 @@ export function runCommand(raw: string): void {
         structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
         visualRev: s2.visualRev + 1,
       }))
-      return ok(`已按元素着色 + 碳${sub === 'cbaw' ? '白' : '灰'}（util.${sub}，${n.toLocaleString()} 个碳原子）——适合白底论文图`)
+      return ok(tt({ zh: `已按元素着色 + 碳${sub === 'cbaw' ? '白' : '灰'}（util.${sub}，${n.toLocaleString()} 个碳原子）——适合白底论文图`, en: `Element coloring + ${sub === 'cbaw' ? 'white' : 'gray'} carbons (util.${sub}, ${n.toLocaleString()} carbon atoms) — good for white-background figures` }))
     }
-    return err('用法：util cbc | cnc | ss | cbss | cbao | cbaw | cbac（按链 / 灰化 / 二级结构 / SS卡通+配体基色 / 元素+AO立体 / 元素+白碳 / 元素+灰碳）')
+    return err(tt({ zh: '用法：util cbc | cnc | ss | cbss | cbao | cbaw | cbac（按链 / 灰化 / 二级结构 / SS卡通+配体基色 / 元素+AO立体 / 元素+白碳 / 元素+灰碳）', en: 'Usage: util cbc | cnc | ss | cbss | cbao | cbaw | cbac (by-chain / gray / secondary structure / SS cartoon + ligand base color / element + AO depth / element + white C / element + gray C)' }))
   }
 
   if (cmd === 'set') {
     const key = (parts[1] ?? '').toLowerCase()
     const rawVal = parts.slice(2).join(' ').trim()
-    if (!key || !rawVal) return err('用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / transition / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / cap_shading / transparency / sphere_scale / stick_radius / cartoon_width / bg_follow')
+    if (!key || !rawVal) return err(tt({ zh: '用法：set <项> <值>。可用：ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / transition / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / cap_shading / transparency / sphere_scale / stick_radius / cartoon_width / bg_follow', en: 'Usage: set <key> <value>. Available: ambient / direct / fill / specular / fog / fog_strength / fov / spin_speed / transition / quality / stereo / axes / outline / outline_strength / outline_thickness / fps / auto_perf / cap_color / cap_shading / transparency / sphere_scale / stick_radius / cartoon_width / bg_follow' }))
     const s = useMolStore.getState()
     const num = parseFloat(rawVal)
     const on = ['on', '1', 'true', 'open'].includes(rawVal.toLowerCase())
@@ -1442,145 +1468,145 @@ export function runCommand(raw: string): void {
     }
     switch (key) {
       case 'ambient': {
-        if (isNaN(num)) return err('用法：set ambient <0-2>，默认 1')
+        if (isNaN(num)) return err(tt({ zh: '用法：set ambient <0-2>，默认 1', en: 'Usage: set ambient <0-2>, default 1' }))
         s.updateSettings({ lightAmbient: clampNum(num, 0, 2, 1) })
-        return ok(`环境光 → ${clampNum(num, 0, 2, 1)}（含环境贴图贡献）`)
+        return ok(tt({ zh: `环境光 → ${clampNum(num, 0, 2, 1)}（含环境贴图贡献）`, en: `Ambient light → ${clampNum(num, 0, 2, 1)} (incl. environment map contribution)` }))
       }
       case 'direct': case 'key': {
-        if (isNaN(num)) return err('用法：set direct <0-3>，默认 1')
+        if (isNaN(num)) return err(tt({ zh: '用法：set direct <0-3>，默认 1', en: 'Usage: set direct <0-3>, default 1' }))
         s.updateSettings({ lightKey: clampNum(num, 0, 3, 1) })
-        return ok(`主光强度 → ${clampNum(num, 0, 3, 1)}`)
+        return ok(tt({ zh: `主光强度 → ${clampNum(num, 0, 3, 1)}`, en: `Key light intensity → ${clampNum(num, 0, 3, 1)}` }))
       }
       case 'fill': {
-        if (isNaN(num)) return err('用法：set fill <0-2>，默认 1')
+        if (isNaN(num)) return err(tt({ zh: '用法：set fill <0-2>，默认 1', en: 'Usage: set fill <0-2>, default 1' }))
         s.updateSettings({ lightFill: clampNum(num, 0, 2, 1) })
-        return ok(`补光强度 → ${clampNum(num, 0, 2, 1)}`)
+        return ok(tt({ zh: `补光强度 → ${clampNum(num, 0, 2, 1)}`, en: `Fill light intensity → ${clampNum(num, 0, 2, 1)}` }))
       }
       case 'specular': {
-        if (!on && !off) return err('用法：set specular on|off（关闭后无镜面高光，哑光质感）')
+        if (!on && !off) return err(tt({ zh: '用法：set specular on|off（关闭后无镜面高光，哑光质感）', en: 'Usage: set specular on|off (off = no specular highlights, matte look)' }))
         s.updateSettings({ specular: on })
-        return ok(`高光 ${on ? '开启' : '关闭'}（set specular off 得到哑光/论文风格渲染）`)
+        return ok(tt({ zh: `高光 ${on ? '开启' : '关闭'}（set specular off 得到哑光/论文风格渲染）`, en: `Specular ${on ? 'on' : 'off'} (set specular off gives a matte/paper-style render)` }))
       }
       case 'fog': {
-        if (!on && !off) return err('用法：set fog on|off')
+        if (!on && !off) return err(tt({ zh: '用法：set fog on|off', en: 'Usage: set fog on|off' }))
         s.updateSettings({ fog: on })
-        return ok(`雾效 ${on ? '开启（远端淡化）' : '关闭'}`)
+        return ok(tt({ zh: `雾效 ${on ? '开启（远端淡化）' : '关闭'}`, en: `Fog ${on ? 'on (distance fade)' : 'off'}` }))
       }
       case 'bg_follow': {
-        if (!on && !off) return err('用法：set bg_follow on|off（on = 主题切换时视口背景跟随；bg 命令会自动固定背景）')
+        if (!on && !off) return err(tt({ zh: '用法：set bg_follow on|off（on = 主题切换时视口背景跟随；bg 命令会自动固定背景）', en: 'Usage: set bg_follow on|off (on = viewport background follows theme switches; the bg command pins it)' }))
         s.updateSettings({ backgroundPinned: !on })
-        return ok(on ? '背景恢复主题跟随（切换深浅主题时同步）' : '背景固定（不随主题切换）')
+        return ok(on ? tt({ zh: '背景恢复主题跟随（切换深浅主题时同步）', en: 'Background follows the theme again (syncs on light/dark switch)' }) : tt({ zh: '背景固定（不随主题切换）', en: 'Background pinned (does not follow theme)' }))
       }
       case 'bgcolor': case 'background': {
         // ChimeraX set bgColor <色>
         const css = parseCssColor(rawVal.toLowerCase())
-        if (!css) return err('用法：set bgColor <#hex 或颜色名>（ChimeraX 风格；本工具 bg 命令同效）')
+        if (!css) return err(tt({ zh: '用法：set bgColor <#hex 或颜色名>（ChimeraX 风格；本工具 bg 命令同效）', en: 'Usage: set bgColor <#hex or color name> (ChimeraX style; same as the bg command here)' }))
         s.updateSettings({ background: css, backgroundPinned: true })
-        return ok(`背景色 → ${css}`)
+        return ok(tt({ zh: `背景色 → ${css}`, en: `Background color → ${css}` }))
       }
       case 'fog_strength': case 'fog_density': {
-        if (isNaN(num)) return err('用法：set fog_strength <0-1>')
+        if (isNaN(num)) return err(tt({ zh: '用法：set fog_strength <0-1>', en: 'Usage: set fog_strength <0-1>' }))
         s.updateSettings({ fog: true, fogStrength: clampNum(num, 0, 1, 0.5) })
-        return ok(`雾强度 → ${clampNum(num, 0, 1, 0.5)}（雾效已开启）`)
+        return ok(tt({ zh: `雾强度 → ${clampNum(num, 0, 1, 0.5)}（雾效已开启）`, en: `Fog strength → ${clampNum(num, 0, 1, 0.5)} (fog on)` }))
       }
       case 'fov': case 'field_of_view': {
-        if (isNaN(num)) return err('用法：set fov <10-100>，默认 45')
+        if (isNaN(num)) return err(tt({ zh: '用法：set fov <10-100>，默认 45', en: 'Usage: set fov <10-100>, default 45' }))
         s.updateSettings({ fov: clampNum(num, 10, 100, 45) })
-        return ok(`视场角 → ${clampNum(num, 10, 100, 45)}°（小值≈长焦）`)
+        return ok(tt({ zh: `视场角 → ${clampNum(num, 10, 100, 45)}°（小值≈长焦）`, en: `Field of view → ${clampNum(num, 10, 100, 45)}° (small ≈ telephoto)` }))
       }
       case 'spin_speed': {
-        if (isNaN(num)) return err('用法：set spin_speed <0.5-20>')
+        if (isNaN(num)) return err(tt({ zh: '用法：set spin_speed <0.5-20>', en: 'Usage: set spin_speed <0.5-20>' }))
         s.updateSettings({ spinSpeed: clampNum(num, 0.5, 20, 2) })
-        return ok(`旋转速度 → ${clampNum(num, 0.5, 20, 2)}`)
+        return ok(tt({ zh: `旋转速度 → ${clampNum(num, 0.5, 20, 2)}`, en: `Spin speed → ${clampNum(num, 0.5, 20, 2)}` }))
       }
       case 'transition': case 'cam_transition': {
         const t = rawVal.toLowerCase()
-        if (!['quick', 'normal', 'cinematic'].includes(t)) return err('用法：set transition quick|normal|cinematic（视角书签/正交视角/场景恢复的飞行时长 0.35/0.65/1.2s）')
+        if (!['quick', 'normal', 'cinematic'].includes(t)) return err(tt({ zh: '用法：set transition quick|normal|cinematic（视角书签/正交视角/场景恢复的飞行时长 0.35/0.65/1.2s）', en: 'Usage: set transition quick|normal|cinematic (flight duration for view bookmarks/axis views/scene recall: 0.35/0.65/1.2s)' }))
         s.updateSettings({ camTransition: t as 'quick' | 'normal' | 'cinematic' })
-        return ok(`视角过渡 → ${t === 'quick' ? '敏锐 0.35s' : t === 'normal' ? '标准 0.65s' : '电影 1.2s'}（场景面板「交互与动画」可同样切换）`)
+        return ok(tt({ zh: `视角过渡 → ${t === 'quick' ? '敏锐 0.35s' : t === 'normal' ? '标准 0.65s' : '电影 1.2s'}（场景面板「交互与动画」可同样切换）`, en: `Camera transition → ${t === 'quick' ? 'quick 0.35s' : t === 'normal' ? 'standard 0.65s' : 'cinematic 1.2s'} (also switchable in the scene panel under "Interaction & animation")` }))
       }
       case 'quality': {
         const q = rawVal.toLowerCase()
-        if (!['low', 'medium', 'high'].includes(q)) return err('用法：set quality low|medium|high')
+        if (!['low', 'medium', 'high'].includes(q)) return err(tt({ zh: '用法：set quality low|medium|high', en: 'Usage: set quality low|medium|high' }))
         s.updateSettings({ quality: q as 'low' | 'medium' | 'high' })
-        return ok(`画质 → ${q}（像素比与几何细分）`)
+        return ok(tt({ zh: `画质 → ${q}（像素比与几何细分）`, en: `Quality → ${q} (pixel ratio and geometry detail)` }))
       }
       case 'stereo': {
-        if (!on && !off) return err('用法：set stereo on|off 或 stereo on|off')
+        if (!on && !off) return err(tt({ zh: '用法：set stereo on|off 或 stereo on|off', en: 'Usage: set stereo on|off, or stereo on|off' }))
         s.updateSettings({ stereo: on })
-        return ok(on ? '红蓝立体开启（佩戴红蓝 3D 眼镜；GTAO 暂停）' : '立体渲染关闭')
+        return ok(on ? tt({ zh: '红蓝立体开启（佩戴红蓝 3D 眼镜；GTAO 暂停）', en: 'Red-cyan stereo on (wear red-cyan 3D glasses; GTAO paused)' }) : tt({ zh: '立体渲染关闭', en: 'Stereo rendering off' }))
       }
       case 'axes': case 'show_axes': {
-        if (!on && !off) return err('用法：set axes on|off（视口右上角坐标轴指示器）')
+        if (!on && !off) return err(tt({ zh: '用法：set axes on|off（视口右上角坐标轴指示器）', en: 'Usage: set axes on|off (axis gizmo at the viewport top-right)' }))
         s.updateSettings({ showAxes: on })
-        return ok(`坐标轴指示器 ${on ? '开启（点击轴端可对齐视角）' : '关闭'}`)
+        return ok(tt({ zh: `坐标轴指示器 ${on ? '开启（点击轴端可对齐视角）' : '关闭'}`, en: `Axis gizmo ${on ? 'on (click an axis tip to align the view)' : 'off'}` }))
       }
       case 'fps': case 'show_fps': {
-        if (!on && !off) return err('用法：set fps on|off（状态栏性能指示器）')
+        if (!on && !off) return err(tt({ zh: '用法：set fps on|off（状态栏性能指示器）', en: 'Usage: set fps on|off (status-bar performance indicator)' }))
         s.updateSettings({ showFps: on })
-        return ok(`性能指示器 ${on ? '开启（状态栏显示 FPS / 绘制调用 / 三角形数）' : '关闭'}`)
+        return ok(tt({ zh: `性能指示器 ${on ? '开启（状态栏显示 FPS / 绘制调用 / 三角形数）' : '关闭'}`, en: `Performance indicator ${on ? 'on (status bar shows FPS / draw calls / triangles)' : 'off'}` }))
       }
       case 'seq_focus': case 'viewport_focus': {
-        if (!on && !off) return err('用法：set seq_focus on|off（序列条视口聚焦指示）')
+        if (!on && !off) return err(tt({ zh: '用法：set seq_focus on|off（序列条视口聚焦指示）', en: 'Usage: set seq_focus on|off (sequence bar viewport-focus indicator)' }))
         s.updateSettings({ seqFocus: on })
-        return ok(`序列条视口聚焦 ${on ? '开启（视野内残基绿色下划线标记，切层裁剪同步感知）' : '关闭'}`)
+        return ok(tt({ zh: `序列条视口聚焦 ${on ? '开启（视野内残基绿色下划线标记，切层裁剪同步感知）' : '关闭'}`, en: `Sequence viewport focus ${on ? 'on (in-view residues underlined in green; slab-aware)' : 'off'}` }))
       }
       case 'cap_color': case 'slab_cap_color': {
         const css = parseCssColor(rawVal.toLowerCase())
-        if (!css) return err('用法：set cap_color <#hex 或颜色名>（切层剖面封盖色，默认 #ccd2d9）')
+        if (!css) return err(tt({ zh: '用法：set cap_color <#hex 或颜色名>（切层剖面封盖色，默认 #ccd2d9）', en: 'Usage: set cap_color <#hex or color name> (slab cap color, default #ccd2d9)' }))
         s.updateSettings({ slab: true, slabCap: true, capColor: css })
-        return ok(`截面封盖色 → ${css}（slab cap 已开启）`)
+        return ok(tt({ zh: `截面封盖色 → ${css}（slab cap 已开启）`, en: `Cap color → ${css} (slab caps on)` }))
       }
       case 'cap_shading': case 'slab_cap_shading': case 'depth_cue_cap': {
-        if (!on && !off) return err('用法：set cap_shading on|off（封盖深度明暗：剖面远端加深，呈现层次）')
+        if (!on && !off) return err(tt({ zh: '用法：set cap_shading on|off（封盖深度明暗：剖面远端加深，呈现层次）', en: 'Usage: set cap_shading on|off (cap depth shading: far side of the cross-section darkened for depth)' }))
         s.updateSettings({ capShading: on })
         return ok(on
-          ? '封盖深度明暗开启：剖面按视深由亮到暗渐变（远端加深），立体层次感增强'
-          : '封盖深度明暗关闭（剖面回到统一平面色）')
+          ? tt({ zh: '封盖深度明暗开启：剖面按视深由亮到暗渐变（远端加深），立体层次感增强', en: 'Cap depth shading on: cross-sections fade bright→dark with view depth (far side darkened), enhancing depth perception' })
+          : tt({ zh: '封盖深度明暗关闭（剖面回到统一平面色）', en: 'Cap depth shading off (cross-sections back to a flat color)' }))
       }
       case 'auto_perf': case 'autoperf': {
-        if (!on && !off) return err('用法：set auto_perf on|off（低帧率自动降级，恢复后自动还原）')
+        if (!on && !off) return err(tt({ zh: '用法：set auto_perf on|off（低帧率自动降级，恢复后自动还原）', en: 'Usage: set auto_perf on|off (auto-degrade on low fps, auto-restore on recovery)' }))
         s.updateSettings({ autoPerf: on })
-        return ok(on ? '自动性能模式开启（帧率持续偏低时自动关闭后处理并降分辨率）' : '自动性能模式关闭（画质设置已还原）')
+        return ok(on ? tt({ zh: '自动性能模式开启（帧率持续偏低时自动关闭后处理并降分辨率）', en: 'Auto performance mode on (post-processing off and resolution lowered when fps stays low)' }) : tt({ zh: '自动性能模式关闭（画质设置已还原）', en: 'Auto performance mode off (quality settings restored)' }))
       }
       case 'outline': case 'silhouettes': case 'silhouette': {
-        if (!on && !off) return err('用法：set outline on|off（出版级轮廓线；或 outline on 1.5 2；ChimeraX 称 silhouettes）')
+        if (!on && !off) return err(tt({ zh: '用法：set outline on|off（出版级轮廓线；或 outline on 1.5 2；ChimeraX 称 silhouettes）', en: 'Usage: set outline on|off (publication-grade outlines; or outline on 1.5 2; ChimeraX calls them silhouettes)' }))
         s.updateSettings({ outline: on })
-        return ok(`轮廓线 ${on ? '开启（Sobel 深度+亮度描边；ray 静帧同样生效；ChimeraX silhouettes 同义）' : '关闭'}`)
+        return ok(tt({ zh: `轮廓线 ${on ? '开启（Sobel 深度+亮度描边；ray 静帧同样生效；ChimeraX silhouettes 同义）' : '关闭'}`, en: `Outlines ${on ? 'on (Sobel depth+brightness edges; applies to ray stills too; ChimeraX silhouettes synonym)' : 'off'}` }))
       }
       case 'outline_strength': {
-        if (isNaN(num)) return err('用法：set outline_strength <0.2-3>，默认 1')
+        if (isNaN(num)) return err(tt({ zh: '用法：set outline_strength <0.2-3>，默认 1', en: 'Usage: set outline_strength <0.2-3>, default 1' }))
         s.updateSettings({ outline: true, outlineStrength: clampNum(num, 0.2, 3, 1) })
-        return ok(`轮廓线强度 → ${clampNum(num, 0.2, 3, 1).toFixed(1)}（已开启）`)
+        return ok(tt({ zh: `轮廓线强度 → ${clampNum(num, 0.2, 3, 1).toFixed(1)}（已开启）`, en: `Outline strength → ${clampNum(num, 0.2, 3, 1).toFixed(1)} (on)` }))
       }
       case 'outline_thickness': {
-        if (isNaN(num)) return err('用法：set outline_thickness <1-4>（像素采样步长），默认 1.5')
+        if (isNaN(num)) return err(tt({ zh: '用法：set outline_thickness <1-4>（像素采样步长），默认 1.5', en: 'Usage: set outline_thickness <1-4> (pixel sample step), default 1.5' }))
         s.updateSettings({ outline: true, outlineThickness: clampNum(num, 1, 4, 1.5) })
-        return ok(`轮廓线粗细 → ${clampNum(num, 1, 4, 1.5).toFixed(1)}px（已开启）`)
+        return ok(tt({ zh: `轮廓线粗细 → ${clampNum(num, 1, 4, 1.5).toFixed(1)}px（已开启）`, en: `Outline thickness → ${clampNum(num, 1, 4, 1.5).toFixed(1)}px (on)` }))
       }
       case 'transparency': case 'surface_opacity': {
-        if (isNaN(num)) return err('用法：set transparency <0-1>（0=不透明，作用于表面表示）')
+        if (isNaN(num)) return err(tt({ zh: '用法：set transparency <0-1>（0=不透明，作用于表面表示）', en: 'Usage: set transparency <0-1> (0 = opaque; applies to surface representations)' }))
         const opacity = clampNum(1 - num, 0.05, 1, 0.6)
         const n = repPatch({ opacity })
-        return n ? ok(`表面不透明度 → ${opacity.toFixed(2)}（${n} 个表面表示）`) : err('当前结构没有表面表示（先 show surface）')
+        return n ? ok(tt({ zh: `表面不透明度 → ${opacity.toFixed(2)}（${n} 个表面表示）`, en: `Surface opacity → ${opacity.toFixed(2)} (${n} surface representation(s))` })) : err(tt({ zh: '当前结构没有表面表示（先 show surface）', en: 'No surface representation in the current structure (show surface first)' }))
       }
       case 'sphere_scale': case 'ball_scale': {
-        if (isNaN(num)) return err('用法：set sphere_scale <0.2-3>')
+        if (isNaN(num)) return err(tt({ zh: '用法：set sphere_scale <0.2-3>', en: 'Usage: set sphere_scale <0.2-3>' }))
         const n = repPatch({ ballScale: clampNum(num, 0.2, 3, 1) })
-        return n ? ok(`球体倍率 → ${clampNum(num, 0.2, 3, 1)}（${n} 个表示）`) : err('没有球体类表示（spacefill / ballstick）')
+        return n ? ok(tt({ zh: `球体倍率 → ${clampNum(num, 0.2, 3, 1)}（${n} 个表示）`, en: `Sphere scale → ${clampNum(num, 0.2, 3, 1)} (${n} representation(s))` })) : err(tt({ zh: '没有球体类表示（spacefill / ballstick）', en: 'No sphere representation (spacefill / ballstick)' }))
       }
       case 'stick_radius': {
-        if (isNaN(num)) return err('用法：set stick_radius <0.05-0.5 Å>')
+        if (isNaN(num)) return err(tt({ zh: '用法：set stick_radius <0.05-0.5 Å>', en: 'Usage: set stick_radius <0.05-0.5 Å>' }))
         const n = repPatch({ stickRadius: clampNum(num, 0.05, 0.5, 0.16) })
-        return n ? ok(`棍半径 → ${clampNum(num, 0.05, 0.5, 0.16)} Å（${n} 个表示）`) : err('没有棍类表示（sticks / ballstick）')
+        return n ? ok(tt({ zh: `棍半径 → ${clampNum(num, 0.05, 0.5, 0.16)} Å（${n} 个表示）`, en: `Stick radius → ${clampNum(num, 0.05, 0.5, 0.16)} Å (${n} representation(s))` })) : err(tt({ zh: '没有棍类表示（sticks / ballstick）', en: 'No stick representation (sticks / ballstick)' }))
       }
       case 'cartoon_width': {
-        if (isNaN(num)) return err('用法：set cartoon_width <0.3-4>')
+        if (isNaN(num)) return err(tt({ zh: '用法：set cartoon_width <0.3-4>', en: 'Usage: set cartoon_width <0.3-4>' }))
         const n = repPatch({ cartoonWidth: clampNum(num, 0.3, 4, 1) })
-        return n ? ok(`cartoon 宽度 → ${clampNum(num, 0.3, 4, 1)}（${n} 个表示）`) : err('没有 cartoon 表示')
+        return n ? ok(tt({ zh: `cartoon 宽度 → ${clampNum(num, 0.3, 4, 1)}（${n} 个表示）`, en: `Cartoon width → ${clampNum(num, 0.3, 4, 1)} (${n} representation(s))` })) : err(tt({ zh: '没有 cartoon 表示', en: 'No cartoon representation' }))
       }
       default:
-        return err(`未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, transition, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, cap_color, cap_shading, transparency, sphere_scale, stick_radius, cartoon_width`)
+        return err(tt({ zh: `未知设置项 "${key}"。可用：ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, transition, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, cap_color, cap_shading, transparency, sphere_scale, stick_radius, cartoon_width`, en: `Unknown setting "${key}". Available: ambient, direct, fill, specular, fog, fog_strength, fov, spin_speed, transition, quality, stereo, axes, outline, outline_strength, outline_thickness, fps, auto_perf, cap_color, cap_shading, transparency, sphere_scale, stick_radius, cartoon_width` }))
     }
   }
 
@@ -1588,25 +1614,25 @@ export function runCommand(raw: string): void {
     const arg = (parts[1] ?? 'on').toLowerCase()
     const on = arg === 'on' || arg === '1' || arg === 'true'
     useMolStore.getState().updateSettings({ stereo: on })
-    return ok(on ? '红蓝立体开启（佩戴红蓝 3D 眼镜观看；GTAO 在立体模式下暂停）' : '立体渲染关闭')
+    return ok(on ? tt({ zh: '红蓝立体开启（佩戴红蓝 3D 眼镜观看；GTAO 在立体模式下暂停）', en: 'Red-cyan stereo on (wear red-cyan 3D glasses; GTAO paused in stereo mode)' }) : tt({ zh: '立体渲染关闭', en: 'Stereo rendering off' }))
   }
 
   if (cmd === 'axes' || cmd === 'axis' || cmd === 'gizmo') {
     const arg = (parts[1] ?? '').toLowerCase()
-    if (arg && arg !== 'on' && arg !== 'off' && arg !== '1' && arg !== '0') return err('用法：axes on|off（视口右上角坐标轴指示器）')
+    if (arg && arg !== 'on' && arg !== 'off' && arg !== '1' && arg !== '0') return err(tt({ zh: '用法：axes on|off（视口右上角坐标轴指示器）', en: 'Usage: axes on|off (axis gizmo at the viewport top-right)' }))
     const s = useMolStore.getState()
     const on = arg ? ['on', '1'].includes(arg) : !s.settings.showAxes
     s.updateSettings({ showAxes: on })
-    return ok(on ? '坐标轴指示器开启（视口右上角；点击轴端对齐视角）' : '坐标轴指示器已关闭')
+    return ok(on ? tt({ zh: '坐标轴指示器开启（视口右上角；点击轴端对齐视角）', en: 'Axis gizmo on (viewport top-right; click an axis tip to align the view)' }) : tt({ zh: '坐标轴指示器已关闭', en: 'Axis gizmo off' }))
   }
 
   if (cmd === 'fps' || cmd === 'perf') {
     const arg = (parts[1] ?? '').toLowerCase()
-    if (arg && arg !== 'on' && arg !== 'off' && arg !== '1' && arg !== '0') return err('用法：fps on|off（状态栏实时性能指示）')
+    if (arg && arg !== 'on' && arg !== 'off' && arg !== '1' && arg !== '0') return err(tt({ zh: '用法：fps on|off（状态栏实时性能指示）', en: 'Usage: fps on|off (live performance indicator in the status bar)' }))
     const s = useMolStore.getState()
     const on = arg ? ['on', '1'].includes(arg) : !s.settings.showFps
     s.updateSettings({ showFps: on })
-    return ok(on ? '性能指示器开启（状态栏显示 FPS / 绘制调用 / 三角形数）' : '性能指示器已关闭')
+    return ok(on ? tt({ zh: '性能指示器开启（状态栏显示 FPS / 绘制调用 / 三角形数）', en: 'Performance indicator on (status bar shows FPS / draw calls / triangles)' }) : tt({ zh: '性能指示器已关闭', en: 'Performance indicator off' }))
   }
 
   if (cmd === 'outline' || cmd === 'edge') {
@@ -1624,15 +1650,15 @@ export function runCommand(raw: string): void {
     const thickness = rest[2] !== undefined ? parseFloat(rest[2]) : NaN
     if (!isNaN(thickness)) patch.outlineThickness = clampNum(thickness, 1, 4, 1.5)
     s.updateSettings(patch)
-    if (!on) return ok('轮廓线已关闭')
+    if (!on) return ok(tt({ zh: '轮廓线已关闭', en: 'Outlines off' }))
     const cur = useMolStore.getState().settings
-    return ok(`轮廓线开启（强度 ${cur.outlineStrength.toFixed(1)} · 粗细 ${cur.outlineThickness.toFixed(1)}px）——出版级描边：Sobel 深度+亮度双信号，ray 静帧同样生效`)
+    return ok(tt({ zh: `轮廓线开启（强度 ${cur.outlineStrength.toFixed(1)} · 粗细 ${cur.outlineThickness.toFixed(1)}px）——出版级描边：Sobel 深度+亮度双信号，ray 静帧同样生效`, en: `Outlines on (strength ${cur.outlineStrength.toFixed(1)} · thickness ${cur.outlineThickness.toFixed(1)}px) — publication-grade edges: Sobel depth+brightness dual signal, applies to ray stills too` }))
   }
 
   if (cmd === 'symmetry' || cmd === 'symmates') {
     const s = useMolStore.getState()
     const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
+    if (!eng) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
     let argStr = input.slice(parts[0].length).trim()
     let targetId = s.activeId
     // 首 token 若为结构名（非数字非 off）→ 指定结构
@@ -1640,11 +1666,11 @@ export function runCommand(raw: string): void {
     const isNumOrOff = first === 'off' || first === '' || !isNaN(parseFloat(first))
     if (!isNumOrOff && first) {
       const found = s.structures.find(x => x.name.toLowerCase().startsWith(first) || x.meta.pdbId?.toLowerCase() === first)
-      if (!found) return err(`未找到结构 "${first}"（可用：${s.structures.map(x => x.name).join('、')}）`)
+      if (!found) return err(tt({ zh: `未找到结构 "${first}"（可用：${s.structures.map(x => x.name).join('、')}）`, en: `Structure "${first}" not found (available: ${s.structures.map(x => x.name).join(', ')})` }))
       targetId = found.id
       argStr = argStr.slice(first.length).trim()
     }
-    if (!targetId) return err('没有活动结构')
+    if (!targetId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     if (argStr === 'off' || argStr === '0') {
       const r = eng.updateSymmetry(targetId, 0)
       return r.ok ? ok(r.message) : err(r.message)
@@ -1653,7 +1679,7 @@ export function runCommand(raw: string): void {
     const r = eng.updateSymmetry(targetId, radius)
     if (!r.ok) return err(r.message)
     ok(r.message)
-    ok('对称伴侣为视觉副本（不参与拾取/选择）；结构面板可调半径或关闭')
+    ok(tt({ zh: '对称伴侣为视觉副本（不参与拾取/选择）；结构面板可调半径或关闭', en: 'Symmetry mates are visual copies (not pickable/selectable); adjust the radius or turn off in the structure panel' }))
     return
   }
 
@@ -1669,19 +1695,19 @@ export function runCommand(raw: string): void {
       const cur = useMapStore.getState()
       if (wantId && !cur.computing && engineRef.current?.getMapInfo() && cur.info?.source === 'sf' && cur.info.pdbId === wantId && cur.info.kind === wantKind) {
         if (!cur.info.visible) setMapLook({ visible: true })
-        return ok(`密度图 ${wantId} ${isFofc ? 'Fo−Fc 差图' : '2Fo−Fc'} 已在场景中——跳过重复计算（map off 后可重新计算）`)
+        return ok(tt({ zh: `密度图 ${wantId} ${isFofc ? 'Fo−Fc 差图' : '2Fo−Fc'} 已在场景中——跳过重复计算（map off 后可重新计算）`, en: `Map ${wantId} ${isFofc ? 'Fo−Fc difference map' : '2Fo−Fc'} already in the scene — skipping recompute (map off then re-run to recompute)` }))
       }
       if (idArg && /^[0-9][a-z0-9]{3}$/i.test(idArg)) {
         void fetchAndComputeMap(idArg, isFofc ? 'fofc' : '2fofc')
         return ok(isFofc
-          ? `正在获取 ${idArg.toUpperCase()} 结构因子并合成 Fo−Fc 差图（±σ 正绿/负红；未加载的结构会自动获取作为相位模型）…`
-          : `正在获取 ${idArg.toUpperCase()} 结构因子并合成 2Fo−Fc 密度图（模型相位 + 3D FFT；未加载的结构会自动获取）…`)
+          ? tt({ zh: `正在获取 ${idArg.toUpperCase()} 结构因子并合成 Fo−Fc 差图（±σ 正绿/负红；未加载的结构会自动获取作为相位模型）…`, en: `Fetching ${idArg.toUpperCase()} structure factors and building the Fo−Fc difference map (±σ, positive green/negative red; an unloaded structure is auto-fetched as the phase model)…` })
+          : tt({ zh: `正在获取 ${idArg.toUpperCase()} 结构因子并合成 2Fo−Fc 密度图（模型相位 + 3D FFT；未加载的结构会自动获取）…`, en: `Fetching ${idArg.toUpperCase()} structure factors and building the 2Fo−Fc map (model phases + 3D FFT; an unloaded structure is auto-fetched)…` }))
       }
       const s = useMolStore.getState()
       const pid = s.structures.find(x => x.id === s.activeId)?.meta.pdbId
-      if (!pid) return err('用法：map fetch <PDB编号> | map fofc <PDB编号>（结构未加载时将自动从 RCSB 获取作为相位模型）')
+      if (!pid) return err(tt({ zh: '用法：map fetch <PDB编号> | map fofc <PDB编号>（结构未加载时将自动从 RCSB 获取作为相位模型）', en: 'Usage: map fetch <PDB ID> | map fofc <PDB ID> (an unloaded structure is auto-fetched from RCSB as the phase model)' }))
       void fetchAndComputeMap(pid, isFofc ? 'fofc' : '2fofc')
-      return ok(`正在获取 ${pid} 结构因子并合成 ${isFofc ? 'Fo−Fc 差图' : '2Fo−Fc 密度图'}…`)
+      return ok(tt({ zh: `正在获取 ${pid} 结构因子并合成 ${isFofc ? 'Fo−Fc 差图' : '2Fo−Fc 密度图'}…`, en: `Fetching ${pid} structure factors and building the ${isFofc ? 'Fo−Fc difference map' : '2Fo−Fc map'}…` }))
     }
     if (sub === 'isolevel' || sub === 'iso' || sub === 'level') {
       // map isolevel <σ>（差图同时设正负）| map isolevel pos <σ> / neg <σ>（差图独立正负峰）
@@ -1690,40 +1716,45 @@ export function runCommand(raw: string): void {
       const isNeg = sideArg === 'neg' || sideArg === 'negative' || sideArg === '-'
       const v = parseFloat(isPos || isNeg ? (parts[3] ?? '') : (parts[2] ?? ''))
       if (isNaN(v) || v < 0.2 || v > 8) {
-        return err('用法：map isolevel <σ 0.2-8>；差图可分开设置：map isolevel pos 3 / map isolevel neg 2.5')
+        return err(tt({ zh: '用法：map isolevel <σ 0.2-8>；差图可分开设置：map isolevel pos 3 / map isolevel neg 2.5', en: 'Usage: map isolevel <σ 0.2-8>; difference maps allow separate levels: map isolevel pos 3 / map isolevel neg 2.5' }))
       }
       const info = engineRef.current?.getMapInfo()
       if (isPos || isNeg) {
-        if (!info) return err('未加载密度图（map fetch <编号> / map fofc <编号>）')
-        if (!info.difference) return err('正/负峰独立级别仅适用于 Fo−Fc 差图（map fofc <编号>）')
+        if (!info) return err(tt({ zh: '未加载密度图（map fetch <编号> / map fofc <编号>）', en: 'No map loaded (map fetch <ID> / map fofc <ID>)' }))
+        if (!info.difference) return err(tt({ zh: '正/负峰独立级别仅适用于 Fo−Fc 差图（map fofc <编号>）', en: 'Separate pos/neg levels only apply to Fo−Fc difference maps (map fofc <ID>)' }))
         setMapLook(isPos ? { iso: v } : { isoNeg: v })
         return ok(isPos
-          ? `差图正峰（绿）等值面 → +${v} σ`
-          : `差图负峰（红）等值面 → −${v} σ`)
+          ? tt({ zh: `差图正峰（绿）等值面 → +${v} σ`, en: `Difference map positive peak (green) isosurface → +${v} σ` })
+          : tt({ zh: `差图负峰（红）等值面 → −${v} σ`, en: `Difference map negative peak (red) isosurface → −${v} σ` }))
       }
       setMapLook({ iso: v, isoNeg: v })
       return info?.difference
-        ? ok(`差图等值面级别 → ±${v} σ（可用 map isolevel pos/neg 分开调整正负峰）`)
-        : ok(`等值面级别 → ${v} σ（1σ≈噪声基准，1.5-2σ 常规骨架）`)
+        ? ok(tt({ zh: `差图等值面级别 → ±${v} σ（可用 map isolevel pos/neg 分开调整正负峰）`, en: `Difference map isosurface level → ±${v} σ (map isolevel pos/neg adjusts peaks separately)` }))
+        : ok(tt({ zh: `等值面级别 → ${v} σ（1σ≈噪声基准，1.5-2σ 常规骨架）`, en: `Isosurface level → ${v} σ (1σ ≈ noise baseline, 1.5–2σ for the usual backbone)` }))
     }
-    if (sub === 'mesh') { setMapLook({ mode: 'mesh' }); return ok('密度图切换为网格 isomesh') }
-    if (sub === 'surface') { setMapLook({ mode: 'surface' }); return ok('密度图切换为实体面 isosurface') }
-    if (sub === 'both') { setMapLook({ mode: 'both' }); return ok('密度图切换为网格+面叠加') }
-    if (sub === 'off' || sub === 'close' || sub === 'remove') { removeMap(); return ok('密度图已移除') }
-    if (sub === 'hide') { setMapLook({ visible: false }); return ok('密度图已隐藏（map show 恢复）') }
-    if (sub === 'show') { setMapLook({ visible: true }); return ok('密度图已显示') }
+    if (sub === 'mesh') { setMapLook({ mode: 'mesh' }); return ok(tt({ zh: '密度图切换为网格 isomesh', en: 'Map switched to mesh (isomesh)' })) }
+    if (sub === 'surface') { setMapLook({ mode: 'surface' }); return ok(tt({ zh: '密度图切换为实体面 isosurface', en: 'Map switched to solid surface (isosurface)' })) }
+    if (sub === 'both') { setMapLook({ mode: 'both' }); return ok(tt({ zh: '密度图切换为网格+面叠加', en: 'Map switched to mesh + surface overlay' })) }
+    if (sub === 'off' || sub === 'close' || sub === 'remove') { removeMap(); return ok(tt({ zh: '密度图已移除', en: 'Map removed' })) }
+    if (sub === 'hide') { setMapLook({ visible: false }); return ok(tt({ zh: '密度图已隐藏（map show 恢复）', en: 'Map hidden (map show to restore)' })) }
+    if (sub === 'show') { setMapLook({ visible: true }); return ok(tt({ zh: '密度图已显示', en: 'Map shown' })) }
     const info = engineRef.current?.getMapInfo()
     if (!info) {
-      return err('未加载密度图。用法：map fetch <PDB编号> | map fofc <PDB编号> | isolevel <σ> | mesh | surface | both | hide | show | off（未加载的结构会自动获取；也可拖入 .ccp4/.map/.mrc 文件）')
+      return err(tt({ zh: '未加载密度图。用法：map fetch <PDB编号> | map fofc <PDB编号> | isolevel <σ> | mesh | surface | both | hide | show | off（未加载的结构会自动获取；也可拖入 .ccp4/.map/.mrc 文件）', en: 'No map loaded. Usage: map fetch <PDB ID> | map fofc <PDB ID> | isolevel <σ> | mesh | surface | both | hide | show | off (an unloaded structure is auto-fetched; you can also drop a .ccp4/.map/.mrc file)' }))
     }
-    return ok(`密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString()} 三角形 · ${info.difference
-      ? (Math.abs(info.iso - info.isoNeg) < 1e-6 ? `±${info.iso.toFixed(1)}σ 差图` : `+${info.iso.toFixed(1)}/−${info.isoNeg.toFixed(1)}σ 差图`)
-      : `${info.iso.toFixed(1)} σ`} · 模式 ${info.mode}${info.truncated ? '（已截断）' : ''} · rms ${info.rms.toFixed(3)}`)
+    return ok(tt({
+      zh: `密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString()} 三角形 · ${info.difference
+        ? (Math.abs(info.iso - info.isoNeg) < 1e-6 ? `±${info.iso.toFixed(1)}σ 差图` : `+${info.iso.toFixed(1)}/−${info.isoNeg.toFixed(1)}σ 差图`)
+        : `${info.iso.toFixed(1)} σ`} · 模式 ${info.mode}${info.truncated ? '（已截断）' : ''} · rms ${info.rms.toFixed(3)}`,
+      en: `Map ${info.name}: ${info.dims.join('×')} voxels · ${info.triangles.toLocaleString()} triangles · ${info.difference
+        ? (Math.abs(info.iso - info.isoNeg) < 1e-6 ? `±${info.iso.toFixed(1)}σ difference map` : `+${info.iso.toFixed(1)}/−${info.isoNeg.toFixed(1)}σ difference map`)
+        : `${info.iso.toFixed(1)} σ`} · mode ${info.mode}${info.truncated ? ' (truncated)' : ''} · rms ${info.rms.toFixed(3)}`,
+    }))
   }
 
   if (cmd === 'png') {
     const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
+    if (!eng) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
     const scale = clampNum(parseFloat(parts[1]), 1, 4, 2)
     const s = useMolStore.getState()
     try {
@@ -1732,9 +1763,9 @@ export function runCommand(raw: string): void {
       a.href = url
       a.download = `${s.structures[0]?.name ?? 'molvision'}${scale > 1 ? `@${scale}x` : ''}.png`
       a.click()
-      return ok(`已导出 PNG（${scale}× 分辨率）`)
+      return ok(tt({ zh: `已导出 PNG（${scale}× 分辨率）`, en: `PNG exported (${scale}× resolution)` }))
     } catch {
-      return err('截图失败')
+      return err(tt({ zh: '截图失败', en: 'Screenshot failed' }))
     }
   }
 
@@ -1742,17 +1773,17 @@ export function runCommand(raw: string): void {
     // PyMOL ray 风格静帧：软阴影 + 1.5× 真超采样（内部高分辨率渲染→高质量降采样=全场景抗锯齿）
     // 异步化：先弹进度 toast 再渲染（双 rAF 让提示先绘制），避免长时间无反馈的「假死」观感
     const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
-    if (!eng.hasStructures) return err('场景为空——先加载结构再渲染（load <PDB编号>）')
+    if (!eng) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
+    if (!eng.hasStructures) return err(tt({ zh: '场景为空——先加载结构再渲染（load <PDB编号>）', en: 'Scene is empty — load a structure before rendering (load <PDB ID>)' }))
     let width: number | undefined
     if (parts[1]) {
       width = clampNum(parseFloat(parts[1]), 320, 4096, NaN)
-      if (isNaN(width)) return err('用法：ray [宽 px]（如 ray 1920；缺省按视口 2× 自适应）')
+      if (isNaN(width)) return err(tt({ zh: '用法：ray [宽 px]（如 ray 1920；缺省按视口 2× 自适应）', en: 'Usage: ray [width px] (e.g. ray 1920; default adapts to viewport ×2)' }))
     }
     const s = useMolStore.getState()
     const tid = 'ray-render'
-    ok('Ray 渲染已启动（PCF 软阴影 + 1.5× 真超采样抗锯齿）——完成后自动导出 PNG，期间界面可能短暂停顿')
-    toast.loading('Ray 渲染中…', { id: tid, description: '软阴影 + 超采样静帧渲染，大场景需数秒' })
+    ok(tt({ zh: 'Ray 渲染已启动（PCF 软阴影 + 1.5× 真超采样抗锯齿）——完成后自动导出 PNG，期间界面可能短暂停顿', en: 'Ray render started (PCF soft shadows + 1.5× true supersampling AA) — PNG exports automatically when done; the UI may briefly freeze' }))
+    toast.loading(tt({ zh: 'Ray 渲染中…', en: 'Ray rendering…' }), { id: tid, description: tt({ zh: '软阴影 + 超采样静帧渲染，大场景需数秒', en: 'Soft shadows + supersampled still render; large scenes take a few seconds' }) })
     void (async () => {
       // 双 rAF：确保 loading toast 先绘制到屏幕，再进入阻塞渲染
       await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
@@ -1761,8 +1792,8 @@ export function runCommand(raw: string): void {
       try {
         const r = await eng.rayRender({ width })
         if (!r.url) {
-          toast.error('Ray 渲染失败', { id: tid, description: '画布尺寸限制——试试更小的宽度' })
-          useMolStore.getState().appendLog('err', 'Ray 渲染失败（画布尺寸限制——试试更小的宽度）')
+          toast.error(tt({ zh: 'Ray 渲染失败', en: 'Ray render failed' }), { id: tid, description: tt({ zh: '画布尺寸限制——试试更小的宽度', en: 'Canvas size limit — try a smaller width' }) })
+          useMolStore.getState().appendLog('err', tt({ zh: 'Ray 渲染失败（画布尺寸限制——试试更小的宽度）', en: 'Ray render failed (canvas size limit — try a smaller width)' }))
           return
         }
         const a = document.createElement('a')
@@ -1770,11 +1801,11 @@ export function runCommand(raw: string): void {
         a.download = `${s.structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
         a.click()
         const ms = r.ms.toFixed(0)
-        toast.success(`Ray 完成：${r.w}×${r.h} px`, { id: tid, description: `耗时 ${ms} ms · 真超采样抗锯齿 · PNG 已导出` })
-        useMolStore.getState().appendLog('out', `Ray 渲染完成：${r.w}×${r.h} px（PCF 软阴影 + 1.5× 真超采样：内部高分辨率渲染后降采样，全场景抗锯齿）· ${ms} ms——已导出 PNG`)
+        toast.success(tt({ zh: `Ray 完成：${r.w}×${r.h} px`, en: `Ray done: ${r.w}×${r.h} px` }), { id: tid, description: tt({ zh: `耗时 ${ms} ms · 真超采样抗锯齿 · PNG 已导出`, en: `${ms} ms · true supersampling AA · PNG exported` }) })
+        useMolStore.getState().appendLog('out', tt({ zh: `Ray 渲染完成：${r.w}×${r.h} px（PCF 软阴影 + 1.5× 真超采样：内部高分辨率渲染后降采样，全场景抗锯齿）· ${ms} ms——已导出 PNG`, en: `Ray render done: ${r.w}×${r.h} px (PCF soft shadows + 1.5× true supersampling: internal hi-res render then downsample, full-scene AA) · ${ms} ms — PNG exported` }))
       } catch {
-        toast.error('Ray 渲染失败', { id: tid, description: '显存或画布尺寸限制——试试更小的宽度' })
-        useMolStore.getState().appendLog('err', 'Ray 渲染失败（显存或画布尺寸限制——试试更小的宽度）')
+        toast.error(tt({ zh: 'Ray 渲染失败', en: 'Ray render failed' }), { id: tid, description: tt({ zh: '显存或画布尺寸限制——试试更小的宽度', en: 'GPU memory or canvas size limit — try a smaller width' }) })
+        useMolStore.getState().appendLog('err', tt({ zh: 'Ray 渲染失败（显存或画布尺寸限制——试试更小的宽度）', en: 'Ray render failed (GPU memory or canvas size limit — try a smaller width)' }))
       }
     })()
     return
@@ -1785,25 +1816,25 @@ export function runCommand(raw: string): void {
     let width: number | undefined
     if (parts[1]) {
       width = clampNum(parseFloat(parts[1]), 320, 4096, NaN)
-      if (isNaN(width)) return err('用法：svg [宽 px]（如 svg 2400；缺省 1600，高度按视口纵横比）')
+      if (isNaN(width)) return err(tt({ zh: '用法：svg [宽 px]（如 svg 2400；缺省 1600，高度按视口纵横比）', en: 'Usage: svg [width px] (e.g. svg 2400; default 1600, height follows the viewport aspect)' }))
     }
     const s = useMolStore.getState()
     const r = buildSvgExport({ width })
-    if (!r.ok || !r.svg) return err(r.error ?? 'SVG 导出失败')
+    if (!r.ok || !r.svg) return err(r.error ?? tt({ zh: 'SVG 导出失败', en: 'SVG export failed' }))
     const name = s.structures[0]?.name ?? 'molvision'
     downloadSvg(r.svg, name)
     const skipped = r.skippedSurfaces.length
-      ? `；跳过 ${r.skippedSurfaces.length} 个表面表示（等值面无矢量原语）`
+      ? tt({ zh: `；跳过 ${r.skippedSurfaces.length} 个表面表示（等值面无矢量原语）`, en: `; skipped ${r.skippedSurfaces.length} surface representation(s) (isosurfaces have no vector primitives)` })
       : ''
-    return ok(`已导出矢量图 ${r.width}×${r.height} · ${r.items.toLocaleString()} 个原语 · ${r.ms.toFixed(0)} ms${skipped}——SVG 无限缩放不失真，可直接入稿`)
+    return ok(tt({ zh: `已导出矢量图 ${r.width}×${r.height} · ${r.items.toLocaleString()} 个原语 · ${r.ms.toFixed(0)} ms${skipped}——SVG 无限缩放不失真，可直接入稿`, en: `Vector image exported ${r.width}×${r.height} · ${r.items.toLocaleString()} primitives · ${r.ms.toFixed(0)} ms${skipped} — SVG scales losslessly, ready for publication` }))
   }
 
   if (cmd === 'deselect' || cmd === 'desel') {
     // 清除当前选择（状态栏徽章 / 面板链行 / 序列条高亮归零；不影响氢键范围烘焙 hbondScope）
     const s = useMolStore.getState()
-    if (!s.selection.structureId && !s.selection.indices.length) return ok('当前无选择')
+    if (!s.selection.structureId && !s.selection.indices.length) return ok(tt({ zh: '当前无选择', en: 'No current selection' }))
     useMolStore.setState(st => ({ selection: { structureId: null, indices: [], rev: st.selection.rev + 1 }, visualRev: st.visualRev + 1 }))
-    return ok('已取消选择（面板/序列条高亮已清除；hbonds in 范围不受影响）')
+    return ok(tt({ zh: '已取消选择（面板/序列条高亮已清除；hbonds in 范围不受影响）', en: 'Selection cleared (panel/sequence highlights cleared; hbonds in scope unaffected)' }))
   }
 
   if (cmd === 'hbonds' || cmd === 'hbond' || cmd === 'hbon') {
@@ -1812,21 +1843,21 @@ export function runCommand(raw: string): void {
     if (arg === 'off' || arg === '0') {
       s.updateSettings({ showHBonds: false })
       if (s.hbondScope) s.setHBondScope(null)
-      return ok('氢键显示关闭（范围烘焙已同步清除）')
+      return ok(tt({ zh: '氢键显示关闭（范围烘焙已同步清除）', en: 'H-bond display off (baked scope cleared too)' }))
     }
     // 范围子句：hbonds on [nÅ] in <表达式>（如 hbonds on 3.4 in byres(within 4.5 of ligand)）
     // 烘焙为独立范围——不随 deselect 清除，也不依赖后续选择变化（口袋工作流标准用法）
     const inMatch = input.slice(parts[0].length).match(/\bin\s+(.+)$/i)
     if (inMatch) {
       const scopeExpr = inMatch[1].trim()
-      if (!s.activeId) return err('没有加载结构')
+      if (!s.activeId) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
       const data = dataRegistry.get(s.activeId)
-      if (!data) return err('结构数据不存在')
+      if (!data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
       const named = buildNamedMasks(s.activeId, data)
       const r = evaluateSelection(scopeExpr, { structure: data, named })
-      if (r.error) return err(`范围选择错误: ${r.error}`)
+      if (r.error) return err(tt({ zh: `范围选择错误: ${r.error}`, en: `Scope selection error: ${r.error}` }))
       const idx = maskToIndices(r.mask)
-      if (!idx.length) return err('范围选择为空')
+      if (!idx.length) return err(tt({ zh: '范围选择为空', en: 'Scope selection is empty' }))
       const dist = parseFloat(parts[2] ?? '')
       const patch: Partial<import('./types').Settings> = { showHBonds: true }
       if (!isNaN(dist) && dist >= 2 && dist <= 6) patch.hbondMaxDist = dist
@@ -1835,8 +1866,11 @@ export function runCommand(raw: string): void {
       // 范围不含配体时提示：配体-残基氢键是互作图核心（旧写法 and polymer 会漏掉配体自身氢键）
       const scopeHint = /ligand|resn/i.test(scopeExpr)
         ? ''
-        : '。提示：范围写 byres(within 4.5 of (ligand)) and not water 可同时画出配体-残基氢键（含配体本身）'
-      return ok(`氢键已烘焙范围「${scopeExpr}」（${idx.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}）——不随 deselect 清除，端点球同步显示${scopeHint}`)
+        : tt({ zh: '。提示：范围写 byres(within 4.5 of (ligand)) and not water 可同时画出配体-残基氢键（含配体本身）', en: '. Tip: scope byres(within 4.5 of (ligand)) and not water also draws ligand–residue H-bonds (including the ligand itself)' })
+      return ok(tt({
+        zh: `氢键已烘焙范围「${scopeExpr}」（${idx.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}）——不随 deselect 清除，端点球同步显示${scopeHint}`,
+        en: `H-bonds baked to scope "${scopeExpr}" (within ${idx.length.toLocaleString()} atoms${!isNaN(dist) && dist >= 2 && dist <= 6 ? `, distance limit ${dist} Å` : ''}) — not cleared by deselect, endpoint spheres shown${scopeHint}`,
+      }))
     }
     let dist = parseFloat(parts[2] ?? '')
     if (isNaN(dist)) dist = parseFloat(arg)
@@ -1845,11 +1879,11 @@ export function runCommand(raw: string): void {
     s.updateSettings(patch)
     const hasSel = s.selection.indices.length > 0
     const scope = s.hbondScope
-    if (scope) return ok(`氢键网络开启（烘焙范围 ${scope.indices.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}，deselect 不影响）`)
+    if (scope) return ok(tt({ zh: `氢键网络开启（烘焙范围 ${scope.indices.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}，deselect 不影响）`, en: `H-bond network on (within baked scope of ${scope.indices.length.toLocaleString()} atoms${!isNaN(dist) && dist >= 2 && dist <= 6 ? `, distance limit ${dist} Å` : ''}; deselect has no effect)` }))
     const scope2 = s.settings.hbondSelOnly
-      ? (hasSel ? `当前选择集（${s.selection.indices.length.toLocaleString()} 原子）范围内` : '仅选择集模式：请先选择残基/链，或用 hbonds on 3.4 in <表达式> 烘焙独立范围（不随 deselect 清除）')
-      : '全结构网络（大结构较密，可在场景面板开启「仅选择集」缩小范围）'
-    return ok(`氢键网络开启${!isNaN(dist) && dist >= 2 && dist <= 6 ? `（距离上限 ${dist} Å）` : ''}——${scope2}，快捷键 B 切换`)
+      ? (hasSel ? tt({ zh: `当前选择集（${s.selection.indices.length.toLocaleString()} 原子）范围内`, en: `within the current selection (${s.selection.indices.length.toLocaleString()} atoms)` }) : tt({ zh: '仅选择集模式：请先选择残基/链，或用 hbonds on 3.4 in <表达式> 烘焙独立范围（不随 deselect 清除）', en: 'Selection-only mode: select residues/chains first, or bake a standalone scope with hbonds on 3.4 in <expression> (survives deselect)' }))
+      : tt({ zh: '全结构网络（大结构较密，可在场景面板开启「仅选择集」缩小范围）', en: 'whole-structure network (dense for large structures; enable "selection only" in the scene panel to narrow the scope)' })
+    return ok(tt({ zh: `氢键网络开启${!isNaN(dist) && dist >= 2 && dist <= 6 ? `（距离上限 ${dist} Å）` : ''}——${scope2}，快捷键 B 切换`, en: `H-bond network on${!isNaN(dist) && dist >= 2 && dist <= 6 ? ` (distance limit ${dist} Å)` : ''} — ${scope2}, hotkey B toggles` }))
   }
 
   if (cmd === 'ssao' || cmd === 'ao' || cmd === 'gtao') {
@@ -1857,7 +1891,7 @@ export function runCommand(raw: string): void {
     const arg = (parts[1] ?? 'on').toLowerCase()
     if (arg === 'off' || arg === '0') {
       s.updateSettings({ ssao: false })
-      return ok('环境光遮蔽已关闭')
+      return ok(tt({ zh: '环境光遮蔽已关闭', en: 'Ambient occlusion off' }))
     }
     // ssao on [半径Å] [强度]（`ssao on 1.5 2` 的第二个数此前被静默忽略——LLM 常给双参数）
     let idx = arg === 'on' ? 2 : 1
@@ -1868,14 +1902,14 @@ export function runCommand(raw: string): void {
     if (!isNaN(radius) && radius >= 0.5 && radius <= 12) patch.ssaoRadius = radius
     if (!isNaN(intensity) && intensity >= 0.2 && intensity <= 2.5) patch.ssaoIntensity = intensity
     s.updateSettings(patch)
-    return ok(`GTAO 环境光遮蔽开启${!isNaN(radius) && radius >= 0.5 && radius <= 12 ? `（采样半径 ${radius} Å）` : '（默认 3 Å）'}${!isNaN(intensity) && intensity >= 0.2 && intensity <= 2.5 ? `，强度 ${intensity}` : ''}，可在场景面板调节强度与半径`)
+    return ok(tt({ zh: `GTAO 环境光遮蔽开启${!isNaN(radius) && radius >= 0.5 && radius <= 12 ? `（采样半径 ${radius} Å）` : '（默认 3 Å）'}${!isNaN(intensity) && intensity >= 0.2 && intensity <= 2.5 ? `，强度 ${intensity}` : ''}，可在场景面板调节强度与半径`, en: `GTAO ambient occlusion on${!isNaN(radius) && radius >= 0.5 && radius <= 12 ? ` (sample radius ${radius} Å)` : ' (default 3 Å)'}${!isNaN(intensity) && intensity >= 0.2 && intensity <= 2.5 ? `, intensity ${intensity}` : ''}; adjust intensity and radius in the scene panel` }))
   }
 
   if (cmd === 'superpose' || cmd === 'match' || cmd === 'align' || cmd === 'mm') {
     const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
+    if (!eng) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
     const s = useMolStore.getState()
-    if (s.structures.length < 2) return err('叠合需要至少 2 个结构（当前 ' + s.structures.length + '）')
+    if (s.structures.length < 2) return err(tt({ zh: `叠合需要至少 2 个结构（当前 ${s.structures.length}）`, en: `Superposition needs at least 2 structures (currently ${s.structures.length})` }))
     // 解析参数：<mobile> [onto <ref>] [chain <移动链> [to <参考链>]]（省略 onto 时参考为当前活动结构）
     let rest = input.slice(parts[0].length).trim()
     // 可选链对：chain <A> [to <B>]——从整条命令中先提取（可出现在任何位置）
@@ -1894,14 +1928,14 @@ export function runCommand(raw: string): void {
       rest = rest.slice(0, ontoM.index).trim()
     }
     const mobileName = rest || (s.activeId ? s.structures.find(x => x.id === s.activeId)?.name : null)
-    if (!mobileName) return err('用法：superpose <移动结构名> onto <参考结构名> [chain <移动链> to <参考链>]（省略 onto 则叠合到当前活动结构）')
+    if (!mobileName) return err(tt({ zh: '用法：superpose <移动结构名> onto <参考结构名> [chain <移动链> to <参考链>]（省略 onto 则叠合到当前活动结构）', en: 'Usage: superpose <mobile name> onto <reference name> [chain <mobile chain> to <reference chain>] (omit onto to superpose onto the active structure)' }))
     if (!refName) {
-      if (!s.activeId) return err('没有活动结构作为参考，请用 superpose <名> onto <参考名>')
+      if (!s.activeId) return err(tt({ zh: '没有活动结构作为参考，请用 superpose <名> onto <参考名>', en: 'No active structure to use as the reference — use superpose <name> onto <reference>' }))
       const a = s.structures.find(x => x.id === s.activeId)
       if (a && a.name.toUpperCase() === mobileName.toUpperCase()) {
         // 移动=活动：改用第一个其它结构作参考
         const other = s.structures.find(x => x.id !== s.activeId)
-        if (!other) return err('没有其它结构可作参考')
+        if (!other) return err(tt({ zh: '没有其它结构可作参考', en: 'No other structure to use as the reference' }))
         refName = other.name
       } else {
         refName = a?.name ?? null
@@ -1910,29 +1944,29 @@ export function runCommand(raw: string): void {
     const findByName = (name: string) => s.structures.find(x => x.name.toUpperCase() === name.toUpperCase() || x.name.toUpperCase().startsWith(name.toUpperCase()))
     const mobile = findByName(mobileName)
     const ref = refName ? findByName(refName) : null
-    if (!mobile) return err(`未找到移动结构 "${mobileName}"（可用：${s.structures.map(x => x.name).join(', ')}）`)
-    if (!ref) return err(`未找到参考结构 "${refName}"`)
-    if (mobile.id === ref.id) return err('移动与参考结构不能相同')
+    if (!mobile) return err(tt({ zh: `未找到移动结构 "${mobileName}"（可用：${s.structures.map(x => x.name).join(', ')}）`, en: `Mobile structure "${mobileName}" not found (available: ${s.structures.map(x => x.name).join(', ')})` }))
+    if (!ref) return err(tt({ zh: `未找到参考结构 "${refName}"`, en: `Reference structure "${refName}" not found` }))
+    if (mobile.id === ref.id) return err(tt({ zh: '移动与参考结构不能相同', en: 'Mobile and reference structures cannot be the same' }))
     const t0 = performance.now()
     const res = eng.superpose(mobile.id, ref.id, mobChain, refChain)
     const ms = Math.round(performance.now() - t0)
-    if (!res.ok) return err(`叠合失败：${res.error}`)
-    ok(`叠合完成：${mobile.name} → ${ref.name}（链 ${res.mobileChain} ↔ 链 ${res.refChain}${mobChain ? '（手动指定）' : ''}）`)
-    ok(`匹配 ${res.matched} 对 CA 原子，对齐后 RMSD = ${res.rmsd.toFixed(3)} Å，耗时 ${ms} ms`)
-    if (res.rmsd > 3) ok('提示：RMSD 偏大，可能存在构象差异或序列相似度低')
+    if (!res.ok) return err(tt({ zh: `叠合失败：${res.error}`, en: `Superposition failed: ${res.error}` }))
+    ok(tt({ zh: `叠合完成：${mobile.name} → ${ref.name}（链 ${res.mobileChain} ↔ 链 ${res.refChain}${mobChain ? '（手动指定）' : ''}）`, en: `Superposed: ${mobile.name} → ${ref.name} (chain ${res.mobileChain} ↔ chain ${res.refChain}${mobChain ? ' (manually specified)' : ''})` }))
+    ok(tt({ zh: `匹配 ${res.matched} 对 CA 原子，对齐后 RMSD = ${res.rmsd.toFixed(3)} Å，耗时 ${ms} ms`, en: `Matched ${res.matched} CA atom pairs, RMSD = ${res.rmsd.toFixed(3)} Å after alignment, ${ms} ms` }))
+    if (res.rmsd > 3) ok(tt({ zh: '提示：RMSD 偏大，可能存在构象差异或序列相似度低', en: 'Note: RMSD is large — possible conformational differences or low sequence identity' }))
     return
   }
 
   if (cmd === 'dssp' || cmd === 'secstr') {
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有活动结构')
+    if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const entry = s.structures.find(x => x.id === s.activeId)
     const r = s.recomputeSS(s.activeId)
-    if (r.error) return err(`DSSP 失败：${r.error}`)
+    if (r.error) return err(tt({ zh: `DSSP 失败：${r.error}`, en: `DSSP failed: ${r.error}` }))
     const total = r.helix + r.strand + r.loop
     const pct = (v: number) => total > 0 ? (v / total * 100).toFixed(0) : '0'
-    ok(`DSSP 二级结构指认完成：螺旋 ${r.helix}（${pct(r.helix)}%）· 折叠 ${r.strand}（${pct(r.strand)}%）· 环 ${r.loop}（${pct(r.loop)}%）`)
-    ok(`cartoon 已按新指认重建${entry?.hasSS ? '' : '（原无 HELIX/SHEET 记录）'}；helix / sheet 选择关键字同步更新`)
+    ok(tt({ zh: `DSSP 二级结构指认完成：螺旋 ${r.helix}（${pct(r.helix)}%）· 折叠 ${r.strand}（${pct(r.strand)}%）· 环 ${r.loop}（${pct(r.loop)}%）`, en: `DSSP secondary structure assigned: helix ${r.helix} (${pct(r.helix)}%) · sheet ${r.strand} (${pct(r.strand)}%) · loop ${r.loop} (${pct(r.loop)}%)` }))
+    ok(tt({ zh: `cartoon 已按新指认重建${entry?.hasSS ? '' : '（原无 HELIX/SHEET 记录）'}；helix / sheet 选择关键字同步更新`, en: `Cartoons rebuilt with the new assignment${entry?.hasSS ? '' : ' (no HELIX/SHEET records originally)'}; helix / sheet selection keywords updated` }))
     return
   }
 
@@ -1942,17 +1976,17 @@ export function runCommand(raw: string): void {
     if (arg === 'off' || arg === '0') {
       useContactStore.getState().clear()
       engineRef.current?.updateContacts()
-      return ok('接触分析已清除')
+      return ok(tt({ zh: '接触分析已清除', en: 'Contact analysis cleared' }))
     }
     if (arg === 'hide') {
       useContactStore.getState().setVisible(false)
       engineRef.current?.updateContacts()
-      return ok('接触连线已隐藏（结果保留，用 contacts show 恢复）')
+      return ok(tt({ zh: '接触连线已隐藏（结果保留，用 contacts show 恢复）', en: 'Contact lines hidden (results kept; contacts show to restore)' }))
     }
     if (arg === 'show') {
       useContactStore.getState().setVisible(true)
       engineRef.current?.updateContacts()
-      return ok('接触连线已显示')
+      return ok(tt({ zh: '接触连线已显示', en: 'Contact lines shown' }))
     }
     // 解析 "exprA | exprB [cutoff]"（cutoff 前导空格或逗号均可：contacts A | B 4.5 / contacts A | B, 4.5——LLM 的 PyMOL 惯性写法）
     const rest = input.slice(parts[0].length).trim()
@@ -1975,13 +2009,13 @@ export function runCommand(raw: string): void {
       if (!isNaN(maybeNum) && maybeNum >= 2.5 && maybeNum <= 10) cutoff = maybeNum
       else {
         // 非 off/show/hide/数字却无管道：不静默复用 store 残留表达式（agent 修正轮会拿到莫名其妙的旧错误）
-        return err('用法：contacts <exprA> | <exprB> [cutoff]（A/B 两组用 | 分隔），如 contacts chain A | chain B 4.0；contacts off 清除')
+        return err(tt({ zh: '用法：contacts <exprA> | <exprB> [cutoff]（A/B 两组用 | 分隔），如 contacts chain A | chain B 4.0；contacts off 清除', en: 'Usage: contacts <exprA> | <exprB> [cutoff] (groups A/B separated by |), e.g. contacts chain A | chain B 4.0; contacts off clears' }))
       }
     }
     const outcome = runContactAnalysis(aExpr, bExpr, cutoff)
     if (!outcome.ok) return err(outcome.message)
     ok(outcome.message)
-    ok('分析面板（左侧「分析」标签）提供 2D 接触图谱与界面残基选择；contacts off 清除')
+    ok(tt({ zh: '分析面板（左侧「分析」标签）提供 2D 接触图谱与界面残基选择；contacts off 清除', en: 'The analysis panel (left "Analysis" tab) offers a 2D contact map and interface residue selection; contacts off clears' }))
     return
   }
 
@@ -1989,7 +2023,7 @@ export function runCommand(raw: string): void {
     // interface <链A> <链B> [cutoff]：链间界面快捷命令
     // 兼容三种写法：interface A B / interface :A :B / interface chain A chain B（表达式风格）
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有活动结构')
+    if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const rest = input.slice(parts[0].length).trim()
     // 尾部截断值
     let expr = rest
@@ -2017,13 +2051,13 @@ export function runCommand(raw: string): void {
         bExpr = tokens.slice(secondKw).join(' ')
       } else {
         // 其他表达式：无法可靠切分，提示用 contacts 管道语法
-        return err('复杂表达式请使用 contacts <A> | <B> [cutoff]，如 contacts chain A | chain B 4.0')
+        return err(tt({ zh: '复杂表达式请使用 contacts <A> | <B> [cutoff]，如 contacts chain A | chain B 4.0', en: 'For complex expressions use contacts <A> | <B> [cutoff], e.g. contacts chain A | chain B 4.0' }))
       }
     } else if (tokens.length === 2) {
       aExpr = `chain ${tokens[0]}`
       bExpr = `chain ${tokens[1]}`
     } else {
-      return err('用法：interface <链A> <链B> [cutoff]，如 interface A B 4.0 或 interface chain A chain B')
+      return err(tt({ zh: '用法：interface <链A> <链B> [cutoff]，如 interface A B 4.0 或 interface chain A chain B', en: 'Usage: interface <chainA> <chainB> [cutoff], e.g. interface A B 4.0 or interface chain A chain B' }))
     }
     const outcome = runContactAnalysis(aExpr, bExpr, cutoff)
     if (!outcome.ok) return err(outcome.message)
@@ -2035,7 +2069,7 @@ export function runCommand(raw: string): void {
     // xcontacts <结构A>:<exprA> | <结构B>:<exprB> [cutoff]
     const rest = input.slice(parts[0].length).trim()
     const pipeM = rest.match(/^(.+?)\s*\|\s*(.+)$/)
-    if (!pipeM) return err('用法：xcontacts <结构A>:<exprA> | <结构B>:<exprB> [cutoff]，如 xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0')
+    if (!pipeM) return err(tt({ zh: '用法：xcontacts <结构A>:<exprA> | <结构B>:<exprB> [cutoff]，如 xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0', en: 'Usage: xcontacts <structA>:<exprA> | <structB>:<exprB> [cutoff], e.g. xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0' }))
     let aSpec = pipeM[1].trim()
     let bPart = pipeM[2].trim()
     // 尾部截断值
@@ -2052,26 +2086,26 @@ export function runCommand(raw: string): void {
     if (!outcome.ok) return err(outcome.message)
     ok(outcome.message)
     if (useContactStore.getState().cross) {
-      ok('跨结构接触以两结构当前位姿为准（superpose 变换会实时反映在坐标中）；分析面板可查看跨结构界面残基列表')
+      ok(tt({ zh: '跨结构接触以两结构当前位姿为准（superpose 变换会实时反映在坐标中）；分析面板可查看跨结构界面残基列表', en: 'Cross-structure contacts use the current poses of both structures (superpose transforms are reflected live); the analysis panel lists cross-structure interface residues' }))
     }
     return
   }
 
   if (cmd === 'sasa' || cmd === 'area') {
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有活动结构')
+    if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const data = engineRef.current && dataRegistry.get(s.activeId)
-    if (!data) return err('结构数据不存在')
+    if (!data) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     const probe = clampNum(parseFloat(parts[1]), 0.8, 2.0, 1.4)
     const nPoints = Math.round(clampNum(parseFloat(parts[2]), 32, 512, 92))
     const eng = engineRef.current!
     const r = eng.requestSasa(s.activeId, { probe, nPoints })
     if (r.done && r.stats) {
       const st = r.stats
-      ok(`SASA（Shrake–Rupley，probe ${probe} Å，${nPoints} 点）：总计 ${st.total.toFixed(0)} Å² · 疏水 ${st.hydrophobic.toFixed(0)} · 极性 ${st.polar.toFixed(0)} · 水与配体 ${st.het.toFixed(0)} · ${st.ms.toFixed(0)} ms`)
-      ok('可用 color sasa 按暴露度着色（埋藏蓝 → 暴露橙红）；分析面板含 Top 暴露残基')
+      ok(tt({ zh: `SASA（Shrake–Rupley，probe ${probe} Å，${nPoints} 点）：总计 ${st.total.toFixed(0)} Å² · 疏水 ${st.hydrophobic.toFixed(0)} · 极性 ${st.polar.toFixed(0)} · 水与配体 ${st.het.toFixed(0)} · ${st.ms.toFixed(0)} ms`, en: `SASA (Shrake–Rupley, probe ${probe} Å, ${nPoints} points): total ${st.total.toFixed(0)} Å² · hydrophobic ${st.hydrophobic.toFixed(0)} · polar ${st.polar.toFixed(0)} · water & ligands ${st.het.toFixed(0)} · ${st.ms.toFixed(0)} ms` }))
+      ok(tt({ zh: '可用 color sasa 按暴露度着色（埋藏蓝 → 暴露橙红）；分析面板含 Top 暴露残基', en: 'Use color sasa to color by exposure (buried blue → exposed orange-red); the analysis panel lists top-exposed residues' }))
     } else {
-      ok(`SASA 计算中（Web Worker，probe ${probe} Å，${nPoints} 点）——完成后将在此输出结果，并自动更新着色`)
+      ok(tt({ zh: `SASA 计算中（Web Worker，probe ${probe} Å，${nPoints} 点）——完成后将在此输出结果，并自动更新着色`, en: `SASA computing (Web Worker, probe ${probe} Å, ${nPoints} points) — results print here when done, coloring updates automatically` }))
     }
     return
   }
@@ -2081,7 +2115,7 @@ export function runCommand(raw: string): void {
     if (!outcome.ok) return err(outcome.message)
     ok(outcome.message)
     if (useSasaStore.getState().buried?.computing === false && useSasaStore.getState().buried) {
-      ok('分析面板提供界面核心残基选择（ΔSASA > 1 Å² 判据）')
+      ok(tt({ zh: '分析面板提供界面核心残基选择（ΔSASA > 1 Å² 判据）', en: 'The analysis panel offers core interface residue selection (ΔSASA > 1 Å² criterion)' }))
     }
     return
   }
@@ -2092,7 +2126,7 @@ export function runCommand(raw: string): void {
     ok(outcome.message)
     const b = useSasaStore.getState().buried
     if (b && b.cross && !b.computing) {
-      ok('以两结构当前位姿为准（superpose 变换实时反映）；分析面板提供两侧核心残基选择')
+      ok(tt({ zh: '以两结构当前位姿为准（superpose 变换实时反映）；分析面板提供两侧核心残基选择', en: 'Based on the current poses of both structures (superpose transforms reflected live); the analysis panel offers core residue selection for both sides' }))
     }
     return
   }
@@ -2106,35 +2140,35 @@ export function runCommand(raw: string): void {
         x.name.toLowerCase() === nameArg.toLowerCase() ||
         x.name.toLowerCase().startsWith(nameArg.toLowerCase()) ||
         x.meta.pdbId?.toLowerCase() === nameArg.toLowerCase())
-      if (!found) return err(`未找到结构 "${nameArg}"（可用：${s.structures.map(x => x.name).join('、')}）`)
+      if (!found) return err(tt({ zh: `未找到结构 "${nameArg}"（可用：${s.structures.map(x => x.name).join('、')}）`, en: `Structure "${nameArg}" not found (available: ${s.structures.map(x => x.name).join(', ')})` }))
       targetId = found.id
     }
-    if (!targetId) return err('没有活动结构')
+    if (!targetId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const r = engineRef.current?.resetTransform(targetId)
-    if (!r) return err('引擎未就绪')
+    if (!r) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
     if (!r.ok) return err(r.message)
-    ok(r.message + '；会话存档中的变换已同步清除')
+    ok(r.message + tt({ zh: '；会话存档中的变换已同步清除', en: '; transform also cleared from the session archive' }))
     return
   }
 
   if (cmd === 'record' || cmd === 'rec') {
     const eng = engineRef.current
-    if (!eng) return err('引擎未就绪')
+    if (!eng) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
     const sub = (parts[1] ?? 'start').toLowerCase()
     if (sub === 'start' || sub === 'on') {
-      if (eng.isRecording) return ok('已在录制中')
+      if (eng.isRecording) return ok(tt({ zh: '已在录制中', en: 'Already recording' }))
       const okStart = eng.startRecording()
-      if (!okStart) return err('当前浏览器不支持画布录制（MediaRecorder）')
+      if (!okStart) return err(tt({ zh: '当前浏览器不支持画布录制（MediaRecorder）', en: 'Canvas recording not supported in this browser (MediaRecorder)' }))
       useRecordStore.getState().setRecording(true)
       const smooth = useMovieStore.getState().smooth
-      return ok(`开始录制（30fps WebM）——可同时播放 ensemble / rock / spin；record stop 停止并下载${smooth ? ' · movie play 走平滑巡航（当前默认，录像连贯）' : ' · 录连贯转场推荐：movie smooth 开启平滑巡航'}`)
+      return ok(tt({ zh: `开始录制（30fps WebM）——可同时播放 ensemble / rock / spin；record stop 停止并下载${smooth ? ' · movie play 走平滑巡航（当前默认，录像连贯）' : ' · 录连贯转场推荐：movie smooth 开启平滑巡航'}`, en: `Recording started (30 fps WebM) — ensemble / rock / spin can play simultaneously; record stop stops and downloads${smooth ? ' · movie play uses smooth cruise (current default, silky recordings)' : ' · for silky transitions, enable smooth cruise with movie smooth'}` }))
     }
     if (sub === 'stop' || sub === 'off') {
-      if (!eng.isRecording) return err('当前未在录制')
+      if (!eng.isRecording) return err(tt({ zh: '当前未在录制', en: 'Not currently recording' }))
       void eng.stopRecording().then(blob => {
         useRecordStore.getState().setRecording(false)
         if (!blob || blob.size === 0) {
-          useMolStore.getState().appendLog('err', '录制内容为空')
+          useMolStore.getState().appendLog('err', tt({ zh: '录制内容为空', en: 'Recording is empty' }))
           return
         }
         const url = URL.createObjectURL(blob)
@@ -2145,11 +2179,11 @@ export function runCommand(raw: string): void {
         a.download = `molvision-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.webm`
         a.click()
         setTimeout(() => URL.revokeObjectURL(url), 5000)
-        useMolStore.getState().appendLog('out', `动画已导出：${(blob.size / 1024 / 1024).toFixed(1)} MB WebM`)
+        useMolStore.getState().appendLog('out', tt({ zh: `动画已导出：${(blob.size / 1024 / 1024).toFixed(1)} MB WebM`, en: `Animation exported: ${(blob.size / 1024 / 1024).toFixed(1)} MB WebM` }))
       })
-      return ok('停止录制，正在生成 WebM…')
+      return ok(tt({ zh: '停止录制，正在生成 WebM…', en: 'Recording stopped, generating WebM…' }))
     }
-    return err('用法：record start | record stop')
+    return err(tt({ zh: '用法：record start | record stop', en: 'Usage: record start | record stop' }))
   }
 
   if (cmd === 'session' || (cmd === 'save' && !(parts[1] ?? '').toLowerCase().endsWith('.pdb') && !(parts[1] ?? '').toLowerCase().endsWith('.ent'))) {
@@ -2157,24 +2191,24 @@ export function runCommand(raw: string): void {
     if (cmd === 'save' || sub === 'save') {
       const okSaved = saveSession()
       const n = useMolStore.getState().structures.length
-      return okSaved && n > 0 ? ok(`会话已保存（${n} 个结构，含相机视角）`) : err('无可保存内容或保存失败')
+      return okSaved && n > 0 ? ok(tt({ zh: `会话已保存（${n} 个结构，含相机视角）`, en: `Session saved (${n} structures, incl. camera views)` })) : err(tt({ zh: '无可保存内容或保存失败', en: 'Nothing to save, or save failed' }))
     }
     if (sub === 'export' || sub === 'file') {
       // 导出 .molvision 会话文件（含结构源文本与全部视图状态）
       const okExport = exportSessionFile()
       return okExport
-        ? ok('会话已导出为 .molvision 文件（含结构源文本 · 表示法 · 设置 · 相机视角 · 书签）')
-        : err('无可导出的会话（先加载结构）')
+        ? ok(tt({ zh: '会话已导出为 .molvision 文件（含结构源文本 · 表示法 · 设置 · 相机视角 · 书签）', en: 'Session exported as a .molvision file (structure source text · representations · settings · camera views · bookmarks)' }))
+        : err(tt({ zh: '无可导出的会话（先加载结构）', en: 'No session to export (load a structure first)' }))
     }
     if (sub === 'new') {
       const closed = newSession()
       return ok(closed > 0
-        ? `已新建会话（关闭 ${closed} 个结构，书签/时间轴/密度图已清空）`
-        : '已新建会话（书签/时间轴/密度图已清空）')
+        ? tt({ zh: `已新建会话（关闭 ${closed} 个结构，书签/时间轴/密度图已清空）`, en: `New session started (closed ${closed} structures; bookmarks/timeline/maps cleared)` })
+        : tt({ zh: '已新建会话（书签/时间轴/密度图已清空）', en: 'New session started (bookmarks/timeline/maps cleared)' }))
     }
     if (sub === 'clear' || sub === 'reset') {
       clearSession()
-      return ok('会话存档已清除（下次刷新不再恢复）')
+      return ok(tt({ zh: '会话存档已清除（下次刷新不再恢复）', en: 'Session archive cleared (not restored on next refresh)' }))
     }
     return ok(sessionInfo())
   }
@@ -2183,26 +2217,26 @@ export function runCommand(raw: string): void {
     // save <名>.pdb [选择]：坐标导出（PyMOL save）
     const fileName = parts[1] ?? ''
     if (!fileName.toLowerCase().endsWith('.pdb') && !fileName.toLowerCase().endsWith('.ent')) {
-      return err('用法：save <文件名>.pdb [选择表达式]（导出坐标）；会话存档用 session save')
+      return err(tt({ zh: '用法：save <文件名>.pdb [选择表达式]（导出坐标）；会话存档用 session save', en: 'Usage: save <file>.pdb [selection expression] (exports coordinates); use session save for the session archive' }))
     }
     const s = useMolStore.getState()
-    if (!s.activeId) return err('没有活动结构')
+    if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const data = dataRegistry.get(s.activeId)
     const entry = s.structures.find(x => x.id === s.activeId)
-    if (!data || !entry) return err('结构数据不存在')
+    if (!data || !entry) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     const expr = parts.slice(2).join(' ').trim()
     let outData = data
     let atomCount = data.atoms.count
     if (expr) {
       const named = buildNamedMasks(s.activeId, data)
       const r = evaluateSelection(expr, { structure: data, named })
-      if (r.error) return err(`选择错误: ${r.error}`)
-      if (r.count === 0) return err('选择为空')
+      if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
+      if (r.count === 0) return err(tt({ zh: '选择为空', en: 'Selection is empty' }))
       try {
         outData = subsetStructure(data, maskToIndices(r.mask), entry.name)
         atomCount = outData.atoms.count
       } catch (e) {
-        return err(`导出失败：${e instanceof Error ? e.message : String(e)}`)
+        return err(tt({ zh: `导出失败：${e instanceof Error ? e.message : String(e)}`, en: `Export failed: ${e instanceof Error ? e.message : String(e)}` }))
       }
     }
     const text = structureToPdbText(outData)
@@ -2213,7 +2247,7 @@ export function runCommand(raw: string): void {
     a.download = fileName.toLowerCase().endsWith('.ent') ? fileName : fileName.replace(/\.[^.]*$/, '') + '.pdb'
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 5000)
-    return ok(`已导出 ${atomCount.toLocaleString()} 个原子 → ${a.download}${expr ? `（选择：${expr}）` : ''}（世界坐标，含 CRYST1）`)
+    return ok(tt({ zh: `已导出 ${atomCount.toLocaleString()} 个原子 → ${a.download}${expr ? `（选择：${expr}）` : ''}（世界坐标，含 CRYST1）`, en: `Exported ${atomCount.toLocaleString()} atoms → ${a.download}${expr ? ` (selection: ${expr})` : ''} (world coordinates, incl. CRYST1)` }))
   }
 
   if (cmd === 'morph') {
@@ -2223,14 +2257,14 @@ export function runCommand(raw: string): void {
     const rest = (isMulti ? parts.slice(2) : parts.slice(1)).join(' ')
     const m = rest.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/)
     if (!m) return err(isMulti
-      ? '用法：morph multi <新对象名> = <构象A> <构象B> <构象C> … [帧数]，如 morph multi m = 1BQL 2LYZ 2VB1 60'
-      : '用法：morph <新对象名> = <结构A> <结构B> [帧数]，如 morph m1 = 1BQL 2LYZ 40')
+      ? tt({ zh: '用法：morph multi <新对象名> = <构象A> <构象B> <构象C> … [帧数]，如 morph multi m = 1BQL 2LYZ 2VB1 60', en: 'Usage: morph multi <new object name> = <conformer A> <conformer B> <conformer C> … [frames], e.g. morph multi m = 1BQL 2LYZ 2VB1 60' })
+      : tt({ zh: '用法：morph <新对象名> = <结构A> <结构B> [帧数]，如 morph m1 = 1BQL 2LYZ 40', en: 'Usage: morph <new object name> = <structure A> <structure B> [frames], e.g. morph m1 = 1BQL 2LYZ 40' }))
     const name = m[1]
     const tail = m[2].trim().split(/\s+/)
     // 尾部可选标志：norefine 关闭帧精修（键长约束 + 去碰撞）
     const noRefine = tail.some(t => t.toLowerCase() === 'norefine')
     const tailClean = tail.filter(t => t.toLowerCase() !== 'norefine')
-    if (tailClean.length < 2) return err(`需要至少两个构象：morph ${isMulti ? 'multi ' : ''}<名> = <A> <B>${isMulti ? ' <C> …' : ''} [帧数] [norefine]`)
+    if (tailClean.length < 2) return err(tt({ zh: `需要至少两个构象：morph ${isMulti ? 'multi ' : ''}<名> = <A> <B>${isMulti ? ' <C> …' : ''} [帧数] [norefine]`, en: `At least two conformers required: morph ${isMulti ? 'multi ' : ''}<name> = <A> <B>${isMulti ? ' <C> …' : ''} [frames] [norefine]` }))
     const s = useMolStore.getState()
     const resolve = (q: string) => s.structures.find(x =>
       x.name.toLowerCase() === q.toLowerCase() ||
@@ -2241,49 +2275,49 @@ export function runCommand(raw: string): void {
     const structToks = framesParsed !== null ? tailClean.slice(0, -1) : tailClean
     const entries = structToks.map(t => resolve(t))
     const missing = structToks.filter((t, i) => !entries[i])
-    if (missing.length) return err(`未找到结构：${missing.join('、')}（可用：${s.structures.map(x => x.name).join('、') || '无'}）`)
+    if (missing.length) return err(tt({ zh: `未找到结构：${missing.join('、')}（可用：${s.structures.map(x => x.name).join('、') || '无'}）`, en: `Structures not found: ${missing.join(', ')} (available: ${s.structures.map(x => x.name).join(', ') || 'none'})` }))
     const ids = new Set(entries.map(e => e!.id))
-    if (ids.size < 2) return err('构象不能来自同一结构（morph 需要不同构象）')
+    if (ids.size < 2) return err(tt({ zh: '构象不能来自同一结构（morph 需要不同构象）', en: 'Conformers cannot come from the same structure (morph needs distinct conformers)' }))
     const datas = entries.map(e => dataRegistry.get(e!.id))
-    if (datas.some(d => !d)) return err('结构数据不存在')
+    if (datas.some(d => !d)) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     try {
       const t0 = performance.now()
       if (isMulti) {
         // ---------- 多态样条 morph ----------
         const steps = framesParsed ?? 48
-        if (steps < 10 || steps > 200) return err('帧数范围 10–200（默认 48）')
+        if (steps < 10 || steps > 200) return err(tt({ zh: '帧数范围 10–200（默认 48）', en: 'Frames must be 10–200 (default 48)' }))
         const r = buildMultiMorph(datas as StructureData[], name, steps, !noRefine)
-        if (!r.ok || !r.data) return err(r.error ?? 'morph 失败')
+        if (!r.ok || !r.data) return err(r.error ?? tt({ zh: 'morph 失败', en: 'morph failed' }))
         const ms = performance.now() - t0
         const id = useMolStore.getState().addStructure(r.data, name, ms)
         textRegistry.set(id, structureToPdbText(r.data))
         const chainInfo = r.matchedChains.map(([a, b]) => `${a}↔${b}`).join(' ')
-        ok(`多态 morph 对象 "${name}" 已创建：${r.knots} 个构象态 · ${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基 · ${r.frames} 帧（Catmull-Rom 样条，${ms.toFixed(0)} ms）${chainInfo ? ` · 链对 ${chainInfo}` : ''}`)
-        if (r.refine) ok(`帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString()} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString()} 处`)
-        else if (noRefine) ok('帧精修已关闭（norefine）：中间帧保留纯样条插值')
+        ok(tt({ zh: `多态 morph 对象 "${name}" 已创建：${r.knots} 个构象态 · ${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基 · ${r.frames} 帧（Catmull-Rom 样条，${ms.toFixed(0)} ms）${chainInfo ? ` · 链对 ${chainInfo}` : ''}`, en: `Multi-state morph object "${name}" created: ${r.knots} conformational states · ${r.matchedAtoms.toLocaleString()} atoms · ${r.matchedResidues.toLocaleString()} residues · ${r.frames} frames (Catmull-Rom spline, ${ms.toFixed(0)} ms)${chainInfo ? ` · chain pairs ${chainInfo}` : ''}` }))
+        if (r.refine) ok(tt({ zh: `帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString()} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString()} 处`, en: `Frame refinement (rigimol-style): ${r.refine.bonds.toLocaleString()} bond-length constraints · mean bond-length drift of intermediate frames zeroed at ${r.refine.bondDrift.toFixed(3)} Å (max ${r.refine.maxDrift.toFixed(3)} Å) · fixed ${r.refine.clashesFixed.toLocaleString()} non-bonded clashes` }))
+        else if (noRefine) ok(tt({ zh: '帧精修已关闭（norefine）：中间帧保留纯样条插值', en: 'Frame refinement off (norefine): intermediate frames keep pure spline interpolation' }))
         r.rmsds.forEach((rmsd, i) => {
-          if (rmsd !== null) ok(`构象 ${i + 2}（${structToks[i + 1]}）叠合到参考：CA RMSD ${rmsd.toFixed(2)} Å`)
+          if (rmsd !== null) ok(tt({ zh: `构象 ${i + 2}（${structToks[i + 1]}）叠合到参考：CA RMSD ${rmsd.toFixed(2)} Å`, en: `Conformer ${i + 2} (${structToks[i + 1]}) superposed onto the reference: CA RMSD ${rmsd.toFixed(2)} Å` }))
         })
-        if (r.strategy === 'identity') ok('匹配策略：恒等（同源结构按原子序对应）')
-        return ok('底部播放条可逐帧浏览样条轨迹——ensemble play 播放，帧滑块可停在任意中间构象')
+        if (r.strategy === 'identity') ok(tt({ zh: '匹配策略：恒等（同源结构按原子序对应）', en: 'Matching strategy: identity (homologous structures matched by atom order)' }))
+        return ok(tt({ zh: '底部播放条可逐帧浏览样条轨迹——ensemble play 播放，帧滑块可停在任意中间构象', en: 'The bottom playback bar scrubs the spline trajectory — ensemble play animates, the frame slider can stop at any intermediate conformation' }))
       }
       // ---------- 双构象 morph ----------
       const steps = framesParsed ?? 30
-      if (steps < 10 || steps > 120) return err('帧数范围 10–120（默认 30）')
+      if (steps < 10 || steps > 120) return err(tt({ zh: '帧数范围 10–120（默认 30）', en: 'Frames must be 10–120 (default 30)' }))
       const r = buildMorph(datas[0]!, datas[1]!, name, steps, !noRefine)
-      if (!r.ok || !r.data) return err(r.error ?? 'morph 失败')
+      if (!r.ok || !r.data) return err(r.error ?? tt({ zh: 'morph 失败', en: 'morph failed' }))
       const ms = performance.now() - t0
       const id = useMolStore.getState().addStructure(r.data, name, ms)
       textRegistry.set(id, structureToPdbText(r.data))
       const chainInfo = r.matchedChains.map(([a, b]) => `${a}↔${b}`).join(' ')
-      ok(`morph 对象 "${name}" 已创建：${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基对 · ${r.frames} 帧${chainInfo ? ` · 链对 ${chainInfo}` : ''}（${ms.toFixed(0)} ms）`)
-      if (r.refine) ok(`帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString()} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString()} 处`)
-      else if (noRefine) ok('帧精修已关闭（norefine）：中间帧保留纯插值')
-      if (r.alignRmsd !== null) ok(`自动叠合 ${entries[1]!.name} → ${entries[0]!.name}：CA RMSD ${r.alignRmsd.toFixed(2)} Å（内存中完成，不改动原结构）`)
-      if (r.strategy === 'identity') ok('匹配策略：恒等（同源结构按原子序对应）')
-      return ok(`底部出现构象播放条——ensemble play 开始播放，V 键保存当前机位后 movie play 可巡航录制（会话存档保存第 1 帧坐标）`)
+      ok(tt({ zh: `morph 对象 "${name}" 已创建：${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基对 · ${r.frames} 帧${chainInfo ? ` · 链对 ${chainInfo}` : ''}（${ms.toFixed(0)} ms）`, en: `Morph object "${name}" created: ${r.matchedAtoms.toLocaleString()} atoms · ${r.matchedResidues.toLocaleString()} residue pairs · ${r.frames} frames${chainInfo ? ` · chain pairs ${chainInfo}` : ''} (${ms.toFixed(0)} ms)` }))
+      if (r.refine) ok(tt({ zh: `帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString()} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString()} 处`, en: `Frame refinement (rigimol-style): ${r.refine.bonds.toLocaleString()} bond-length constraints · mean bond-length drift of intermediate frames zeroed at ${r.refine.bondDrift.toFixed(3)} Å (max ${r.refine.maxDrift.toFixed(3)} Å) · fixed ${r.refine.clashesFixed.toLocaleString()} non-bonded clashes` }))
+      else if (noRefine) ok(tt({ zh: '帧精修已关闭（norefine）：中间帧保留纯插值', en: 'Frame refinement off (norefine): intermediate frames keep pure interpolation' }))
+      if (r.alignRmsd !== null) ok(tt({ zh: `自动叠合 ${entries[1]!.name} → ${entries[0]!.name}：CA RMSD ${r.alignRmsd.toFixed(2)} Å（内存中完成，不改动原结构）`, en: `Auto-superposed ${entries[1]!.name} → ${entries[0]!.name}: CA RMSD ${r.alignRmsd.toFixed(2)} Å (in memory; original structures untouched)` }))
+      if (r.strategy === 'identity') ok(tt({ zh: '匹配策略：恒等（同源结构按原子序对应）', en: 'Matching strategy: identity (homologous structures matched by atom order)' }))
+      return ok(tt({ zh: '底部出现构象播放条——ensemble play 开始播放，V 键保存当前机位后 movie play 可巡航录制（会话存档保存第 1 帧坐标）', en: 'A conformation playback bar appears at the bottom — ensemble play starts playback; save the current viewpoint with V and movie play can cruise-record (the session archive stores frame 1 coordinates)' }))
     } catch (e) {
-      return err(`morph 失败：${e instanceof Error ? e.message : String(e)}`)
+      return err(tt({ zh: `morph 失败：${e instanceof Error ? e.message : String(e)}`, en: `morph failed: ${e instanceof Error ? e.message : String(e)}` }))
     }
   }
 
@@ -2309,14 +2343,14 @@ export function runCommand(raw: string): void {
       const validTl = tl.filter(e => byId.has(e.viewId)).length
       // 无显式秒数且时间轴有 ≥2 有效关键帧 → 时间轴模式（逐段时长）；否则经典书签统一时长模式
       const useTl = !hasSecs && validTl >= 2
-      if (!useTl && vs.bookmarks.length < 2) return err(`至少需要 2 个视角书签（当前 ${vs.bookmarks.length}）——V 键或 view save 先保存多机位`)
+      if (!useTl && vs.bookmarks.length < 2) return err(tt({ zh: `至少需要 2 个视角书签（当前 ${vs.bookmarks.length}）——V 键或 view save 先保存多机位`, en: `At least 2 view bookmarks required (currently ${vs.bookmarks.length}) — save viewpoints first with V or view save` }))
       const rounds = n ?? (useTl ? useMovieStore.getState().loopsEdit : 1)
       // 开始消息立即打印（playMovie 的 promise 在播放结束时才 resolve）
       if (useTl) {
         const totalMs = tl.reduce((s, e) => s + e.duration, 0)
-        ok(`movie 开始（时间轴模式${smooth ? ' · 平滑巡航' : ' · 逐帧驻留'}）：${validTl} 个关键帧 · 单轮 ${(totalMs / 1000).toFixed(1)}s（逐段时长）× ${rounds} 轮——拖动/滚轮接管停止；record start 可同步录制`)
+        ok(tt({ zh: `movie 开始（时间轴模式${smooth ? ' · 平滑巡航' : ' · 逐帧驻留'}）：${validTl} 个关键帧 · 单轮 ${(totalMs / 1000).toFixed(1)}s（逐段时长）× ${rounds} 轮——拖动/滚轮接管停止；record start 可同步录制`, en: `movie started (timeline mode${smooth ? ' · smooth cruise' : ' · per-frame dwell'}): ${validTl} keyframes · ${(totalMs / 1000).toFixed(1)}s per pass (per-segment durations) × ${rounds} rounds — drag/scroll to take over; record start records in sync` }))
       } else {
-        ok(`movie 开始（${smooth ? '平滑巡航：关键帧间速度连续，录像丝滑' : '逐帧驻留：每机位 easeInOut 停顿'}）：${vs.bookmarks.length} 个视角 × ${rounds} 轮 × ${dur}s——拖动/滚轮可随时接管停止；record start 可同步录制`)
+        ok(tt({ zh: `movie 开始（${smooth ? '平滑巡航：关键帧间速度连续，录像丝滑' : '逐帧驻留：每机位 easeInOut 停顿'}）：${vs.bookmarks.length} 个视角 × ${rounds} 轮 × ${dur}s——拖动/滚轮可随时接管停止；record start 可同步录制`, en: `movie started (${smooth ? 'smooth cruise: continuous velocity between keyframes, silky recordings' : 'per-frame dwell: easeInOut pause at each viewpoint'}): ${vs.bookmarks.length} viewpoints × ${rounds} rounds × ${dur}s — drag/scroll to take over anytime; record start records in sync` }))
       }
       void playMovie({ duration: dur * 1000, loops: n, useTimeline: useTl, smooth }).then(r => {
         if (!r.ok) err(r.error)
@@ -2325,82 +2359,82 @@ export function runCommand(raw: string): void {
     }
     if (sub === 'smooth' || sub === 'cruise') {
       useMovieStore.getState().setSmooth(true)
-      return ok('movie 默认模式已设为平滑巡航（关键帧间 Catmull-Rom 连续插值，速度不归零——录像连贯无顿挫）——movie play 使用此默认；movie hold 切回逐帧驻留')
+      return ok(tt({ zh: 'movie 默认模式已设为平滑巡航（关键帧间 Catmull-Rom 连续插值，速度不归零——录像连贯无顿挫）——movie play 使用此默认；movie hold 切回逐帧驻留', en: 'movie default mode set to smooth cruise (Catmull-Rom continuous interpolation between keyframes, velocity never zero — silky, stutter-free recordings) — movie play uses this default; movie hold switches back to per-frame dwell' }))
     }
     if (sub === 'hold' || sub === 'classic') {
       useMovieStore.getState().setSmooth(false)
-      return ok('movie 默认模式已设为逐帧驻留（每个关键帧 easeInOut 停顿——PyMOL 经典幻灯片式）——movie play 使用此默认；movie smooth 切回平滑巡航')
+      return ok(tt({ zh: 'movie 默认模式已设为逐帧驻留（每个关键帧 easeInOut 停顿——PyMOL 经典幻灯片式）——movie play 使用此默认；movie smooth 切回平滑巡航', en: 'movie default mode set to per-frame dwell (easeInOut pause at each keyframe — PyMOL classic slideshow) — movie play uses this default; movie smooth switches back to smooth cruise' }))
     }
     if (sub === 'stop' || sub === 'end') {
       stopMovie()
-      return ok('movie 序列播放已停止')
+      return ok(tt({ zh: 'movie 序列播放已停止', en: 'movie sequence playback stopped' }))
     }
     if (sub === 'edit' || sub === 'timeline') {
       useMovieStore.getState().setTimelineOpen(true)
-      return ok('movie 时间轴已打开（底部面板：拖拽排序、逐段时长、轮数、播放）——工具栏 Film 按钮可开关')
+      return ok(tt({ zh: 'movie 时间轴已打开（底部面板：拖拽排序、逐段时长、轮数、播放）——工具栏 Film 按钮可开关', en: 'movie timeline opened (bottom panel: drag to reorder, per-segment durations, rounds, playback) — the toolbar Film button toggles it' }))
     }
     const ms = useMovieStore.getState()
     if (ms.playing) {
-      return ok(`movie 播放中${ms.smooth ? '（平滑巡航）' : '（逐帧驻留）'}：段 ${ms.seg + 1}/${ms.total}（${ms.currentName ?? ''}），本段 ${(ms.duration / 1000).toFixed(1)}s × ${ms.loops} 轮`)
+      return ok(tt({ zh: `movie 播放中${ms.smooth ? '（平滑巡航）' : '（逐帧驻留）'}：段 ${ms.seg + 1}/${ms.total}（${ms.currentName ?? ''}），本段 ${(ms.duration / 1000).toFixed(1)}s × ${ms.loops} 轮`, en: `movie playing${ms.smooth ? ' (smooth cruise)' : ' (per-frame dwell)'}: segment ${ms.seg + 1}/${ms.total} (${ms.currentName ?? ''}), ${(ms.duration / 1000).toFixed(1)}s × ${ms.loops} rounds` }))
     }
     const tlInfo = ms.timeline.length
-      ? ` · 时间轴 ${ms.timeline.length} 段（movie play 走时间轴模式；movie edit 打开编排面板）`
-      : ' · movie edit 打开时间轴编排面板'
-    return ok(`movie 未播放。已存 ${useViewsStore.getState().bookmarks.length} 个视角书签（上限 ${MAX_BOOKMARKS}）——movie play [smooth|hold] [秒/视角] [轮数] 启动；当前默认模式：${ms.smooth ? '平滑巡航（录像连贯）' : '逐帧驻留（PyMOL 经典）'}${tlInfo}`)
+      ? tt({ zh: ` · 时间轴 ${ms.timeline.length} 段（movie play 走时间轴模式；movie edit 打开编排面板）`, en: ` · timeline with ${ms.timeline.length} segments (movie play uses timeline mode; movie edit opens the arranging panel)` })
+      : tt({ zh: ' · movie edit 打开时间轴编排面板', en: ' · movie edit opens the timeline arranging panel' })
+    return ok(tt({ zh: `movie 未播放。已存 ${useViewsStore.getState().bookmarks.length} 个视角书签（上限 ${MAX_BOOKMARKS}）——movie play [smooth|hold] [秒/视角] [轮数] 启动；当前默认模式：${ms.smooth ? '平滑巡航（录像连贯）' : '逐帧驻留（PyMOL 经典）'}${tlInfo}`, en: `movie idle. ${useViewsStore.getState().bookmarks.length} view bookmarks saved (max ${MAX_BOOKMARKS}) — start with movie play [smooth|hold] [seconds/viewpoint] [rounds]; current default mode: ${ms.smooth ? 'smooth cruise (silky recordings)' : 'per-frame dwell (PyMOL classic)'}${tlInfo}` }))
   }
 
   if (cmd === 'ensemble' || cmd === 'ens') {
     const eng = engineRef.current
     const es = useEnsembleStore.getState()
-    if (!eng) return err('引擎未就绪')
+    if (!eng) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
     const sub = (parts[1] ?? 'info').toLowerCase()
     if (sub === 'play') {
-      if (!es.structureId) return err('当前无含 ensemble 的结构（试试 1D3Z）')
+      if (!es.structureId) return err(tt({ zh: '当前无含 ensemble 的结构（试试 1D3Z）', en: 'No structure with an ensemble (try 1D3Z)' }))
       eng.playEnsemble(es.structureId)
-      return ok(`构象动画播放中（${es.total} 帧，P 暂停）`)
+      return ok(tt({ zh: `构象动画播放中（${es.total} 帧，P 暂停）`, en: `Ensemble animation playing (${es.total} frames, P pauses)` }))
     }
     if (sub === 'pause' || sub === 'stop') {
       eng.pauseEnsemble()
-      return ok('构象动画已暂停')
+      return ok(tt({ zh: '构象动画已暂停', en: 'Ensemble animation paused' }))
     }
     if (sub === 'reset') {
-      if (!es.structureId) return err('当前无含 ensemble 的结构')
+      if (!es.structureId) return err(tt({ zh: '当前无含 ensemble 的结构', en: 'No structure with an ensemble' }))
       eng.resetEnsemble(es.structureId)
-      return ok('已回到第 1 帧')
+      return ok(tt({ zh: '已回到第 1 帧', en: 'Back to frame 1' }))
     }
     if (sub === 'frame' || sub === 'goto') {
-      if (!es.structureId) return err('当前无含 ensemble 的结构')
+      if (!es.structureId) return err(tt({ zh: '当前无含 ensemble 的结构', en: 'No structure with an ensemble' }))
       const n = parseInt(parts[2] ?? '', 10)
-      if (isNaN(n)) return err('用法：ensemble frame <1..N>')
+      if (isNaN(n)) return err(tt({ zh: '用法：ensemble frame <1..N>', en: 'Usage: ensemble frame <1..N>' }))
       eng.setEnsembleFrame(es.structureId, n - 1)
-      return ok(`已跳到第 ${n} 帧`)
+      return ok(tt({ zh: `已跳到第 ${n} 帧`, en: `Jumped to frame ${n}` }))
     }
     if (sub === 'fps' || sub === 'speed') {
       const v = parseFloat(parts[2] ?? '')
-      if (isNaN(v) || v < 0.5 || v > 60) return err('用法：ensemble fps <0.5-60>')
+      if (isNaN(v) || v < 0.5 || v > 60) return err(tt({ zh: '用法：ensemble fps <0.5-60>', en: 'Usage: ensemble fps <0.5-60>' }))
       es.setFps(v)
-      return ok(`播放速度 ${v} 帧/秒`)
+      return ok(tt({ zh: `播放速度 ${v} 帧/秒`, en: `Playback speed ${v} fps` }))
     }
     if (sub === 'interp') {
       const on = (parts[2] ?? 'on').toLowerCase() !== 'off'
       es.setInterp(on)
-      return ok(on ? '帧间插值开启（平滑）' : '帧间插值关闭（跳变）')
+      return ok(on ? tt({ zh: '帧间插值开启（平滑）', en: 'Inter-frame interpolation on (smooth)' }) : tt({ zh: '帧间插值关闭（跳变）', en: 'Inter-frame interpolation off (stepped)' }))
     }
     if (sub === 'loop') {
       const on = (parts[2] ?? 'on').toLowerCase() !== 'off'
       es.setLoop(on)
-      return ok(on ? '循环播放开启' : '循环播放关闭')
+      return ok(on ? tt({ zh: '循环播放开启', en: 'Looping on' }) : tt({ zh: '循环播放关闭', en: 'Looping off' }))
     }
     return es.structureId
-      ? ok(`ensemble：${es.total} 帧，当前第 ${es.frame + 1} 帧，${es.playing ? '播放中' : '已暂停'}，${es.fps} fps，插值${es.interp ? '开' : '关'}，循环${es.loop ? '开' : '关'}`)
-      : err('当前无含 ensemble 的结构（试试 load 1D3Z）')
+      ? ok(tt({ zh: `ensemble：${es.total} 帧，当前第 ${es.frame + 1} 帧，${es.playing ? '播放中' : '已暂停'}，${es.fps} fps，插值${es.interp ? '开' : '关'}，循环${es.loop ? '开' : '关'}`, en: `ensemble: ${es.total} frames, currently frame ${es.frame + 1}, ${es.playing ? 'playing' : 'paused'}, ${es.fps} fps, interpolation ${es.interp ? 'on' : 'off'}, looping ${es.loop ? 'on' : 'off'}` }))
+      : err(tt({ zh: '当前无含 ensemble 的结构（试试 load 1D3Z）', en: 'No structure with an ensemble (try load 1D3Z)' }))
   }
 
   if (cmd === 'measure' || cmd === 'dist') {
     // measure dist|angle|dihedral (选择A) (选择B) […] —— 选择表达式测量（命令行 / AI 助手 / 面板点击三种入口共用 measurements 存储）
     if ((parts[1] ?? '').toLowerCase() === 'clear' || (parts[1] ?? '').toLowerCase() === 'off') {
       useMolStore.getState().clearMeasurements()
-      return ok('已清除全部测量标注')
+      return ok(tt({ zh: '已清除全部测量标注', en: 'All measurement annotations cleared' }))
     }
     const MEASURE_MODES: Record<string, 'distance' | 'angle' | 'dihedral'> = {
       dist: 'distance', distance: 'distance',
@@ -2410,7 +2444,7 @@ export function runCommand(raw: string): void {
     const parenStart = input.indexOf('(')
     const headTok = ((parenStart >= 0 ? input.slice(0, parenStart) : input).trim().split(/\s+/)[1] ?? '').toLowerCase()
     if (parenStart < 0 || (headTok && !MEASURE_MODES[headTok])) {
-      return err('用法：measure dist|angle|dihedral (选择A) (选择B) [(选择C) (选择D)] 或 measure clear。例：measure dist (resn HEM) (within 5 of resn HEM and protein)')
+      return err(tt({ zh: '用法：measure dist|angle|dihedral (选择A) (选择B) [(选择C) (选择D)] 或 measure clear。例：measure dist (resn HEM) (within 5 of resn HEM and protein)', en: 'Usage: measure dist|angle|dihedral (selection A) (selection B) [(selection C) (selection D)], or measure clear. E.g. measure dist (resn HEM) (within 5 of resn HEM and protein)' }))
     }
     const mode = MEASURE_MODES[headTok] ?? 'distance'
     const need = mode === 'distance' ? 2 : mode === 'angle' ? 3 : 4
@@ -2422,23 +2456,23 @@ export function runCommand(raw: string): void {
       else if (ch === ')') {
         depth--
         if (depth === 0) { groups.push(cur.trim()); continue }
-        if (depth < 0) return err('括号不匹配')
+        if (depth < 0) return err(tt({ zh: '括号不匹配', en: 'Unbalanced parentheses' }))
       }
       if (depth >= 1) cur += ch
       else if (depth === 0 && ch.trim()) topJunk += ch
     }
-    if (depth !== 0) return err('括号不匹配')
+    if (depth !== 0) return err(tt({ zh: '括号不匹配', en: 'Unbalanced parentheses' }))
     if (topJunk.trim()) {
       // PyMOL 宽容：组间仅逗号+空白时静默容忍（measure dist (A), (B) 习惯写法）
-      if (!/^[\s,]+$/.test(topJunk)) return err(`括号组之间存在多余内容「${topJunk.trim()}」——每个选择用一对括号包裹`)
+      if (!/^[\s,]+$/.test(topJunk)) return err(tt({ zh: `括号组之间存在多余内容「${topJunk.trim()}」——每个选择用一对括号包裹`, en: `Extra content "${topJunk.trim()}" between parenthesized groups — wrap each selection in its own parentheses` }))
     }
     if (groups.length !== need) {
-      return err(`${mode === 'distance' ? '距离' : mode === 'angle' ? '角度' : '二面角'}测量需要 ${need} 个选择（括号组），当前 ${groups.length} 个`)
+      return err(tt({ zh: `${mode === 'distance' ? '距离' : mode === 'angle' ? '角度' : '二面角'}测量需要 ${need} 个选择（括号组），当前 ${groups.length} 个`, en: `${mode === 'distance' ? 'Distance' : mode === 'angle' ? 'Angle' : 'Dihedral'} measurement needs ${need} selections (parenthesized groups), got ${groups.length}` }))
     }
     const sMeas = useMolStore.getState()
-    if (!sMeas.activeId) return err('没有加载结构（测量作用于活动结构）')
+    if (!sMeas.activeId) return err(tt({ zh: '没有加载结构（测量作用于活动结构）', en: 'No structure loaded (measurements act on the active structure)' }))
     const dataMeas = dataRegistry.get(sMeas.activeId)
-    if (!dataMeas) return err('结构数据不存在')
+    if (!dataMeas) return err(tt({ zh: '结构数据不存在', en: 'Structure data not found' }))
     const namedMeas = buildNamedMasks(sMeas.activeId, dataMeas)
     const P = dataMeas.atoms.positions
     // 各组求值 → 原子索引
@@ -2446,11 +2480,11 @@ export function runCommand(raw: string): void {
     const countPerGroup: number[] = []
     for (const g of groups) {
       const r = evaluateSelection(g, { structure: dataMeas, named: namedMeas })
-      if (r.error) return err(`选择错误: ${r.error}（"${g}"）`)
-      if (!r.count) return err(`选择 "${g}" 命中 0 个原子`)
+      if (r.error) return err(tt({ zh: `选择错误: ${r.error}（"${g}"）`, en: `Selection error: ${r.error} ("${g}")` }))
+      if (!r.count) return err(tt({ zh: `选择 "${g}" 命中 0 个原子`, en: `Selection "${g}" matched 0 atoms` }))
       idxPerGroup.push(...maskToIndices(r.mask))
       countPerGroup.push(r.count)
-      if (idxPerGroup.length > 40000) return err('选择过大（>4万原子），请缩小范围后测量')
+      if (idxPerGroup.length > 40000) return err(tt({ zh: '选择过大（>4万原子），请缩小范围后测量', en: 'Selection too large (>40k atoms) — narrow the scope before measuring' }))
     }
     // 每组代表原子：单原子直接用；多原子取质心最近原子（距离模式取两组间最近原子对）
     const centroidNearest = (from: number, to: number): number => {
@@ -2477,7 +2511,7 @@ export function runCommand(raw: string): void {
     if (mode === 'distance') {
       const idxA = idxPerGroup.slice(0, countPerGroup[0])
       const idxB = idxPerGroup.slice(groupStarts[1])
-      if (idxA.length * idxB.length > 30_000_000) return err('两个选择过大（>3000万原子对），请缩小范围')
+      if (idxA.length * idxB.length > 30_000_000) return err(tt({ zh: '两个选择过大（>3000万原子对），请缩小范围', en: 'The two selections are too large (>30M atom pairs) — narrow the scope' }))
       let best = Infinity, bi = idxA[0], bj = idxB[0]
       for (const i of idxA) {
         const ax = P[i * 3], ay = P[i * 3 + 1], az = P[i * 3 + 2]
@@ -2488,7 +2522,7 @@ export function runCommand(raw: string): void {
       }
       value = Math.sqrt(best)
       selIdx = [bi, bj]
-      ok(`距离 ${value.toFixed(2)} Å：${atomDesc(bi)} — ${atomDesc(bj)}${countPerGroup.some(c => c > 1) ? '（多原子选择取最近原子对）' : ''}`)
+      ok(tt({ zh: `距离 ${value.toFixed(2)} Å：${atomDesc(bi)} — ${atomDesc(bj)}${countPerGroup.some(c => c > 1) ? '（多原子选择取最近原子对）' : ''}`, en: `Distance ${value.toFixed(2)} Å: ${atomDesc(bi)} — ${atomDesc(bj)}${countPerGroup.some(c => c > 1) ? ' (nearest atom pair for multi-atom selections)' : ''}` }))
     } else {
       // 角度/二面角：每组取质心最近原子
       selIdx = groupStarts.map((st, gi) => centroidNearest(st, st + countPerGroup[gi]))
@@ -2500,7 +2534,7 @@ export function runCommand(raw: string): void {
         const dot = v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
         const n1 = Math.hypot(...v1), n2 = Math.hypot(...v2)
         value = Math.acos(Math.max(-1, Math.min(1, dot / (n1 * n2)))) * 180 / Math.PI
-        ok(`键角 ${value.toFixed(1)}°：${atomDesc(selIdx[0])} — ${atomDesc(selIdx[1])} — ${atomDesc(selIdx[2])}${countPerGroup.some(c => c > 1) ? '（多原子选择取质心最近原子）' : ''}`)
+        ok(tt({ zh: `键角 ${value.toFixed(1)}°：${atomDesc(selIdx[0])} — ${atomDesc(selIdx[1])} — ${atomDesc(selIdx[2])}${countPerGroup.some(c => c > 1) ? '（多原子选择取质心最近原子）' : ''}`, en: `Bond angle ${value.toFixed(1)}°: ${atomDesc(selIdx[0])} — ${atomDesc(selIdx[1])} — ${atomDesc(selIdx[2])}${countPerGroup.some(c => c > 1) ? ' (centroid-nearest atom for multi-atom selections)' : ''}` }))
       } else {
         const b1 = [pos[1][0] - pos[0][0], pos[1][1] - pos[0][1], pos[1][2] - pos[0][2]]
         const b2 = [pos[2][0] - pos[1][0], pos[2][1] - pos[1][1], pos[2][2] - pos[1][2]]
@@ -2511,7 +2545,7 @@ export function runCommand(raw: string): void {
         const x = n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2]
         const y = m[0] * n2[0] + m[1] * n2[1] + m[2] * n2[2]
         value = Math.atan2(y, x) * 180 / Math.PI
-        ok(`二面角 ${value.toFixed(1)}°：${selIdx.map(atomDesc).join(' — ')}${countPerGroup.some(c => c > 1) ? '（多原子选择取质心最近原子）' : ''}`)
+        ok(tt({ zh: `二面角 ${value.toFixed(1)}°：${selIdx.map(atomDesc).join(' — ')}${countPerGroup.some(c => c > 1) ? '（多原子选择取质心最近原子）' : ''}`, en: `Dihedral ${value.toFixed(1)}°: ${selIdx.map(atomDesc).join(' — ')}${countPerGroup.some(c => c > 1) ? ' (centroid-nearest atom for multi-atom selections)' : ''}` }))
       }
     }
     useMolStore.setState(st => ({
@@ -2524,8 +2558,8 @@ export function runCommand(raw: string): void {
       }],
       visualRev: st.visualRev + 1,
     }))
-    return ok('已添加 3D 测量标注（测量面板可查看/删除全部测量）')
+    return ok(tt({ zh: '已添加 3D 测量标注（测量面板可查看/删除全部测量）', en: '3D measurement annotation added (view/delete all measurements in the measurement panel)' }))
   }
 
-  err(`未知命令 "${parts[0]}"。输入 help 查看可用命令。`)
+  err(tt({ zh: `未知命令 "${parts[0]}"。输入 help 查看可用命令。`, en: `Unknown command "${parts[0]}". Type help to list available commands.` }))
 }

@@ -8,10 +8,12 @@ import { Bookmark, BookmarkPlus, Camera, ChevronRight, Loader2, Trash2 } from 'l
 import { toast } from 'sonner'
 import { MAX_BOOKMARKS, useViewsStore, type ViewBookmark } from '@/lib/molecular/views-store'
 import { useMolStore } from '@/lib/molecular/store'
+import { useI18n, tt } from '@/i18n'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { cn } from '@/lib/utils'
 
 export function ViewBar() {
+  const { t } = useI18n()
   const structures = useMolStore(s => s.structures)
   const bookmarks = useViewsStore(s => s.bookmarks)
   const hydrate = useViewsStore(s => s.hydrate)
@@ -38,18 +40,20 @@ export function ViewBar() {
     if (!restoreBookmark(b.id)) return
     setActiveId(b.id)
     window.setTimeout(() => setActiveId(prev => (prev === b.id ? null : prev)), 900)
-    useMolStore.getState().appendLog('out', `已跳转到视角书签「${b.name}」`)
+    useMolStore.getState().appendLog('out', tt({ zh: `已跳转到视角书签「${b.name}」`, en: `Jumped to view bookmark "${b.name}"` }))
   }
 
   const save = () => {
     const bm = addBookmark()
     if (!bm) {
-      toast.error(`书签已达上限（${MAX_BOOKMARKS}）`, { description: '先删除不再需要的书签' })
+      toast.error(tt({ zh: `书签已达上限（${MAX_BOOKMARKS}）`, en: `Bookmark limit reached (${MAX_BOOKMARKS})` }), { description: tt({ zh: '先删除不再需要的书签', en: 'Delete bookmarks you no longer need first' }) })
       return
     }
     setUserCollapsed(false)
-    toast.success(`已保存视角书签「${bm.name}」`, {
-      description: bookmarks.length + 1 < 9 ? `Shift+${bookmarks.length + 1} 快速跳转 · 双击名称可重命名` : '双击名称可重命名',
+    toast.success(tt({ zh: `已保存视角书签「${bm.name}」`, en: `View bookmark "${bm.name}" saved` }), {
+      description: bookmarks.length + 1 < 9
+        ? tt({ zh: `Shift+${bookmarks.length + 1} 快速跳转 · 双击名称可重命名`, en: `Shift+${bookmarks.length + 1} to jump · double-click the name to rename` })
+        : tt({ zh: '双击名称可重命名', en: 'Double-click the name to rename' }),
     })
   }
 
@@ -64,17 +68,17 @@ export function ViewBar() {
       <div className="flex items-center gap-1">
         <button
           onClick={save}
-          title="保存当前视角为书签 (V)"
+          title={t({ zh: '保存当前视角为书签 (V)', en: 'Save the current view as a bookmark (V)' })}
           className="mol-elevate flex h-7 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-[11px] font-medium transition hover:border-primary/40 hover:text-primary active:scale-[0.97]"
         >
           <BookmarkPlus className="h-3 w-3" />
-          保存视角
+          {t({ zh: '保存视角', en: 'Save view' })}
         </button>
         {bookmarks.length > 0 && (
           <button
             onClick={() => setUserCollapsed(!collapsed)}
-            title={collapsed ? '展开书签列表' : '折叠书签列表'}
-            aria-label={collapsed ? '展开书签列表' : '折叠书签列表'}
+            title={collapsed ? t({ zh: '展开书签列表', en: 'Expand the bookmark list' }) : t({ zh: '折叠书签列表', en: 'Collapse the bookmark list' })}
+            aria-label={collapsed ? t({ zh: '展开书签列表', en: 'Expand the bookmark list' }) : t({ zh: '折叠书签列表', en: 'Collapse the bookmark list' })}
             className="mol-elevate flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition hover:text-foreground active:scale-[0.97]"
           >
             <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', collapsed ? '' : 'rotate-180')} />
@@ -86,7 +90,7 @@ export function ViewBar() {
       {collapsed ? (
         <button
           onClick={() => setUserCollapsed(false)}
-          title={`视角书签 × ${bookmarks.length}`}
+          title={t({ zh: `视角书签 × ${bookmarks.length}`, en: `View bookmarks × ${bookmarks.length}` })}
           className="mol-elevate relative flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition hover:text-foreground"
         >
           <Bookmark className="h-4 w-4" />
@@ -100,8 +104,8 @@ export function ViewBar() {
             <div className="mol-elevate w-28 rounded-lg border border-dashed border-border bg-card px-2.5 py-3 text-center">
               <Camera className="mx-auto mb-1.5 h-4 w-4 text-muted-foreground/70" />
               <p className="text-[10px] leading-relaxed text-muted-foreground">
-                暂无书签<br />保存常用视角<br />
-                <span className="text-muted-foreground/70">（结合口袋 / 活性位点）</span>
+                {t({ zh: '暂无书签', en: 'No bookmarks yet' })}<br />{t({ zh: '保存常用视角', en: 'Save your favorite views' })}<br />
+                <span className="text-muted-foreground/70">{t({ zh: '（结合口袋 / 活性位点）', en: '(pockets / active sites)' })}</span>
               </p>
             </div>
           )}
@@ -115,14 +119,14 @@ export function ViewBar() {
               renaming={renamingId === b.id}
               renameRef={renameRef}
               onJump={() => jump(b, i)}
-              onDelete={() => { removeBookmark(b.id); toast.success(`已删除书签「${b.name}」`) }}
+              onDelete={() => { removeBookmark(b.id); toast.success(tt({ zh: `已删除书签「${b.name}」`, en: `Bookmark "${b.name}" deleted` })) }}
               onRenameStart={() => setRenamingId(b.id)}
               onRenameCommit={name => { renameBookmark(b.id, name); setRenamingId(null) }}
             />
           ))}
           {bookmarks.length > 0 && (
             <p className="px-1 pt-0.5 text-right text-[9px] leading-tight text-muted-foreground/80">
-              V 保存 · Shift+数字 跳转
+              {t({ zh: 'V 保存 · Shift+数字 跳转', en: 'V to save · Shift+number to jump' })}
             </p>
           )}
         </div>
@@ -145,6 +149,7 @@ function BookmarkCard({
   onRenameStart: () => void
   onRenameCommit: (name: string) => void
 }) {
+  const { t } = useI18n()
   const [draft, setDraft] = useState(b.name)
 
   const time = new Date(b.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -159,9 +164,9 @@ function BookmarkCard({
           : 'border-border hover:border-foreground/25',
       )}
     >
-      <button onClick={onJump} className="block w-full" title={`跳转到「${b.name}」（${time} 保存）`}>
+      <button onClick={onJump} className="block w-full" title={t({ zh: `跳转到「${b.name}」（${time} 保存）`, en: `Jump to "${b.name}" (saved ${time})` })}>
         {b.thumb ? (
-          <img src={b.thumb} alt={`视角书签「${b.name}」缩略图`} className="block aspect-[8/5] w-full bg-black/10 object-cover" draggable={false} />
+          <img src={b.thumb} alt={t({ zh: `视角书签「${b.name}」缩略图`, en: `View bookmark "${b.name}" thumbnail` })} className="block aspect-[8/5] w-full bg-black/10 object-cover" draggable={false} />
         ) : (
           <div className="flex aspect-[8/5] w-full items-center justify-center bg-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground/60" />
@@ -179,8 +184,8 @@ function BookmarkCard({
       {/* 删除按钮（悬停浮现） */}
       <button
         onClick={onDelete}
-        title="删除此书签"
-        aria-label={`删除书签「${b.name}」`}
+        title={t({ zh: '删除此书签', en: 'Delete this bookmark' })}
+        aria-label={t({ zh: `删除书签「${b.name}」`, en: `Delete bookmark "${b.name}"` })}
         className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/65 text-white opacity-0 transition group-hover:opacity-100 hover:bg-red-500"
       >
         <Trash2 className="h-3 w-3" />
@@ -205,7 +210,7 @@ function BookmarkCard({
         ) : (
           <button
             onDoubleClick={() => { setDraft(b.name); onRenameStart() }}
-            title="双击重命名"
+            title={t({ zh: '双击重命名', en: 'Double-click to rename' })}
             className="w-full truncate text-left font-mono text-[10px] font-medium leading-tight text-foreground/90"
           >
             {b.name}

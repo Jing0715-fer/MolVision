@@ -19,13 +19,14 @@ import {
 } from '@/lib/molecular/agent/protocol'
 import { ProviderSettingsDialog, type ProviderInfo } from './ProviderSettingsDialog'
 import { cn } from '@/lib/utils'
+import { useI18n, tt, type DualText } from '@/i18n'
 
 /** 分类建议（空状态展示——覆盖渲染 / 聚焦 / 分析 / 构象四类工作流） */
-const SUGGESTION_GROUPS: { label: string; items: string[] }[] = [
-  { label: '渲染质感', items: ['出版级渲染当前视角', '加轮廓线和环境光遮蔽，彩虹渐变上色'] },
-  { label: '加载聚焦', items: ['加载血红蛋白 4HHB，展示血红素口袋', '只显示螺旋并放大'] },
-  { label: '分析测量', items: ['测一下血红素和最近残基的距离', '链 A 和链 B 的界面接触分析'] },
-  { label: '构象动画', items: ['加载两个构象生成插值动画', '轮廓线再粗一点，亮度再高一些'] },
+const SUGGESTION_GROUPS: { label: DualText; items: DualText[] }[] = [
+  { label: { zh: '渲染质感', en: 'Rendering' }, items: [{ zh: '出版级渲染当前视角', en: 'Render the current view in publication quality' }, { zh: '加轮廓线和环境光遮蔽，彩虹渐变上色', en: 'Add outline and ambient occlusion, color with a rainbow gradient' }] },
+  { label: { zh: '加载聚焦', en: 'Load & focus' }, items: [{ zh: '加载血红蛋白 4HHB，展示血红素口袋', en: 'Load hemoglobin 4HHB and show the heme pocket' }, { zh: '只显示螺旋并放大', en: 'Show only the helices and zoom in' }] },
+  { label: { zh: '分析测量', en: 'Analyze & measure' }, items: [{ zh: '测一下血红素和最近残基的距离', en: 'Measure the distance from the heme to the nearest residue' }, { zh: '链 A 和链 B 的界面接触分析', en: 'Analyze interface contacts between chain A and chain B' }] },
+  { label: { zh: '构象动画', en: 'Conformations & animation' }, items: [{ zh: '加载两个构象生成插值动画', en: 'Load two conformations and generate a morph animation' }, { zh: '轮廓线再粗一点，亮度再高一些', en: 'Make the outline a bit thicker and brighter' }] },
 ]
 
 /** 非视觉命令（执行后无需视觉自查） */
@@ -41,7 +42,7 @@ async function shrinkImage(dataUrl: string, maxW: number): Promise<string> {
   img.src = dataUrl
   await new Promise<void>((res, rej) => {
     img.onload = () => res()
-    img.onerror = () => rej(new Error('截图加载失败'))
+    img.onerror = () => rej(new Error(tt({ zh: '截图加载失败', en: 'Failed to load screenshot' })))
   })
   const scale = Math.min(1, maxW / img.width)
   const c = document.createElement('canvas')
@@ -58,7 +59,7 @@ function lastGoalText(list: AgentChatMessage[]): string {
   for (let i = list.length - 1; i >= 0; i--) {
     if (list[i].role === 'user') return list[i].content
   }
-  return '优化当前视图的渲染效果'
+  return tt({ zh: '优化当前视图的渲染效果', en: 'Improve the rendering of the current view' })
 }
 
 /** 调后端 LLM：返回决策或 null（错误已 toast）。带 image 时走 VLM 视觉自查分支（可选前后对比）；memory 为长期对话记忆摘要 */
@@ -76,12 +77,12 @@ async function callAgent(
     })
     const data = await res.json() as { ok: boolean; decision?: AgentDecision; error?: string }
     if (!data.ok || !data.decision) {
-      toast.error(`AI 助手出错：${data.error ?? res.statusText}`)
+      toast.error(`${tt({ zh: 'AI 助手出错：', en: 'AI assistant error: ' })}${data.error ?? res.statusText}`)
       return null
     }
     return data.decision
   } catch (e) {
-    toast.error(`AI 助手网络异常：${e instanceof Error ? e.message : '未知错误'}`)
+    toast.error(`${tt({ zh: 'AI 助手网络异常：', en: 'AI assistant network error: ' })}${e instanceof Error ? e.message : tt({ zh: '未知错误', en: 'unknown error' })}`)
     return null
   }
 }
@@ -112,7 +113,7 @@ async function callAgentStream(
         const data = await res.json() as { error?: string }
         if (data.error) msg = data.error
       } catch { /* 非 JSON 错误体 */ }
-      toast.error(`AI 助手出错：${msg}`)
+      toast.error(`${tt({ zh: 'AI 助手出错：', en: 'AI assistant error: ' })}${msg}`)
       return { kind: 'error', partial: acc, err: msg }
     }
     const reader = res.body.getReader()
@@ -136,7 +137,7 @@ async function callAgentStream(
         } else if (ev.t === 'end') {
           return { kind: 'decision', decision: ev.decision }
         } else if (ev.t === 'err') {
-          toast.error(`AI 助手出错：${ev.error}`)
+          toast.error(`${tt({ zh: 'AI 助手出错：', en: 'AI assistant error: ' })}${ev.error}`)
           return { kind: 'error', partial: acc, err: ev.error }
         }
       }
@@ -145,12 +146,12 @@ async function callAgentStream(
     if (acc.trim().length > 4) {
       return { kind: 'decision', decision: { reply: acc.replace(/^```[a-z]*\n?|```$/g, '').trim().slice(0, 800), commands: [] } }
     }
-    toast.error('AI 助手连接中断，请重试')
-    return { kind: 'error', partial: acc, err: '连接中断' }
+    toast.error(tt({ zh: 'AI 助手连接中断，请重试', en: 'AI assistant connection lost, please retry' }))
+    return { kind: 'error', partial: acc, err: tt({ zh: '连接中断', en: 'connection lost' }) }
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') return { kind: 'aborted', partial: acc }
-    toast.error(`AI 助手网络异常：${e instanceof Error ? e.message : '未知错误'}`)
-    return { kind: 'error', partial: acc, err: e instanceof Error ? e.message : '网络异常' }
+    toast.error(`${tt({ zh: 'AI 助手网络异常：', en: 'AI assistant network error: ' })}${e instanceof Error ? e.message : tt({ zh: '未知错误', en: 'unknown error' })}`)
+    return { kind: 'error', partial: acc, err: e instanceof Error ? e.message : tt({ zh: '网络异常', en: 'network error' }) }
   }
 }
 
@@ -186,6 +187,7 @@ function SessionListPopover({
   onOpenChange: (o: boolean) => void
   busy: boolean
 }) {
+  const { t: tr } = useI18n()
   const sessions = useAgentChatStore(s => s.sessions)
   const activeId = useAgentChatStore(s => s.activeId)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -207,8 +209,8 @@ function SessionListPopover({
     if (confirmDel === id) {
       if (resetTimer.current) clearTimeout(resetTimer.current)
       setConfirmDel(null)
-      if (useAgentChatStore.getState().deleteSession(id)) toast.success(`已删除会话「${title}」`)
-      else toast.info('生成中——结束后再删除当前会话')
+      if (useAgentChatStore.getState().deleteSession(id)) toast.success(tt({ zh: `已删除会话「${title}」`, en: `Session "${title}" deleted` }))
+      else toast.info(tt({ zh: '生成中——结束后再删除当前会话', en: 'Generating — delete the current session after it finishes' }))
       return
     }
     setConfirmDel(id)
@@ -228,36 +230,36 @@ function SessionListPopover({
       <PopoverTrigger asChild>
         <button
           disabled={busy}
-          title={busy ? '生成中——结束后可切换会话' : '会话历史（切换 / 新建 / 重命名 / 删除）'}
-          aria-label="打开会话历史"
+          title={busy ? tr({ zh: '生成中——结束后可切换会话', en: 'Generating — switch sessions after it finishes' }) : tr({ zh: '会话历史（切换 / 新建 / 重命名 / 删除）', en: 'Session history (switch / new / rename / delete)' })}
+          aria-label={tr({ zh: '打开会话历史', en: 'Open session history' })}
           className={cn(
             'flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left transition',
             busy ? 'cursor-not-allowed opacity-60' : 'hover:bg-accent',
           )}
         >
-          <span className="truncate text-xs font-medium">{sessions.find(s => s.id === activeId)?.title ?? '新会话'}</span>
+          <span className="truncate text-xs font-medium">{sessions.find(s => s.id === activeId)?.title ?? tr({ zh: '新会话', en: 'New session' })}</span>
           <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/70" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" side="bottom" className="w-64 rounded-lg border-border p-0 mol-elevate-lg">
         <div className="flex items-center justify-between border-b border-border px-2.5 py-2">
-          <span className="mol-micro text-muted-foreground">会话 {sessions.length}/{SESSIONS_MAX}</span>
+          <span className="mol-micro text-muted-foreground">{tr({ zh: `会话 ${sessions.length}/${SESSIONS_MAX}`, en: `Sessions ${sessions.length}/${SESSIONS_MAX}` })}</span>
           <button
             onClick={() => {
               const id = useAgentChatStore.getState().newSession()
-              if (id) { onOpenChange(false); toast.info('已新建会话（上下文已清零）') }
-              else toast.info('生成中——结束后再新建会话')
+              if (id) { onOpenChange(false); toast.info(tt({ zh: '已新建会话（上下文已清零）', en: 'New session created (context cleared)' })) }
+              else toast.info(tt({ zh: '生成中——结束后再新建会话', en: 'Generating — create a new session after it finishes' }))
             }}
             className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-primary transition hover:bg-primary/10"
-            title="新建会话（清空上下文重新开始）"
+            title={tr({ zh: '新建会话（清空上下文重新开始）', en: 'New session (clear context and start over)' })}
           >
             <MessageSquarePlus className="h-3 w-3" />
-            新建
+            {tr({ zh: '新建', en: 'New' })}
           </button>
         </div>
         <div className="mol-scroll max-h-72 overflow-y-auto p-1.5">
           {sessions.length === 0 && (
-            <p className="px-2 py-3 text-center text-[10px] text-muted-foreground">暂无历史会话</p>
+            <p className="px-2 py-3 text-center text-[10px] text-muted-foreground">{tr({ zh: '暂无历史会话', en: 'No saved sessions yet' })}</p>
           )}
           {sessions.map(s => {
             const isActive = s.id === activeId
@@ -284,23 +286,23 @@ function SessionListPopover({
                       e.stopPropagation()
                     }}
                     onBlur={commitRename}
-                    aria-label="会话重命名"
+                    aria-label={tr({ zh: '会话重命名', en: 'Rename session' })}
                     className="h-6 min-w-0 flex-1 rounded border border-primary/50 bg-background px-1.5 text-[11px] outline-none"
                   />
                 ) : (
                   <button
                     onClick={() => {
                       if (useAgentChatStore.getState().switchSession(s.id)) onOpenChange(false)
-                      else toast.info('生成中——结束后可切换会话')
+                      else toast.info(tt({ zh: '生成中——结束后可切换会话', en: 'Generating — switch sessions after it finishes' }))
                     }}
                     className="min-w-0 flex-1 text-left"
-                    title={`切换到「${s.title}」（${s.messages.length} 条消息 · ${sessionTimeLabel(s.updatedAt)}）`}
+                    title={tr({ zh: `切换到「${s.title}」（${s.messages.length} 条消息 · ${sessionTimeLabel(s.updatedAt)}）`, en: `Switch to "${s.title}" (${s.messages.length} messages · ${sessionTimeLabel(s.updatedAt)})` })}
                   >
                     <span className={cn('block truncate text-[11px]', isActive ? 'font-semibold text-foreground' : 'text-foreground/90')}>
                       {s.title}
                     </span>
                     <span className="mt-0.5 block truncate font-mono text-[9px] tabular-nums text-muted-foreground/70">
-                      {s.messages.length} 条 · {sessionTimeLabel(s.updatedAt)}
+                      {tr({ zh: `${s.messages.length} 条 · ${sessionTimeLabel(s.updatedAt)}`, en: `${s.messages.length} msgs · ${sessionTimeLabel(s.updatedAt)}` })}
                     </span>
                   </button>
                 )}
@@ -308,8 +310,8 @@ function SessionListPopover({
                   {!editing && (
                     <button
                       onClick={() => { setEditingId(s.id); setDraft(s.autoTitle ? '' : s.title) }}
-                      aria-label="重命名会话"
-                      title="重命名"
+                      aria-label={tr({ zh: '重命名会话', en: 'Rename session' })}
+                      title={tr({ zh: '重命名', en: 'Rename' })}
                       className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/70 transition hover:bg-accent hover:text-foreground"
                     >
                       <Pencil className="h-2.5 w-2.5" />
@@ -317,8 +319,8 @@ function SessionListPopover({
                   )}
                   <button
                     onClick={() => armDelete(s.id, s.title)}
-                    aria-label={confirmDel === s.id ? '再次点击确认删除' : '删除会话'}
-                    title={confirmDel === s.id ? '再次点击确认删除' : '删除'}
+                    aria-label={confirmDel === s.id ? tr({ zh: '再次点击确认删除', en: 'Click again to confirm' }) : tr({ zh: '删除会话', en: 'Delete session' })}
+                    title={confirmDel === s.id ? tr({ zh: '再次点击确认删除', en: 'Click again to confirm' }) : tr({ zh: '删除', en: 'Delete' })}
                     className={cn(
                       'flex h-5 w-5 items-center justify-center rounded transition',
                       confirmDel === s.id
@@ -339,6 +341,7 @@ function SessionListPopover({
 }
 
 export function AgentPanel({ float = false }: { float?: boolean }) {
+  const { t } = useI18n()
   const open = useMolStore(s => s.ui.agentOpen)
   const setUi = useMolStore(s => s.setUi)
   // 对话状态存于模块级 store（而非组件 useState）：欢迎页 load <PDB> 触发视图切换时
@@ -404,7 +407,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     const next = !useAgentChatStore.getState().visualOn
     setVisualOn(next)
     try { localStorage.setItem(AGENT_VISUAL_KEY, next ? 'on' : 'off') } catch { /* 忽略 */ }
-    toast.info(next ? '视觉自查已开启：命令执行后助手会审视渲染结果并自动修正' : '视觉自查已关闭')
+    toast.info(next ? tt({ zh: '视觉自查已开启：命令执行后助手会审视渲染结果并自动修正', en: 'Visual self-check on: after commands run, the assistant reviews the render and auto-corrects' }) : tt({ zh: '视觉自查已关闭', en: 'Visual self-check off' }))
   }, [setVisualOn])
 
   /**
@@ -429,14 +432,14 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     const lines: string[] = []
     for (const m of early) {
       if (m.role === 'user') {
-        const t = m.content.replace(/\s+/g, ' ').trim()
-        if (t) lines.push(`- 用户：「${t.slice(0, 48)}」`)
+        const txt = m.content.replace(/\s+/g, ' ').trim()
+        if (txt) lines.push(tt({ zh: `- 用户：「${txt.slice(0, 48)}」`, en: `- User: "${txt.slice(0, 48)}"` }))
       } else if (m.kind === 'visual') {
-        const t = m.content.replace(/\s+/g, ' ').trim()
-        if (t) lines.push(`- 视觉自查：${t.slice(0, 36)}`)
+        const txt = m.content.replace(/\s+/g, ' ').trim()
+        if (txt) lines.push(tt({ zh: `- 视觉自查：${txt.slice(0, 36)}`, en: `- Visual check: ${txt.slice(0, 36)}` }))
       } else {
         const okCmds = (m.commands ?? []).filter(c => c.status === 'ok').map(c => c.cmd)
-        if (okCmds.length) lines.push(`- 助手执行：${okCmds.slice(0, 5).join('；')}${okCmds.length > 5 ? ` 等 ${okCmds.length} 条` : ''}`)
+        if (okCmds.length) lines.push(tt({ zh: `- 助手执行：${okCmds.slice(0, 5).join('；')}${okCmds.length > 5 ? ` 等 ${okCmds.length} 条` : ''}`, en: `- Assistant ran: ${okCmds.slice(0, 5).join('; ')}${okCmds.length > 5 ? ` and ${okCmds.length} more` : ''}` }))
       }
     }
     return lines.slice(-30).join('\n').slice(0, 1400)
@@ -456,9 +459,9 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     for (let i = 0; i < records.length; i++) {
       const cls = classifyCmd(records[i].cmd)
       if (cls === 'blocked') {
-        records[i] = { ...records[i], status: 'blocked', output: '该命令不在助手可执行白名单内（请在命令行手动执行）' }
+        records[i] = { ...records[i], status: 'blocked', output: tt({ zh: '该命令不在助手可执行白名单内（请在命令行手动执行）', en: 'This command is not in the assistant whitelist (run it manually in the command line)' }) }
       } else if (cls === 'confirm') {
-        records[i] = { ...records[i], status: 'confirm', output: '影响较大，请确认后执行' }
+        records[i] = { ...records[i], status: 'confirm', output: tt({ zh: '影响较大，请确认后执行', en: 'High impact — confirm to run' }) }
       } else {
         // 视图切换窗口兑底：load 刚落地（activeId 已设）而 MolViewer（dynamic）仍在挂载——
         // 引擎依赖命令（view from/orient/ray…）此刻会失败或入队静默。有结构但引擎缺席 →
@@ -481,14 +484,14 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       setPhase('think')
       const okOuts = records.filter(r => r.status === 'ok' && r.output)
         .slice(-6).map(r => `- ${r.cmd} → ${(r.output ?? '').replace(/\s+/g, ' ').slice(0, 110)}`)
-      const fixPrompt = `刚才这些命令执行失败了，请修正（换正确的选择表达式 / 命令写法）后重新给出命令：\n${fails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}${okOuts.length ? `\n\n已成功命令的关键输出（含系统提示，供参考）：\n${okOuts.join('\n')}` : ''}\n只给出修正后需要执行的命令，不要重复已成功的命令。`
+      const fixPrompt = tt({ zh: `刚才这些命令执行失败了，请修正（换正确的选择表达式 / 命令写法）后重新给出命令：\n${fails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}${okOuts.length ? `\n\n已成功命令的关键输出（含系统提示，供参考）：\n${okOuts.join('\n')}` : ''}\n只给出修正后需要执行的命令，不要重复已成功的命令。`, en: `These commands just failed. Fix them (correct selection expressions / command syntax) and give the commands again:\n${fails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}${okOuts.length ? `\n\nKey output of already-successful commands (system hints included, for reference):\n${okOuts.join('\n')}` : ''}\nOnly give the corrected commands to run; do not repeat the successful ones.` })
       const fix = await callAgent([...buildApiHistory(priorMsgs), { role: 'user', content: fixPrompt }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs))
       if (fix) {
         const fixCmds = splitCommands(fix.commands)
         const fixId = newId()
         const fixMsg: AgentChatMessage = {
           id: fixId, role: 'assistant',
-          content: `自动修正：${fix.reply}`,
+          content: `${tt({ zh: '自动修正：', en: 'Auto-fix: ' })}${fix.reply}`,
           time: nowTime(),
           commands: fixCmds.length ? fixCmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
         }
@@ -587,12 +590,12 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
         }
       } else if (r.kind === 'aborted') {
         ensureMsg()
-        patchAi({ content: (extractPartialReply(r.partial) || '…') + '（已停止）', streaming: false })
-        toast.info('已停止生成')
+        patchAi({ content: (extractPartialReply(r.partial) || '…') + tt({ zh: '（已停止）', en: ' (stopped)' }), streaming: false })
+        toast.info(tt({ zh: '已停止生成', en: 'Generation stopped' }))
       } else {
         // 错误：保留已流出的部分文本；无产出时气泡携带具体原因（限流/网络等可操作信息）
-        if (inserted) patchAi({ content: (extractPartialReply(r.partial) || '…') + '（生成中断，请重试）', streaming: false })
-        else setMsgs(m => [...m, { id: newId(), role: 'assistant', content: r.err ? `出错了：${r.err}` : '出错了，请重试或换个说法。', time: nowTime() }])
+        if (inserted) patchAi({ content: (extractPartialReply(r.partial) || '…') + tt({ zh: '（生成中断，请重试）', en: ' (generation interrupted, please retry)' }), streaming: false })
+        else setMsgs(m => [...m, { id: newId(), role: 'assistant', content: r.err ? `${tt({ zh: '出错了：', en: 'Error: ' })}${r.err}` : tt({ zh: '出错了，请重试或换个说法。', en: 'Something went wrong. Please retry or rephrase.' }), time: nowTime() }])
       }
     } finally {
       setBusy(false)
@@ -617,12 +620,12 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
   const clearChat = useCallback(() => {
     useAgentChatStore.getState().clearMsgs()
-    toast.info('当前会话已清空（历史会话不受影响）')
+    toast.info(tt({ zh: '当前会话已清空（历史会话不受影响）', en: 'Current session cleared (other sessions untouched)' }))
   }, [])
 
   const startNewSession = useCallback(() => {
-    if (useAgentChatStore.getState().newSession()) toast.info('已新建会话（上下文已清零）')
-    else toast.info('生成中——结束后再新建会话')
+    if (useAgentChatStore.getState().newSession()) toast.info(tt({ zh: '已新建会话（上下文已清零）', en: 'New session created (context cleared)' }))
+    else toast.info(tt({ zh: '生成中——结束后再新建会话', en: 'Generating — create a new session after it finishes' }))
   }, [])
 
   const onTaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
@@ -633,8 +636,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
   if (!open) return null
 
-  const phaseLabel = phase === 'think' ? '正在思考' : phase === 'stream' ? '回复生成中' : phase === 'exec' ? '正在执行命令' : '视觉自查中'
-  const phaseHint = phase === 'visual' ? '审视渲染结果' : phase === 'exec' ? '命令将自动执行' : phase === 'stream' ? '逐字生成，可随时停止' : '理解你的需求'
+  const phaseLabel = phase === 'think' ? t({ zh: '正在思考', en: 'Thinking' }) : phase === 'stream' ? t({ zh: '回复生成中', en: 'Generating reply' }) : phase === 'exec' ? t({ zh: '正在执行命令', en: 'Running commands' }) : t({ zh: '视觉自查中', en: 'Visual self-check' })
+  const phaseHint = phase === 'visual' ? t({ zh: '审视渲染结果', en: 'Reviewing the render' }) : phase === 'exec' ? t({ zh: '命令将自动执行', en: 'Commands run automatically' }) : phase === 'stream' ? t({ zh: '逐字生成，可随时停止', en: 'Streaming — stop anytime' }) : t({ zh: '理解你的需求', en: 'Understanding your request' })
   // 思考/流式阶段 LLM 请求可中断；命令执行与视觉自查阶段不可（停止无意义）
   const canAbort = busy && (phase === 'think' || phase === 'stream')
 
@@ -647,7 +650,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           : 'inset-y-3 left-3 right-3 sm:left-auto sm:w-[356px]',
       )}
       role="complementary"
-      aria-label="AI 助手面板"
+      aria-label={t({ zh: 'AI 助手面板', en: 'AI assistant panel' })}
     >
       {/* 头部：会话切换器（r55 多会话）+ 供应商徽章 + 长期记忆徽章 + 工具组 */}
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-2">
@@ -658,7 +661,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
         {/* 当前供应商徽章：品牌色点 + 模型名（点击打开设置） */}
         <button
           onClick={() => setProviderOpen(true)}
-          title={provider ? `${provider.displayName}${provider.effectiveModel ? ` · ${provider.effectiveModel}` : ''}（点击配置供应商）` : 'AI 供应商设置'}
+          title={provider ? `${provider.displayName}${provider.effectiveModel ? ` · ${provider.effectiveModel}` : ''}${t({ zh: '（点击配置供应商）', en: ' — click to configure provider' })}` : t({ zh: 'AI 供应商设置', en: 'AI provider settings' })}
           className="hidden min-w-0 items-center gap-1 rounded-full border border-border bg-background px-2 py-px font-mono text-[9px] font-medium text-muted-foreground transition hover:border-border hover:text-foreground sm:flex"
         >
           <span
@@ -671,19 +674,19 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
         {/* 长期记忆徽章：对话超出滚动窗口（12 条）后亮起——早期轮次已压缩为记忆摘要随每轮请求携带 */}
         {msgs.length > 12 && (
           <span
-            title={`长期记忆已激活：更早的 ${msgs.length - 12} 条消息压缩为摘要随每轮请求携带（引用早期轮次 / 避免重复已完成的工作）`}
+            title={t({ zh: `长期记忆已激活：更早的 ${msgs.length - 12} 条消息压缩为摘要随每轮请求携带（引用早期轮次 / 避免重复已完成的工作）`, en: `Long-term memory active: the earlier ${msgs.length - 12} messages are compressed into a summary carried with every request (recall early turns / avoid repeating finished work)` })}
             className="hidden min-w-0 items-center gap-1 rounded-full border border-border bg-background px-2 py-px font-mono text-[9px] font-medium tabular-nums text-muted-foreground lg:flex"
           >
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70 led-dot" />
-            记忆 {msgs.length - 12}
+            {t({ zh: '记忆', en: 'Memory' })} {msgs.length - 12}
           </span>
         )}
         <div className="ml-auto flex items-center gap-0.5">
           <button
             onClick={startNewSession}
             disabled={busy}
-            aria-label="新建会话"
-            title={busy ? '生成中——结束后可新建' : '新建会话（清空上下文重新开始）'}
+            aria-label={t({ zh: '新建会话', en: 'New session' })}
+            title={busy ? t({ zh: '生成中——结束后可新建', en: 'Generating — available after it finishes' }) : t({ zh: '新建会话（清空上下文重新开始）', en: 'New session (clear context and start over)' })}
             className={cn(
               'flex h-6 w-6 items-center justify-center rounded transition hover:bg-accent hover:text-foreground',
               busy ? 'cursor-not-allowed text-muted-foreground/40' : 'text-muted-foreground',
@@ -693,17 +696,17 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           </button>
           <button
             onClick={() => setProviderOpen(true)}
-            aria-label="AI 供应商设置"
-            title="供应商与 API Key 设置"
+            aria-label={t({ zh: 'AI 供应商设置', en: 'AI provider settings' })}
+            title={t({ zh: '供应商与 API Key 设置', en: 'Provider & API key settings' })}
             className="flex h-6 w-6 items-center justify-center rounded transition hover:bg-accent hover:text-foreground text-muted-foreground/70"
           >
             <Settings2 className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={toggleVisual}
-            aria-label={visualOn ? '关闭视觉自查' : '开启视觉自查'}
+            aria-label={visualOn ? t({ zh: '关闭视觉自查', en: 'Turn off visual self-check' }) : t({ zh: '开启视觉自查', en: 'Turn on visual self-check' })}
             aria-pressed={visualOn}
-            title={visualOn ? '视觉自查已开：命令执行后审视渲染结果并自动修正' : '视觉自查已关（点击开启）'}
+            title={visualOn ? t({ zh: '视觉自查已开：命令执行后审视渲染结果并自动修正', en: 'Visual self-check on: reviews the render after commands and auto-corrects' }) : t({ zh: '视觉自查已关（点击开启）', en: 'Visual self-check off (click to enable)' })}
             className={cn(
               'flex h-6 w-6 items-center justify-center rounded transition hover:bg-accent',
               visualOn ? 'text-primary' : 'text-muted-foreground/50',
@@ -714,8 +717,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           {msgs.length > 0 && (
             <button
               onClick={clearChat}
-              aria-label="清空当前会话"
-              title="清空当前会话（历史会话不受影响）"
+              aria-label={t({ zh: '清空当前会话', en: 'Clear current session' })}
+              title={t({ zh: '清空当前会话（历史会话不受影响）', en: 'Clear current session (other sessions untouched)' })}
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -723,7 +726,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           )}
           <button
             onClick={() => setUi({ agentOpen: false })}
-            aria-label="关闭 AI 助手"
+            aria-label={t({ zh: '关闭 AI 助手', en: 'Close AI assistant' })}
             className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
           >
             <X className="h-4 w-4" />
@@ -740,25 +743,25 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                 <Bot className="h-4.5 w-4.5" />
               </span>
               <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                用自然语言指挥整个工作台——加载、表示、着色、<br />测量、分析、动画，我会翻译成命令自动执行。
+                {t({ zh: '用自然语言指挥整个工作台——加载、表示、着色、测量、分析、动画，我会翻译成命令自动执行。', en: 'Drive the whole workbench in natural language — load, represent, color, measure, analyze, animate. I translate it into commands and run them for you.' })}
               </p>
               {visualOn && (
                 <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] text-primary">
-                  <Eye className="h-2.5 w-2.5" /> 执行后自动审视渲染结果
+                  <Eye className="h-2.5 w-2.5" /> {t({ zh: '执行后自动审视渲染结果', en: 'Reviews the render after every execution' })}
                 </p>
               )}
             </div>
             {SUGGESTION_GROUPS.map(grp => (
-              <div key={grp.label} className="space-y-1.5">
-                <p className="px-1 mol-micro text-muted-foreground/60">{grp.label}</p>
+              <div key={grp.label.zh} className="space-y-1.5">
+                <p className="px-1 mol-micro text-muted-foreground/60">{t(grp.label)}</p>
                 {grp.items.map(s => (
                   <button
-                    key={s}
-                    onClick={() => void send(s)}
+                    key={s.zh}
+                    onClick={() => void send(t(s))}
                     className="panel-card flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-all duration-150 hover:text-foreground hover:translate-x-0.5"
                   >
                     <Send className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-                    <span className="min-w-0 flex-1">{s}</span>
+                    <span className="min-w-0 flex-1">{t(s)}</span>
                   </button>
                 ))}
               </div>
@@ -770,7 +773,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           <div key={m.id} className={cn('flex flex-col', m.role === 'user' ? 'items-end' : 'items-start')}>
             {m.kind === 'visual' && (
               <span className="mb-0.5 inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-px text-[9px] font-medium text-primary">
-                <Eye className="h-2.5 w-2.5" /> 视觉自查
+                <Eye className="h-2.5 w-2.5" /> {t({ zh: '视觉自查', en: 'Visual check' })}
               </span>
             )}
             <div
@@ -788,13 +791,13 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
               {m.streaming && (
                 <span aria-hidden className="ml-0.5 inline-block h-3 w-[5px] animate-pulse rounded-[1px] bg-primary align-middle" />
               )}
-              {m.streaming && !m.content && <span className="sr-only">正在生成回复</span>}
+              {m.streaming && !m.content && <span className="sr-only">{t({ zh: '正在生成回复', en: 'Generating reply' })}</span>}
             </div>
             {/* 视觉自查附带的视口截图缩略图（自检透明化：直观看到助手「看」到了什么） */}
             {m.kind === 'visual' && m.image && (
               <img
                 src={m.image}
-                alt="视觉自查时的视口截图"
+                alt={t({ zh: '视觉自查时的视口截图', en: 'Viewport screenshot during visual self-check' })}
                 className="mt-1.5 max-w-[92%] rounded-md border border-border bg-background"
                 loading="lazy"
               />
@@ -823,8 +826,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                         {(c.status === 'ok' || c.status === 'error') && (
                           <button
                             onClick={() => void act(m.id, ci, 'rerun')}
-                            aria-label="重新执行此命令"
-                            title="重新执行"
+                            aria-label={t({ zh: '重新执行此命令', en: 'Re-run this command' })}
+                            title={t({ zh: '重新执行', en: 'Re-run' })}
                             className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition hover:bg-accent hover:text-foreground"
                           >
                             <RotateCw className="h-3 w-3" />
@@ -837,13 +840,13 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                             onClick={() => void act(m.id, ci, 'confirm-run')}
                             className="rounded bg-amber-600 px-2 py-0.5 text-[10px] font-medium text-white transition hover:bg-amber-500"
                           >
-                            确认执行
+                            {t({ zh: '确认执行', en: 'Confirm run' })}
                           </button>
                           <button
                             onClick={() => void act(m.id, ci, 'confirm-skip')}
                             className="rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent"
                           >
-                            跳过
+                            {t({ zh: '跳过', en: 'Skip' })}
                           </button>
                         </div>
                       )}
@@ -898,15 +901,15 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
               e.stopPropagation()
             }}
             rows={1}
-            placeholder="描述需求：测量、上色、聚焦、动画…全部功能皆可自然语言下达"
-            aria-label="AI 助手输入"
+            placeholder={t({ zh: '描述需求：测量、上色、聚焦、动画…全部功能皆可自然语言下达', en: 'Describe what you need: measure, color, focus, animate… everything works in natural language' })}
+            aria-label={t({ zh: 'AI 助手输入', en: 'AI assistant input' })}
             className="mol-scroll max-h-24 min-h-[22px] flex-1 resize-none bg-transparent text-[11.5px] leading-relaxed outline-none placeholder:text-muted-foreground/50"
           />
           <button
             onClick={() => { if (canAbort) abortRef.current?.abort(); else void send(input) }}
             disabled={!canAbort && (busy || !input.trim())}
-            aria-label={canAbort ? '停止生成' : '发送给 AI 助手'}
-            title={canAbort ? '停止生成（保留已生成部分）' : '发送（Enter）'}
+            aria-label={canAbort ? t({ zh: '停止生成', en: 'Stop generating' }) : t({ zh: '发送给 AI 助手', en: 'Send to AI assistant' })}
+            title={canAbort ? t({ zh: '停止生成（保留已生成部分）', en: 'Stop generating (keep partial output)' }) : t({ zh: '发送（Enter）', en: 'Send (Enter)' })}
             className={cn(
               'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white transition disabled:opacity-40',
               canAbort ? 'bg-rose-600 hover:bg-rose-500' : 'bg-primary hover:bg-primary/90',
@@ -918,8 +921,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           </button>
         </div>
         <p className="mt-1.5 px-1 text-[9px] text-muted-foreground/60">
-          Enter 发送 · Shift+Enter 换行 · 生成中可点 ■ 停止
-          {visualOn ? ' · 视觉自查开（Eye 可关）' : ' · 视觉自查关'}
+          {t({ zh: 'Enter 发送 · Shift+Enter 换行 · 生成中可点 ■ 停止', en: 'Enter to send · Shift+Enter for a new line · ■ stops generation' })}
+          {visualOn ? t({ zh: ' · 视觉自查开（Eye 可关）', en: ' · Visual check on (Eye toggles)' }) : t({ zh: ' · 视觉自查关', en: ' · Visual check off' })}
         </p>
       </div>
 

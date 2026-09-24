@@ -6,6 +6,7 @@
 // r19 新增：时间轴编辑（timeline）——书签关键帧的有序子集 + 每段独立时长 + 轮数，
 // localStorage 持久化（molvision-movie-v1），MovieTimeline 组件提供可视编排 UI。
 import { create } from 'zustand'
+import { tt } from '@/i18n'
 import { engineRef } from './store'
 import { useViewsStore, type ViewBookmark } from './views-store'
 import { useMolStore } from './store'
@@ -187,7 +188,7 @@ export async function playMovie(opts: {
   useTimeline?: boolean
   smooth?: boolean
 } = {}): Promise<{ ok: true; views: number; segs: number } | { ok: false; error: string }> {
-  if (running) return { ok: false, error: 'movie 已在播放中（movie stop 停止）' }
+  if (running) return { ok: false, error: tt({ zh: 'movie 已在播放中（movie stop 停止）', en: 'movie is already playing (stop it with movie stop)' }) }
   const useTimeline = opts.useTimeline === true
   const bookmarks: ViewBookmark[] = useViewsStore.getState().bookmarks
 
@@ -198,20 +199,20 @@ export async function playMovie(opts: {
       .map(e => ({ view: byId.get(e.viewId), duration: clampDur(e.duration) }))
       .filter((s): s is PlaySeg => s.view !== undefined)
     if (segs.length < 2) {
-      return { ok: false, error: '时间轴至少需要 2 个有效关键帧（书签可能已被删除——打开时间轴「同步书签」重建）' }
+      return { ok: false, error: tt({ zh: '时间轴至少需要 2 个有效关键帧（书签可能已被删除——打开时间轴「同步书签」重建）', en: 'The timeline needs at least 2 valid keyframes (bookmarks may have been deleted — open the timeline and "Sync bookmarks" to rebuild)' }) }
     }
   } else {
-    if (bookmarks.length < 2) return { ok: false, error: `至少需要 2 个视角书签（当前 ${bookmarks.length} 个）——用 V 键或 view save 先保存多机位` }
+    if (bookmarks.length < 2) return { ok: false, error: tt({ zh: `至少需要 2 个视角书签（当前 ${bookmarks.length} 个）——用 V 键或 view save 先保存多机位`, en: `At least 2 view bookmarks are needed (${bookmarks.length} present) — save multiple viewpoints with the V key or view save first` }) }
     const dur = clampDur(opts.duration ?? 2600)
     segs = bookmarks.map(b => ({ view: b, duration: dur }))
   }
 
   const settings = useMolStore.getState().settings
   if (settings.spin || settings.rock) {
-    return { ok: false, error: 'spin / rock 开启时无法播放 movie（相机被程序控制）——先 spin off / rock off' }
+    return { ok: false, error: tt({ zh: 'spin / rock 开启时无法播放 movie（相机被程序控制）——先 spin off / rock off', en: 'Cannot play a movie while spin / rock is on (the camera is program-controlled) — run spin off / rock off first' }) }
   }
   const eng = engineRef.current
-  if (!eng) return { ok: false, error: '引擎未就绪' }
+  if (!eng) return { ok: false, error: tt({ zh: '引擎未就绪', en: 'Engine not ready' }) }
 
   const rounds = Math.max(1, Math.min(10, Math.round(opts.loops ?? (useTimeline ? useMovieStore.getState().loopsEdit : 1))))
   const total = segs.length * rounds
@@ -230,7 +231,7 @@ export async function playMovie(opts: {
       }
       const started = eng.animateCameraPath(allPoses, allDurs)
       if (!started) {
-        return { ok: false, error: '无法启动平滑巡航（相机被程序控制或关键帧无效）' }
+        return { ok: false, error: tt({ zh: '无法启动平滑巡航（相机被程序控制或关键帧无效）', en: 'Cannot start the smooth cruise (camera is program-controlled or keyframes are invalid)' }) }
       }
       const totalMs = allDurs.reduce((a, b) => a + b, 0)
       const cancelBase = eng.cameraCancelCount()
@@ -240,7 +241,7 @@ export async function playMovie(opts: {
         if (eng.cameraCancelCount() > cancelBase) {
           const segNow = useMovieStore.getState().seg
           useMovieStore.setState({ playing: false, currentName: null })
-          useMolStore.getState().appendLog('out', `movie：用户接管相机，平滑巡航提前结束（${segNow + 1}/${total} 段）`)
+          useMolStore.getState().appendLog('out', tt({ zh: `movie：用户接管相机，平滑巡航提前结束（${segNow + 1}/${total} 段）`, en: `movie: user took over the camera, smooth cruise ended early (segment ${segNow + 1}/${total})` }))
           return { ok: true, views: bookmarks.length, segs: segs.length }
         }
         // UI 同步：当前段目的地 = segs[seg % segs.length]
@@ -251,7 +252,7 @@ export async function playMovie(opts: {
         }
         await sleep(120)
       }
-      useMolStore.getState().appendLog('out', `movie 平滑巡航完成：${segs.length} 帧 × ${rounds} 轮（Catmull-Rom 连续路径）`)
+      useMolStore.getState().appendLog('out', tt({ zh: `movie 平滑巡航完成：${segs.length} 帧 × ${rounds} 轮（Catmull-Rom 连续路径）`, en: `movie smooth cruise complete: ${segs.length} frames × ${rounds} rounds (Catmull-Rom continuous path)` }))
       return { ok: true, views: bookmarks.length, segs: segs.length }
     }
 
@@ -270,7 +271,7 @@ export async function playMovie(opts: {
           if (!useMovieStore.getState().playing) return { ok: true, views: bookmarks.length, segs: segs.length }
           if (eng.cameraCancelCount() > cancelBase) {
             useMovieStore.setState({ playing: false, currentName: null })
-            useMolStore.getState().appendLog('out', `movie：用户接管相机，序列播放提前结束（${seg}/${total} 段）`)
+            useMolStore.getState().appendLog('out', tt({ zh: `movie：用户接管相机，序列播放提前结束（${seg}/${total} 段）`, en: `movie: user took over the camera, playback ended early (segment ${seg}/${total})` }))
             return { ok: true, views: bookmarks.length, segs: segs.length }
           }
           await sleep(90)
@@ -278,7 +279,7 @@ export async function playMovie(opts: {
         seg++
       }
     }
-    useMolStore.getState().appendLog('out', `movie 播放完成：${segs.length} 段 × ${rounds} 轮`)
+    useMolStore.getState().appendLog('out', tt({ zh: `movie 播放完成：${segs.length} 段 × ${rounds} 轮`, en: `movie playback complete: ${segs.length} segments × ${rounds} rounds` }))
     return { ok: true, views: bookmarks.length, segs: segs.length }
   } finally {
     running = false

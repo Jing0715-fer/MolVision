@@ -11,6 +11,8 @@ import { useContactStore } from '@/lib/molecular/contacts-store'
 import { useSasaStore } from '@/lib/molecular/sasa-store'
 import { useMapStore } from '@/lib/molecular/map-store'
 import { usePerfStore } from '@/lib/molecular/perf-store'
+import { useI18n } from '@/i18n'
+import { LanguageToggle } from './LanguageToggle'
 import { cn } from '@/lib/utils'
 
 /** 语义色小圆点（仪表高亮：在墨底上用 400 级亮度；led-dot 顶部内高光 = 硬件 LED 质感） */
@@ -29,6 +31,7 @@ function Readout({ label, children }: { label?: string; children: React.ReactNod
 }
 
 export function StatusBar() {
+  const { t } = useI18n()
   const hoverText = useHoverStore(s => s.text)
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
@@ -54,9 +57,9 @@ export function StatusBar() {
   const mapLabel = (() => {
     if (!mapInfo) return null
     const trunc = mapInfo.truncated ? '+' : ''
-    if (!mapInfo.difference) return <>密度 {mapInfo.iso.toFixed(1)}σ{trunc}</>
-    if (Math.abs(mapInfo.iso - mapInfo.isoNeg) < 1e-6) return <>差图 {mapInfo.iso.toFixed(1)}σ{trunc}</>
-    return <>差图 <span className="text-emerald-400">+{mapInfo.iso.toFixed(1)}</span>/<span className="text-red-400">−{mapInfo.isoNeg.toFixed(1)}</span>σ{trunc}</>
+    if (!mapInfo.difference) return <>{t({ zh: '密度', en: 'Map' })} {mapInfo.iso.toFixed(1)}σ{trunc}</>
+    if (Math.abs(mapInfo.iso - mapInfo.isoNeg) < 1e-6) return <>{t({ zh: '差图', en: 'Diff' })} {mapInfo.iso.toFixed(1)}σ{trunc}</>
+    return <>{t({ zh: '差图', en: 'Diff' })} <span className="text-emerald-400">+{mapInfo.iso.toFixed(1)}</span>/<span className="text-red-400">−{mapInfo.isoNeg.toFixed(1)}</span>σ{trunc}</>
   })()
 
   return (
@@ -71,7 +74,7 @@ export function StatusBar() {
         </Readout>
       ) : (
         <Readout label="status">
-          <span className="status-val" style={{ color: 'var(--status-dim)' }}>READY — 等待加载结构</span>
+          <span className="status-val" style={{ color: 'var(--status-dim)' }}>{t({ zh: 'READY — 等待加载结构', en: 'READY — awaiting structure' })}</span>
         </Readout>
       )}
 
@@ -105,7 +108,7 @@ export function StatusBar() {
 
       {/* 环境光遮蔽 */}
       {settings.ssao && (
-        <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" title={`环境光遮蔽半径 ${settings.ssaoRadius.toFixed(0)}Å`} style={{ color: 'var(--status-dim)' }}>
+        <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" title={t({ zh: `环境光遮蔽半径 ${settings.ssaoRadius.toFixed(0)}Å`, en: `Ambient occlusion radius ${settings.ssaoRadius.toFixed(0)}Å` })} style={{ color: 'var(--status-dim)' }}>
           <Dot tone="bg-amber-400" />
           AO {settings.ssaoRadius.toFixed(0)}Å
         </span>
@@ -116,15 +119,15 @@ export function StatusBar() {
         <button
           type="button"
           onClick={() => useMolStore.getState().updateSettings({ showHBonds: false })}
-          title="氢键网络显示中 · 点击关闭（按 B 重新开启）"
-          aria-label="关闭氢键网络"
+          title={t({ zh: '氢键网络显示中 · 点击关闭（按 B 重新开启）', en: 'H-bond network shown · click to hide (press B to re-enable)' })}
+          aria-label={t({ zh: '关闭氢键网络', en: 'Hide H-bond network' })}
           className="status-val flex shrink-0 cursor-pointer items-center gap-1.5 transition-opacity hover:opacity-80"
         >
           {hbond.computing
             ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
             : <Dot tone="bg-teal-400" />}
-          <span style={{ color: 'var(--status-fg)' }}>{hbond.computing ? '氢键计算中…' : `${hbond.count.toLocaleString()} 氢键`}</span>
-          {!hbond.computing && hbond.waterCount > 0 && <span style={{ color: 'var(--status-dim)' }}>（含水 {hbond.waterCount}）</span>}
+          <span style={{ color: 'var(--status-fg)' }}>{hbond.computing ? t({ zh: '氢键计算中…', en: 'Computing H-bonds…' }) : t({ zh: `${hbond.count.toLocaleString()} 氢键`, en: `${hbond.count.toLocaleString()} H-bonds` })}</span>
+          {!hbond.computing && hbond.waterCount > 0 && <span style={{ color: 'var(--status-dim)' }}>{t({ zh: `（含水 ${hbond.waterCount}）`, en: `(${hbond.waterCount} via water)` })}</span>}
           <X className="h-2.5 w-2.5 opacity-50" aria-hidden />
         </button>
       )}
@@ -133,7 +136,7 @@ export function StatusBar() {
       {contact.structureId === activeId && contact.pairs.length > 0 && (
         <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" style={{ color: 'var(--status-dim)' }}>
           <Dot tone={contact.visible ? 'bg-orange-400' : 'bg-white/20'} />
-          {contact.pairs.length.toLocaleString()} 接触
+          {contact.pairs.length.toLocaleString()} {t({ zh: '接触', en: 'contacts' })}
           <span className="text-[9px]">≤{contact.cutoff.toFixed(1)}Å</span>
         </span>
       )}
@@ -153,7 +156,7 @@ export function StatusBar() {
           {sasa.computing
             ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
             : <Dot tone="bg-cyan-400" />}
-          {sasa.computing ? 'SASA 计算中…' : `SASA ${sasa.total.toLocaleString(undefined, { maximumFractionDigits: 0 })} Å²`}
+          {sasa.computing ? t({ zh: 'SASA 计算中…', en: 'Computing SASA…' }) : `SASA ${sasa.total.toLocaleString(undefined, { maximumFractionDigits: 0 })} Å²`}
         </span>
       )}
 
@@ -161,7 +164,7 @@ export function StatusBar() {
       {settings.stereo && (
         <span className="status-val hidden shrink-0 items-center gap-1.5 sm:flex" style={{ color: 'var(--status-dim)' }}>
           <Dot tone="bg-rose-400" />
-          立体
+          {t({ zh: '立体', en: 'Stereo' })}
         </span>
       )}
 
@@ -169,7 +172,7 @@ export function StatusBar() {
       {symCount > 0 && (
         <span className="status-val hidden shrink-0 items-center gap-1.5 sm:flex" style={{ color: 'var(--status-dim)' }}>
           <Dot tone="bg-violet-400" />
-          {symCount} 对称伴侣
+          {t({ zh: `${symCount} 对称伴侣`, en: `${symCount} symmetry mates` })}
         </span>
       )}
 
@@ -179,7 +182,7 @@ export function StatusBar() {
           {mapComputing
             ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
             : <Dot tone="bg-sky-400" />}
-          {mapComputing ? '密度图计算中…' : mapLabel}
+          {mapComputing ? t({ zh: '密度图计算中…', en: 'Computing map…' }) : mapLabel}
         </span>
       )}
 
@@ -187,15 +190,15 @@ export function StatusBar() {
       {ens.structureId && ens.total >= 2 && (
         <span className="status-val hidden shrink-0 items-center gap-1.5 sm:flex" style={{ color: 'var(--status-dim)' }}>
           <Dot tone="bg-violet-400" pulse={ens.playing} />
-          {ens.playing ? `构象 ${ens.frame + 1}/${ens.total}` : `ensemble ${ens.total} 帧`}
+          {ens.playing ? t({ zh: `构象 ${ens.frame + 1}/${ens.total}`, en: `Frame ${ens.frame + 1}/${ens.total}` }) : t({ zh: `ensemble ${ens.total} 帧`, en: `ensemble ${ens.total} frames` })}
         </span>
       )}
 
       {/* 轮廓线开启提示（与 FPS 指示互斥位置：均在测量模式前） */}
       {outlineOn && !showFps && (
-        <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" title="轮廓描边开启（outline on/off）" style={{ color: 'var(--status-dim)' }}>
+        <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" title={t({ zh: '轮廓描边开启（outline on/off）', en: 'Outline shading on (outline on/off)' })} style={{ color: 'var(--status-dim)' }}>
           <Dot tone="bg-fuchsia-400" />
-          描边
+          {t({ zh: '描边', en: 'Outline' })}
         </span>
       )}
 
@@ -203,9 +206,9 @@ export function StatusBar() {
       {perf.degraded && (
         <span
           className="status-val hidden shrink-0 items-center gap-1.5 font-semibold text-amber-400 md:flex"
-          title="自动性能模式：帧率持续偏低，后处理已临时关闭、分辨率已降低；帧率恢复或 perf off 时自动还原（perf status 查看）"
+          title={t({ zh: '自动性能模式：帧率持续偏低，后处理已临时关闭、分辨率已降低；帧率恢复或 perf off 时自动还原（perf status 查看）', en: 'Auto performance mode: sustained low FPS — post-processing temporarily disabled and resolution reduced; restores automatically when FPS recovers or perf off (see perf status)' })}
         >
-          <Cpu className="h-3 w-3" /> 性能
+          <Cpu className="h-3 w-3" /> {t({ zh: '性能', en: 'Perf' })}
         </span>
       )}
 
@@ -218,7 +221,7 @@ export function StatusBar() {
               : perf.fps >= 30 ? 'text-amber-400'
                 : 'text-red-400',
           )}
-          title={`帧耗时 ${perf.frameMs.toFixed(1)}ms · 几何体 ${perf.geometries} · 纹理 ${perf.textures}（fps on|off 切换）`}
+          title={t({ zh: `帧耗时 ${perf.frameMs.toFixed(1)}ms · 几何体 ${perf.geometries} · 纹理 ${perf.textures}（fps on|off 切换）`, en: `Frame time ${perf.frameMs.toFixed(1)}ms · ${perf.geometries} geometries · ${perf.textures} textures (toggle with fps on|off)` })}
         >
           <Gauge className="h-3 w-3" />
           {perf.fps < 10 ? perf.fps.toFixed(1) : perf.fps.toFixed(0)} fps
@@ -235,11 +238,14 @@ export function StatusBar() {
           {measureMode === 'distance' && <Ruler className="h-3 w-3" />}
           {measureMode === 'angle' && <Triangle className="h-3 w-3" />}
           {measureMode === 'dihedral' && <Rotate3d className="h-3 w-3" />}
-          {measureMode === 'distance' ? '测距' : measureMode === 'angle' ? '测角' : '二面角'}
+          {measureMode === 'distance' ? t({ zh: '测距', en: 'Distance' }) : measureMode === 'angle' ? t({ zh: '测角', en: 'Angle' }) : t({ zh: '二面角', en: 'Dihedral' })}
           {measurePicks ? ` ${measurePicks.atoms.length}/${need}` : ` 0/${need}`}
-          <span className="font-normal opacity-60">Esc 退出</span>
+          <span className="font-normal opacity-60">{t({ zh: 'Esc 退出', en: 'Esc to exit' })}</span>
         </span>
       )}
+
+      {/* 语言切换（国际化）：尾部常驻入口 */}
+      <LanguageToggle variant="status" />
     </footer>
   )
 }

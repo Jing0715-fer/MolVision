@@ -6,11 +6,13 @@ import { useMolStore, dataRegistry } from '@/lib/molecular/store'
 import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 import { useMovieStore } from '@/lib/molecular/movie'
 import { engineRef } from '@/lib/molecular/store'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 const FPS_CHOICES = [2, 4, 8, 15, 30]
 
 export function EnsembleBar() {
+  const { t } = useI18n()
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   const playing = useEnsembleStore(s => s.playing)
@@ -95,14 +97,18 @@ export function EnsembleBar() {
         <Layers className="h-3.5 w-3.5 text-muted-foreground/70" />
         <span className="max-w-28 truncate text-[11px] font-semibold text-popover-foreground">{entry?.name ?? sid}</span>
         <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground">
-          {isMorph ? (ensKind === 'multimorph' ? `多态 morph · ${knots} 态 · ` : 'morph · ') : 'NMR · '}{total}{isMorph ? ' 帧' : ' 构象'}
+          {t(isMorph
+            ? (ensKind === 'multimorph'
+              ? { zh: `多态 morph · ${knots} 态 · ${total} 帧`, en: `Multi-state morph · ${knots} states · ${total} frames` }
+              : { zh: `morph · ${total} 帧`, en: `Morph · ${total} frames` })
+            : { zh: `NMR · ${total} 构象`, en: `NMR · ${total} conformers` })}
         </span>
       </div>
 
       {/* 播放/暂停 */}
       <button
         onClick={togglePlay}
-        aria-label={playing ? '暂停构象动画' : '播放构象动画'}
+        aria-label={playing ? t({ zh: '暂停构象动画', en: 'Pause ensemble animation' }) : t({ zh: '播放构象动画', en: 'Play ensemble animation' })}
         className={cn(
           'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-primary-foreground shadow-md transition',
           'bg-primary hover:opacity-90 active:scale-95',
@@ -120,7 +126,7 @@ export function EnsembleBar() {
           max={total - 1}
           step={1}
           value={shown}
-          aria-label="构象帧"
+          aria-label={t({ zh: '构象帧', en: 'Ensemble frame' })}
           className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:transition hover:[&::-webkit-slider-thumb]:scale-110"
           onPointerDown={() => { prevPlaying.current = playing; if (playing) engineRef.current?.pauseEnsemble(); setDragging(true); setDragVal(frame) }}
           onChange={e => {
@@ -147,7 +153,7 @@ export function EnsembleBar() {
           <button
             key={f}
             onClick={() => useEnsembleStore.getState().setFps(f)}
-            aria-label={`播放速度 ${f} 帧/秒`}
+            aria-label={t({ zh: `播放速度 ${f} 帧/秒`, en: `Playback speed ${f} fps` })}
             className={cn(
               'rounded px-2 py-0.5 text-[10px] font-bold tabular-nums transition',
               fps === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
@@ -161,8 +167,8 @@ export function EnsembleBar() {
       {/* 插值开关 */}
       <button
         onClick={() => useEnsembleStore.getState().setInterp(!interp)}
-        aria-label={interp ? '关闭帧间插值' : '开启帧间插值'}
-        title={interp ? '插值：开（平滑过渡）' : '插值：关（逐帧跳变）'}
+        aria-label={interp ? t({ zh: '关闭帧间插值', en: 'Disable frame interpolation' }) : t({ zh: '开启帧间插值', en: 'Enable frame interpolation' })}
+        title={interp ? t({ zh: '插值：开（平滑过渡）', en: 'Interpolation: on (smooth transitions)' }) : t({ zh: '插值：关（逐帧跳变）', en: 'Interpolation: off (stepped frames)' })}
         className={cn(
           'flex h-7 w-7 items-center justify-center rounded-md transition',
           interp ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
@@ -174,8 +180,8 @@ export function EnsembleBar() {
       {/* 循环开关 */}
       <button
         onClick={() => useEnsembleStore.getState().setLoop(!loop)}
-        aria-label={loop ? '关闭循环播放' : '开启循环播放'}
-        title={loop ? '循环：开' : '循环：关'}
+        aria-label={loop ? t({ zh: '关闭循环播放', en: 'Disable looping' }) : t({ zh: '开启循环播放', en: 'Enable looping' })}
+        title={loop ? t({ zh: '循环：开', en: 'Loop: on' }) : t({ zh: '循环：关', en: 'Loop: off' })}
         className={cn(
           'flex h-7 w-7 items-center justify-center rounded-md transition',
           loop ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
@@ -187,8 +193,8 @@ export function EnsembleBar() {
       {/* 重置 */}
       <button
         onClick={() => engineRef.current?.resetEnsemble(sid)}
-        aria-label="回到第 1 帧"
-        title="回到第 1 帧"
+        aria-label={t({ zh: '回到第 1 帧', en: 'Back to frame 1' })}
+        title={t({ zh: '回到第 1 帧', en: 'Back to frame 1' })}
         className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
       >
         <RotateCcw className="h-3.5 w-3.5" />

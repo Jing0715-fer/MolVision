@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { runCommand } from '@/lib/molecular/commands'
 import { useMolStore } from '@/lib/molecular/store'
+import { useI18n, type DualText } from '@/i18n'
 import type { StructureEntry } from '@/lib/molecular/types'
 import { cn } from '@/lib/utils'
 
@@ -45,38 +46,39 @@ function LetterButton({ letter, title, children, accent }: {
   )
 }
 
-const REP_SHOW_ITEMS: { label: string; cmd: string; hint?: string }[] = [
-  { label: 'Cartoon 带状', cmd: 'show cartoon, all' },
-  { label: '球棍 Ball&Stick', cmd: 'show ballstick, all' },
-  { label: '棍 Sticks', cmd: 'show sticks, all' },
-  { label: '线 Lines', cmd: 'show lines, all' },
-  { label: '空间填充 Spheres', cmd: 'show spacefill, all' },
-  { label: '表面 Surface', cmd: 'show surface, all' },
-  { label: 'Putty B 因子管', cmd: 'show putty, all' },
+const REP_SHOW_ITEMS: { label: DualText; cmd: string; hint?: string }[] = [
+  { label: { zh: 'Cartoon 带状', en: 'Cartoon' }, cmd: 'show cartoon, all' },
+  { label: { zh: '球棍 Ball&Stick', en: 'Ball & stick' }, cmd: 'show ballstick, all' },
+  { label: { zh: '棍 Sticks', en: 'Sticks' }, cmd: 'show sticks, all' },
+  { label: { zh: '线 Lines', en: 'Lines' }, cmd: 'show lines, all' },
+  { label: { zh: '空间填充 Spheres', en: 'Spacefill' }, cmd: 'show spacefill, all' },
+  { label: { zh: '表面 Surface', en: 'Surface' }, cmd: 'show surface, all' },
+  { label: { zh: 'Putty B 因子管', en: 'Putty B-factor tube' }, cmd: 'show putty, all' },
 ]
 
-const REP_HIDE_ITEMS: { label: string; cmd: string }[] = [
-  { label: 'Cartoon', cmd: 'hide cartoon' },
-  { label: '球棍', cmd: 'hide ballstick' },
-  { label: '棍', cmd: 'hide sticks' },
-  { label: '线', cmd: 'hide lines' },
-  { label: '空间填充', cmd: 'hide spacefill' },
-  { label: '表面', cmd: 'hide surface' },
-  { label: '全部表示', cmd: 'hide all' },
+const REP_HIDE_ITEMS: { label: DualText; cmd: string }[] = [
+  { label: { zh: 'Cartoon', en: 'Cartoon' }, cmd: 'hide cartoon' },
+  { label: { zh: '球棍', en: 'Ball & stick' }, cmd: 'hide ballstick' },
+  { label: { zh: '棍', en: 'Sticks' }, cmd: 'hide sticks' },
+  { label: { zh: '线', en: 'Lines' }, cmd: 'hide lines' },
+  { label: { zh: '空间填充', en: 'Spacefill' }, cmd: 'hide spacefill' },
+  { label: { zh: '表面', en: 'Surface' }, cmd: 'hide surface' },
+  { label: { zh: '全部表示', en: 'All representations' }, cmd: 'hide all' },
 ]
 
-const COLOR_ITEMS: { label: string; cmd: string }[] = [
-  { label: '元素色 CPK', cmd: 'color element' },
-  { label: '按链', cmd: 'color chain' },
-  { label: '按残基', cmd: 'color residue' },
-  { label: '二级结构', cmd: 'color ss' },
-  { label: 'B 因子', cmd: 'color bfactor' },
-  { label: '链序渐变', cmd: 'color spectrum' },
-  { label: '口袋距离渐变', cmd: 'color pocket' },
-  { label: 'SASA 暴露度', cmd: 'color sasa' },
+const COLOR_ITEMS: { label: DualText; cmd: string }[] = [
+  { label: { zh: '元素色 CPK', en: 'Element (CPK)' }, cmd: 'color element' },
+  { label: { zh: '按链', en: 'By chain' }, cmd: 'color chain' },
+  { label: { zh: '按残基', en: 'By residue' }, cmd: 'color residue' },
+  { label: { zh: '二级结构', en: 'Secondary structure' }, cmd: 'color ss' },
+  { label: { zh: 'B 因子', en: 'B-factor' }, cmd: 'color bfactor' },
+  { label: { zh: '链序渐变', en: 'Chain-order spectrum' }, cmd: 'color spectrum' },
+  { label: { zh: '口袋距离渐变', en: 'Pocket distance gradient' }, cmd: 'color pocket' },
+  { label: { zh: 'SASA 暴露度', en: 'SASA exposure' }, cmd: 'color sasa' },
 ]
 
 export function ObjectActionBar({ st, className }: { st: StructureEntry; className?: string }) {
+  const { t } = useI18n()
   const setActive = useMolStore(s => s.setActive)
   const setStructureVisible = useMolStore(s => s.setStructureVisible)
   const labelCount = useMolStore(s => s.labels.filter(l => l.structureId === st.id).length)
@@ -88,71 +90,71 @@ export function ObjectActionBar({ st, className }: { st: StructureEntry; classNa
   }
 
   return (
-    <div className={cn('flex items-center gap-1', className)} role="toolbar" aria-label={`${st.name} 对象动作（PyMOL 风格）`}>
-      <LetterButton letter="A" title={`动作 Actions——取景 / 对齐 / 拆分 / 导出 / 关闭（作用于 ${st.name}）`}>
+    <div className={cn('flex items-center gap-1', className)} role="toolbar" aria-label={t({ zh: `${st.name} 对象动作（PyMOL 风格）`, en: `${st.name} object actions (PyMOL style)` })}>
+      <LetterButton letter="A" title={t({ zh: `动作 Actions——取景 / 对齐 / 拆分 / 导出 / 关闭（作用于 ${st.name}）`, en: `Actions — view / align / split / export / close (applies to ${st.name})` })}>
         <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Actions · {st.name}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => act('zoom')}>聚焦适配 <span className="ml-auto font-mono text-[10px] text-muted-foreground">zoom</span></DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('orient')}>主轴对齐 <span className="ml-auto font-mono text-[10px] text-muted-foreground">orient</span></DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('reset')}>复位视角 <span className="ml-auto font-mono text-[10px] text-muted-foreground">reset</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('zoom')}>{t({ zh: '聚焦适配', en: 'Fit to view' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">zoom</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('orient')}>{t({ zh: '主轴对齐', en: 'Align principal axes' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">orient</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('reset')}>{t({ zh: '复位视角', en: 'Reset view' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">reset</span></DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => act('split_chains')}>按链拆分对象 <span className="ml-auto font-mono text-[10px] text-muted-foreground">split_chains</span></DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act(`save ${st.name}.pdb`)}>导出 PDB <span className="ml-auto font-mono text-[10px] text-muted-foreground">save</span></DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('session export')}>导出会话文件 <span className="ml-auto font-mono text-[10px] text-muted-foreground">session export</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('split_chains')}>{t({ zh: '按链拆分对象', en: 'Split by chain' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">split_chains</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act(`save ${st.name}.pdb`)}>{t({ zh: '导出 PDB', en: 'Export PDB' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">save</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('session export')}>{t({ zh: '导出会话文件', en: 'Export session file' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">session export</span></DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => setStructureVisible(st.id, !st.visible)}
           className={st.visible ? '' : 'text-primary'}
         >
-          {st.visible ? <><EyeOff className="mr-1.5 h-3 w-3" />隐藏对象</> : <><Eye className="mr-1.5 h-3 w-3" />显示对象</>}
+          {st.visible ? <><EyeOff className="mr-1.5 h-3 w-3" />{t({ zh: '隐藏对象', en: 'Hide object' })}</> : <><Eye className="mr-1.5 h-3 w-3" />{t({ zh: '显示对象', en: 'Show object' })}</>}
           <span className="ml-auto font-mono text-[10px] text-muted-foreground">{st.visible ? 'off' : 'on'}</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act(`close ${st.name}`)} className="text-destructive focus:text-destructive">关闭结构 <span className="ml-auto font-mono text-[10px]">close</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act(`close ${st.name}`)} className="text-destructive focus:text-destructive">{t({ zh: '关闭结构', en: 'Close structure' })} <span className="ml-auto font-mono text-[10px]">close</span></DropdownMenuItem>
       </LetterButton>
 
-      <LetterButton letter="S" title={`显示 Show——为 ${st.name} 添加表示法`}>
-        <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Show 表示法</DropdownMenuLabel>
+      <LetterButton letter="S" title={t({ zh: `显示 Show——为 ${st.name} 添加表示法`, en: `Show — add representations to ${st.name}` })}>
+        <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{t({ zh: 'Show 表示法', en: 'Show representations' })}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {REP_SHOW_ITEMS.map(it => (
-          <DropdownMenuItem key={it.cmd} onClick={() => act(it.cmd)}>{it.label}</DropdownMenuItem>
+          <DropdownMenuItem key={it.cmd} onClick={() => act(it.cmd)}>{t(it.label)}</DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => act('show hydrogens')}>氢原子</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('show waters')}>水分子</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('show cell')}>晶胞盒</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('preset publication')}>出版级互作一键组</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('show hydrogens')}>{t({ zh: '氢原子', en: 'Hydrogens' })}</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('show waters')}>{t({ zh: '水分子', en: 'Waters' })}</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('show cell')}>{t({ zh: '晶胞盒', en: 'Unit cell' })}</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('preset publication')}>{t({ zh: '出版级互作一键组', en: 'Publication preset' })}</DropdownMenuItem>
       </LetterButton>
 
-      <LetterButton letter="H" title={`隐藏 Hide——移除 ${st.name} 的表示法`}>
-        <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Hide 表示法</DropdownMenuLabel>
+      <LetterButton letter="H" title={t({ zh: `隐藏 Hide——移除 ${st.name} 的表示法`, en: `Hide — remove representations from ${st.name}` })}>
+        <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{t({ zh: 'Hide 表示法', en: 'Hide representations' })}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {REP_HIDE_ITEMS.map(it => (
-          <DropdownMenuItem key={it.cmd} onClick={() => act(it.cmd)}>{it.label}</DropdownMenuItem>
+          <DropdownMenuItem key={it.cmd} onClick={() => act(it.cmd)}>{t(it.label)}</DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => act('hide hydrogens')}>氢原子</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('hide waters')}>水分子</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('hide cell')}>晶胞盒</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('hide hydrogens')}>{t({ zh: '氢原子', en: 'Hydrogens' })}</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('hide waters')}>{t({ zh: '水分子', en: 'Waters' })}</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('hide cell')}>{t({ zh: '晶胞盒', en: 'Unit cell' })}</DropdownMenuItem>
       </LetterButton>
 
-      <LetterButton letter="L" title={`标注 Label——为 ${st.name} 当前选择添加/清除原子标注`} accent={labelCount > 0 ? 'border-primary/50 text-primary' : undefined}>
-        <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Label 标注{labelCount > 0 ? `（${labelCount} 个）` : ''}</DropdownMenuLabel>
+      <LetterButton letter="L" title={t({ zh: `标注 Label——为 ${st.name} 当前选择添加/清除原子标注`, en: `Label — add/clear atom labels for the current selection in ${st.name}` })} accent={labelCount > 0 ? 'border-primary/50 text-primary' : undefined}>
+        <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{t({ zh: `Label 标注${labelCount > 0 ? `（${labelCount} 个）` : ''}`, en: `Label${labelCount > 0 ? ` (${labelCount})` : ''}` })}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => act('select all')}>全选原子 <span className="ml-auto font-mono text-[10px] text-muted-foreground">select all</span></DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('label on')}>标注当前选择 <span className="ml-auto font-mono text-[10px] text-muted-foreground">label on</span></DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('label off')} className={labelCount > 0 ? 'text-primary' : ''}>清除全部标注 <span className="ml-auto font-mono text-[10px] text-muted-foreground">label off</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('select all')}>{t({ zh: '全选原子', en: 'Select all atoms' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">select all</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('label on')}>{t({ zh: '标注当前选择', en: 'Label current selection' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">label on</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('label off')} className={labelCount > 0 ? 'text-primary' : ''}>{t({ zh: '清除全部标注', en: 'Clear all labels' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">label off</span></DropdownMenuItem>
       </LetterButton>
 
-      <LetterButton letter="C" title={`上色 Color——为 ${st.name} 应用配色方案`}>
-        <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Color 上色</DropdownMenuLabel>
+      <LetterButton letter="C" title={t({ zh: `上色 Color——为 ${st.name} 应用配色方案`, en: `Color — apply a color scheme to ${st.name}` })}>
+        <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{t({ zh: 'Color 上色', en: 'Color' })}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {COLOR_ITEMS.map(it => (
-          <DropdownMenuItem key={it.cmd} onClick={() => act(it.cmd)}>{it.label}</DropdownMenuItem>
+          <DropdownMenuItem key={it.cmd} onClick={() => act(it.cmd)}>{t(it.label)}</DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => act('util cbss')}>SS 卡通 + 基色 <span className="ml-auto font-mono text-[10px] text-muted-foreground">util cbss</span></DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('util cbaw')}>元素 + 白碳（论文） <span className="ml-auto font-mono text-[10px] text-muted-foreground">util cbaw</span></DropdownMenuItem>
-        <DropdownMenuItem onClick={() => act('reset_colors')}>重置颜色 <span className="ml-auto font-mono text-[10px] text-muted-foreground">reset_colors</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('util cbss')}>{t({ zh: 'SS 卡通 + 基色', en: 'SS cartoon + base colors' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">util cbss</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('util cbaw')}>{t({ zh: '元素 + 白碳（论文）', en: 'Element + white carbons (publication)' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">util cbaw</span></DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('reset_colors')}>{t({ zh: '重置颜色', en: 'Reset colors' })} <span className="ml-auto font-mono text-[10px] text-muted-foreground">reset_colors</span></DropdownMenuItem>
       </LetterButton>
     </div>
   )

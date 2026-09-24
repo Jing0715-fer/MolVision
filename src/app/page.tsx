@@ -16,6 +16,7 @@ import { CommandPalette } from '@/components/studio/CommandPalette'
 import { AgentPanel } from '@/components/studio/AgentPanel'
 import { ViewportHUD } from '@/components/studio/ViewportHUD'
 import { useMolStore } from '@/lib/molecular/store'
+import { useI18n } from '@/i18n'
 
 const MolViewer = dynamic(() => import('@/components/molecular/MolViewer'), {
   ssr: false,
@@ -23,13 +24,20 @@ const MolViewer = dynamic(() => import('@/components/molecular/MolViewer'), {
     <div className="flex h-full w-full items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3">
         <span className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-foreground/70" />
-        <span className="text-xs text-muted-foreground">正在初始化渲染引擎…</span>
+        <RenderI18nText />
       </div>
     </div>
   ),
 })
 
+/** dynamic loading 占位文案（需组件化以使用 useI18n 钩子） */
+function RenderI18nText() {
+  const { t } = useI18n()
+  return <span className="text-xs text-muted-foreground">{t({ zh: '正在初始化渲染引擎…', en: 'Initializing render engine…' })}</span>
+}
+
 export default function Home() {
+  const { t } = useI18n()
   // 未加载任何结构 → 欢迎页接管整个视口（会话恢复 / PDB / 文件 / 示例入口在此完成）
   const empty = useMolStore(s => s.structures.length === 0)
   return (
@@ -41,7 +49,7 @@ export default function Home() {
           <Toolbar />
           <div className="relative flex min-h-0 flex-1">
             <LeftPanel />
-            <main className="relative min-w-0 flex-1" aria-label="3D 分子视图">
+            <main className="relative min-w-0 flex-1" aria-label={t({ zh: '3D 分子视图', en: '3D molecular viewport' })}>
               <MolViewer />
               {/* 取景器 OSD 读数：活动结构 · 原子数 · 主表示法（相机取景框信息条，不拦截交互） */}
               <ViewportHUD />

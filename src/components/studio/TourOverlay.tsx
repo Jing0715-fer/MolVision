@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import type { TourAccent, TourIcon } from '@/lib/molecular/tours'
+import { useI18n, tt } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -60,6 +61,7 @@ const ACCENT: Record<TourAccent, { icon: string; chip: string; bar: string; ring
 
 /** 命令 chip：点击复制（key=步骤索引挂载，切换步骤自动重置内部状态） */
 function CmdChip({ cmd, accent }: { cmd: string; accent: TourAccent }) {
+  const { t } = useI18n()
   const [copied, setCopied] = useState(false)
   const copy = () => {
     try {
@@ -67,7 +69,7 @@ function CmdChip({ cmd, accent }: { cmd: string; accent: TourAccent }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {
-      toast.error('复制失败')
+      toast.error(tt({ zh: '复制失败', en: 'Copy failed' }))
     }
   }
   return (
@@ -77,7 +79,7 @@ function CmdChip({ cmd, accent }: { cmd: string; accent: TourAccent }) {
         'mt-2.5 flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition hover:brightness-105',
         ACCENT[accent].chip,
       )}
-      title="点击复制命令"
+      title={t({ zh: '点击复制命令', en: 'Click to copy the command' })}
     >
       <span className="font-mono text-[10px] font-bold opacity-60">»</span>
       <code className="flex-1 truncate font-mono text-[11px]">{cmd}</code>
@@ -89,6 +91,7 @@ function CmdChip({ cmd, accent }: { cmd: string; accent: TourAccent }) {
 }
 
 export function TourOverlay() {
+  const { t } = useI18n()
   const tour = useTourStore(s => s.tour)
   const stepIdx = useTourStore(s => s.stepIdx)
   const busy = useTourStore(s => s.busy)
@@ -106,7 +109,7 @@ export function TourOverlay() {
   return (
     <div
       role="region"
-      aria-label={`演示引导：${tour.title}`}
+      aria-label={t({ zh: `演示引导：${t(tour.title)}`, en: `Guided tour: ${t(tour.title)}` })}
       className="tour-in absolute left-1/2 top-3 z-40 w-[min(30rem,calc(100%-1.5rem))] -translate-x-1/2"
     >
       <div className="overflow-hidden rounded-lg border border-border bg-card mol-elevate-lg">
@@ -119,14 +122,14 @@ export function TourOverlay() {
             <Icon className="h-4 w-4" strokeWidth={1.9} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-semibold tracking-tight">{tour.title}</div>
+            <div className="truncate text-xs font-semibold tracking-tight">{t(tour.title)}</div>
             <div className="text-[10px] text-muted-foreground">
-              第 {stepIdx + 1} / {tour.steps.length} 步{busy ? ' · 执行中…' : ''}
+              {t({ zh: `第 ${stepIdx + 1} / ${tour.steps.length} 步`, en: `Step ${stepIdx + 1} / ${tour.steps.length}` })}{busy ? t({ zh: ' · 执行中…', en: ' · running…' }) : ''}
             </div>
           </div>
           <button
             onClick={stop}
-            aria-label="结束演示"
+            aria-label={t({ zh: '结束演示', en: 'End tour' })}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
@@ -139,7 +142,7 @@ export function TourOverlay() {
             <button
               key={i}
               onClick={() => void useTourStore.getState().go(i)}
-              aria-label={`跳到第 ${i + 1} 步`}
+              aria-label={t({ zh: `跳到第 ${i + 1} 步`, en: `Go to step ${i + 1}` })}
               className={cn(
                 'h-1.5 flex-1 rounded-full transition-colors hover:bg-muted-foreground/50',
                 i === stepIdx ? accent.bar : i < stepIdx ? 'bg-muted-foreground/40' : 'bg-muted',
@@ -150,9 +153,9 @@ export function TourOverlay() {
 
         {/* 正文 */}
         <div className="px-3.5 pb-3 pt-2.5">
-          <div className="text-sm font-semibold leading-snug">{step.title}</div>
+          <div className="text-sm font-semibold leading-snug">{t(step.title)}</div>
           <p className="mt-1.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-            {step.body}
+            {t(step.body)}
           </p>
           {step.cmd && <CmdChip key={stepIdx} cmd={step.cmd} accent={tour.accent} />}
         </div>
@@ -165,10 +168,10 @@ export function TourOverlay() {
             className="flex h-7 items-center gap-1 rounded-md border border-border/70 px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:opacity-35"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">上一步</span>
+            <span className="hidden sm:inline">{t({ zh: '上一步', en: 'Back' })}</span>
           </button>
           <div className="flex-1 text-center text-[10px] text-muted-foreground/70">
-            <span className="hidden sm:inline">← / → 键切换 · Esc 结束</span>
+            <span className="hidden sm:inline">{t({ zh: '← / → 键切换 · Esc 结束', en: '← / → to step · Esc to exit' })}</span>
           </div>
           <button
             onClick={() => void next()}
@@ -181,7 +184,7 @@ export function TourOverlay() {
             {busy
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <ChevronRight className="h-3.5 w-3.5" />}
-            {isLast ? '完成' : '下一步'}
+            {isLast ? t({ zh: '完成', en: 'Finish' }) : t({ zh: '下一步', en: 'Next' })}
           </button>
         </div>
       </div>

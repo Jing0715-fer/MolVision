@@ -10,6 +10,7 @@ import { ChevronRight, Eye, Film, Minus, Pause, Play, Plus, RefreshCw, Trash2, X
 import { toast } from 'sonner'
 import { playMovie, stopMovie, useMovieStore, type TimelineEntry } from '@/lib/molecular/movie'
 import { useViewsStore, type ViewBookmark } from '@/lib/molecular/views-store'
+import { useI18n, tt } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { FadeEdge } from './FadeEdge'
 
@@ -19,6 +20,7 @@ const DUR_STEP = 200
 const DRAG_THRESHOLD = 5
 
 export function MovieTimeline() {
+  const { t } = useI18n()
   const open = useMovieStore(s => s.timelineOpen)
   const timeline = useMovieStore(s => s.timeline)
   const loopsEdit = useMovieStore(s => s.loopsEdit)
@@ -122,14 +124,14 @@ export function MovieTimeline() {
   const doSync = () => {
     const n = syncTimeline()
     setSelected(null)
-    if (n === 0) toast.info('当前没有视角书签', { description: '先在 3D 视口中按 V 键保存机位（或 view save 名称）' })
-    else toast.success(`已同步 ${n} 个书签为关键帧`, { description: '拖拽卡片排序 · 点选后调时长 · 播放按时间轴巡航' })
+    if (n === 0) toast.info(tt({ zh: '当前没有视角书签', en: 'No view bookmarks yet' }), { description: tt({ zh: '先在 3D 视口中按 V 键保存机位（或 view save 名称）', en: 'Press V in the 3D viewport to save a view first (or view save <name>)' }) })
+    else toast.success(tt({ zh: `已同步 ${n} 个书签为关键帧`, en: `Synced ${n} bookmarks as keyframes` }), { description: tt({ zh: '拖拽卡片排序 · 点选后调时长 · 播放按时间轴巡航', en: 'Drag cards to reorder · click to edit duration · playback follows the timeline' }) })
   }
   const doPlay = () => {
     if (playing) { stopMovie(); return }
     void playMovie({ useTimeline: true }).then(r => {
       if (!r.ok) toast.error(r.error)
-      else toast.success('movie 时间轴播放中', { description: `${r.segs} 段逐段巡航 · 拖动/滚轮接管或 Esc 停止 · record start 可同步录制` })
+      else toast.success(tt({ zh: 'movie 时间轴播放中', en: 'Playing movie timeline' }), { description: tt({ zh: `${r.segs} 段逐段巡航 · 拖动/滚轮接管或 Esc 停止 · record start 可同步录制`, en: `${r.segs} segments, each with its own duration · drag/scroll to take over or Esc to stop · record start to capture while playing` }) })
     })
   }
   const previewView = (view: ViewBookmark) => {
@@ -154,23 +156,23 @@ export function MovieTimeline() {
         <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Film className="h-3 w-3" />
         </span>
-        <span className="text-[11px] font-semibold text-foreground">movie 时间轴</span>
+        <span className="text-[11px] font-semibold text-foreground">{t({ zh: 'movie 时间轴', en: 'Movie timeline' })}</span>
         <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-          {validCount}/{timeline.length} 关键帧 · {(totalMs / 1000).toFixed(1)}s/轮
+          {t({ zh: `${validCount}/${timeline.length} 关键帧 · ${(totalMs / 1000).toFixed(1)}s/轮`, en: `${validCount}/${timeline.length} keyframes · ${(totalMs / 1000).toFixed(1)}s/loop` })}
         </span>
         <div className="flex-1" />
         <button
           onClick={doSync}
           className="flex h-6 items-center gap-1 rounded-md border border-border bg-muted/40 px-2 text-[10px] font-medium text-foreground transition hover:bg-accent"
-          title="用当前视角书签重建关键帧（保留已有时长设置）"
+          title={t({ zh: '用当前视角书签重建关键帧（保留已有时长设置）', en: 'Rebuild keyframes from current view bookmarks (existing durations kept)' })}
         >
-          <RefreshCw className="h-3 w-3" /> 同步书签
+          <RefreshCw className="h-3 w-3" /> {t({ zh: '同步书签', en: 'Sync bookmarks' })}
         </button>
         {timeline.length > 0 && (
           <button
             onClick={() => { clearTimeline(); setSelected(null) }}
             className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-red-500/10 hover:text-red-500"
-            title="清空时间轴（不影响书签本体）"
+            title={t({ zh: '清空时间轴（不影响书签本体）', en: 'Clear timeline (bookmarks themselves are kept)' })}
           >
             <Trash2 className="h-3 w-3" />
           </button>
@@ -178,7 +180,7 @@ export function MovieTimeline() {
         <button
           onClick={() => setTimelineOpen(false)}
           className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-          title="关闭时间轴（工具栏 Film 按钮可重新打开）"
+          title={t({ zh: '关闭时间轴（工具栏 Film 按钮可重新打开）', en: 'Close timeline (reopen from the toolbar Film button)' })}
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -187,8 +189,8 @@ export function MovieTimeline() {
       {/* 关键帧卡片带（横向滚动） */}
       {timeline.length === 0 ? (
         <div className="flex h-[76px] w-[min(560px,70vw)] flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border bg-muted/25 text-center">
-          <span className="text-[11px] text-muted-foreground">时间轴为空——「同步书签」把视角书签导入为关键帧</span>
-          <span className="text-[10px] text-muted-foreground/70">V 键保存机位 · view save 名称 · 上限 12 帧</span>
+          <span className="text-[11px] text-muted-foreground">{t({ zh: '时间轴为空——「同步书签」把视角书签导入为关键帧', en: 'Timeline is empty — "Sync bookmarks" imports view bookmarks as keyframes' })}</span>
+          <span className="text-[10px] text-muted-foreground/70">{t({ zh: 'V 键保存机位 · view save 名称 · 上限 12 帧', en: 'Press V to save views · view save <name> · 12 frames max' })}</span>
         </div>
       ) : (
         <FadeEdge className="max-w-full items-center py-1">
@@ -216,7 +218,7 @@ export function MovieTimeline() {
                     isDragging && 'z-10 cursor-grabbing border-primary opacity-90 mol-elevate',
                   )}
                   style={isDragging ? { transform: `translateX(${drag!.dx}px) scale(1.05)` } : undefined}
-                  title={`${view?.name ?? '书签已删除'} · ${(e.duration / 1000).toFixed(1)}s（拖拽排序 · 点击选中）`}
+                  title={t({ zh: `${view?.name ?? '书签已删除'} · ${(e.duration / 1000).toFixed(1)}s（拖拽排序 · 点击选中）`, en: `${view?.name ?? 'Bookmark deleted'} · ${(e.duration / 1000).toFixed(1)}s (drag to reorder · click to select)` })}
                 >
                   {view?.thumb ? (
                     <img src={view.thumb} alt={view.name} className="h-9 w-full rounded-sm object-cover" draggable={false} />
@@ -225,11 +227,11 @@ export function MovieTimeline() {
                       'flex h-9 w-full items-center justify-center rounded-sm text-[9px]',
                       view ? 'bg-muted/70 text-muted-foreground' : 'bg-red-500/10 text-red-600 dark:text-red-400',
                     )}>
-                      {view ? '无缩略图' : '已失效'}
+                      {view ? t({ zh: '无缩略图', en: 'No thumbnail' }) : t({ zh: '已失效', en: 'Invalid' })}
                     </div>
                   )}
                   <div className="mt-0.5 truncate text-center text-[9px] font-medium leading-tight text-foreground/90">
-                    {view?.name ?? '（失效书签）'}
+                    {view?.name ?? t({ zh: '（失效书签）', en: '(invalid bookmark)' })}
                   </div>
                   <div className="text-center font-mono text-[9px] tabular-nums leading-tight text-primary">
                     {(e.duration / 1000).toFixed(1)}s
@@ -264,15 +266,15 @@ export function MovieTimeline() {
           )}
         >
           {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="ml-0.5 h-3.5 w-3.5" />}
-          {playing ? '停止' : `播放 ${validCount} 帧`}
+          {playing ? t({ zh: '停止', en: 'Stop' }) : t({ zh: `播放 ${validCount} 帧`, en: `Play ${validCount} frames` })}
         </button>
         {/* 轮数 stepper */}
         <div className="flex h-7 shrink-0 items-center rounded-md border border-border bg-muted/40 pl-2 pr-1">
-          <span className="text-[10px] text-muted-foreground">轮数</span>
+          <span className="text-[10px] text-muted-foreground">{t({ zh: '轮数', en: 'Loops' })}</span>
           <button
             onClick={() => setLoopsEdit(loopsEdit - 1)}
             className="mx-0.5 flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
-            title="减少循环轮数"
+            title={t({ zh: '减少循环轮数', en: 'Fewer loops' })}
           >
             <Minus className="h-3 w-3" />
           </button>
@@ -280,7 +282,7 @@ export function MovieTimeline() {
           <button
             onClick={() => setLoopsEdit(loopsEdit + 1)}
             className="mx-0.5 flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
-            title="增加循环轮数"
+            title={t({ zh: '增加循环轮数', en: 'More loops' })}
           >
             <Plus className="h-3 w-3" />
           </button>
@@ -289,11 +291,11 @@ export function MovieTimeline() {
         {sel && sel.view ? (
           <div className="flex h-7 min-w-0 items-center gap-1 overflow-x-auto rounded-md border border-border bg-muted/40 px-2">
             <span className="max-w-24 shrink-0 truncate text-[10px] font-medium text-foreground/90">{sel.view.name}</span>
-            <span className="shrink-0 text-[9px] text-muted-foreground">时长</span>
+            <span className="shrink-0 text-[9px] text-muted-foreground">{t({ zh: '时长', en: 'Duration' })}</span>
             <button
               onClick={() => setEntryDuration(selected!, timeline[selected!].duration - DUR_STEP)}
               className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
-              title="减少 0.2s"
+              title={t({ zh: '减少 0.2s', en: 'Decrease by 0.2s' })}
             >
               <Minus className="h-3 w-3" />
             </button>
@@ -303,28 +305,28 @@ export function MovieTimeline() {
             <button
               onClick={() => setEntryDuration(selected!, timeline[selected!].duration + DUR_STEP)}
               className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
-              title="增加 0.2s"
+              title={t({ zh: '增加 0.2s', en: 'Increase by 0.2s' })}
             >
               <Plus className="h-3 w-3" />
             </button>
             <button
               onClick={() => previewView(sel.view!)}
               className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
-              title="预览此机位（平滑过渡）"
+              title={t({ zh: '预览此机位（平滑过渡）', en: 'Preview this view (smooth transition)' })}
             >
               <Eye className="h-3 w-3" />
             </button>
             <button
               onClick={() => { removeEntry(selected!); setSelected(null) }}
               className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-red-500/10 hover:text-red-500"
-              title="从时间轴移除此关键帧"
+              title={t({ zh: '从时间轴移除此关键帧', en: 'Remove this keyframe from the timeline' })}
             >
               <Trash2 className="h-3 w-3" />
             </button>
           </div>
         ) : (
           <span className="truncate text-[10px] text-muted-foreground/80">
-            {timeline.length ? '点击卡片编辑时长 · 拖拽排序 · 「预览」查看机位' : '同步后可拖拽排序、逐段调时长'}
+            {timeline.length ? t({ zh: '点击卡片编辑时长 · 拖拽排序 · 「预览」查看机位', en: 'Click a card to edit duration · drag to reorder · "Preview" to inspect the view' }) : t({ zh: '同步后可拖拽排序、逐段调时长', en: 'After syncing, drag to reorder and tune per-segment durations' })}
           </span>
         )}
       </div>
@@ -344,17 +346,17 @@ export function MovieTimeline() {
             role="menu"
           >
             <div className="border-b border-border px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
-              <span className="block truncate">{entry.view?.name ?? '（失效书签）'}</span>
-              <span className="font-mono">{(entry.e.duration / 1000).toFixed(1)}s · 第 {ctx.i + 1}/{timeline.length} 帧</span>
+              <span className="block truncate">{entry.view?.name ?? t({ zh: '（失效书签）', en: '(invalid bookmark)' })}</span>
+              <span className="font-mono">{t({ zh: `${(entry.e.duration / 1000).toFixed(1)}s · 第 ${ctx.i + 1}/${timeline.length} 帧`, en: `${(entry.e.duration / 1000).toFixed(1)}s · frame ${ctx.i + 1}/${timeline.length}` })}</span>
             </div>
-            <TlItem onClick={() => { if (entry.view) previewView(entry.view); setCtx(null) }} disabled={!entry.view}>预览此机位（平滑过渡）</TlItem>
-            <TlItem onClick={() => { setEntryDuration(ctx.i, timeline[ctx.i].duration - DUR_STEP); setCtx(null) }}>时长 −0.2s</TlItem>
-            <TlItem onClick={() => { setEntryDuration(ctx.i, timeline[ctx.i].duration + DUR_STEP); setCtx(null) }}>时长 +0.2s</TlItem>
+            <TlItem onClick={() => { if (entry.view) previewView(entry.view); setCtx(null) }} disabled={!entry.view}>{t({ zh: '预览此机位（平滑过渡）', en: 'Preview this view (smooth transition)' })}</TlItem>
+            <TlItem onClick={() => { setEntryDuration(ctx.i, timeline[ctx.i].duration - DUR_STEP); setCtx(null) }}>{t({ zh: '时长 −0.2s', en: 'Duration −0.2s' })}</TlItem>
+            <TlItem onClick={() => { setEntryDuration(ctx.i, timeline[ctx.i].duration + DUR_STEP); setCtx(null) }}>{t({ zh: '时长 +0.2s', en: 'Duration +0.2s' })}</TlItem>
             <div className="-mx-1 my-1 h-px bg-border" />
-            <TlItem onClick={() => { if (ctx.i > 0) { reorderTimeline(ctx.i, 0); setSelected(0) }; setCtx(null) }} disabled={ctx.i === 0}>移到最前</TlItem>
-            <TlItem onClick={() => { if (ctx.i < last) { reorderTimeline(ctx.i, last); setSelected(last) }; setCtx(null) }} disabled={ctx.i === last}>移到最后</TlItem>
+            <TlItem onClick={() => { if (ctx.i > 0) { reorderTimeline(ctx.i, 0); setSelected(0) }; setCtx(null) }} disabled={ctx.i === 0}>{t({ zh: '移到最前', en: 'Move to front' })}</TlItem>
+            <TlItem onClick={() => { if (ctx.i < last) { reorderTimeline(ctx.i, last); setSelected(last) }; setCtx(null) }} disabled={ctx.i === last}>{t({ zh: '移到最后', en: 'Move to end' })}</TlItem>
             <div className="-mx-1 my-1 h-px bg-border" />
-            <TlItem danger onClick={() => { removeEntry(ctx.i); setSelected(null); setCtx(null) }}>从时间轴移除</TlItem>
+            <TlItem danger onClick={() => { removeEntry(ctx.i); setSelected(null); setCtx(null) }}>{t({ zh: '从时间轴移除', en: 'Remove from timeline' })}</TlItem>
           </div>
         )
       })()}

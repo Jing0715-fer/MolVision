@@ -21,6 +21,8 @@ import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '@/components/ui/command'
 import { cn } from '@/lib/utils'
+import { useI18n, tt, type DualText } from '@/i18n'
+import { providerNameText } from '@/lib/molecular/agent/provider-display'
 
 // ———— 类型（与后端 ProviderStatus 对齐） ————
 
@@ -38,6 +40,7 @@ export interface AvailableModelInfo {
 export interface ProviderInfo {
   id: string
   displayName: string
+  displayNameEn?: string
   label: string
   category: ProviderCategory
   brand: string
@@ -47,7 +50,8 @@ export interface ProviderInfo {
   models: { id: string; name: string; contextWindow?: number }[]
   docsUrl: string
   website: string
-  note?: string
+  /** 目录静态说明（服务端 DualText 透传；t() 双态兼容 string） */
+  note?: DualText
   hasApiKey: boolean
   hasBaseURLOverride: boolean
   effectiveModel: string
@@ -68,24 +72,24 @@ interface ProbeState {
   error?: string
 }
 
-const CATEGORY_LABEL: Record<ProviderCategory, string> = {
-  builtin: '内置',
-  global: '国际',
-  cn: '国内',
-  aggregator: '聚合',
-  local: '本地',
-  custom: '自定义',
+const CATEGORY_LABEL: Record<ProviderCategory, DualText> = {
+  builtin: { zh: '内置', en: 'Built-in' },
+  global: { zh: '国际', en: 'Global' },
+  cn: { zh: '国内', en: 'CN' },
+  aggregator: { zh: '聚合', en: 'Aggregator' },
+  local: { zh: '本地', en: 'Local' },
+  custom: { zh: '自定义', en: 'Custom' },
 }
 
 const CATEGORY_ORDER: ProviderCategory[] = ['builtin', 'global', 'cn', 'aggregator', 'local', 'custom']
 
-const KIND_GROUP: { match: (k?: string) => boolean; label: string }[] = [
-  { match: k => !k || k === 'chat', label: '对话模型' },
-  { match: k => k === 'embedding', label: '向量 / 检索' },
-  { match: k => k === 'image', label: '图像生成' },
-  { match: k => k === 'audio', label: '语音' },
-  { match: k => k === 'video', label: '视频' },
-  { match: k => k === 'other', label: '其他' },
+const KIND_GROUP: { id: string; match: (k?: string) => boolean; label: DualText }[] = [
+  { id: 'chat', match: k => !k || k === 'chat', label: { zh: '对话模型', en: 'Chat models' } },
+  { id: 'embedding', match: k => k === 'embedding', label: { zh: '向量 / 检索', en: 'Embeddings / retrieval' } },
+  { id: 'image', match: k => k === 'image', label: { zh: '图像生成', en: 'Image generation' } },
+  { id: 'audio', match: k => k === 'audio', label: { zh: '语音', en: 'Audio' } },
+  { id: 'video', match: k => k === 'video', label: { zh: '视频', en: 'Video' } },
+  { id: 'other', match: k => k === 'other', label: { zh: '其他', en: 'Other' } },
 ]
 
 /** 上下文窗口人性化（1M / 128k） */
@@ -133,6 +137,7 @@ interface Props {
 }
 
 export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
+  const { t } = useI18n()
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedId, setSelectedId] = useState('zai')
@@ -170,6 +175,7 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
       if (cat !== 'all' && p.category !== cat) return false
       if (!q) return true
       return p.displayName.toLowerCase().includes(q)
+        || (p.displayNameEn ?? '').toLowerCase().includes(q)
         || p.label.toLowerCase().includes(q)
         || p.availableModels.some(m => m.id.toLowerCase().includes(q))
     })
@@ -190,7 +196,8 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
       body: JSON.stringify({ providerId: id, setDefault: true }),
     })
     const p = providers.find(x => x.id === id)
-    toast.success(`默认供应商已切换为 ${p?.displayName ?? id}`)
+    const pn = p ? providerNameText(p) : id
+    toast.success(tt({ zh: `默认供应商已切换为 ${tt(pn)}`, en: `Default provider switched to ${tt(pn)}` }))
     void refresh()
   }
 
@@ -200,9 +207,9 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
         showCloseButton={false}
         className="flex gap-0 overflow-hidden p-0 sm:w-[860px] sm:max-w-[calc(100vw-2rem)] h-[min(600px,88dvh)] w-[calc(100vw-2rem)] rounded-lg mol-elevate-lg"
       >
-        <DialogTitle className="sr-only">AI 模型服务商设置</DialogTitle>
+        <DialogTitle className="sr-only">{t({ zh: 'AI 模型服务商设置', en: 'AI model provider settings' })}</DialogTitle>
         <DialogDescription className="sr-only">
-          配置 AI 助手的模型供应商：输入 API Key 后自动检测可用模型。
+          {t({ zh: '配置 AI 助手的模型供应商：输入 API Key 后自动检测可用模型。', en: 'Configure model providers for the AI assistant: available models are detected automatically after entering an API Key.' })}
         </DialogDescription>
 
         <div className="flex min-h-0 w-full flex-col">
@@ -211,33 +218,33 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
             <span className="flex h-5.5 w-5.5 items-center justify-center rounded-md bg-primary/10 text-primary">
               <KeyRound className="h-3 w-3" />
             </span>
-            <span className="text-[13px] font-semibold leading-none">模型服务商</span>
+            <span className="text-[13px] font-semibold leading-none">{t({ zh: '模型服务商', en: 'Model Providers' })}</span>
             <span className="text-[10px] tabular-nums text-muted-foreground">
-              {providers.length > 0 ? `${providers.length} 家可选 · 已配置 ${configuredCount}` : '加载目录…'}
+              {providers.length > 0 ? t({ zh: `${providers.length} 家可选 · 已配置 ${configuredCount}`, en: `${providers.length} available · ${configuredCount} configured` }) : t({ zh: '加载目录…', en: 'Loading catalog…' })}
             </span>
             <div className="ml-auto flex min-w-0 items-center gap-1.5">
               {defaultProvider && (
                 <button
                   onClick={() => setSelectedId(defaultProvider.id)}
-                  title={`当前默认：${defaultProvider.displayName}（点击查看）`}
+                  title={t({ zh: `当前默认：${t(providerNameText(defaultProvider))}（点击查看）`, en: `Current default: ${t(providerNameText(defaultProvider))} (click to view)` })}
                   className="flex h-6 min-w-0 items-center gap-1.5 rounded-full border border-border bg-background pl-1 pr-2.5 transition hover:border-border"
                 >
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                  <span className="max-w-32 truncate text-[10px] font-medium">{defaultProvider.displayName}</span>
+                  <span className="max-w-32 truncate text-[10px] font-medium">{t(providerNameText(defaultProvider))}</span>
                   <span className="max-w-36 truncate font-mono text-[9px] text-muted-foreground">{defaultProvider.effectiveModel || '—'}</span>
                 </button>
               )}
               <button
                 onClick={() => void refresh()}
-                aria-label="刷新供应商状态"
-                title="刷新状态"
+                aria-label={t({ zh: '刷新供应商状态', en: 'Refresh provider status' })}
+                title={t({ zh: '刷新状态', en: 'Refresh status' })}
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition hover:bg-accent hover:text-foreground"
               >
                 <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
               </button>
               <button
                 onClick={() => onOpenChange(false)}
-                aria-label="关闭设置"
+                aria-label={t({ zh: '关闭设置', en: 'Close settings' })}
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition hover:bg-accent hover:text-foreground"
               >
                 <X className="h-4 w-4" />
@@ -248,19 +255,19 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
           {/* 主体双栏（移动端纵向堆叠：横向供应商条 + 详情） */}
           <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
             {/* 左栏：供应商目录（桌面） */}
-            <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-muted/40 sm:flex" aria-label="供应商目录">
+            <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-muted/40 sm:flex" aria-label={t({ zh: '供应商目录', en: 'Provider catalog' })}>
               <div className="shrink-0 space-y-2 px-2.5 pb-2 pt-2.5">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground/60" />
                   <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder="搜索供应商或模型…"
-                    aria-label="搜索供应商"
+                    placeholder={t({ zh: '搜索供应商或模型…', en: 'Search providers or models…' })}
+                    aria-label={t({ zh: '搜索供应商', en: 'Search providers' })}
                     className="h-8 w-full rounded-md border border-border bg-background pl-7.5 pr-2 text-xs outline-none transition placeholder:text-muted-foreground/50 focus:border-ring/60 focus:ring-2 focus:ring-ring/25"
                   />
                 </div>
-                <div className="flex flex-wrap gap-1" role="tablist" aria-label="分类筛选">
+                <div className="flex flex-wrap gap-1" role="tablist" aria-label={t({ zh: '分类筛选', en: 'Category filter' })}>
                   {(['all', 'global', 'cn', 'aggregator', 'local'] as const).map(c => (
                     <button
                       key={c}
@@ -274,7 +281,7 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
                           : 'bg-background text-muted-foreground border border-border hover:text-foreground',
                       )}
                     >
-                      {c === 'all' ? '全部' : CATEGORY_LABEL[c]}
+                      {c === 'all' ? t({ zh: '全部', en: 'All' }) : t(CATEGORY_LABEL[c])}
                     </button>
                   ))}
                 </div>
@@ -291,10 +298,10 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
                 {grouped.map(g => (
                   <div key={g.c} className="mb-1.5">
                     <p className="px-2 pb-1 pt-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">
-                      {CATEGORY_LABEL[g.c]}
+                      {t(CATEGORY_LABEL[g.c])}
                       {g.c === 'builtin' ? '' : ` · ${g.items.length}`}
                     </p>
-                    <div role="listbox" aria-label={CATEGORY_LABEL[g.c]} className="space-y-0.5">
+                    <div role="listbox" aria-label={t(CATEGORY_LABEL[g.c])} className="space-y-0.5">
                       {g.items.map(p => (
                         <button
                           key={p.id}
@@ -318,13 +325,13 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
                             'min-w-0 flex-1 truncate text-xs',
                             selectedId === p.id ? 'font-medium text-foreground' : 'text-foreground/85',
                           )}>
-                            {p.displayName}
+                            {t(providerNameText(p))}
                           </span>
                           {p.hasApiKey && (
-                            <span aria-label="已配置" title="已配置 API Key" className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.5)]" />
+                            <span aria-label={t({ zh: '已配置', en: 'Configured' })} title={t({ zh: '已配置 API Key', en: 'API Key configured' })} className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.5)]" />
                           )}
                           {p.isDefault && (
-                            <Star aria-label="默认供应商" className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
+                            <Star aria-label={t({ zh: '默认供应商', en: 'Default provider' })} className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
                           )}
                         </button>
                       ))}
@@ -332,13 +339,13 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
                   </div>
                 ))}
                 {providers.length > 0 && filtered.length === 0 && (
-                  <p className="px-2 py-6 text-center text-[11px] text-muted-foreground/60">无匹配供应商</p>
+                  <p className="px-2 py-6 text-center text-[11px] text-muted-foreground/60">{t({ zh: '无匹配供应商', en: 'No matching providers' })}</p>
                 )}
               </div>
 
               <div className="flex shrink-0 items-center gap-1.5 border-t border-border px-3 py-2 text-[10px] leading-tight text-muted-foreground/70">
                 <Lock className="h-2.5 w-2.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                Key 仅存本机 .molvision/，服务端读取，前端不回传明文
+                {t({ zh: 'Key 仅存本机 .molvision/，服务端读取，前端不回传明文', en: 'Keys are stored locally in .molvision/ only, read server-side, and never returned to the frontend in plain text' })}
               </div>
             </aside>
 
@@ -354,14 +361,14 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
                   )}
                 >
                   <Monogram label={p.label} brand={p.brand} size='md' />
-                  <span className="max-w-28 truncate">{p.displayName}</span>
+                  <span className="max-w-28 truncate">{t(providerNameText(p))}</span>
                   {p.hasApiKey && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
                 </button>
               ))}
             </div>
 
             {/* 右栏：详情 */}
-            <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="供应商详情">
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label={t({ zh: '供应商详情', en: 'Provider details' })}>
               {selected ? (
                 <ProviderDetail
                   key={selected.id}
@@ -372,7 +379,7 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground/50">
                   <ServerCog className="h-6 w-6" />
-                  <p className="text-xs">从左侧目录选择供应商开始配置</p>
+                  <p className="text-xs">{t({ zh: '从左侧目录选择供应商开始配置', en: 'Select a provider from the catalog to start configuring' })}</p>
                 </div>
               )}
             </section>
@@ -392,6 +399,7 @@ function ProviderDetail({
   onChanged: () => void
   onSetDefault: () => void
 }) {
+  const { t } = useI18n()
   const isLocal = p.category === 'local' || p.category === 'custom'
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
@@ -431,7 +439,7 @@ function ProviderDetail({
         setProbe({ status: 'ok', models, total: data.total ?? models.length, note: data.note })
         if (models.length > 0) {
           if (opts.reason !== 'auto') {
-            toast.success(`检测到 ${models.length} 个可用模型`, { description: `${p.displayName} · /models 列表` })
+            toast.success(tt({ zh: `检测到 ${models.length} 个可用模型`, en: `Detected ${models.length} available models` }), { description: tt({ zh: `${tt(providerNameText(p))} · /models 列表`, en: `${tt(providerNameText(p))} · /models list` }) })
           }
           // 空模型时智能预选：目录默认 → 首个 chat 模型
           if (!model.trim()) {
@@ -486,8 +494,10 @@ function ProviderDetail({
         }),
       })
       setApiKey('')
-      toast.success(`已保存 ${p.displayName} 配置`, {
-        description: p.isDefault ? '该供应商即当前默认，下次对话生效' : '在顶栏徽章处可切换默认供应商',
+      toast.success(tt({ zh: `已保存 ${tt(providerNameText(p))} 配置`, en: `Saved ${tt(providerNameText(p))} configuration` }), {
+        description: p.isDefault
+          ? tt({ zh: '该供应商即当前默认，下次对话生效', en: 'This provider is the current default; it takes effect from the next conversation' })
+          : tt({ zh: '在顶栏徽章处可切换默认供应商', en: 'You can switch the default provider via the top-bar badge' }),
       })
       onChanged()
     } finally {
@@ -499,7 +509,7 @@ function ProviderDetail({
     setDeleting(true)
     try {
       await fetch(`/api/agent/providers?providerId=${p.id}`, { method: 'DELETE' })
-      toast.success(`已删除 ${p.displayName} 配置`)
+      toast.success(tt({ zh: `已删除 ${tt(providerNameText(p))} 配置`, en: `Deleted ${tt(providerNameText(p))} configuration` }))
       setApiKey('')
       setModel(p.defaultModel || '')
       setProbe({ status: 'idle', models: [], total: 0 })
@@ -517,30 +527,30 @@ function ProviderDetail({
         <Monogram label={p.label} brand={p.brand} size="lg" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <h3 className="text-sm font-semibold leading-tight">{p.displayName}</h3>
+            <h3 className="text-sm font-semibold leading-tight">{t(providerNameText(p))}</h3>
             <span className="rounded bg-muted px-1.5 py-px text-[9px] font-medium text-muted-foreground">
-              {CATEGORY_LABEL[p.category]}
+              {t(CATEGORY_LABEL[p.category])}
             </span>
             {p.isDefault && (
               <span className="flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-px text-[9px] font-semibold text-amber-600 dark:text-amber-400">
-                <Star className="h-2.5 w-2.5 fill-current" /> 默认
+                <Star className="h-2.5 w-2.5 fill-current" /> {t({ zh: '默认', en: 'Default' })}
               </span>
             )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-muted-foreground">
-            <span className="font-mono">{p.effectiveModel || '未配置模型'}</span>
+            <span className="font-mono">{p.effectiveModel || t({ zh: '未配置模型', en: 'No model configured' })}</span>
             {p.maskedKey && (
-              <span className="font-mono" title={p.envKeySource ? `来自环境变量 ${p.apiKeyEnv}` : '本地存储'}>{p.maskedKey}</span>
+              <span className="font-mono" title={p.envKeySource ? t({ zh: `来自环境变量 ${p.apiKeyEnv}`, en: `From environment variable ${p.apiKeyEnv}` }) : t({ zh: '本地存储', en: 'Local storage' })}>{p.maskedKey}</span>
             )}
             {p.envKeySource && <span className="rounded bg-muted px-1 py-px text-[9px]">env</span>}
             {p.website && (
               <a href={p.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 transition hover:text-foreground">
-                官网 <ExternalLink className="h-2.5 w-2.5" />
+                {t({ zh: '官网', en: 'Website' })} <ExternalLink className="h-2.5 w-2.5" />
               </a>
             )}
             {p.docsUrl && (
               <a href={p.docsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 transition hover:text-foreground">
-                获取 Key <ExternalLink className="h-2.5 w-2.5" />
+                {t({ zh: '获取 Key', en: 'Get a Key' })} <ExternalLink className="h-2.5 w-2.5" />
               </a>
             )}
           </div>
@@ -551,7 +561,7 @@ function ProviderDetail({
             p.hasApiKey ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground',
           )}
         >
-          {p.hasApiKey ? '已配置' : '未配置'}
+          {p.hasApiKey ? t({ zh: '已配置', en: 'Configured' }) : t({ zh: '未配置', en: 'Not configured' })}
         </span>
       </div>
 
@@ -568,12 +578,12 @@ function ProviderDetail({
                 onClick={() => void runProbe({ reason: 'manual' })}
                 disabled={probe.status === 'loading' || (!keyDirty && !p.hasApiKey)}
                 className="flex items-center gap-1 rounded text-[10px] font-medium text-primary/90 transition hover:text-primary disabled:opacity-40"
-                title="用当前输入的 Key 立即检测可用模型"
+                title={t({ zh: '用当前输入的 Key 立即检测可用模型', en: 'Detect available models now using the entered Key' })}
               >
                 {probe.status === 'loading'
                   ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
                   : <RefreshCw className="h-2.5 w-2.5" />}
-                检测模型
+                {t({ zh: '检测模型', en: 'Detect models' })}
               </button>
             )}
           </div>
@@ -589,7 +599,7 @@ function ProviderDetail({
               }}
               onPaste={() => { setTimeout(() => { if (apiKey.trim().length >= 8) void runProbe({ reason: 'auto' }) }, 500) }}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void runProbe({ reason: 'enter' }) } }}
-              placeholder={p.id === 'zai' ? '内置通道，无需 API Key' : p.hasApiKey ? '留空保留现有 Key' : isLocal ? '本地服务可填任意值（如 none）' : `粘贴 ${p.label} 的 Key 后自动检测模型…`}
+              placeholder={p.id === 'zai' ? t({ zh: '内置通道，无需 API Key', en: 'Built-in channel — no API Key needed' }) : p.hasApiKey ? t({ zh: '留空保留现有 Key', en: 'Leave empty to keep the existing Key' }) : isLocal ? t({ zh: '本地服务可填任意值（如 none）', en: 'For local services, fill in any value (e.g. none)' }) : t({ zh: `粘贴 ${p.label} 的 Key 后自动检测模型…`, en: `Paste your ${p.label} Key to auto-detect models…` })}
               autoComplete="off"
               spellCheck={false}
               disabled={p.id === 'zai'}
@@ -598,7 +608,7 @@ function ProviderDetail({
             <button
               type="button"
               onClick={() => setShowKey(v => !v)}
-              aria-label={showKey ? '隐藏 Key' : '显示 Key'}
+              aria-label={showKey ? t({ zh: '隐藏 Key', en: 'Hide Key' }) : t({ zh: '显示 Key', en: 'Show Key' })}
               className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground/60 transition hover:text-foreground"
             >
               {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -612,14 +622,14 @@ function ProviderDetail({
         <section className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80">
-              <ServerCog className="h-2.5 w-2.5" /> 模型
+              <ServerCog className="h-2.5 w-2.5" /> {t({ zh: '模型', en: 'Model' })}
             </label>
             <span className="text-[9px] text-muted-foreground/50">
               {probe.status === 'ok' && probe.models.length > 0
-                ? `已检测 ${probe.total} 个`
+                ? t({ zh: `已检测 ${probe.total} 个`, en: `${probe.total} detected` })
                 : probe.status === 'ok'
-                  ? '端点连通，列表不可用'
-                  : '目录预设 · 可搜索后直接输入自定义 ID'}
+                  ? t({ zh: '端点连通，列表不可用', en: 'Endpoint reachable, list unavailable' })
+                  : t({ zh: '目录预设 · 可搜索后直接输入自定义 ID', en: 'Catalog presets · search or type a custom ID directly' })}
             </span>
           </div>
 
@@ -636,7 +646,7 @@ function ProviderDetail({
                 )}
               >
                 <span className={cn('min-w-0 flex-1 truncate font-mono text-xs', model ? 'text-foreground' : 'text-muted-foreground/45')}>
-                  {model || '选择或输入模型 ID…'}
+                  {model || t({ zh: '选择或输入模型 ID…', en: 'Select or type a model ID…' })}
                 </span>
                 {probe.status === 'loading' && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground/60" />}
                 {probe.status === 'ok' && probe.models.length > 0 && (
@@ -652,18 +662,18 @@ function ProviderDetail({
                 <CommandInput
                   value={modelQuery}
                   onValueChange={setModelQuery}
-                  placeholder="搜索模型，或输入自定义 ID 后选择…"
+                  placeholder={t({ zh: '搜索模型，或输入自定义 ID 后选择…', en: 'Search models, or type a custom ID and select it…' })}
                   className="h-8 text-xs"
                 />
                 <CommandList id={`model-list-${p.id}`} className="mol-scroll max-h-64 py-1">
                   <CommandEmpty className="py-3 text-center text-[11px] text-muted-foreground">
-                    无匹配模型——直接输入自定义 ID 选择
+                    {t({ zh: '无匹配模型——直接输入自定义 ID 选择', en: 'No matching models — type a custom ID to select it' })}
                   </CommandEmpty>
                   {KIND_GROUP.map(g => {
                     const items = modelList.filter(m => g.match(m.kind))
                     if (items.length === 0) return null
                     return (
-                      <CommandGroup key={g.label} heading={g.label}>
+                      <CommandGroup key={g.id} heading={t(g.label)}>
                         {items.slice(0, 200).map(m => (
                           <CommandItem
                             key={m.id}
@@ -675,17 +685,17 @@ function ProviderDetail({
                           </CommandItem>
                         ))}
                         {items.length > 200 && (
-                          <p className="px-2 py-1 text-[9px] text-muted-foreground/50">…还有 {items.length - 200} 个，请搜索缩小范围</p>
+                          <p className="px-2 py-1 text-[9px] text-muted-foreground/50">{t({ zh: `…还有 ${items.length - 200} 个，请搜索缩小范围`, en: `…${items.length - 200} more — search to narrow down` })}</p>
                         )}
                       </CommandGroup>
                     )
                   })}
                   {/* 搜索词直接作为自定义模型 ID（私有部署/最新模型） */}
                   {modelQuery.trim().length >= 2 && !modelList.some(m => m.id === modelQuery.trim()) && (
-                    <CommandGroup heading="自定义">
+                    <CommandGroup heading={t({ zh: '自定义', en: 'Custom' })}>
                       <CommandItem value={`__custom__${modelQuery.trim()}`} onSelect={() => { setModel(modelQuery.trim()); setModelOpen(false) }} className="gap-2 text-xs">
                         <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{modelQuery.trim()}</span>
-                        <span className="shrink-0 rounded bg-primary/10 px-1.5 py-px text-[9px] font-medium text-primary">使用此 ID</span>
+                        <span className="shrink-0 rounded bg-primary/10 px-1.5 py-px text-[9px] font-medium text-primary">{t({ zh: '使用此 ID', en: 'Use this ID' })}</span>
                       </CommandItem>
                     </CommandGroup>
                   )}
@@ -696,7 +706,7 @@ function ProviderDetail({
 
           {modelNotInList && (
             <p className="text-[10px] leading-relaxed text-amber-600 dark:text-amber-400/90">
-              当前模型不在检测列表中——若为自定义部署 ID 属正常，保存即可
+              {t({ zh: '当前模型不在检测列表中——若为自定义部署 ID 属正常，保存即可', en: 'The current model is not in the detected list — normal for custom deployment IDs; just save' })}
             </p>
           )}
         </section>
@@ -706,9 +716,9 @@ function ProviderDetail({
           <div className="flex items-center justify-between">
             <label htmlFor={`base-${p.id}`} className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80">
               <Globe className="h-2.5 w-2.5" /> Base URL
-              {p.hasBaseURLOverride && <span className="rounded bg-muted px-1 py-px font-normal normal-case tracking-normal text-[9px]">自定义</span>}
+              {p.hasBaseURLOverride && <span className="rounded bg-muted px-1 py-px font-normal normal-case tracking-normal text-[9px]">{t({ zh: '自定义', en: 'Custom' })}</span>}
             </label>
-            <span className="text-[9px] text-muted-foreground/50">代理 / 私有部署时修改</span>
+            <span className="text-[9px] text-muted-foreground/50">{t({ zh: '代理 / 私有部署时修改', en: 'Change for proxies / private deployments' })}</span>
           </div>
           <input
             id={`base-${p.id}`}
@@ -724,7 +734,7 @@ function ProviderDetail({
         {/* 说明 */}
         {p.note && (
           <p className="rounded-md border border-border/50 bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            {p.note}
+            {t(p.note)}
           </p>
         )}
       </div>
@@ -739,7 +749,7 @@ function ProviderDetail({
               className="flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground/80 transition hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50"
             >
               {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-              删除
+              {t({ zh: '删除', en: 'Delete' })}
             </button>
           )}
           {p.hasApiKey && !p.isDefault && (
@@ -747,13 +757,13 @@ function ProviderDetail({
               onClick={onSetDefault}
               className="flex h-7 items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 text-[11px] font-medium text-amber-700 transition hover:bg-amber-500/20 dark:text-amber-400"
             >
-              <Star className="h-3 w-3" /> 设为默认
+              <Star className="h-3 w-3" /> {t({ zh: '设为默认', en: 'Set as default' })}
             </button>
           )}
         </div>
         <div className="flex items-center gap-1.5">
           <span className="hidden items-center gap-0.5 text-[9px] text-muted-foreground/45 sm:flex">
-            <CornerDownLeft className="h-2.5 w-2.5" /> Key 输入框回车即检测
+            <CornerDownLeft className="h-2.5 w-2.5" /> {t({ zh: 'Key 输入框回车即检测', en: 'Press Enter in the Key field to detect' })}
           </span>
           <button
             onClick={() => void save()}
@@ -761,7 +771,7 @@ function ProviderDetail({
             className="mol-btn-primary flex h-7 items-center gap-1.5 rounded-md bg-primary px-3.5 text-[11px] font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-            保存配置
+            {t({ zh: '保存配置', en: 'Save configuration' })}
           </button>
         </div>
       </div>
@@ -771,11 +781,12 @@ function ProviderDetail({
 
 /** 探测状态反馈行（Key 输入框下方） */
 function ProbeFeedback({ probe, hasStored, onRetry }: { probe: ProbeState; hasStored: boolean; onRetry: () => void }) {
+  const { t } = useI18n()
   if (probe.status === 'loading') {
     return (
       <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
         <Loader2 className="h-2.5 w-2.5 animate-spin" />
-        正在检测可用模型…
+        {t({ zh: '正在检测可用模型…', en: 'Detecting available models…' })}
       </p>
     )
   }
@@ -784,8 +795,8 @@ function ProbeFeedback({ probe, hasStored, onRetry }: { probe: ProbeState; hasSt
       <p className="flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
         {probe.models.length > 0
-          ? `已连通 · 检测到 ${probe.total} 个模型（下方模型列表已更新）`
-          : `已连通${probe.note ? ` · ${probe.note}` : ''}`}
+          ? t({ zh: `已连通 · 检测到 ${probe.total} 个模型（下方模型列表已更新）`, en: `Connected · ${probe.total} models detected (model list below updated)` })
+          : t({ zh: `已连通${probe.note ? ` · ${probe.note}` : ''}`, en: `Connected${probe.note ? ` · ${probe.note}` : ''}` })}
       </p>
     )
   }
@@ -795,14 +806,14 @@ function ProbeFeedback({ probe, hasStored, onRetry }: { probe: ProbeState; hasSt
         <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
         <span className="min-w-0 flex-1 break-words">{probe.error}</span>
         <button onClick={onRetry} className="shrink-0 font-medium underline underline-offset-2 transition hover:opacity-70">
-          重试
+          {t({ zh: '重试', en: 'Retry' })}
         </button>
       </p>
     )
   }
   return (
     <p className="text-[10px] text-muted-foreground/55">
-      {hasStored ? '已保存 Key——粘贴新值可替换，留空保留' : '输入 Key 后自动检测该账号可用的模型列表'}
+      {hasStored ? t({ zh: '已保存 Key——粘贴新值可替换，留空保留', en: 'Key saved — paste a new value to replace it, or leave empty to keep it' }) : t({ zh: '输入 Key 后自动检测该账号可用的模型列表', en: 'Enter a Key to auto-detect the models available to this account' })}
     </p>
   )
 }

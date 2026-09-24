@@ -1,6 +1,7 @@
 // PyMOL 风格原子选择表达式：chain A and (resi 50-60 or resn HEM) | within 4 of (ligand) | byres(...)
 import { AMINO_ACIDS, NUCLEIC_ACIDS, WATERS, elementInfo, BACKBONE_ATOMS } from './chemistry'
 import type { StructureData } from './parser'
+import { tt, type DualText } from '@/i18n'
 
 export interface EvalContext {
   structure: StructureData
@@ -31,7 +32,7 @@ function tokenize(src: string): Tok[] | { error: string } {
     }
     if (ch === '"' || ch === "'") {
       const end = src.indexOf(ch, i + 1)
-      if (end === -1) return { error: '未闭合的引号' }
+      if (end === -1) return { error: tt({ zh: '未闭合的引号', en: 'Unclosed quote' }) }
       toks.push({ t: 'word', v: src.slice(i + 1, end) })
       i = end + 1
       continue
@@ -72,7 +73,7 @@ class Evaluator {
   parse(): Uint8Array | { error: string } {
     const r = this.parseOr()
     if (r && 'error' in r) return r
-    if (this.pos < this.toks.length) return { error: `无法解析的多余内容：${JSON.stringify(this.toks[this.pos])}` }
+    if (this.pos < this.toks.length) return { error: tt({ zh: `无法解析的多余内容：${JSON.stringify(this.toks[this.pos])}`, en: `Unparseable trailing content: ${JSON.stringify(this.toks[this.pos])}` }) }
     return r
   }
 
@@ -113,15 +114,15 @@ class Evaluator {
 
   parsePrimary(): Uint8Array | { error: string } {
     const t = this.peek()
-    if (!t) return { error: '表达式意外结束' }
+    if (!t) return { error: tt({ zh: '表达式意外结束', en: 'Unexpected end of expression' }) }
     if (t.t === 'punct' && t.v === '(') {
       this.next()
       const inner = this.parseOr()
       if (inner && 'error' in inner) return inner
-      if (!this.expectPunct(')')) return { error: '缺少右括号 )' }
+      if (!this.expectPunct(')')) return { error: tt({ zh: '缺少右括号 )', en: 'Missing closing parenthesis )' }) }
       return inner
     }
-    if (t.t !== 'word') return { error: `意外的符号 ${t.v}` }
+    if (t.t !== 'word') return { error: tt({ zh: `意外的符号 ${t.v}`, en: `Unexpected token ${t.v}` }) }
     const kw = t.v.toLowerCase()
 
     // 零参数谓词
@@ -133,8 +134,8 @@ class Evaluator {
     if (kw === 'within' || kw === 'within5' || kw === 'near') {
       this.next()
       const num = this.next()
-      if (!num || num.t !== 'num') return { error: 'within 需要距离数值，如 within 5 of (...)' }
-      if (!this.isWord('of')) return { error: 'within 语法：within <距离> of (<表达式>)' }
+      if (!num || num.t !== 'num') return { error: tt({ zh: 'within 需要距离数值，如 within 5 of (...)', en: 'within requires a distance value, e.g. within 5 of (...)' }) }
+      if (!this.isWord('of')) return { error: tt({ zh: 'within 语法：within <距离> of (<表达式>)', en: 'within syntax: within <distance> of (<expression>)' }) }
       this.next()
       const inner = this.parsePrimary()
       if (inner && 'error' in inner) return inner
@@ -155,9 +156,9 @@ class Evaluator {
     if (kw === 'bfactor' || kw === 'b') {
       this.next()
       const op = this.next()
-      if (!op || op.t !== 'punct' || !['<', '>', '='].includes(op.v)) return { error: 'bfactor 需要比较符 < > =' }
+      if (!op || op.t !== 'punct' || !['<', '>', '='].includes(op.v)) return { error: tt({ zh: 'bfactor 需要比较符 < > =', en: 'bfactor requires a comparison operator < > =' }) }
       const val = this.next()
-      if (!val || val.t !== 'num') return { error: 'bfactor 需要数值' }
+      if (!val || val.t !== 'num') return { error: tt({ zh: 'bfactor 需要数值', en: 'bfactor requires a numeric value' }) }
       return bfactorCmp(this.ctx, op.v, val.v)
     }
     // 单参数谓词
@@ -166,7 +167,7 @@ class Evaluator {
       this.next()
       const values = this.parseValueList()
       if (values instanceof Array === false) return values as { error: string }
-      if (!values.length) return { error: `${t.v} 需要参数值` }
+      if (!values.length) return { error: tt({ zh: `${t.v} 需要参数值`, en: `${t.v} requires argument values` }) }
       return one(this.ctx, values)
     }
     // 命名选择
@@ -175,7 +176,7 @@ class Evaluator {
       this.next()
       return namedMask.slice()
     }
-    return { error: `无法识别的选择词 "${t.v}"` }
+    return { error: tt({ zh: `无法识别的选择词 "${t.v}"`, en: `Unrecognized selection keyword "${t.v}"` }) }
   }
 
   parseValueList(): string[] | { error: string } {
@@ -183,11 +184,11 @@ class Evaluator {
     // PyMOL 宽容语法：谓词后裸 '='（resn = ALA / chain = A）——静默跳过，语义与省略等价
     if (this.peek()?.t === 'punct' && (this.peek() as { v: string }).v === '=') this.next()
     const first = this.next()
-    if (!first) return { error: '缺少参数值' }
+    if (!first) return { error: tt({ zh: '缺少参数值', en: 'Missing argument value' }) }
     // 负数首值：'-5'（'-' 是独立 punct）
     if (first.t === 'punct' && first.v === '-') {
       const v = this.next()
-      if (!v) return { error: '缺少参数值' }
+      if (!v) return { error: tt({ zh: '缺少参数值', en: 'Missing argument value' }) }
       values.push(`-${(v as { v: number | string }).v}`)
     } else {
       values.push(String((first as { v: string | number }).v))
@@ -199,7 +200,7 @@ class Evaluator {
       if (!p || p.t !== 'punct' || (p.v !== '+' && p.v !== '-')) break
       this.next()
       const v = this.next()
-      if (!v) return { error: '列表/范围不完整' }
+      if (!v) return { error: tt({ zh: '列表/范围不完整', en: 'Incomplete list/range' }) }
       const val = String((v as { v: string | number }).v)
       if (p.v === '+') {
         values.push(val)
@@ -426,24 +427,24 @@ function matchByResidue(ctx: EvalContext, left: Uint8Array, right: Uint8Array, s
 
 // ---------- 预设选择 ----------
 
-export const PRESET_SELECTIONS: { value: string; label: string }[] = [
-  { value: 'all', label: 'all — 全部原子' },
-  { value: 'polymer', label: 'polymer — 聚合物(蛋白+核酸)' },
-  { value: 'protein', label: 'protein — 氨基酸' },
-  { value: 'nucleic', label: 'nucleic — 核酸' },
-  { value: 'ligand', label: 'ligand — 配体' },
-  { value: 'molecule 0', label: 'molecule N — 第 N 个配体分子（0 基）' },
-  { value: 'hetero', label: 'hetero — 非聚合物' },
-  { value: 'water', label: 'water — 水' },
-  { value: 'metal', label: 'metal — 金属离子' },
-  { value: 'backbone', label: 'backbone — 主链' },
-  { value: 'sidechain', label: 'sidechain — 侧链' },
-  { value: 'helix', label: 'helix — 螺旋' },
-  { value: 'sheet', label: 'sheet — β折叠' },
-  { value: 'ss h', label: 'ss h/s/l — 二级结构（PyMOL 字母体系）' },
-  { value: 'b > 50', label: 'b > 50 — B 因子比较（q 占据率同理）' },
-  { value: 'chain A and resi 50-100', label: 'chain X and resi N-M — 链+残基号组合' },
-  { value: 'not hydrogen', label: 'not hydrogen — 排除氢原子' },
+export const PRESET_SELECTIONS: { value: string; label: DualText }[] = [
+  { value: 'all', label: { zh: 'all — 全部原子', en: 'all — all atoms' } },
+  { value: 'polymer', label: { zh: 'polymer — 聚合物(蛋白+核酸)', en: 'polymer — polymer (protein + nucleic acid)' } },
+  { value: 'protein', label: { zh: 'protein — 氨基酸', en: 'protein — amino acids' } },
+  { value: 'nucleic', label: { zh: 'nucleic — 核酸', en: 'nucleic — nucleic acids' } },
+  { value: 'ligand', label: { zh: 'ligand — 配体', en: 'ligand — ligands' } },
+  { value: 'molecule 0', label: { zh: 'molecule N — 第 N 个配体分子（0 基）', en: 'molecule N — the Nth ligand molecule (0-based)' } },
+  { value: 'hetero', label: { zh: 'hetero — 非聚合物', en: 'hetero — non-polymer' } },
+  { value: 'water', label: { zh: 'water — 水', en: 'water — water' } },
+  { value: 'metal', label: { zh: 'metal — 金属离子', en: 'metal — metal ions' } },
+  { value: 'backbone', label: { zh: 'backbone — 主链', en: 'backbone — backbone atoms' } },
+  { value: 'sidechain', label: { zh: 'sidechain — 侧链', en: 'sidechain — side chains' } },
+  { value: 'helix', label: { zh: 'helix — 螺旋', en: 'helix — helices' } },
+  { value: 'sheet', label: { zh: 'sheet — β折叠', en: 'sheet — β-strands' } },
+  { value: 'ss h', label: { zh: 'ss h/s/l — 二级结构（PyMOL 字母体系）', en: 'ss h/s/l — secondary structure (PyMOL letters)' } },
+  { value: 'b > 50', label: { zh: 'b > 50 — B 因子比较（q 占据率同理）', en: 'b > 50 — B-factor comparison (q occupancy works the same)' } },
+  { value: 'chain A and resi 50-100', label: { zh: 'chain X and resi N-M — 链+残基号组合', en: 'chain X and resi N-M — chain + residue-number combination' } },
+  { value: 'not hydrogen', label: { zh: 'not hydrogen — 排除氢原子', en: 'not hydrogen — exclude hydrogens' } },
 ]
 
 // ---------- 求值入口 ----------

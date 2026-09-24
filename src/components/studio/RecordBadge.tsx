@@ -6,6 +6,7 @@ import { CircleStop } from 'lucide-react'
 import { toast } from 'sonner'
 import { engineRef } from '@/lib/molecular/store'
 import { useRecordStore } from '@/lib/molecular/record-store'
+import { useI18n, tt } from '@/i18n'
 
 function timestampName(): string {
   const d = new Date()
@@ -14,6 +15,7 @@ function timestampName(): string {
 }
 
 export function RecordBadge() {
+  const { t } = useI18n()
   const recording = useRecordStore(s => s.recording)
   const setRecording = useRecordStore(s => s.setRecording)
   const timeRef = useRef<HTMLSpanElement>(null)
@@ -42,7 +44,7 @@ export function RecordBadge() {
     const blob = await eng.stopRecording()
     setRecording(false)
     if (!blob || blob.size === 0) {
-      toast.error('录制内容为空')
+      toast.error(tt({ zh: '录制内容为空', en: 'Recording is empty' }))
       return
     }
     const url = URL.createObjectURL(blob)
@@ -53,8 +55,8 @@ export function RecordBadge() {
     a.click()
     a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 5000)
-    toast.success('动画已导出为 WebM 视频', {
-      description: `${(blob.size / 1024 / 1024).toFixed(1)} MB · ${elapsed.toFixed(1)} 秒 · 30 fps`,
+    toast.success(tt({ zh: '动画已导出为 WebM 视频', en: 'Animation exported as a WebM video' }), {
+      description: tt({ zh: `${(blob.size / 1024 / 1024).toFixed(1)} MB · ${elapsed.toFixed(1)} 秒 · 30 fps`, en: `${(blob.size / 1024 / 1024).toFixed(1)} MB · ${elapsed.toFixed(1)} s · 30 fps` }),
     })
   }
 
@@ -70,9 +72,9 @@ export function RecordBadge() {
       <button
         onClick={() => void stop()}
         className="flex h-6 items-center gap-1 rounded-full bg-red-500/90 px-2 text-[10px] font-semibold text-white transition hover:bg-red-600"
-        title="停止并下载 WebM"
+        title={t({ zh: '停止并下载 WebM', en: 'Stop and download the WebM' })}
       >
-        <CircleStop className="h-3 w-3" /> 停止
+        <CircleStop className="h-3 w-3" /> {t({ zh: '停止', en: 'Stop' })}
       </button>
     </div>
   )

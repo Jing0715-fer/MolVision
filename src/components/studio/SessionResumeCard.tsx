@@ -7,17 +7,19 @@ import { useRef, useState } from 'react'
 import { ArrowRight, HardDriveDownload } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
+import { useI18n, tt, type DualText } from '@/i18n'
 import { restoreSession, sessionSnapshot } from '@/lib/molecular/session'
 
-function relTime(ts: number): string {
+function relTime(ts: number): DualText {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000))
-  if (s < 60) return '刚刚'
-  if (s < 3600) return `${Math.round(s / 60)} 分钟前`
-  if (s < 86400) return `${Math.round(s / 3600)} 小时前`
-  return `${Math.round(s / 86400)} 天前`
+  if (s < 60) return { zh: '刚刚', en: 'just now' }
+  if (s < 3600) return { zh: `${Math.round(s / 60)} 分钟前`, en: `${Math.round(s / 60)} min ago` }
+  if (s < 86400) return { zh: `${Math.round(s / 3600)} 小时前`, en: `${Math.round(s / 3600)} h ago` }
+  return { zh: `${Math.round(s / 86400)} 天前`, en: `${Math.round(s / 86400)} d ago` }
 }
 
 function SessionResumeCard() {
+  const { t } = useI18n()
   const loading = useMolStore(s => s.loading)
   // 仅客户端渲染：localStorage 惰性读取安全
   const [session] = useState(sessionSnapshot)
@@ -31,11 +33,11 @@ function SessionResumeCard() {
     restoring.current = true
     const n = restoreSession()
     if (n > 0) {
-      toast.success('已恢复上次会话', { description: `${n} 个结构 · 表示法与相机视角已还原` })
+      toast.success(tt({ zh: '已恢复上次会话', en: 'Previous session restored' }), { description: tt({ zh: `${n} 个结构 · 表示法与相机视角已还原`, en: `${n} structures · representations and camera views restored` }) })
     } else {
       restoring.current = false
       setGone(true)
-      toast.error('会话恢复失败', { description: '本地存档中没有可恢复的结构，已忽略' })
+      toast.error(tt({ zh: '会话恢复失败', en: 'Session restore failed' }), { description: tt({ zh: '本地存档中没有可恢复的结构，已忽略', en: 'No recoverable structures in the local autosave; ignored' }) })
     }
   }
 
@@ -55,9 +57,9 @@ function SessionResumeCard() {
         <HardDriveDownload className="h-4 w-4 text-primary" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-medium leading-tight">继续上次会话</span>
+        <span className="block text-[13px] font-medium leading-tight">{t({ zh: '继续上次会话', en: 'Resume last session' })}</span>
         <span className="mt-1 block truncate font-mono text-[10px] leading-none tabular-nums text-muted-foreground">
-          {session.count} 个结构 · {session.names.join(' / ')} · {relTime(session.savedAt)}
+          {t({ zh: `${session.count} 个结构`, en: `${session.count} structures` })} · {session.names.join(' / ')} · {t(relTime(session.savedAt))}
         </span>
       </span>
       <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-[transform,color] duration-200 group-hover:translate-x-0.5 group-hover:text-primary" />

@@ -28,12 +28,14 @@ import { useEnsembleStore } from '@/lib/molecular/ensemble-store'
 import { useViewsStore } from '@/lib/molecular/views-store'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import { useMovieStore, stopMovie } from '@/lib/molecular/movie'
+import { useI18n, tt, type TranslateInput } from '@/i18n'
 import { MovieBadge } from '@/components/studio/MovieBadge'
 import { MovieTimeline } from '@/components/studio/MovieTimeline'
 
 interface HoverState { text: string; x: number; y: number; sub?: string }
 
 export default function MolViewer() {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const engine = useRef<MolEngine | null>(null)
   const [hover, setHover] = useState<HoverState | null>(null)
@@ -113,14 +115,24 @@ export default function MolViewer() {
         const rect = el.getBoundingClientRect()
         const molIdx = data.atomMolecule[i] ?? -1
         const mol = molIdx >= 0 ? data.molecules[molIdx] : null
+        const chain = a.chainIds[i].trim() || '?'
+        const bTxt = a.bfactors[i] ? ` · B=${a.bfactors[i].toFixed(1)}` : ''
+        const hetTxt = a.hetero[i] ? ' · HET' : ''
+        // 名称/坐标/化学记号不译，固定前缀字样（链/螺旋/折叠/分子）按双语
         setHover({
           text: `${a.names[i]} · ${a.resNames[i]} ${a.resSeqs[i]}${a.iCodes[i] || ''}`,
-          sub: `链 ${a.chainIds[i].trim() || '?'} · ${a.elements[i]}${a.hetero[i] ? ' · HET' : ''}${a.bfactors[i] ? ` · B=${a.bfactors[i].toFixed(1)}` : ''}${res.ss === 'H' ? ' · 螺旋' : res.ss === 'E' ? ' · 折叠' : ''}${mol ? ` · 分子 ${mol.label}（${mol.atoms} 原子）` : ''}`,
+          sub: tt({
+            zh: `链 ${chain} · ${a.elements[i]}${hetTxt}${bTxt}${res.ss === 'H' ? ' · 螺旋' : res.ss === 'E' ? ' · 折叠' : ''}${mol ? ` · 分子 ${mol.label}（${mol.atoms} 原子）` : ''}`,
+            en: `Chain ${chain} · ${a.elements[i]}${hetTxt}${bTxt}${res.ss === 'H' ? ' · helix' : res.ss === 'E' ? ' · strand' : ''}${mol ? ` · Molecule ${mol.label} (${mol.atoms} atoms)` : ''}`,
+          }),
           x: info.x - rect.left + 14,
           y: info.y - rect.top + 14,
         })
         useHoverStore.getState().setText(
-          `链 ${a.chainIds[i].trim() || '?'} · ${a.resNames[i]} ${a.resSeqs[i]} · ${a.names[i]} (${a.elements[i]})${a.bfactors[i] ? ` · B=${a.bfactors[i].toFixed(1)}` : ''}`
+          tt({
+            zh: `链 ${chain} · ${a.resNames[i]} ${a.resSeqs[i]} · ${a.names[i]} (${a.elements[i]})${bTxt}`,
+            en: `Chain ${chain} · ${a.resNames[i]} ${a.resSeqs[i]} · ${a.names[i]} (${a.elements[i]})${bTxt}`,
+          })
         )
       },
       onPick: (pick, empty) => handlePick(pick, empty),
@@ -244,7 +256,7 @@ export default function MolViewer() {
       // movie 序列播放中 Esc 停止；否则时间轴打开时 Esc 关闭时间轴
       if (e.key === 'Escape' && useMovieStore.getState().playing) {
         stopMovie()
-        store.appendLog('out', 'movie 序列播放已停止（Esc）')
+        store.appendLog('out', tt({ zh: 'movie 序列播放已停止（Esc）', en: 'movie sequence playback stopped (Esc)' }))
         return
       }
       if (e.key === 'Escape' && useMovieStore.getState().timelineOpen) {
@@ -258,9 +270,9 @@ export default function MolViewer() {
         const b = vs.bookmarks[idx]
         if (b) {
           vs.restoreBookmark(b.id)
-          store.appendLog('out', `已跳转到视角书签「${b.name}」`)
+          store.appendLog('out', tt({ zh: `已跳转到视角书签「${b.name}」`, en: `Jumped to view bookmark "${b.name}"` }))
         } else {
-          toast.error(`视角书签 ${idx + 1} 不存在`, { description: '按 V 保存当前视角后再跳转' })
+          toast.error(tt({ zh: `视角书签 ${idx + 1} 不存在`, en: `View bookmark ${idx + 1} does not exist` }), { description: tt({ zh: '按 V 保存当前视角后再跳转', en: 'Press V to save the current view first' }) })
         }
         return
       }
@@ -276,42 +288,54 @@ export default function MolViewer() {
           break
         case 's': case 'S':
           store.updateSettings({ spin: !store.settings.spin, ...(store.settings.spin ? {} : { rock: false }) })
-          toast.info(store.settings.spin ? '自动旋转已停止' : '自动旋转已开启', {
-            description: store.settings.spin ? '快捷键 S · 场景面板可再切换' : '结构持续水平旋转 · 再按 S 停止（场景面板有速度滑杆）',
+          toast.info(tt(store.settings.spin
+            ? { zh: '自动旋转已停止', en: 'Spin stopped' }
+            : { zh: '自动旋转已开启', en: 'Spin enabled' }), {
+            description: tt(store.settings.spin
+              ? { zh: '快捷键 S · 场景面板可再切换', en: 'Shortcut S · toggle again in the Scene panel' }
+              : { zh: '结构持续水平旋转 · 再按 S 停止（场景面板有速度滑杆）', en: 'Structure rotates continuously · press S again to stop (speed slider in the Scene panel)' }),
           })
           break
         case 'r': case 'R':
           store.updateSettings({ rock: !store.settings.rock, ...(store.settings.rock ? {} : { spin: false }) })
-          toast.info(store.settings.rock ? '相机摇摆已停止' : '相机摇摆已开启', {
-            description: store.settings.rock ? '快捷键 R · 场景面板可再切换' : '±26° 往复摆动观察口袋深度 · 再按 R 停止',
+          toast.info(tt(store.settings.rock
+            ? { zh: '相机摇摆已停止', en: 'Rocking stopped' }
+            : { zh: '相机摇摆已开启', en: 'Rocking enabled' }), {
+            description: tt(store.settings.rock
+              ? { zh: '快捷键 R · 场景面板可再切换', en: 'Shortcut R · toggle again in the Scene panel' }
+              : { zh: '±26° 往复摆动观察口袋深度 · 再按 R 停止', en: '±26° oscillation to inspect pocket depth · press R again to stop' }),
           })
           break
         case 'h': case 'H': {
           const on = !store.settings.hideHydrogens
           store.updateSettings({ hideHydrogens: on })
-          toast.info(on ? '氢原子已隐藏' : '氢原子已显示', { description: '快捷键 H · 场景面板可再切换' })
+          toast.info(tt(on
+            ? { zh: '氢原子已隐藏', en: 'Hydrogens hidden' }
+            : { zh: '氢原子已显示', en: 'Hydrogens shown' }), { description: tt({ zh: '快捷键 H · 场景面板可再切换', en: 'Shortcut H · toggle again in the Scene panel' }) })
           break
         }
         case 'w': case 'W': {
           const on = !store.settings.hideWater
           store.updateSettings({ hideWater: on })
-          toast.info(on ? '水分子已隐藏' : '水分子已显示', { description: '快捷键 W · 场景面板可再切换' })
+          toast.info(tt(on
+            ? { zh: '水分子已隐藏', en: 'Waters hidden' }
+            : { zh: '水分子已显示', en: 'Waters shown' }), { description: tt({ zh: '快捷键 W · 场景面板可再切换', en: 'Shortcut W · toggle again in the Scene panel' }) })
           break
         }
         case 'b': case 'B': {
           const on = !store.settings.showHBonds
           store.updateSettings({ showHBonds: on })
           if (!on) {
-            toast.info('氢键网络已关闭', { description: '快捷键 B · 场景面板可再开启' })
+            toast.info(tt({ zh: '氢键网络已关闭', en: 'H-bond network off' }), { description: tt({ zh: '快捷键 B · 场景面板可再开启', en: 'Shortcut B · re-enable in the Scene panel' }) })
           } else if (store.settings.hbondSelOnly && store.selection.indices.length === 0) {
-            toast.info('氢键网络已开启（仅选择集）', {
-              description: '点击残基/链建立选择后显示其氢键（带端点球）——全局网络对大结构过于密集；场景面板「氢键仅选择集」可切换全局模式',
+            toast.info(tt({ zh: '氢键网络已开启（仅选择集）', en: 'H-bond network on (selection only)' }), {
+              description: tt({ zh: '点击残基/链建立选择后显示其氢键（带端点球）——全局网络对大结构过于密集；场景面板「氢键仅选择集」可切换全局模式', en: 'Pick residues/chains to build a selection and show its H-bonds (with endpoint spheres) — the global network is too dense for large structures; switch in the Scene panel' }),
             })
           } else {
-            toast.info('氢键网络已开启', {
-              description: store.settings.hbondSelOnly
-                ? '当前选择集范围内显示虚线与端点球 · 快捷键 B 关闭'
-                : '全结构网络（大结构较密）· 快捷键 B 关闭',
+            toast.info(tt({ zh: '氢键网络已开启', en: 'H-bond network on' }), {
+              description: tt(store.settings.hbondSelOnly
+                ? { zh: '当前选择集范围内显示虚线与端点球 · 快捷键 B 关闭', en: 'Dashes and endpoint spheres shown within the current selection · press B to turn off' }
+                : { zh: '全结构网络（大结构较密）· 快捷键 B 关闭', en: 'Whole-structure network (dense for large structures) · press B to turn off' }),
             })
           }
           break
@@ -334,9 +358,9 @@ export default function MolViewer() {
           if (e.ctrlKey || e.metaKey || e.altKey) break
           const bm = useViewsStore.getState().addBookmark()
           if (bm) {
-            toast.success(`已保存视角书签「${bm.name}」`, { description: 'Shift+数字键快速跳转 · 视口右缘可管理' })
+            toast.success(tt({ zh: `已保存视角书签「${bm.name}」`, en: `View bookmark "${bm.name}" saved` }), { description: tt({ zh: 'Shift+数字键快速跳转 · 视口右缘可管理', en: 'Jump with Shift+number · manage at the viewport edge' }) })
           } else if (useViewsStore.getState().bookmarks.length >= 12) {
-            toast.error('书签已达上限（12）', { description: '在视口右缘删除不再需要的书签' })
+            toast.error(tt({ zh: '书签已达上限（12）', en: 'Bookmark limit reached (12)' }), { description: tt({ zh: '在视口右缘删除不再需要的书签', en: 'Delete unneeded bookmarks at the viewport edge' }) })
           }
           break
         }
@@ -427,7 +451,7 @@ export default function MolViewer() {
       }
       useMolStore.getState().setActive(ctxMenu.pick.structureId)
       useMolStore.getState().setSelection(ctxMenu.pick.structureId, indices)
-      useMolStore.getState().appendLog('out', `已选择周围环境：${resSet.size} 个残基（5Å）`)
+      useMolStore.getState().appendLog('out', tt({ zh: `已选择周围环境：${resSet.size} 个残基（5Å）`, en: `Selected environment: ${resSet.size} residues within 5Å` }))
     },
     sameResidue: () => {
       if (!ctxMenu) return
@@ -520,23 +544,23 @@ export default function MolViewer() {
               {ctxInfo}
             </div>
           )}
-          <CtxItem onClick={() => { ctxActions.atom(); setCtxMenu(null) }}>选择此原子</CtxItem>
-          <CtxItem onClick={() => { ctxActions.residue(); setCtxMenu(null) }}>选择此残基</CtxItem>
+          <CtxItem onClick={() => { ctxActions.atom(); setCtxMenu(null) }}>{t({ zh: '选择此原子', en: 'Select this atom' })}</CtxItem>
+          <CtxItem onClick={() => { ctxActions.residue(); setCtxMenu(null) }}>{t({ zh: '选择此残基', en: 'Select this residue' })}</CtxItem>
           {ctxMolInfo && (
             <CtxItem onClick={() => { ctxActions.molecule(); setCtxMenu(null) }}
-              hint={`${ctxMolInfo.atoms} 原子`}>选择此分子（{ctxMolInfo.label}）</CtxItem>
+              hint={t({ zh: `${ctxMolInfo.atoms} 原子`, en: `${ctxMolInfo.atoms} atoms` })}>{t({ zh: `选择此分子（${ctxMolInfo.label}）`, en: `Select molecule (${ctxMolInfo.label})` })}</CtxItem>
           )}
-          <CtxItem onClick={() => { ctxActions.chain(); setCtxMenu(null) }}>选择此链（链组）</CtxItem>
-          <CtxItem onClick={() => { ctxActions.sameResidue(); setCtxMenu(null) }}>选择全部 {ctxInfo?.split('·')[1]?.trim().split(' ')[0] ?? '同类'} 残基</CtxItem>
+          <CtxItem onClick={() => { ctxActions.chain(); setCtxMenu(null) }}>{t({ zh: '选择此链（链组）', en: 'Select this chain (chain group)' })}</CtxItem>
+          <CtxItem onClick={() => { ctxActions.sameResidue(); setCtxMenu(null) }}>{t({ zh: `选择全部 ${ctxInfo?.split('·')[1]?.trim().split(' ')[0] ?? '同类'} 残基`, en: `Select all ${ctxInfo?.split('·')[1]?.trim().split(' ')[0] ?? 'same-type'} residues` })}</CtxItem>
           <CtxItem onClick={() => { ctxActions.environment(); setCtxMenu(null) }}
-            hint="5Å 内完整残基">选择周围环境</CtxItem>
+            hint={t({ zh: '5Å 内完整残基', en: 'full residues within 5Å' })}>{t({ zh: '选择周围环境', en: 'Select environment' })}</CtxItem>
           <div className="-mx-1 my-1 h-px bg-border" />
-          <CtxItem onClick={() => { ctxActions.measure(); setCtxMenu(null) }}>测距：从此原子开始…</CtxItem>
-          <CtxItem onClick={() => { ctxActions.label(); setCtxMenu(null) }}>标注此原子</CtxItem>
-          <CtxItem onClick={() => { ctxActions.focus(); setCtxMenu(null) }}>聚焦此残基</CtxItem>
+          <CtxItem onClick={() => { ctxActions.measure(); setCtxMenu(null) }}>{t({ zh: '测距：从此原子开始…', en: 'Measure distance from this atom…' })}</CtxItem>
+          <CtxItem onClick={() => { ctxActions.label(); setCtxMenu(null) }}>{t({ zh: '标注此原子', en: 'Label this atom' })}</CtxItem>
+          <CtxItem onClick={() => { ctxActions.focus(); setCtxMenu(null) }}>{t({ zh: '聚焦此残基', en: 'Focus this residue' })}</CtxItem>
           <div className="-mx-1 my-1 h-px bg-border" />
           <CtxItem onClick={() => { setTheme(theme === 'dark' ? 'light' : 'dark'); setCtxMenu(null) }}>
-            切换浅色/深色界面
+            {t({ zh: '切换浅色/深色界面', en: 'Toggle light/dark UI' })}
           </CtxItem>
         </div>
       )}
@@ -545,7 +569,7 @@ export default function MolViewer() {
       {dragOver && (
         <div className="pointer-events-none absolute inset-0 z-50 m-3 flex items-center justify-center rounded-xl border-2 border-dashed border-primary/50 bg-primary/[0.06] backdrop-blur-[2px]">
           <div className="rounded-lg bg-background/90 px-4 py-3 text-sm font-medium text-foreground/80 shadow-lg">
-            释放以加载 PDB / mmCIF 文件
+            {t({ zh: '释放以加载 PDB / mmCIF 文件', en: 'Release to load PDB / mmCIF files' })}
           </div>
         </div>
       )}
@@ -555,7 +579,7 @@ export default function MolViewer() {
         <div
           className="absolute right-3 top-3 z-10 cursor-pointer rounded-full transition hover:bg-foreground/[0.04] active:bg-foreground/[0.08]"
           style={{ width: AXIS_GIZMO.size, height: AXIS_GIZMO.size }}
-          title="坐标轴指示器（点击轴端对齐视角；场景面板可关闭）"
+          title={t({ zh: '坐标轴指示器（点击轴端对齐视角；场景面板可关闭）', en: 'Axis gizmo (click an axis tip to align the view; disable in the Scene panel)' })}
           onMouseMove={e => {
             engine.current?.setGizmoHover(engine.current?.gizmoAxisFromPoint(e.clientX, e.clientY) ?? null)
           }}
@@ -571,7 +595,7 @@ export default function MolViewer() {
             const name = Math.abs(dir.x) > 0.5 ? (dir.x > 0 ? '+X' : '-X')
               : Math.abs(dir.y) > 0.5 ? (dir.y > 0 ? '+Y' : '-Y')
               : (dir.z > 0 ? '+Z' : '-Z')
-            useMolStore.getState().appendLog('out', `视角已对齐 ${name} 轴（保持目标点与距离）`)
+            useMolStore.getState().appendLog('out', tt({ zh: `视角已对齐 ${name} 轴（保持目标点与距离）`, en: `View aligned to the ${name} axis (target point and distance kept)` }))
           }}
         />
       )}
@@ -613,13 +637,14 @@ export default function MolViewer() {
 }
 
 function EmptyHint() {
+  const { t } = useI18n()
   const structures = useMolStore(s => s.structures)
   const loading = useMolStore(s => s.loading)
   const setUi = useMolStore(s => s.setUi)
   const startTour = useTourStore(s => s.start)
   if (structures.length > 0) return null
-  const QUICK: { id: string; label: string; hint: string }[] = [
-    { id: '4HHB', label: '4HHB', hint: '血红蛋白' },
+  const QUICK: { id: string; label: string; hint: TranslateInput }[] = [
+    { id: '4HHB', label: '4HHB', hint: { zh: '血红蛋白', en: 'Hemoglobin' } },
     { id: '1BNA', label: '1BNA', hint: 'B-DNA' },
     { id: '6LU7', label: '6LU7', hint: 'Mpro' },
     { id: '1D3Z', label: '1D3Z', hint: 'NMR' },
@@ -630,7 +655,7 @@ function EmptyHint() {
       {loading ? (
         <div className="flex flex-col items-center gap-2.5">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-foreground/70" />
-          <p className="text-xs text-muted-foreground">正在获取结构…</p>
+          <p className="text-xs text-muted-foreground">{t({ zh: '正在获取结构…', en: 'Fetching structure…' })}</p>
         </div>
       ) : (
         <>
@@ -641,25 +666,28 @@ function EmptyHint() {
               <circle cx="12" cy="12" r="4.2" />
               <circle cx="12" cy="12" r="8" opacity="0.5" />
             </svg>
-            <h2 className="text-sm font-medium text-foreground/85">未加载结构</h2>
+            <h2 className="text-sm font-medium text-foreground/85">{t({ zh: '未加载结构', en: 'No structure loaded' })}</h2>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              输入 PDB 编号，或拖放 .pdb / .cif 文件到画布任意位置
+              {t({ zh: '输入 PDB 编号，或拖放 .pdb / .cif 文件到画布任意位置', en: 'Enter a PDB ID, or drop .pdb / .cif files anywhere on the canvas' })}
             </p>
           </div>
 
           {/* 快捷示例：低调文字按钮（无彩色描边，hover 仅背景微亮） */}
           <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-0.5">
-            {QUICK.map(q => (
-              <button
-                key={q.id}
-                onClick={() => void fetchPdbId(q.id)}
-                className="flex items-baseline gap-1.5 rounded-md px-2.5 py-1.5 transition hover:bg-accent/70"
-                title={`加载 ${q.hint}`}
-              >
-                <span className="font-mono text-xs font-semibold tracking-wide text-foreground/75">{q.label}</span>
-                <span className="text-[10px] text-muted-foreground/70">{q.hint}</span>
-              </button>
-            ))}
+            {QUICK.map(q => {
+              const hint = t(q.hint)
+              return (
+                <button
+                  key={q.id}
+                  onClick={() => void fetchPdbId(q.id)}
+                  className="flex items-baseline gap-1.5 rounded-md px-2.5 py-1.5 transition hover:bg-accent/70"
+                  title={t({ zh: `加载 ${hint}`, en: `Load ${hint}` })}
+                >
+                  <span className="font-mono text-xs font-semibold tracking-wide text-foreground/75">{q.label}</span>
+                  <span className="text-[10px] text-muted-foreground/70">{hint}</span>
+                </button>
+              )
+            })}
           </div>
 
           {/* 次要动作：文字链接式（去彩色按钮） */}
@@ -668,7 +696,7 @@ function EmptyHint() {
               onClick={() => setUi({ loadOpen: true })}
               className="font-medium text-primary/90 underline-offset-4 transition hover:text-primary hover:underline"
             >
-              加载结构
+              {t({ zh: '加载结构', en: 'Load structure' })}
             </button>
             <span className="h-3 w-px bg-border" aria-hidden />
             <button
@@ -676,7 +704,7 @@ function EmptyHint() {
               className="inline-flex items-center gap-1 text-muted-foreground transition hover:text-foreground"
             >
               <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-              跟随演示上手
+              {t({ zh: '跟随演示上手', en: 'Take the guided tour' })}
             </button>
           </div>
         </>
@@ -685,21 +713,22 @@ function EmptyHint() {
       {/* 快捷键速查：吸附视口底部，极小字 */}
       <div className="pointer-events-none absolute inset-x-0 bottom-9 hidden flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground/55 sm:flex">
         <span className="flex items-center gap-1">
-          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">Ctrl K</kbd> 命令面板
+          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">Ctrl K</kbd> {t({ zh: '命令面板', en: 'command palette' })}
         </span>
         <span className="flex items-center gap-1">
-          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">`</kbd> 命令行
+          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">`</kbd> {t({ zh: '命令行', en: 'command line' })}
         </span>
         <span className="flex items-center gap-1">
-          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">8</kbd> 表示法预设
+          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">8</kbd> {t({ zh: '表示法预设', en: 'representation presets' })}
         </span>
-        <span className="flex items-center gap-1">右键 · 原子级操作</span>
+        <span className="flex items-center gap-1">{t({ zh: '右键 · 原子级操作', en: 'Right-click · atom-level actions' })}</span>
       </div>
     </div>
   )
 }
 
 function QuickPresets() {
+  const { t } = useI18n()
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   const applyPreset = useMolStore(s => s.applyPreset)
@@ -712,22 +741,22 @@ function QuickPresets() {
       {loading && (
         <div className="mr-0.5 flex items-center gap-2 rounded-md border border-border/60 bg-popover/95 px-2.5 py-1.5 text-xs shadow-md backdrop-blur">
           <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/50 border-t-foreground" />
-          处理中…
+          {t({ zh: '处理中…', en: 'Working…' })}
         </div>
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-popover/95 px-2.5 text-xs font-medium shadow-sm backdrop-blur transition hover:bg-popover hover:border-border">
-            快速风格
+            {t({ zh: '快速风格', en: 'Quick styles' })}
             <span className="text-[10px] text-muted-foreground">1-8</span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" side="top">
-          <DropdownMenuLabel className="text-xs">应用预设</DropdownMenuLabel>
+          <DropdownMenuLabel className="text-xs">{t({ zh: '应用预设', en: 'Apply preset' })}</DropdownMenuLabel>
           {Object.entries(PRESETS).map(([key, p], i) => (
             <DropdownMenuItem key={key} onClick={() => applyPreset(key)} className="gap-2 text-xs">
               <span className="w-4 text-center text-[10px] text-muted-foreground">{i + 1}</span>
-              {p.label}
+              {t(p.label)}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

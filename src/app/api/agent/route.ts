@@ -3,9 +3,31 @@
 // 命令参考为独立静态文本（不 import 客户端 commands.ts，服务端零 zustand/three 依赖）
 // 供应商可配（设置页）：默认 zai 内置 SDK；其余 OpenAI 兼容端点直连 fetch
 import { NextResponse } from 'next/server'
+import { cookies, headers } from 'next/headers'
 import ZAI from 'z-ai-web-dev-sdk'
 import type { AgentRequestBody, AgentDecision } from '@/lib/molecular/agent/protocol'
 import { chatCompletionOnce, chatCompletionStream, getDefaultProviderId, type ChatMessage } from '@/lib/molecular/agent/providers'
+import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
+
+/** 请求级语言检测（与 layout 同规则）：cookie > Accept-Language —— 与界面语言保持一致 */
+async function detectReqLocale(): Promise<Locale> {
+  const stored = (await cookies()).get(LOCALE_COOKIE)?.value
+  if (stored === 'en' || stored === 'zh') return stored
+  const accept = (await headers()).get('accept-language')?.toLowerCase() ?? ''
+  return accept.startsWith('en') ? 'en' : 'zh'
+}
+
+/** 英文界面时的回复语言指令（附在提示词尾部，recency 最优——覆盖「reply 用中文」默认规则） */
+function langDirective(locale: Locale): string {
+  return locale === 'en'
+    ? '\n\n## Response language (highest priority)\nThe user interface language is English. The "reply" field MUST be written in English (≤80 words). All explanations, questions, and confirmations to the user must be in English. Command strings stay unchanged.'
+    : ''
+}
+
+/** 服务端错误文案（面向 AgentPanel 错误展示） */
+function errText(locale: Locale, zh: string, en: string): string {
+  return locale === 'en' ? en : zh
+}
 
 /** 命令语法速查（对话与视觉自查两份提示词共用——覆盖应用全部功能） */
 const COMMAND_REF = `## 命令速查（全部小写；[sel] 为可选选择表达式，省略时作用于活动结构或当前选择；双软件语法并轨——PyMOL 与 ChimeraX 习惯均直接可用）
@@ -247,14 +269,15 @@ function sceneWithMemory(scene: string, memory?: string): string {
 }
 
 export async function POST(req: Request) {
+  const locale = await detectReqLocale()
   let body: AgentRequestBody
   try {
     body = (await req.json()) as AgentRequestBody
   } catch {
-    return NextResponse.json({ ok: false, error: '请求体不是合法 JSON' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: errText(locale, '请求体不是合法 JSON', 'Request body is not valid JSON') }, { status: 400 })
   }
   if (!body?.scene) {
-    return NextResponse.json({ ok: false, error: '缺少 scene' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: errText(locale, '缺少 scene', 'Missing scene') }, { status: 400 })
   }
 
   // ---------- 视觉自查分支（VLM 看截图，可选前后对比） ----------
@@ -277,7 +300,7 @@ export async function POST(req: Request) {
           const completion = await zai.chat.completions.createVision({
             model: 'glm-4.6v',
             messages: [
-              { role: 'assistant', content: REVIEW_PROMPT },
+              { role: 'assistant', content: REVIEW_PROMPT + langDirective(locale) },
               { role: 'user', content: imageParts },
             ],
             thinking: { type: 'disabled' },
@@ -300,31 +323,33 @@ export async function POST(req: Request) {
         }
       }
       if (!decision) {
-        return NextResponse.json({ ok: false, error: `视觉自查失败：${lastErr}` }, { status: 502 })
+        return NextResponse.json({ ok: false, error: errText(locale, `视觉自查失败：${lastErr}`, `Visual review failed: ${lastErr}`) }, { status: 502 })
       }
       return NextResponse.json({ ok: true, decision })
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'VLM 服务异常'
+      const msg = e instanceof Error ? e.message : errText(locale, 'VLM 服务异常', 'VLM service error')
       return NextResponse.json({ ok: false, error: msg }, { status: 502 })
     }
   }
 
   // ---------- 对话决策分支（文本 LLM） ----------
   if (!body?.messages?.length) {
-    return NextResponse.json({ ok: false, error: '缺少 messages' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: errText(locale, '缺少 messages', 'Missing messages') }, { status: 400 })
   }
   // 历史裁剪：最近 12 条（防上下文超限）
   const history = body.messages.slice(-12)
   const last = history[history.length - 1]
   if (!last || last.role !== 'user') {
-    return NextResponse.json({ ok: false, error: '最后一条消息必须是 user' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: errText(locale, '最后一条消息必须是 user', 'The last message must have role "user"') }, { status: 400 })
   }
 
   // 协议提醒附加在最后一条用户消息（recency 加固——长历史下 LLM 会模仿历史的散文格式而丢掉 JSON 协议，实测捕获）
-  const PROTOCOL_SUFFIX = '\n\n【系统提醒】你的下一条回复必须只是一个 JSON 对象：{"reply":"<中文回复>","commands":["<命令>",...]}。commands 是字符串数组（无可执行命令时为 []），不要输出 JSON 以外的任何文字。'
+  const PROTOCOL_SUFFIX = locale === 'en'
+    ? '\n\n[System reminder] Your next reply must be ONLY a JSON object: {"reply":"<English reply>","commands":["<command>",...]}. commands is an array of strings (empty [] if no executable commands). Output nothing besides the JSON.'
+    : '\n\n【系统提醒】你的下一条回复必须只是一个 JSON 对象：{"reply":"<中文回复>","commands":["<命令>",...]}。commands 是字符串数组（无可执行命令时为 []），不要输出 JSON 以外的任何文字。'
 
   const messages: ZAIMessage[] = [
-    { role: 'assistant', content: SYSTEM_PROMPT },
+    { role: 'assistant', content: SYSTEM_PROMPT + langDirective(locale) },
     // 场景上下文（含长期记忆）以首条 user 消息注入（每次请求都是最新快照）
     { role: 'user', content: `【自动注入的当前场景信息，非用户发言】\n${sceneWithMemory(body.scene, body.memory)}` },
     { role: 'assistant', content: '已了解当前场景。请讲。' },

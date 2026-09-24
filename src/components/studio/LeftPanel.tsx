@@ -7,6 +7,7 @@ import {
   Boxes, Info, Palette, Ruler, Settings2, Shapes, Target, ChevronLeft, FlaskConical, Grid3x3,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
+import { useI18n, type DualText } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { StructuresPanel } from './panels/StructuresPanel'
 import { RepsPanel } from './panels/RepsPanel'
@@ -21,16 +22,16 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 
 const PANELS = [
-  { key: 'structures', label: '结构', icon: Boxes, group: 0 },
-  { key: 'reps', label: '表示法', icon: Shapes, group: 0 },
-  { key: 'colors', label: '颜色', icon: Palette, group: 0 },
-  { key: 'selection', label: '选择', icon: Target, group: 1 },
-  { key: 'measure', label: '测量', icon: Ruler, group: 1 },
-  { key: 'analysis', label: '分析', icon: FlaskConical, group: 1 },
-  { key: 'maps', label: '密度图', icon: Grid3x3, group: 1 },
-  { key: 'scene', label: '场景', icon: Settings2, group: 2 },
-  { key: 'info', label: '信息', icon: Info, group: 2 },
-] as const
+  { key: 'structures', label: { zh: '结构', en: 'Structures' }, icon: Boxes, group: 0 },
+  { key: 'reps', label: { zh: '表示法', en: 'Representations' }, icon: Shapes, group: 0 },
+  { key: 'colors', label: { zh: '颜色', en: 'Colors' }, icon: Palette, group: 0 },
+  { key: 'selection', label: { zh: '选择', en: 'Selection' }, icon: Target, group: 1 },
+  { key: 'measure', label: { zh: '测量', en: 'Measure' }, icon: Ruler, group: 1 },
+  { key: 'analysis', label: { zh: '分析', en: 'Analysis' }, icon: FlaskConical, group: 1 },
+  { key: 'maps', label: { zh: '密度图', en: 'Maps' }, icon: Grid3x3, group: 1 },
+  { key: 'scene', label: { zh: '场景', en: 'Scene' }, icon: Settings2, group: 2 },
+  { key: 'info', label: { zh: '信息', en: 'Info' }, icon: Info, group: 2 },
+] as const satisfies readonly { key: string; label: DualText; icon: typeof Boxes; group: number }[]
 
 // —— 面板宽度拖拽（持久化） ——
 const PANEL_W_KEY = 'molvision-panel-w'
@@ -62,6 +63,7 @@ function useMounted(): boolean {
 }
 
 export function LeftPanel() {
+  const { t } = useI18n()
   const ui = useMolStore(s => s.ui)
   const setUi = useMolStore(s => s.setUi)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -92,16 +94,18 @@ export function LeftPanel() {
     try { localStorage.removeItem(PANEL_W_KEY) } catch { /* ignore */ }
   }
 
+  const activePanelLabel = PANELS.find(p => p.key === ui.panel)?.label
+
   const content = (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <span className="mol-micro text-foreground/75">
-          {PANELS.find(p => p.key === ui.panel)?.label}
+          {activePanelLabel ? t(activePanelLabel) : null}
         </span>
         <button
           onClick={() => setUi({ panelOpen: false })}
-          aria-label="折叠面板（点击左侧图标恢复）"
-          title="折叠面板"
+          aria-label={t({ zh: '折叠面板（点击左侧图标恢复）', en: 'Collapse the panel (click a left icon to reopen)' })}
+          title={t({ zh: '折叠面板', en: 'Collapse panel' })}
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -137,8 +141,8 @@ export function LeftPanel() {
                   <TooltipTrigger asChild>
                     <button
                       onClick={() => setUi({ panel: p.key, panelOpen: ui.panel === p.key ? !ui.panelOpen : true })}
-                      aria-label={p.label}
-                      title={p.label}
+                      aria-label={t(p.label)}
+                      title={t(p.label)}
                       className={cn(
                         'relative flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 active:scale-95',
                         active
@@ -150,7 +154,7 @@ export function LeftPanel() {
                       <p.icon className="h-4 w-4" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="right">{p.label}</TooltipContent>
+                  <TooltipContent side="right">{t(p.label)}</TooltipContent>
                 </Tooltip>
               </div>
             )
@@ -168,8 +172,8 @@ export function LeftPanel() {
             <div
               role="separator"
               aria-orientation="vertical"
-              aria-label="拖拽调整面板宽度（双击复位）"
-              title="拖拽调整宽度 · 双击复位"
+              aria-label={t({ zh: '拖拽调整面板宽度（双击复位）', en: 'Drag to resize the panel (double-click to reset)' })}
+              title={t({ zh: '拖拽调整宽度 · 双击复位', en: 'Drag to resize · double-click to reset' })}
               onPointerDown={onHandleDown}
               onPointerMove={onHandleMove}
               onPointerUp={onHandleUp}
@@ -187,14 +191,14 @@ export function LeftPanel() {
       {/* 移动端抽屉 */}
         <button
           onClick={() => setMobileOpen(true)}
-          aria-label="打开控制面板"
+          aria-label={t({ zh: '打开控制面板', en: 'Open the control panel' })}
           className="absolute left-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card mol-elevate transition md:hidden"
         >
           <Boxes className="h-4 w-4" />
         </button>
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-[300px] p-0">
-          <SheetTitle className="sr-only">控制面板</SheetTitle>
+          <SheetTitle className="sr-only">{t({ zh: '控制面板', en: 'Control panel' })}</SheetTitle>
           {content}
         </SheetContent>
       </Sheet>

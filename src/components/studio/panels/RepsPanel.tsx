@@ -7,6 +7,7 @@ import { COLOR_SCHEME_LABELS, type ColorScheme } from '@/lib/molecular/colors'
 import { REP_LABELS, type RepConfig, type RepType } from '@/lib/molecular/types'
 import { PRESET_SELECTIONS } from '@/lib/molecular/selection'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
@@ -41,6 +42,7 @@ function TypeIcon({ type, className }: { type: RepType; className?: string }) {
 }
 
 export function RepsPanel() {
+  const { t: tr } = useI18n()
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   const addRep = useMolStore(s => s.addRep)
@@ -52,7 +54,7 @@ export function RepsPanel() {
     return (
       <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
         <Shapes className="h-8 w-8 text-muted-foreground/40" />
-        <p className="text-xs text-muted-foreground">加载结构后在此管理表示法。</p>
+        <p className="text-xs text-muted-foreground">{tr({ zh: '加载结构后在此管理表示法。', en: 'Load a structure to manage its representations here.' })}</p>
       </div>
     )
   }
@@ -63,19 +65,19 @@ export function RepsPanel() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-primary-foreground transition hover:opacity-90">
-              <Plus className="h-3 w-3" /> 添加
+              <Plus className="h-3 w-3" /> {tr({ zh: '添加', en: 'Add' })}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {REP_TYPES.map(t => (
               <DropdownMenuItem key={t} onClick={() => addRep(st.id, { type: t, selection: 'all' })} className="gap-2 text-xs">
-                <TypeIcon type={t} />{REP_LABELS[t]}
+                <TypeIcon type={t} />{tr(REP_LABELS[t])}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
       }>
-        表示法 ({st.reps.length})
+        {tr({ zh: `表示法 (${st.reps.length})`, en: `Representations (${st.reps.length})` })}
       </SectionTitle>
 
       <div className="space-y-2 px-2">
@@ -84,12 +86,12 @@ export function RepsPanel() {
         ))}
         {st.reps.length === 0 && (
           <p className="rounded-lg border border-dashed border-border/70 p-3 text-center text-[11px] text-muted-foreground">
-            没有表示法。点击「添加」或用命令行 <code className="rounded bg-muted px-1">show cartoon</code>。
+            {tr({ zh: '没有表示法。点击「添加」或用命令行 ', en: 'No representations yet. Click "Add" or use ' })}<code className="rounded bg-muted px-1">show cartoon</code>{tr({ zh: '。', en: '.' })}
           </p>
         )}
       </div>
       <PanelHint>
-        每种表示法可指定独立的原子范围与配色。选择语法：<code className="text-[10px]">chain A</code>、<code className="text-[10px]">resi 1-60</code>、<code className="text-[10px]">within 5 of (ligand)</code>…
+        {tr({ zh: '每种表示法可指定独立的原子范围与配色。选择语法：', en: 'Each representation has its own atom scope and coloring. Selection syntax:' })} <code className="text-[10px]">chain A</code>、<code className="text-[10px]">resi 1-60</code>、<code className="text-[10px]">within 5 of (ligand)</code>…
       </PanelHint>
     </div>
   )
@@ -103,6 +105,7 @@ function RepCard({
   onUpdate: (structureId: string, repId: string, patch: Partial<RepConfig>) => void
   onRemove: (structureId: string, repId: string) => void
 }) {
+  const { t: tr } = useI18n()
   return (
     <div className={cn(
       // `!` 提权：panel-card 为未分层自定义规则，压过 @layer utilities 的状态类
@@ -121,7 +124,7 @@ function RepCard({
             {REP_TYPES.map(t => (
               <SelectItem key={t} value={t} className="text-xs">
                 <span className="flex items-center gap-1.5">
-                  <TypeIcon type={t} className="h-3 w-3" />{REP_LABELS[t]}
+                  <TypeIcon type={t} className="h-3 w-3" />{tr(REP_LABELS[t])}
                 </span>
               </SelectItem>
             ))}
@@ -131,7 +134,7 @@ function RepCard({
         {/* 参数 */}
         <Popover>
           <PopoverTrigger asChild>
-            <button className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:bg-accent hover:text-foreground active:scale-95" title="参数">
+            <button className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:bg-accent hover:text-foreground active:scale-95" title={tr({ zh: '参数', en: 'Parameters' })}>
               <SlidersHorizontal className="h-3 w-3" />
             </button>
           </PopoverTrigger>
@@ -140,7 +143,7 @@ function RepCard({
               {(rep.type === 'spacefill' || rep.type === 'ballstick') && (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
-                    <span>{rep.type === 'spacefill' ? '原子半径倍率' : '球半径倍率'}</span>
+                    <span>{rep.type === 'spacefill' ? tr({ zh: '原子半径倍率', en: 'Atom radius scale' }) : tr({ zh: '球半径倍率', en: 'Ball radius scale' })}</span>
                     <span className="font-mono">{rep.ballScale.toFixed(2)}×</span>
                   </div>
                   <Slider
@@ -152,7 +155,7 @@ function RepCard({
               {(rep.type === 'ballstick' || rep.type === 'sticks') && (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
-                    <span>棍半径</span><span className="font-mono">{rep.stickRadius.toFixed(2)} Å</span>
+                    <span>{tr({ zh: '棍半径', en: 'Stick radius' })}</span><span className="font-mono">{rep.stickRadius.toFixed(2)} Å</span>
                   </div>
                   <Slider
                     value={[rep.stickRadius]} min={0.05} max={0.35} step={0.01}
@@ -163,7 +166,7 @@ function RepCard({
               {(rep.type === 'cartoon' || rep.type === 'putty') && (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
-                    <span>{rep.type === 'putty' ? '管径整体倍率' : '带状宽度'}</span><span className="font-mono">{rep.cartoonWidth.toFixed(2)}×</span>
+                    <span>{rep.type === 'putty' ? tr({ zh: '管径整体倍率', en: 'Tube width scale' }) : tr({ zh: '带状宽度', en: 'Ribbon width' })}</span><span className="font-mono">{rep.cartoonWidth.toFixed(2)}×</span>
                   </div>
                   <Slider
                     value={[rep.cartoonWidth]} min={0.3} max={2.5} step={0.05}
@@ -174,20 +177,20 @@ function RepCard({
               {rep.type === 'putty' && (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
-                    <span>B 因子上限</span><span className="font-mono">{rep.puttyRange > 0 ? `${rep.puttyRange.toFixed(0)} Å²` : '自动'}</span>
+                    <span>{tr({ zh: 'B 因子上限', en: 'B-factor cap' })}</span><span className="font-mono">{rep.puttyRange > 0 ? `${rep.puttyRange.toFixed(0)} Å²` : tr({ zh: '自动', en: 'auto' })}</span>
                   </div>
                   <Slider
                     value={[rep.puttyRange > 0 ? rep.puttyRange : 100]} min={0} max={200} step={5}
                     onValueChange={v => onUpdate(structureId, rep.id, { puttyRange: v[0] })}
                   />
-                  <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground/80">0 = 按结构实际 B 范围；调低可抑制高 B 离群值拉伸管径。</p>
+                  <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground/80">{tr({ zh: '0 = 按结构实际 B 范围；调低可抑制高 B 离群值拉伸管径。', en: '0 = use the structure\'s actual B range; lower values keep high-B outliers from stretching the tube.' })}</p>
                 </div>
               )}
               {rep.type === 'surface' && (
                 <>
                   <div>
                     <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
-                      <span>探针半径</span><span className="font-mono">{rep.probe.toFixed(1)} Å</span>
+                      <span>{tr({ zh: '探针半径', en: 'Probe radius' })}</span><span className="font-mono">{rep.probe.toFixed(1)} Å</span>
                     </div>
                     <Slider
                       value={[rep.probe]} min={0} max={3} step={0.1}
@@ -196,7 +199,7 @@ function RepCard({
                   </div>
                   <div>
                     <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-muted-foreground">
-                      <span>不透明度</span><span className="font-mono">{Math.round(rep.opacity * 100)}%</span>
+                      <span>{tr({ zh: '不透明度', en: 'Opacity' })}</span><span className="font-mono">{Math.round(rep.opacity * 100)}%</span>
                     </div>
                     <Slider
                       value={[rep.opacity]} min={0.15} max={1} step={0.05}
@@ -206,7 +209,7 @@ function RepCard({
                 </>
               )}
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-medium text-muted-foreground">可见</span>
+                <span className="text-[10px] font-medium text-muted-foreground">{tr({ zh: '可见', en: 'Visible' })}</span>
                 <Switch checked={rep.visible} onCheckedChange={v => onUpdate(structureId, rep.id, { visible: v })} />
               </div>
             </div>
@@ -216,14 +219,14 @@ function RepCard({
         <button
           onClick={() => onUpdate(structureId, rep.id, { visible: !rep.visible })}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-          title={rep.visible ? '隐藏' : '显示'}
+          title={rep.visible ? tr({ zh: '隐藏', en: 'Hide' }) : tr({ zh: '显示', en: 'Show' })}
         >
           {rep.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
         </button>
         <button
           onClick={() => onRemove(structureId, rep.id)}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-          title="删除"
+          title={tr({ zh: '删除', en: 'Delete' })}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -234,7 +237,7 @@ function RepCard({
         <Input
           value={rep.selection}
           onChange={e => onUpdate(structureId, rep.id, { selection: e.target.value })}
-          placeholder="选择表达式"
+          placeholder={tr({ zh: '选择表达式', en: 'Selection expression' })}
           className={cn(
             'h-7 min-w-[96px] flex-1 basis-[96px] grow border-border bg-background font-mono text-[10px]',
             rep.error && 'border-destructive focus-visible:ring-destructive/30',
@@ -244,23 +247,23 @@ function RepCard({
           value={PRESET_SELECTIONS.some(p => p.value === rep.selection) ? rep.selection : undefined}
           onValueChange={v => onUpdate(structureId, rep.id, { selection: v })}
         >
-          <SelectTrigger className="h-7 w-7 shrink-0 border-border bg-background px-1 text-[10px] [&_svg]:hidden" title="预设选择">
+          <SelectTrigger className="h-7 w-7 shrink-0 border-border bg-background px-1 text-[10px] [&_svg]:hidden" title={tr({ zh: '预设选择', en: 'Preset selections' })}>
             <span className="text-muted-foreground" aria-hidden>≡</span>
-            <span className="sr-only">预设选择</span>
+            <span className="sr-only">{tr({ zh: '预设选择', en: 'Preset selections' })}</span>
           </SelectTrigger>
           <SelectContent>
             {PRESET_SELECTIONS.map(p => (
-              <SelectItem key={p.value} value={p.value} className="font-mono text-[10px]">{p.label}</SelectItem>
+              <SelectItem key={p.value} value={p.value} className="font-mono text-[10px]">{tr(p.label)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={rep.colorScheme} onValueChange={v => onUpdate(structureId, rep.id, { colorScheme: v as ColorScheme })}>
-          <SelectTrigger className="h-7 w-[92px] shrink-0 border-border bg-background text-[10px]" title="配色方案">
+          <SelectTrigger className="h-7 w-[92px] shrink-0 border-border bg-background text-[10px]" title={tr({ zh: '配色方案', en: 'Color scheme' })}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {SCHEMES.map(sc => (
-              <SelectItem key={sc} value={sc} className="text-xs">{COLOR_SCHEME_LABELS[sc]}</SelectItem>
+              <SelectItem key={sc} value={sc} className="text-xs">{tr(COLOR_SCHEME_LABELS[sc])}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -270,7 +273,7 @@ function RepCard({
             value={rep.uniformColor}
             onChange={e => onUpdate(structureId, rep.id, { uniformColor: e.target.value })}
             className="h-7 w-8 shrink-0 cursor-pointer rounded border border-border bg-background p-0.5"
-            title="统一颜色"
+            title={tr({ zh: '统一颜色', en: 'Uniform color' })}
           />
         )}
       </div>

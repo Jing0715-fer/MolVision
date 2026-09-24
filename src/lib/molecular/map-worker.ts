@@ -5,10 +5,13 @@
 
 import { parseSfCif, computeDensityMap, type ModelAtoms, type MapKind } from './sffourier'
 import type { CrystalCell } from './symmetry'
+import type { Locale } from '@/i18n/locales'
 
 export interface MapWorkerRequest {
   type: 'compute'
   reqId: number
+  /** 界面语言（主线程随请求线程化；worker 内错误文案双语选择，缺省 zh） */
+  locale?: Locale
   /** SF mmCIF 全文（结构化克隆字符串，~3MB 可接受） */
   cifText: string
   /** 合成类型：2Fo−Fc 常规 / Fo−Fc 差图 */
@@ -45,9 +48,18 @@ const ctx = globalThis as unknown as {
   onmessage: ((event: MessageEvent<MapWorkerRequest>) => void) | null
 }
 
+// worker 侧语言（请求到达时更新；store 无法跨线程同步，经请求载荷线程化）
+let workerLocale: Locale = 'zh'
+
+/** worker 内双语文案选择 */
+function wt(zh: string, en: string): string {
+  return workerLocale === 'en' ? en : zh
+}
+
 ctx.onmessage = (e: MessageEvent<MapWorkerRequest>) => {
   const msg = e.data
   if (!msg || msg.type !== 'compute') return
+  workerLocale = msg.locale === 'en' ? 'en' : 'zh'
   const t0 = performance.now()
   const base = {
     type: 'result' as const,
@@ -65,22 +77,22 @@ ctx.onmessage = (e: MessageEvent<MapWorkerRequest>) => {
     ms: performance.now() - t0,
   }
   try {
-    const sf = parseSfCif(msg.cifText)
+    const sf = parseSfCif(msg.cifText, workerLocale)
     if (sf.error) {
       ctx.postMessage({ ...base, error: sf.error })
       return
     }
     if (sf.reflns.length < 50) {
-      ctx.postMessage({ ...base, error: `有效反射过少（${sf.reflns.length} 条）` })
+      ctx.postMessage({ ...base, error: wt(`有效反射过少（${sf.reflns.length} 条）`, `Too few valid reflections (${sf.reflns.length})`) })
       return
     }
     const cell = sf.cell ?? msg.fallbackCell
     if (!cell) {
-      ctx.postMessage({ ...base, error: '结构因子文件与结构均无晶胞信息' })
+      ctx.postMessage({ ...base, error: wt('结构因子文件与结构均无晶胞信息', 'No unit-cell info in either the structure-factor file or the structure') })
       return
     }
     const spaceGroup = sf.spaceGroup || msg.fallbackSpaceGroup || 'P 1'
-    const result = computeDensityMap(sf.reflns, cell, spaceGroup, msg.atoms, msg.kind)
+    const result = computeDensityMap(sf.reflns, cell, spaceGroup, msg.atoms, msg.kind, workerLocale)
     if (result.error) {
       ctx.postMessage({ ...base, error: result.error })
       return

@@ -2221,3 +2221,258 @@ Stage Summary:
 - 验证：lint 0/0 / tsc 0 / console 0 / 11 项 E2E 全绿（含 zone 括号平衡修复、measure 无括号包装、A/S/H/L/C 菜单派发）
 - 遗留与风险：①presets 映射为近似（interactive→hybrid）②ChimeraX 高级说明符（::属性 @@原子属性）未支持（低频）③命名选择栗色为固定色值未入 token④双主题下 maroon 对比度未做 WCAG 复核
 - 下阶段建议：①ChimeraX 高级属性选择器（::element 等）②maroon 入 CSS token + 浅色主题适配③A/S/H/L/C 移动端 Sheet 化④VLM 视觉终审新深色工作台
+
+---
+Task ID: r62-core
+Agent: main
+Task: 用户需求「增加国际化，适配全英文界面」——i18n 基础设施 + 范例改造（主线程部分）
+
+Work Log:
+- 【规模测量】2523 条用户可见中文串 / 70 文件（commands.ts 635 最多；engine/route 大头是注释非 UI 串）
+- 【架构】inline DualText 方案（`t({ zh, en })`）而非中央字典——并行改造零键名协调、grep 可达、类型安全
+- 【新文件】src/i18n/locales.ts（纯常量模块：Locale/DualText 类型 + LOCALE_COOKIE='molvision-locale'——服务端可安全 import，无 'use client'）
+- 【新文件】src/i18n/index.tsx：zustand 内存 store（无 persist，worker 安全，document 全守卫）+ `tt()`（事件时翻译，lib 层用）+ `useI18n()`（React 渲染期，订阅 locale 切换即重渲）+ `I18nProvider`（useState 初始化器 SSR 直读，无首屏闪烁）
+- 【持久化】cookie 唯一持久源；layout.tsx 改 async：cookies() > accept-language 检测 → html lang + generateMetadata 双语（英文 title "MolVision — 3D Molecular Visualization Workbench"）+ I18nProvider 包裹
+- 【新组件】LanguageToggle.tsx（中/EN 分段控件，variant='status'|'default'）挂 StatusBar 尾部 + WelcomeScreen footer
+- 【agent 语言】api/agent/route.ts：detectReqLocale()（cookie > accept-language，与 UI 同规则）+ langDirective()（英文界面时附提示词尾部覆盖「reply 用中文」默认）+ PROTOCOL_SUFFIX locale 感知 + errText() 服务端错误双语——AgentPanel 零改动（cookie 自动随 fetch）
+- 【范例改造】StatusBar（20 串 + toggle）/ WelcomeScreen（19 串 + toggle + `t(ex.title)` 前瞻兼容 loader 的 DualText title）/ ConsoleBar（21 串，含 module 级 Record 改 DualText 的范式）/ page.tsx（loading 占位文案组件化）
+
+## ⭐ i18n 转换规范（所有子代理必读必守）
+
+### API
+```ts
+import { useI18n, tt, type DualText } from '@/i18n'
+// React 渲染期（组件内）：
+const { t } = useI18n()
+<div>{t({ zh: '加载结构', en: 'Load structure' })}</div>
+<button title={t({ zh: `已选 ${n} 个`, en: `${n} selected` })}>
+// 事件时（回调/toast/throw/非 React 模块）：
+toast.success(tt({ zh: '已加载', en: 'Loaded' }))
+throw new Error(tt({ zh: '无效选择', en: 'Invalid selection' }))
+```
+- `t`/`tt` 均接受 `DualText | string`——`t(ex.title)` 对 string 与 DualText 都编译通过（跨文件契约零风险）
+- 插值直接进两个分支：`t({ zh: \`链 ${c}\`, en: \`Chain ${c}\` })`
+- 组件内已有 `t` 变量冲突时别名：`const { t: tr } = useI18n()`
+- module 级常量表（Record<..., string>）→ `Record<..., DualText>`，渲染处 `t(TABLE[key])`（ConsoleBar LOG_HEIGHT_LABEL 范式）
+- 长内容（HelpDialog 等）允许 `{zh:[...],en:[...]}` 平行内容块按 locale 取
+
+### 翻译什么（用户可见即译）
+JSX 文本 / placeholder / title / aria-label / toast / 命令行输出（log/warn） / throw 的错误消息 / 补全提示 / 引导文案
+
+### 不翻译
+- 代码注释（保持中文原样！）/ console.log 调试输出 / 标识符 / 存储的用户数据（命名选择名、场景名、会话名）
+- 化学通用记号：PDB ID、HEM/ALA、CA、σ、Å、chain letter、RGB hex
+- 命令本身（load 4hhb / select chain A）——命令语法是英文的
+
+### 英文术语表（保持全应用一致）
+cartoon / ball-stick / spacefill / wireframe / surface / ribbon / H-bonds / measurement / dihedral / residue / chain / ligand / pocket / binding site / symmetric mates / unit cell / electron density / B-factor / occupancy / secondary structure / ensemble / morph / superpose / contacts / SASA / outline / stereo / silhouette
+
+### 验证纪律（每个子代理收尾必做）
+1. `bunx tsc --noEmit 2>&1 | rg "^src/"`——只修**自己文件**的错误（他人文件的错误忽略，并行开发中）
+2. `bun run lint`——同理只修自己的
+3. 禁止 git 操作；禁止改自己清单外的文件
+4. worklog.md 追加节（Task ID + 模板）
+
+Stage Summary:
+- 基础设施完成：tsc 0 / lint 0 / dev 200；范例四文件已双语化
+- 首次访问英文浏览器（accept-language en*）自动英文界面；切换即时生效（cookie + store）且下次首屏 SSR 直读零闪烁
+- agent 对话英文界面下回复英文（服务端提示词注入，零客户端改动）
+---
+Task ID: r62-c
+Agent: general-purpose
+Task: Agent 面板与五个左侧小面板（Info/Measure/Colors/Reps/Selection）双语化（r62 国际化改造第三批）
+
+Work Log:
+- 读 worklog r62-core 转换规范 + 范例（ConsoleBar/StatusBar），确认 t/tt/DualText 契约与「注释保持中文」纪律
+- AgentPanel.tsx（106 串）：欢迎语/分类建议（SUGGESTION_GROUPS 转 DualText，label+8 条建议项双语，key 改 .zh）/输入 placeholder/发送·停止按钮 aria+title/busy 阶段标签（正在思考·回复生成中·正在执行命令·视觉自查中 + 4 条 hint）/确认卡（确认执行=Confirm run · 跳过=Skip · 重跑）/命令卡 blocked/confirm 输出/错误前缀（AI 助手出错：/网络异常：，详情保持运行时原文）/供应商徽章·长期记忆徽章 title/视觉自查开关 toast/会话浮层全部文案（切换/新建/重命名/两击删除/条数·时间插值）/停止与中断气泡后缀/自动修正前缀/LLM 记忆摘要与修正提示词（fixPrompt/goal 回退文本随界面语言，保证英文界面下 AI 载荷一致）
+- InfoPanel.tsx（28 串）：rows 表改 {label: DualText, value: string|DualText}（条目/格式/实验方法/分辨率/原子数/残基数/化学键/链数/氢原子/水分子/配体残基/配体分子/二级结构/解析耗时；值中固定中文「来自 HELIX/SHEET 注释」「几何启发式推断」双语，数字/Å 不动）/三个 SectionTitle/链类型名（蛋白质/核酸/水/配体）/…共 N 条链/三条 PanelHint；key 改 r.label.zh
+- MeasurePanel.tsx（17 串）：MODES 表 label+hint 双语（关闭/距离/键角=Angle/二面角 + 点击提示）/测量模式·测量结果(N) 标题/全部清除/重新开始/列表行类型标签/空态/PanelHint
+- ColorsPanel.tsx（13 串）：四 SectionTitle/空态/上色=Apply/toast（已应用配色/已上色 → Applied: …，COLOR_SCHEME_LABELS 经 tt() 前瞻兼容 lib 后续 DualText 化）/重置所选/重置全部/提示语
+- RepsPanel.tsx（26 串）：t 命名冲突（map 参数 t）→ const { t: tr }；空态/添加/表示法(N)/参数弹层全部滑杆标签（原子半径倍率/球半径倍率/棍半径/管径整体倍率/带状宽度/B 因子上限+自动/探针半径/不透明度/可见）及说明/隐藏·显示·删除 title/选择表达式 placeholder/预设选择/统一颜色/方案与类型名经 tr(REP_LABELS[t])/tr(COLOR_SCHEME_LABELS[sc])/tr(p.label) 前瞻兼容；空态句拆 text+code+句读三段双语
+- SelectionPanel.tsx（32 串）：QUICK_EXPRS 十标签双语/表达式选择·当前选择·命名选择标题/placeholder/统计行（原子/残基/链/杂原子）/聚焦/反选/标注 (L)/清除/保存/toast（选择错误：·已选择 N 个原子·请输入名称·已保存命名选择）/空态引导/语法 PanelHint 拆分双语
+- 验证：bunx tsc --noEmit → 我的六文件 0 错误（仅 MapLegend.tsx 有他人并行编辑中的瞬时语法错，非本批文件）；scoped eslint 六文件 0 error 0 warning；rg 中文复查 → 剩余中文仅代码注释与 zh: 分支
+- 未动：chat-store 消息内容（运行时数据）、命令/化学记号、注释、src/i18n/**、lib/**
+
+Stage Summary:
+- 六文件 222 条用户可见串全部双语化；英文界面下 Agent 面板从欢迎页到确认卡全链路可用
+- 与 lib 层的跨文件契约已按 WelcomeScreen 范式预埋（t()/tt() 包裹 REP_LABELS/COLOR_SCHEME_LABELS/PRESET_SELECTIONS.label，lib 转 DualText 后零改动自动生效；lib 未转期间英文界面暂显示其中文方案名——lib 批次负责）
+- 遗留：无（本批范围内）；sessionTimeLabel（chat-store）返回中文相对时间为 lib 批次职责
+
+---
+Task ID: r62-a
+Agent: general-purpose
+Task: 菜单与小组件批 i18n 双语化（Toolbar / ObjectActionBar / ViewBar / LeftPanel / HistoryDialog / LoadDialog / SessionResumeCard / TourOverlay / RecordBadge / ColorLegend / MovieBadge 共 11 文件）
+
+Work Log:
+- 读取 r62-core 规范与 StatusBar/WelcomeScreen/ConsoleBar 范例，采用 t({...}) 内联 + tt() 事件时 + module 级 Record→DualText 范式
+- Toolbar.tsx（97 处）：MEASURE_MODES/DropTrigger(label+hint) 改 DualText；会话/示例/风格预设/演示四下拉与视角/测量/媒体/右侧集群全部 aria-label·title·tooltip·toast 双语化；新建会话 AlertDialog 双语；TourOverlay 菜单 map 变量 t→tour 避让翻译函数
+- 跨文件契约先行包裹（28 处渲染点，先包后翻零风险）：PRESETS[key].label / SCENE_PRESETS 的 label·desc·after（after 经事件时 tt(sp.after)）/ TOURS 的 title·tagline / EXAMPLE_STRUCTURES 的 title·desc / applyScenePreset 返回的 applied·error（tt() 包裹，翻转为 DualText 后依然编译通过）/ sessionInfo() 前瞻 t() 包裹
+- ObjectActionBar.tsx（32 处）：REP_SHOW/REP_HIDE/COLOR_ITEMS 三表 label→DualText；A/S/H/L/C 五字母按钮 title（含结构名插值）与全部菜单项双语；术语对齐 PyMOL（Fit to view / Align principal axes / Unit cell / Spacefill / B-factor 等）
+- ViewBar.tsx（23 处）：保存/跳转/删除 toast + appendLog 控制台输出走 tt；书签名（用户数据）不译；折叠徽章 title、空态卡、BookmarkCard title/alt 双语
+- LeftPanel.tsx（6 处）：PANELS 九面板 label→DualText（as const satisfies 保字面量键型）；面板头标签/图标栏 title·aria·Tooltip/拖拽把手/移动端抽屉 sr-only 标题双语
+- HistoryDialog.tsx（31 处）：标题计数（N 条→entries、N 置顶→pinned）、富文本描述按 span 拆段双语、搜索 placeholder、空态/无匹配/截断提示、页脚快捷键说明；useEffect 内 setTimeout 变量 t→timer 避让
+- LoadDialog.tsx（10 处）：PDB 编号校验 toast、标题/描述/分节标签/拖放区文案；示例卡 ex.title/ex.desc 契约包裹
+- SessionResumeCard.tsx（6 处）：relTime() 返回类型 string→DualText（刚刚/分钟前/小时前/天前 → just now/min ago/h ago/d ago）；恢复 toast 双语；结构名列表（用户数据）不译
+- TourOverlay.tsx（11 处）：tour.title/step.title/step.body 契约包裹；步骤计数/进度段 aria/上一步·下一步·完成/键盘提示双语；CmdChip 复制 toast 走 tt
+- RecordBadge / ColorLegend / MovieBadge（5+10+4 处）：录制 toast·停止按钮；B 因子/SASA 图例刻度·putty 刚柔性标注·钳制 title；movie 段落计数·「视角 N」默认名（固定 UI 前缀译，书签用户名不译）
+- 代码注释一律保持中文原样；PDB ID/命令/文件名后缀/化学记号不译；截图文件名 '-透明'→'-transparent'（tt）
+- 验证：bunx tsc --noEmit —— 我的 11 文件 0 错误（仅 MapLegend.tsx 有并行代理编辑中错误，已忽略）；bun run lint 退出码 0；rg 复查 11 文件剩余中文仅存在于注释与 zh: 分支
+
+Stage Summary:
+- 11 文件全部双语化完成：235 处内联 DualText + 28 处跨文件契约 t() 包裹，共 263 个转换触点
+- 跨文件契约就绪：loader/store/scenes/tours 翻转为 DualText 后无需再改本批组件（t/tt 对 string|DualText 均成立）
+- 遗留：sessionInfo()（session.ts，他代理文件）当前仍返回中文串——Toolbar 已 t() 包裹，翻转后自动生效；movie 时间轴面板、MapLegend 等属其他代理批次
+---
+Task ID: r62-b
+Agent: general-purpose
+Task: 条带/视口/命令面板批 i18n 双语化（SequenceBar / MovieTimeline / SceneBar / EnsembleBar / MapLegend / CommandPalette / MolViewer）
+
+Work Log:
+- 读 r62-core 转换规范 + StatusBar/ConsoleBar 范例，通读 7 个目标文件后逐文件改造
+- SequenceBar.tsx：60 串（9 事件时 tt）。SEQ_HEIGHT_LABEL → Record<string, DualText>（ConsoleBar 范式）；残基/配体/链 tooltip 双语插值；拖拽浮动提示 tipText → tip: DualText 渲染期 t()；搜索定位 toast、选择库保存/召回/聚焦 toast 全 tt()
+- MovieTimeline.tsx：38 串（6 tt）。同步/播放 toast、关键帧卡片 title、右键菜单（预览/时长±0.2s/移到最前/最后/移除）、空态引导、轮数 stepper
+- SceneBar.tsx：20 串（7 tt）。保存/更新/删除/召回 toast 与 appendLog 输出、卡片 title/alt/aria；SceneCard 时间戳改 locale 感知（zh-CN 24h / en-US）
+- EnsembleBar.tsx：17 串。NMR/morph/多态 morph 徽章、播放/滑块/FPS/插值/循环/重置的 aria-label 与 title
+- MapLegend.tsx：17 串。MODES 表 → DualText；差图正/负峰 σ 滑块 aria、等值面颜色 tooltip、「文件」徽章、三角形计数 title
+- CommandPalette.tsx：54 串（10 tt）。PaletteItem.label/desc → TranslateInput（对 string/DualText 均成立——COMMAND_HELP.desc 被 lib 代理翻转后零改动兼容）；cmdk 过滤 value 经 flat() 双语都参与搜索；快速动作/结构切换/最近/置顶条目、分组名、搜索占位、底部快捷键图例全部 t()；截图/会话 toast tt()
+- MolViewer.tsx：59 串（26 tt）。s/r/h/w/b/p/v 快捷键 toast 全 tt()；hover 提示与状态栏悬停读数（链/螺旋/折叠/分子等固定前缀双语，名称/坐标/B 因子/HET 不译）事件时 tt()；右键菜单 10 项、拖放遮罩、坐标轴 gizmo、Esc/E 环境选择等 appendLog 输出 tt()；EmptyHint 空态（QUICK 示例 hint → DualText）、快捷键速查行；QuickPresets 的 {p.label} → t(p.label)（store PRESETS 翻转兼容）
+- 收尾验证：bunx tsc --noEmit → 本批 7 文件 0 错（仅余 ProviderSettingsDialog/ViewportHUD/complete.ts 等他人并行文件错误，按规范忽略）；bun run lint 退出码 0 零告警；rg 中文复查 → 7 文件剩余中文仅注释与 zh: 分支数据
+- dev server 未动，dev.log 持续 ✓ Compiled 无失败
+
+Stage Summary:
+- 本批 7 文件共 265 条用户可见串双语化（渲染期 t() / 事件时 tt()），tsc+lint 全绿，全英文界面下条带/视口/命令面板可用
+- 兼容性前瞻：CommandPalette 的 desc 类型放宽为 TranslateInput、MolViewer 的 PRESETS.label 渲染处 t() 包裹——lib 层（commands.ts/store.ts）DualText 翻转落地后无需再改本批文件
+- 遗留：hover 提示文本为事件时快照（切换语言后需再次悬停才更新，符合 tt() 语义）；r.error 等来自 lib 层的串待 lib 代理翻转
+
+---
+Task ID: r62-h
+Agent: general-purpose
+Task: 密度图层（map-load/ccp4/sffourier/marching-cubes/map-worker）+ Agent 供应商栈（providers/chat-store/runner）+ ProviderSettingsDialog + 3 个 API 路由双语化
+
+Work Log:
+- 【拓扑结论】rg 确认：ccp4.ts 仅被 map-load.ts import（纯主线程）→ tt() 直接用；sffourier.ts 被 map-load（主线程回退路径）+ map-worker（Worker）双上下文执行 → parseSfCif/computeDensityMap 追加可选 locale?: Locale 参数（import type from '@/i18n/locales'，worker 安全），主线程传 useI18nStore.getState().locale、worker 传请求 locale；marching-cubes.ts 仅被 engine.ts import（主线程）且唯一中文串位于 mcSelfTest()（无任何调用方）→ 0 条需译
+- 【worker locale 线程化】MapWorkerRequest 追加 locale 字段（map-load postMessage 时附 useI18nStore locale）；map-worker 收到请求存模块级 `let workerLocale: Locale = 'zh'` + 本地 wt(zh,en) 助手；'worker-unavailable'/'worker-error' 为内部哨兵字符串（按 message 身份比较）不译
+- 【自检死代码】ccp4.ts/sffourier.ts/marching-cubes.ts 的 *SelfTest() 函数全项目零调用（rg 验证）——其内部中文为调试输出，按 r62-core 规范不译（任务估算的 82 条中约 60 条属此类）
+- 【map-load.ts】~30 条（进度 toast/appendLog/throw/就绪 log 长模板含嵌套分支）全部 tt()；kindLabel（Fo−Fc 差图）tt 化随 toast/图层名/setComputing 消费
+- 【ccp4.ts】parseCcp4 14 条头解析错误 tt()（文件过短/word53/MODE/采样数/轴序×2/NSYMBT/数据偏移/晶胞×3/数据不足/长度不符/分配失败）
+- 【sffourier.ts】7 条（parseSfCif 1 + computeDensityMap fail 6）经 loc(locale, zh, en) 参数线程化，双上下文均正确出英文
+- 【providers.ts】CATEGORY_META name/hint → DualText（12）；18 条 PROVIDER_CATALOG note → DualText（ProviderProfile.note 字段类型改 DualText，服务端仅透传对象、展示在客户端）；prepareRequest 改 async + reqLocale()（cookies/headers from 'next/headers'，仅请求上下文内有效，异常回退 zh）+ bt() 4 条配置错误双语；chatCompletionOnce/Stream HTTP 错误 3 条双语（prepareRequest 返回 locale 复用）。该模块仅被 3 个 API 路由 import（rg 验证），next/headers 导入安全
+- 【ProviderSettingsDialog.tsx】~56 条全双语（useI18n().t 渲染 / toast tt() 事件时）：表单标签、按钮、探测反馈行（ProbeFeedback 独立组件补 hook）、Key 掩码/占位符 4 分支、模型列表表头（KIND_GROUP 加 id 字段 + DualText）、CATEGORY_LABEL → Record<ProviderCategory, DualText>、note 消费改 t(p.note)（t 双态兼容）
+- 【chat-store.ts】7 条 tt()（刷新中断横幅/未命名会话/导入历史/新会话×2/刚刚/N 分钟前）；【runner.ts】3 条 tt()（执行异常/已加载/已受理）；context.ts 按指令跳过（LLM 提示词内容，30 条保持中文与主提示词一致）
+- 【API 路由】3 个路由各复制 layout 检测逻辑为局部 detectLocale()（cookies > accept-language；LOCALE_COOKIE 从 '@/i18n/locales' 导入值，绕开 'use client' 边界）+ errText()：providers/route.ts 9 条、providers/models/route.ts 13 条（含 note 双语）、sf/[id]/route.ts 5 条（Invalid PDB ID/Upstream error 原英文串补中文分支）；sf 路由局部 headers 变量更名 headers_ 避免与导入冲突
+- 【验证】bunx tsc --noEmit：我的 12 个文件 0 错误（仅 ViewportHUD/complete.ts 有他人文件 DualText 中途态错误）；bun run lint 0 错 0 警；dev.log 无新增编译错误；抽样复查非注释中文已清（余量均为 zh: 分支、品牌/模型名、注释、死代码自检串）
+
+Stage Summary:
+- 完成 ~183 条双语化（map-load 30 / map-worker 2 / sffourier 7 / ccp4 14 / providers 37 / dialog 56 / chat-store 7 / runner 3 / API 路由 27）
+- Worker 拓扑：仅 map-worker.ts + sffourier.ts（被 worker import）在 Worker 上下文执行；locale 经 postMessage 请求载荷线程化，sffourier 经可选参数下探——主线程/worker 双路径错误文案均随界面语言
+- 遗留：① ccp4/sffourier/marching-cubes 自检死代码中文未译（规范内不译，若未来接 selftest 命令需补）；② chat-store 模块初始化在 I18nProvider 渲染前执行，页面刷新后存量「被中断」横幅文案恒为 zh（罕见路径）；③ providers.ts 的 prepareRequest 错误经 api/agent/route.ts（非本任务文件）透传，已自带双语故无需改动
+---
+Task ID: r62-e
+Agent: general-purpose
+Task: HelpDialog 全量双语化（帮助对话框——快捷键表/鼠标操作表/PyMOL·ChimeraX 用户速查卡/结构分析与渲染说明段落，全应用最大单一双语化内容块）
+Work Log:
+- 读取 worklog「r62-core」转换规范与 ConsoleBar（Record<string, DualText> 范式）；针对本文件长内容特点选定「文段 DSL」组织模式：段落拆成 Seg 序列（每段自带 zh/en + code/strong/dim/kbd 样式标记，工厂函数 T/S/D/C2/C/K），渲染组件 Segs 逐段 t()——两语言共享同一结构与样式标记，零重复 JSX（规范中「平行块」与「逐项 t()」的合体，键帽/命令记号 zh==en 不译）
+- 表格逐格双语：SHORTCUTS 17 行（键位列不译）· MOUSE 12 行两列全译 · PYMOL_MAP 13 行 / CHIMERAX_MAP 14 行（命令动词与示例不译，说明列 DualText；含中文的键名「ss / b / q 谓词」「说明符 /A :42…」「& | ~ 取反」「color byX 双词」「focus / zoom <倍率>」双语化，纯记号键名走 t(string) 直通）
+- 长段落拆段双语：结构分析与晶体学 11 段 · 渲染与视图 28 段 · 会话与文件 6 段 · 快速上手 6 步 + 演示提示段 · 选择表达式示例 4 条 // 注释说明（示例本身不译）；标题/对话框头/两速查表引言全部双语
+- 命令示例、键位记号、σ/Å/PDB ID/CRYST1 等不译（C/K 工厂 86 处）；内嵌中文示例名仅 2 处随语言切换（view save 口袋→view save pocket、Shift+数字→Shift+number）
+- 布局微调：鼠标操作标签胶囊 w-24→w-28（容纳英文 Ctrl+Shift+drag 单行显示；原中文 Ctrl+Shift+拖动 已贴边溢出，双向受益）
+- 验证：bunx tsc --noEmit 过滤后无 HelpDialog 错误（修复 1 处 S() 缺参）；bun run lint 全绿（eslint 零输出）；rg 中文残留复查——所有中文仅位于注释、zh: 分支与 T/S/D/C2 首参（即双语对本身），无未译 UI 串；dev.log 持续 ✓ Compiled 无本文件报错
+
+Stage Summary:
+- 完成 322 条双语对（73 个 DualText 对象 + 249 个文段对）+ 86 处不译记号段，覆盖帮助对话框全部用户可见中文；英文采用 PyMOL-wiki 风格专业语气，术语表一致（cartoon/ball-stick/spacefill/superpose/SASA/unit cell/symmetric mates/outline…）
+- tsc 0 / lint 0 / 编译 ✓；遗留：无（w-28 为有意微宽，如需像素级还原可改回 w-24 但英文 Ctrl+Shift+drag 会换行）
+
+---
+Task ID: r62-g
+Agent: general-purpose
+Task: lib 主线杂项批 i18n 双语化（20 文件：selection/store/loader/session/symmetry/contacts/engine/colors/scenes/movie/scene-store/types/superpose/morph/svg-export/parser/tour-store/tours/views-store/heavy-queue）
+
+Work Log:
+- 读取 r62-core 规范 + i18n 基础设施（tt/useI18n/DualText）；确认 api/ 路由零 import 本批文件（'@/i18n' 客户端模块引入安全）
+- 【DualText 翻转（事件时求值型常量 → 双语对象，消费端 t()/tt() 双态兼容）】
+  · loader.ts EXAMPLE_STRUCTURES：title×7 + desc×7
+  · store.ts PRESETS：label×9（cartoon/ballstick/spacefill/wireframe/surface/bindingsite/publication/hybrid/putty）
+  · scenes.ts SCENE_PRESETS：label×4 + desc×4 + after×4（after 进 toast description）；applyScenePreset 返回值保持 string 契约（applied=tt(scene.label)、error=tt()）
+  · types.ts REP_LABELS：×7；colors.ts COLOR_SCHEME_LABELS：×9；selection.ts PRESET_SELECTIONS：label×17（均 type-only import DualText，服务端安全）
+  · tours.ts TourDef/TourStep：title×40（6 tour + 34 step）+ tagline×6 + body×34 = 80 字段；run() 回调内 4 条 appendLog 跳步提示同步 tt()
+- 【store.ts 引导日志特殊处理】consoleLog 首条「命令行就绪」在模块初始化期求值早于 I18nProvider 首次 setLocale（en 用户首算得 zh）——BOOT_LOG 常量 + 订阅 useI18nStore locale 变化重写首条（time='' 且无 seq 识别；SSR 与客户端首渲染同步生效，无水合闪烁）
+- 【事件时 tt() 求值】loader 16 / session 20 / contacts 29 / engine 28 / movie 10 / scene-store 7 / tour-store 6 / superpose 6 / morph 7 / svg-export 5 / parser 3 / selection 14 / heavy-queue 1 / views-store 1（默认书签名「视角 N」/「View N」快照值）/ store 6（selectFromExpr·recomputeSS 错误 + 引导日志）——合计 166 处 tt()
+- 【engine.ts】对称伴侣生成/关闭/晶胞缺失/空间群不支持、superpose/resetTransform 消息、SASA/ΔSASA/跨结构 ΔSASA 完成与 Worker 异常日志、氢键/接触截断提示、自动性能模式 5 条状态消息、heavy-queue acquire 标签 ×4（氢键检测/SASA 计算/ΔSASA 计算/跨结构 ΔSASA）；console.warn ×2（轮廓线/GTAO 回退）按规范不译
+- 【symmetry.ts 零改动决策】全文仅注释 + symmetrySelfTest 开发诊断串（无任何 UI 消费方）；该模块文档化设计为「纯 TS 数学库零 import」且经 sffourier 进入 map-worker bundle——引入 '@/i18n' 会把 react/zustand 拖进 Worker 打包，风险大于收益，保持原样
+- 【session.ts】会话恢复/新建/合并/导入全链路日志、importSessionFile/mergeSessionFile 的 throw 错误、sessionInfo() 存档摘要（秒/分钟前 + 含相机）；console.warn（结构过大未入档）按规范不译
+- 收尾验证：bunx tsc --noEmit → 本批 20 文件 0 错误；bun run lint → 0 errors 0 warnings；dev.log 持续 ✓ Compiled
+
+Stage Summary:
+- 本批 19 文件完成双语化（symmetry.ts 判定零用户可见串不改），166 处 tt() 事件时求值 + 148 个 DualText 展示字段翻转；注释全部原样保留
+- 消费端编译报错记录（非本批文件，待收口）：
+  · src/components/studio/ViewportHUD.tsx:29 —— `{REP_LABELS[rep.type] ?? rep.type}` 未包 t()（REP_LABELS 已 DualText）
+  · src/lib/molecular/complete.ts:101 —— `detail: REP_LABELS[k]` 未包 tt()（同上）
+  · src/lib/molecular/complete.ts:102/103 —— CompletionItem.detail 收到 string|DualText 联合（REP_LABELS 翻转波及；102/103 自身的「显示氢/显示水」中文串属 complete.ts 责任方）
+  · src/lib/molecular/complete.ts:106 —— `detail: COLOR_SCHEME_LABELS[k]` 未包 tt()（COLOR_SCHEME_LABELS 已 DualText）
+  · 其余已知消费方（Toolbar/LoadDialog/MolViewer/commands.ts/RepsPanel/SelectionPanel/ColorsPanel/TourOverlay）已由并行代理包好 t()/tt()，tsc 无报错
+- 遗留说明：engine/session 的 3 条 console.warn 与 symmetry 自检串为调试/诊断输出，按 r62-core 规范不译
+
+---
+Task ID: r62-d
+Agent: general-purpose
+Task: i18n 大面板批——StructuresPanel / AnalysisPanel / ScenePanel / MapsPanel 四面板全面双语化
+
+Work Log:
+- 读 worklog r62-core 转换规范 + StatusBar/WelcomeScreen 范例，确认 t/tt/DualText API 与术语表
+- StructuresPanel.tsx：111 条 zh 键（渲染期 t 82 + 事件 toast tt 29）。覆盖：QuickColorPopover（label prop 改 DualText，弹层标题/aria/应用/重置）、CHAIN_TYPE_LABEL → Record<string, DualText>（渲染处 t(...) ?? '' 兜底）、结构卡折叠/统计行（atoms/residues/chains；折叠态紧凑行 en 用 at/ch 与 StatusBar 术语一致）、链组/配体分子行 title、链眼睛 aria、对称伴侣（空间群/操作数/晶胞徽章 title、搜索半径）、配体口袋按钮、叠合工具（移动/参考链下拉含 option 双语）、全部关闭 AlertDialog、closeStructureWithUndo 模块级函数用 tt
+- AnalysisPanel.tsx：120 条 zh 键（t 107 + tt 13）。覆盖：单结构/跨结构模式切换、A/B 表达式输入（ExprInput label 调用点 t 传串）、距离截断、跨结构结果卡/xbsa 三路 SASA 说明段（含 <span>bsa</span> 嵌套分段双语）、接触图谱空态/单元格提示、SASA/BSA/DSSP 全部按钮与 Stat 标签、SSComposition 螺旋/折叠/环、PairTableToolbar 筛选/排序、两张残基对表（表头 aria、展开/收起、onPick label 的全角括号按 locale 走 tt）；appendLog 命令输出 13 处 tt
+- ScenePanel.tsx：106 条 zh 键（t 99 + tt 7）。覆盖：背景/景深透视/交互动画/灯光渲染/切层/显示过滤/氢键网络/AO/轮廓线/渲染画质/会话 十一个分区全部 SectionTitle、开关行与 aria、各展开说明段、相机过渡手感 radio（label 改 DualText 数组 + title 三分支）、SelectItem 三档、会话导入导出 toast；PanelHint 色名列表按 locale 切分隔符（en ', ' / zh '、'）
+- MapsPanel.tsx：63 条 zh 键（全 t，无 toast）。MODES label → DualText（mesh/surface/both）、KINDS hint → DualText（2Fo−Fc/Fo−Fc 公式名保留）；图类型切换/PDB 输入/合成按钮/当前结构合成段（保留 activePdbId 等宽 span 分段双语）/CCP4 导入/计算中兜底/空态 PanelHint/信息卡（来源/网格/体素/三角形/rms/耗时）/差图正负峰 σ 双滑块与刻度/显示模式/颜色 aria/不透明度/可见/收尾 PanelHint（差图双面 + CRYST1 缺失提示）；useIsoThrottle 共享 hook 零改动（MapLegend 依赖不受影响）
+- 共享数据契约遵守：结构名/链 ID/残基标识/残基对表格数据行/RMSD 数值/命令字符串（symmetry 20、slab move -5、map isolevel pos 3 等）一律不译；英文用 PyMOL/ChimeraX 惯用词（symmetry mates / depth cue / slab / matchmaker / isomesh）
+- 代码注释全部保持中文原样未动
+
+Stage Summary:
+- 4 文件 400 条双语串（Structures 111 / Analysis 120 / Scene 106 / Maps 63），其中事件时 tt 49 条
+- bunx tsc --noEmit：本批 4 文件 0 错误（仅余 ViewportHUD/complete.ts 他人文件错误，按并行纪律不处理）
+- bun run lint：退出码 0，0 errors 0 warnings；dev server 持续编译成功（dev.log ✓）
+- rg 复查：4 文件剩余中文仅代码注释与 zh: 分支，无用户可见中文残留，无中文漏入 en 分支
+---
+Task ID: r62-f2
+Agent: general-purpose
+Task: r62-f 续作——commands.ts 剩余 97 条 + complete.ts 208 条收尾
+
+Work Log:
+- 读 worklog r62-core 转换规范与 r62-f 遗留状态；确认 commands.ts 顶部已有 `import { tt } from '@/i18n'`，定位脚本实测余留 68 行（66 行 COMMAND_HELP + 2 行多行模板续行）
+- 【commands.ts · COMMAND_HELP 重构合体】66 条 desc：r62-f 采用的 desc/descEn 平行字段模式 → 合并为 `desc: DualText`（翻译全部复用既有 descEn，零新译）。此举修复一个真实泄漏：CommandPalette.tsx:164 `desc: h.desc` 在 descEn 模式下英文界面仍显示中文描述，翻转后经 r62-b 预埋的 PaletteItem.desc: TranslateInput 自动出英文（t()/flat() 双态兼容，tsc 验证 0 错）
+- 【commands.ts · cmd/example 平行字段】cmd 字段不能翻转 DualText（CommandPalette 以其拼 id `'cmd:'+h.cmd`、commandIcon 切分、fill 首词提取、firstExample 取可执行示例——字符串运算会炸）→ 25 条含中文占位符的 cmd 加 `cmdEn?: string`（create <名> = <选择> → create <name> = <selection>、sasa [probe] [点数] → sasa [probe] [points] 等）；2 条含中文 example 加 `exampleEn?: string`（view save 口袋 → view save pocket；scene save A链口袋 → scene save pocket——与 r62-e HelpDialog「内嵌示例名随语言切换」先例一致）
+- 【commands.ts · 助手替换】移除 commandDesc()（全项目零消费）→ 导出 commandCmd(h)/commandExample(h) 事件时 tt() 求值；help 命令输出行改 `${commandCmd(h).padEnd(22)} ${tt(h.desc)} …${commandExample(h)}`；import 扩展 `type DualText`
+- 【complete.ts · 全量 208 条】顶部补 `import { tt, type DualText } from '@/i18n'` + 从 './commands' 增补 commandCmd/commandExample
+  · SEL_KEYWORDS 39 条 → [string, DualText][]（链 ID→chain ID、占据率比较→Occupancy comparison、ChimeraX 说明符系列等）
+  · COMMON_COLORS 16 条 → [string, DualText][]（红→Red … 鸭绿→Teal）
+  · REP_LABELS/COLOR_SCHEME_LABELS 消费处 `tt(REP_LABELS[k])`/`tt(COLOR_SCHEME_LABELS[k])` 包裹——修复 r62-g 报告的 complete.ts:101-106 编译错；「显示氢/显示水」等自串照常 tt({zh,en})
+  · REGISTRY 全部 ~130 处 detail 提示文本 tt({zh,en})（select add/subtract/zone、scene 六子命令、view 十四方位/书签、set 24 项渲染设置、slab/perf/map/hbonds/superpose/morph/movie/ensemble/session 等全部子命令与参数说明）——args 闭包在 buildCompletions 事件时调用，tt() 求值时机正确
+  · presetNameItems 9 条、structItems/selItems/onOff/sceneNameItems 自串、xcontacts「结构:选择」、delete/close 命名选择与全部结构等散点
+  · HELP_BY_CMD 类型改 `(typeof COMMAND_HELP)[number]`，hint 在 buildCompletions 内事件时构建 `{ cmd: commandCmd(h), desc: tt(h.desc), example: commandExample(h) }`——CompletionItem.detail / CompletionResult.hint 三字段类型保持 string，ConsoleBar 渲染契约零改动；select 首参「覆盖命名选择」与 kw 前 8 条同理 tt() 化
+- 【验证】bunx tsc --noEmit → 全 src 0 错误（两文件 0 错；CommandPalette DualText 兼容同时验证）；bun run lint 退出码 0 零告警；定位脚本重跑：complete.ts 输出空，commands.ts 仅剩 1747/1748 两行（多行模板字面量续行，zh: 标记在 1746 行——r62-f 已完成的 tt({zh,en}) 包裹内部，非未译项）；dev server 未动，dev.log 持续 ✓ Compiled 无报错
+- 转换触点统计：complete.ts 156 处 tt() 调用 + 191 个 zh 字面量；commands.ts 本批新增 66 DualText + 25 cmdEn + 2 exampleEn + 2 助手函数（全文件 tt() 累计 490）
+
+Stage Summary:
+- 两文件收尾完成：complete.ts 208 条全量双语化 + commands.ts COMMAND_HELP 66 条 DualText 合体与 27 条 cmd/example 平行翻译，英文界面下命令行帮助、命令面板描述、补全提示、参数 hint（含命令语法占位符）全链路随 locale 切换
+- 架构决策记录：COMMAND_HELP.cmd/example 保持 string（CommandPalette 字符串运算依赖），中文占位符经 cmdEn/exampleEn 平行携带由 commandCmd()/commandExample() 事件时求值；desc 翻转 DualText 后 CommandPalette 零改动自动英文（r62-b TranslateInput 预埋生效）
+- 不可译项/假阳性清单：commands.ts:1747/1748——多行模板字面量续行（已在 tt({zh,en}) 内，r62-f 完成）；代码注释中文一律保留；insert 命令名/结构名/书签名/场景名（用户数据）不译
+- 遗留：无（本任务范围内）；CommandPalette 的 label 仍直读 h.cmd——英文界面命令面板标签中的占位符仍为中文（如 create <名>），需 CommandPalette 责任方改用 commandCmd(h) 方可消除，属跨文件职责
+
+---
+Task ID: r62-final
+Agent: main
+Task: i18n 总收口——合并修复 + 全量 E2E + 推送（用户需求：增加国际化，适配全英文界面）
+
+Work Log:
+- 【8 批并行子代理全部完成】r62-a 菜单组件 263 触点 / r62-b 条带视口 265 / r62-c Agent面板 222 / r62-d 大面板 400 / r62-e HelpDialog 322 双语对 / r62-f+ f2 命令层 635+208（f 超时后 f2 收尾）/ r62-g lib 杂项 314（166 tt + 148 DualText 翻转）/ r62-h 地图层+Agent栈+API 183
+- 【主线程合并修复】①ViewportHUD 孤儿文件（REP_LABELS 已翻转未包 t()——tsc 兜底捕获）②CommandPalette 命令标签改 commandCmd(h)（cmdEn 随 locale 切换，依赖数组补 locale）③providers 15 家中文品牌名补 displayNameEn（火山方舟→Volcano Ark Doubao / 腾讯混元→Tencent Hunyuan 等）+ providerNameText() 助手 + ProviderSettingsDialog 10 处消费点 + 服务端错误模板英文分支
+- 【关键架构事故修复】providers.ts 是 server-only 模块（node:fs + next/headers）——把 providerNameText 放进它导致客户端 import 时整个模块被拖进 client bundle → Turbopack「chunking context does not support external modules (node:fs)」500。修复：拆出零依赖纯模块 src/lib/molecular/agent/provider-display.ts（客户端安全）。教训：**server-only 模块只能被 API 路由 import，客户端组件需要的工具必须拆纯模块**
+- 【dev server 僵死恢复】并行子代理大量 HMR 后 Next 进程僵死（端口无监听但 wrapper 存活）——kill + 清 dev.log + 重启，恢复 200
+- 【E2E 十项验证（agent-browser，全英文路径）】①无 cookie 英文浏览器首访：SSR 直出全英文（title "MolVision — 3D Molecular Visualization Workbench"/html lang=en/欢迎页/WebGL engine ready/示例名英文）②工作台工具栏 16 个 tooltip 全英文 ③命令输出英文：「Loaded 4HHB: 4779 atoms, 801 residues, 12 chains」「1,168 atoms selected」+ boot log 英文（r62-g 的 locale 订阅重写机制生效）④help 输出英文 + Unknown command 英文 ⑤HelpDialog 24,766 字符全英文（PyMOL/ChimeraX 速查表在）⑥切换中文：「已选择 172 个原子」+ lang=zh-CN + cookie 写入 + toggle aria-pressed 状态正确 ⑦切回 EN + reload：cookie SSR 直读英文首屏零闪烁 ⑧命令面板 81 项全英文零中文泄漏（cmdEn 修复实证）⑨AgentPanel 占位符英文 + A 菜单 8 项英文（Fit to view/Split by chain/Export PDB...）+ CHAINS (12) 面板英文 ⑩移动端 390×844：FAB/语言切换/状态栏 28px 正常；console 零错误零警告
+- 【lint】0 errors 0 warnings；【tsc】src 零错误；73 文件变更提交
+
+Stage Summary:
+- 交付：完整 i18n 体系——inline DualText 双语模式（~2500 串全覆盖 70 文件）、cookie+SSR 直读（首屏零闪烁）、自动语言检测（cookie > Accept-Language）、StatusBar/欢迎页双入口语言切换、agent 对话随界面语言回复（服务端提示词注入）、worker 层 locale 线程化（map 请求载荷）
+- 验证：lint 0/0 · tsc 0 · console 0 · E2E 10/10（英文默认→命令输出→帮助→切换→持久化→面板→移动端）
+- 架构资产：src/i18n/locales.ts（服务端安全纯模块）+ src/i18n/index.tsx（store/tt/useI18n/Provider）+ provider-display.ts（server-only 模块拆分范式）
+- 遗留与风险：①worker 内字符串仅 map 链路线程化（hbond/sasa worker 无中文）②agent context.ts 场景信息保持中文提示词（有意决策，LLM 回复语言已由指令控制）③ccp4/sffourier/marching-cubes selftest 诊断输出未译（死代码，零 UI 消费）④hover 提示为事件时快照——切语言后需再次悬停才更新（tt 语义，符合预期）
+- 下阶段建议：①翻译质量终审（VLM 截图审英文排版/溢出，尤其长按钮文案宽度）②日期数字 locale 格式化深化（现有 toLocaleString 已随浏览器）③更多语言扩展只需 DualText 加字段（架构已就绪）

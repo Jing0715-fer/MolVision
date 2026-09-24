@@ -4,17 +4,19 @@
 import { Ruler, Triangle, Rotate3d, Trash2, Zap, MousePointer2 } from 'lucide-react'
 import { dataRegistry, useMolStore } from '@/lib/molecular/store'
 import { cn } from '@/lib/utils'
+import { useI18n, type DualText } from '@/i18n'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import type { MeasureMode } from '@/lib/molecular/types'
 
-const MODES: { mode: MeasureMode; label: string; icon: typeof Ruler; need: number; hint: string }[] = [
-  { mode: 'off', label: '关闭', icon: MousePointer2, need: 0, hint: '' },
-  { mode: 'distance', label: '距离', icon: Ruler, need: 2, hint: '在 3D 视图中点击 2 个原子' },
-  { mode: 'angle', label: '键角', icon: Triangle, need: 3, hint: '依次点击 3 个原子（中间为顶点）' },
-  { mode: 'dihedral', label: '二面角', icon: Rotate3d, need: 4, hint: '依次点击 4 个原子' },
+const MODES: { mode: MeasureMode; label: DualText; icon: typeof Ruler; need: number; hint: DualText }[] = [
+  { mode: 'off', label: { zh: '关闭', en: 'Off' }, icon: MousePointer2, need: 0, hint: { zh: '', en: '' } },
+  { mode: 'distance', label: { zh: '距离', en: 'Distance' }, icon: Ruler, need: 2, hint: { zh: '在 3D 视图中点击 2 个原子', en: 'Click 2 atoms in the 3D view' } },
+  { mode: 'angle', label: { zh: '键角', en: 'Angle' }, icon: Triangle, need: 3, hint: { zh: '依次点击 3 个原子（中间为顶点）', en: 'Click 3 atoms in order (the middle one is the vertex)' } },
+  { mode: 'dihedral', label: { zh: '二面角', en: 'Dihedral' }, icon: Rotate3d, need: 4, hint: { zh: '依次点击 4 个原子', en: 'Click 4 atoms in order' } },
 ]
 
 export function MeasurePanel() {
+  const { t } = useI18n()
   const measureMode = useMolStore(s => s.measureMode)
   const setMeasureMode = useMolStore(s => s.setMeasureMode)
   const measurePicks = useMolStore(s => s.measurePicks)
@@ -37,7 +39,7 @@ export function MeasurePanel() {
 
   return (
     <div className="pb-4">
-      <SectionTitle>测量模式</SectionTitle>
+      <SectionTitle>{t({ zh: '测量模式', en: 'Measurement mode' })}</SectionTitle>
       <div className="grid grid-cols-2 gap-1.5 px-2">
         {MODES.map(m => (
           <button
@@ -51,7 +53,7 @@ export function MeasurePanel() {
             )}
           >
             <m.icon className="h-3.5 w-3.5" />
-            {m.label}
+            {t(m.label)}
           </button>
         ))}
       </div>
@@ -60,7 +62,7 @@ export function MeasurePanel() {
         <div className="mx-2 mt-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5">
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
             <Zap className="h-3.5 w-3.5" />
-            {current.hint}
+            {t(current.hint)}
           </div>
           {pickInfo && (
             <div className="mt-1.5 space-y-0.5">
@@ -74,7 +76,7 @@ export function MeasurePanel() {
           )}
           {picks && picks.atoms.length > 0 && (
             <button onClick={clearMeasurePicks} className="mt-1.5 text-[10px] text-muted-foreground underline-offset-2 hover:underline">
-              重新开始
+              {t({ zh: '重新开始', en: 'Start over' })}
             </button>
           )}
         </div>
@@ -83,16 +85,16 @@ export function MeasurePanel() {
       <SectionTitle right={
         measurements.length > 0 ? (
           <button onClick={clearMeasurements} className="text-[10px] text-muted-foreground transition hover:text-destructive">
-            全部清除
+            {t({ zh: '全部清除', en: 'Clear all' })}
           </button>
         ) : undefined
       }>
-        测量结果 ({measurements.length})
+        {t({ zh: `测量结果 (${measurements.length})`, en: `Measurements (${measurements.length})` })}
       </SectionTitle>
       <div className="mol-scroll max-h-64 space-y-1 overflow-y-auto px-2">
         {measurements.map(m => {
           const data = dataRegistry.get(m.structureId)
-          const label = m.type === 'distance' ? '距离' : m.type === 'angle' ? '键角' : '二面角'
+          const label = m.type === 'distance' ? t({ zh: '距离', en: 'Distance' }) : m.type === 'angle' ? t({ zh: '键角', en: 'Angle' }) : t({ zh: '二面角', en: 'Dihedral' })
           const color = m.type === 'distance' ? '#ffd166' : m.type === 'angle' ? '#4fd1c5' : '#c39bd3'
           const atomNames = data ? m.atoms.map(i => `${data.atoms.chainIds[i].trim()}:${data.atoms.resNames[i]}${data.atoms.resSeqs[i]}.${data.atoms.names[i]}`).join(' → ') : ''
           return (
@@ -117,10 +119,10 @@ export function MeasurePanel() {
           )
         })}
         {measurements.length === 0 && (
-          <p className="px-1 text-[11px] text-muted-foreground">暂无测量。选择模式后在 3D 视图中点击原子。</p>
+          <p className="px-1 text-[11px] text-muted-foreground">{t({ zh: '暂无测量。选择模式后在 3D 视图中点击原子。', en: 'No measurements yet. Pick a mode, then click atoms in the 3D view.' })}</p>
         )}
       </div>
-      <PanelHint>测量值实时显示为 3D 标注；右键菜单「测距：从此原子开始」可快速进入测量。</PanelHint>
+      <PanelHint>{t({ zh: '测量值实时显示为 3D 标注；右键菜单「测距：从此原子开始」可快速进入测量。', en: 'Measured values are shown live as 3D labels; the context-menu "Distance: from this atom" starts a measurement instantly.' })}</PanelHint>
     </div>
   )
 }

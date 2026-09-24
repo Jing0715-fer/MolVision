@@ -3,19 +3,20 @@ import * as THREE from 'three'
 import { elementInfo, residueClass, type ResidueClass } from './chemistry'
 import type { StructureData } from './parser'
 import { maxAtomSasa } from './sasa'
+import type { DualText } from '@/i18n'
 
 export type ColorScheme = 'element' | 'chain' | 'spectrum' | 'residue' | 'ss' | 'bfactor' | 'sasa' | 'uniform' | 'pocket'
 
-export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
-  element: '元素 (CPK)',
-  chain: '链',
-  spectrum: '光谱 (彩虹)',
-  residue: '残基类型',
-  ss: '二级结构',
-  bfactor: 'B 因子',
-  sasa: '溶剂可及 (SASA)',
-  uniform: '统一颜色',
-  pocket: '口袋 (配体距离)',
+export const COLOR_SCHEME_LABELS: Record<ColorScheme, DualText> = {
+  element: { zh: '元素 (CPK)', en: 'Element (CPK)' },
+  chain: { zh: '链', en: 'Chain' },
+  spectrum: { zh: '光谱 (彩虹)', en: 'Spectrum (rainbow)' },
+  residue: { zh: '残基类型', en: 'Residue type' },
+  ss: { zh: '二级结构', en: 'Secondary structure' },
+  bfactor: { zh: 'B 因子', en: 'B-factor' },
+  sasa: { zh: '溶剂可及 (SASA)', en: 'Solvent accessibility (SASA)' },
+  uniform: { zh: '统一颜色', en: 'Uniform color' },
+  pocket: { zh: '口袋 (配体距离)', en: 'Pocket (ligand distance)' },
 }
 
 /** 链调色板：黄金角 HSL，稳定可复现 */

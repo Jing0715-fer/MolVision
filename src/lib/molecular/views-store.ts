@@ -1,6 +1,7 @@
 // 视角书签：相机状态 + 视口缩略图，localStorage 独立持久化（molvision-views-v1）
 // 与会话存档（结构/reps/密度图）解耦——清空结构不清空书签，跨刷新/跨会话保留
 import { create } from 'zustand'
+import { tt } from '@/i18n'
 import { engineRef } from './store'
 
 const KEY = 'molvision-views-v1'
@@ -124,7 +125,7 @@ export const useViewsStore = create<ViewsState>((set, get) => ({
     const st = eng.getCameraState()
     const bm: ViewBookmark = {
       id: `v${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      name: (name ?? '').trim() || `视角 ${get().bookmarks.length + 1}`,
+      name: (name ?? '').trim() || tt({ zh: `视角 ${get().bookmarks.length + 1}`, en: `View ${get().bookmarks.length + 1}` }),
       camera: {
         pos: [st.pos[0], st.pos[1], st.pos[2]],
         target: [st.target[0], st.target[1], st.target[2]],

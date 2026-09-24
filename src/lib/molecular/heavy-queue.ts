@@ -3,6 +3,7 @@
 // 造成内存尖峰与 CPU 争抢（用户仍可继续操作视图，队列空出后自动继续）。
 // 投递侧：await lane.acquire(label) →（过期检查，过期则直接 release）→ lane.post(release) → postMessage
 // 结果侧：lane.releaseOne()（每条结果消息）；worker 异常 / 引擎销毁：lane.releaseAll()
+import { tt } from '@/i18n'
 import { useMolStore } from './store'
 
 const MAX_CONCURRENT = 2
@@ -15,7 +16,7 @@ const waiting: Array<() => void> = []
  */
 export async function acquireHeavySlot(label: string): Promise<() => void> {
   if (active >= MAX_CONCURRENT) {
-    useMolStore.getState().appendLog('out', `${label} 排队等待（重计算并发已满，空出后自动继续）…`)
+    useMolStore.getState().appendLog('out', tt({ zh: `${label} 排队等待（重计算并发已满，空出后自动继续）…`, en: `${label} queued (heavy-compute concurrency full, resumes automatically when a slot frees)…` }))
     await new Promise<void>(resolve => { waiting.push(resolve) })
   }
   active++

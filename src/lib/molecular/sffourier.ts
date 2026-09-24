@@ -26,6 +26,12 @@
 // ============================================================================
 
 import { symOpsFor, orthoMatrix, type CrystalCell, type SymOp } from './symmetry'
+import type { Locale } from '@/i18n/locales'
+
+/** 双语错误文案选择（locale 由调用方线程化：主线程传 store locale，worker 传请求 locale；缺省 zh） */
+function loc(locale: Locale | undefined, zh: string, en: string): string {
+  return locale === 'en' ? en : zh
+}
 
 // ---------- 公共类型 ----------
 
@@ -202,7 +208,7 @@ function cifNum(s: string): number | null {
  * （SF 文件常见 _symmetry.space_group_name_H-M，另兜底 _space_group 变体）。
  * tokenizer 处理引号字符串、分号文本块、# 注释、data_ 块头与跨行折行。
  * 跳过 fobs≤0 / sigf≤0 / 非数值（'.'/'?'）行。 */
-export function parseSfCif(text: string): { reflns: SfRefln[]; cell: CrystalCell | null; spaceGroup: string | null; error?: string } {
+export function parseSfCif(text: string, locale?: Locale): { reflns: SfRefln[]; cell: CrystalCell | null; spaceGroup: string | null; error?: string } {
   const reflns: SfRefln[] = []
   let a = NaN, b = NaN, c = NaN, al = NaN, be = NaN, ga = NaN
   let spaceGroup: string | null = null
@@ -297,7 +303,7 @@ export function parseSfCif(text: string): { reflns: SfRefln[]; cell: CrystalCell
   }
 
   if (reflns.length === 0) {
-    return { reflns, cell, spaceGroup, error: '未解析到观测反射（缺 _refln loop 或 h/k/l/Fobs/σF 列均无效）' }
+    return { reflns, cell, spaceGroup, error: loc(locale, '未解析到观测反射（缺 _refln loop 或 h/k/l/Fobs/σF 列均无效）', 'No observed reflections parsed (missing _refln loop, or h/k/l/Fobs/σF columns all invalid)') }
   }
   return { reflns, cell, spaceGroup }
 }
@@ -459,7 +465,7 @@ function buildFullOps(symbol: string, ops: SymOp[] | null): SymOp[] {
 /** 密度合成类型：2Fo−Fc 常规图 / Fo−Fc 差图（模型缺失/错位处出现正/负峰） */
 export type MapKind = '2fofc' | 'fofc'
 
-export function computeDensityMap(reflns: SfRefln[], cell: CrystalCell, spaceGroup: string, atoms: ModelAtoms, kind: MapKind = '2fofc'): DensityMapResult {
+export function computeDensityMap(reflns: SfRefln[], cell: CrystalCell, spaceGroup: string, atoms: ModelAtoms, kind: MapKind = '2fofc', locale?: Locale): DensityMapResult {
   const fail = (msg: string): DensityMapResult => ({
     grid: new Float32Array(0), n: 0, voxel: [0, 0, 0],
     rms: 0, mean: 0, min: 0, max: 0, scale: 0, nRefs: 0, cell, error: msg,
@@ -469,11 +475,11 @@ export function computeDensityMap(reflns: SfRefln[], cell: CrystalCell, spaceGro
   if (cell == null || !(cell.a > 0) || !(cell.b > 0) || !(cell.c > 0)
     || !(cell.alpha > 0 && cell.alpha < 180) || !(cell.beta > 0 && cell.beta < 180)
     || !(cell.gamma > 0 && cell.gamma < 180)) {
-    return fail('晶胞参数缺失或无效（a/b/c > 0 且 0 < 角度 < 180）')
+    return fail(loc(locale, '晶胞参数缺失或无效（a/b/c > 0 且 0 < 角度 < 180）', 'Unit-cell parameters missing or invalid (a/b/c > 0 and 0 < angles < 180)'))
   }
   const sg = spaceGroup != null ? spaceGroup.trim() : ''
-  if (sg === '') return fail('空间群符号缺失')
-  if (reflns == null || reflns.length < 10) return fail('反射数 < 10，无法合成密度图')
+  if (sg === '') return fail(loc(locale, '空间群符号缺失', 'Space group symbol missing'))
+  if (reflns == null || reflns.length < 10) return fail(loc(locale, '反射数 < 10，无法合成密度图', 'Fewer than 10 reflections — cannot synthesize a density map'))
 
   // —— 有效反射筛选（fobs/σF > 0，hkl 有限）——
   let nRef = 0
@@ -481,7 +487,7 @@ export function computeDensityMap(reflns: SfRefln[], cell: CrystalCell, spaceGro
     const r = reflns[q]
     if (Number.isFinite(r.h) && Number.isFinite(r.k) && Number.isFinite(r.l) && r.fobs > 0 && r.sigf > 0) nRef++
   }
-  if (nRef < 10) return fail('有效反射数 < 10（fobs/σF 须 > 0）')
+  if (nRef < 10) return fail(loc(locale, '有效反射数 < 10（fobs/σF 须 > 0）', 'Fewer than 10 valid reflections (fobs/σF must be > 0)'))
   const hs = new Int32Array(nRef)
   const ks = new Int32Array(nRef)
   const ls = new Int32Array(nRef)
@@ -501,11 +507,11 @@ export function computeDensityMap(reflns: SfRefln[], cell: CrystalCell, spaceGro
   }
 
   // —— 栅格尺寸：n = 大于 2·maxIdx+2 的最小 2 的幂，clamp [32,256] ——
-  if (maxIdx > 127) return fail(`最大反射指数 ${maxIdx} > 127，超出可合成范围`)
+  if (maxIdx > 127) return fail(loc(locale, `最大反射指数 ${maxIdx} > 127，超出可合成范围`, `Max reflection index ${maxIdx} > 127, beyond the synthesizable range`))
   let n = 2
   const mreq = 2 * maxIdx + 2
   while (n <= mreq) n <<= 1
-  if (n > 256) return fail(`所需 FFT 栅格 ${n}³ 超出 256³ 上限（max|hkl| = ${maxIdx}）`)
+  if (n > 256) return fail(loc(locale, `所需 FFT 栅格 ${n}³ 超出 256³ 上限（max|hkl| = ${maxIdx}）`, `Required FFT grid ${n}³ exceeds the 256³ limit (max|hkl| = ${maxIdx})`))
   if (n < 32) n = 32
   const n2 = n * n
   const n3 = n2 * n

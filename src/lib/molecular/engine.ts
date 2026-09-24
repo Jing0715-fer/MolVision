@@ -33,6 +33,7 @@ import { useHBondStore, type HBondPairSummary } from './hbond-store'
 import { useEnsembleStore } from './ensemble-store'
 import { makeTextSprite, disposeSprite } from './textsprite'
 import { useMolStore, buildNamedMasks, dataRegistry } from './store'
+import { tt } from '@/i18n'
 import { patchCapMaterial, syncCapSettings, capState, applyCapSides, capUniforms } from './cap-material'
 import { SlotLane } from './heavy-queue'
 import type { AtomLabel, Measurement, RepConfig, Settings, StructureEntry } from './types'
@@ -732,7 +733,7 @@ export class MolEngine {
   private updateAutoPerf(fps: number) {
     if (!this.settings?.autoPerf) {
       // 自动模式关闭：若此前由自动降级 → 立即恢复基线（手动接手场景已在 applySettings 处理并退出自动模式）
-      if (this.perfBaseline) this.restorePerfBaseline('自动性能模式已关闭，画质设置已还原')
+      if (this.perfBaseline) this.restorePerfBaseline(tt({ zh: '自动性能模式已关闭，画质设置已还原', en: 'Auto performance mode off — quality settings restored' }))
       return
     }
     if (this.perfBaseline) {
@@ -740,7 +741,7 @@ export class MolEngine {
       if (fps >= 30) {
         this.perfHighStreak++
         if (this.perfHighStreak >= 20) {
-          this.restorePerfBaseline(`帧率已稳定（${fps.toFixed(0)} fps），自动还原后处理与分辨率`)
+          this.restorePerfBaseline(tt({ zh: `帧率已稳定（${fps.toFixed(0)} fps），自动还原后处理与分辨率`, en: `Frame rate stabilized (${fps.toFixed(0)} fps) — post-processing and resolution restored automatically` }))
         }
       } else {
         this.perfHighStreak = 0
@@ -763,7 +764,7 @@ export class MolEngine {
       usePerfStore.getState().setDegraded(true)
       useMolStore.getState().appendLog(
         'out',
-        `自动性能模式：帧率持续偏低（${fps.toFixed(0)} fps），已临时关闭后处理并降低分辨率（perf off 或等待恢复）`,
+        tt({ zh: `自动性能模式：帧率持续偏低（${fps.toFixed(0)} fps），已临时关闭后处理并降低分辨率（perf off 或等待恢复）`, en: `Auto performance mode: frame rate persistently low (${fps.toFixed(0)} fps) — post-processing temporarily disabled and resolution reduced (perf off, or wait for recovery)` }),
       )
     } else {
       this.perfLowStreak = 0
@@ -806,7 +807,7 @@ export class MolEngine {
       usePerfStore.getState().setDegraded(false)
       return false
     }
-    this.restorePerfBaseline('已手动恢复画质设置')
+    this.restorePerfBaseline(tt({ zh: '已手动恢复画质设置', en: 'Quality settings restored manually' }))
     return true
   }
 
@@ -1871,7 +1872,7 @@ export class MolEngine {
       }
       total += draw.length
       waterTotal += waterN
-      if (truncated) useMolStore.getState().appendLog('out', `氢键数量超过 ${CAP}，已截断显示（共 ${hbonds.length}）`)
+      if (truncated) useMolStore.getState().appendLog('out', tt({ zh: `氢键数量超过 ${CAP}，已截断显示（共 ${hbonds.length}）`, en: `More than ${CAP} H-bonds — display truncated (${hbonds.length} total)` }))
     }
     useHBondStore.getState().setStats(total, waterTotal, true)
     useHBondStore.getState().setComputing(this.hbondPending.size > 0)
@@ -1912,7 +1913,7 @@ export class MolEngine {
       const posB = dataB.atoms.positions
       const draw = cs.crossPairs.length > MolEngine.CONTACT_CAP ? cs.crossPairs.slice(0, MolEngine.CONTACT_CAP) : cs.crossPairs
       if (cs.crossPairs.length > MolEngine.CONTACT_CAP) {
-        useMolStore.getState().appendLog('out', `接触连线超过 ${MolEngine.CONTACT_CAP}，仅渲染最近的 ${MolEngine.CONTACT_CAP} 条（共 ${cs.crossPairs.length} 对）`)
+        useMolStore.getState().appendLog('out', tt({ zh: `接触连线超过 ${MolEngine.CONTACT_CAP}，仅渲染最近的 ${MolEngine.CONTACT_CAP} 条（共 ${cs.crossPairs.length} 对）`, en: `More than ${MolEngine.CONTACT_CAP} contact lines — only the nearest ${MolEngine.CONTACT_CAP} rendered (${cs.crossPairs.length} pairs total)` }))
       }
       const verts = new Float32Array(draw.length * 6)
       const cols = new Float32Array(draw.length * 6)
@@ -1951,7 +1952,7 @@ export class MolEngine {
     const pos = data.atoms.positions
     const draw = cs.pairs.length > MolEngine.CONTACT_CAP ? cs.pairs.slice(0, MolEngine.CONTACT_CAP) : cs.pairs
     if (cs.pairs.length > MolEngine.CONTACT_CAP) {
-      useMolStore.getState().appendLog('out', `接触连线超过 ${MolEngine.CONTACT_CAP}，仅渲染最近的 ${MolEngine.CONTACT_CAP} 条（共 ${cs.pairs.length} 对）`)
+      useMolStore.getState().appendLog('out', tt({ zh: `接触连线超过 ${MolEngine.CONTACT_CAP}，仅渲染最近的 ${MolEngine.CONTACT_CAP} 条（共 ${cs.pairs.length} 对）`, en: `More than ${MolEngine.CONTACT_CAP} contact lines — only the nearest ${MolEngine.CONTACT_CAP} rendered (${cs.pairs.length} pairs total)` }))
     }
     // 顶点色连线（近距离红 → 远距离琥珀）
     const verts = new Float32Array(draw.length * 6)
@@ -2059,7 +2060,7 @@ export class MolEngine {
     const reqId = ++this.hbondReqId
     this.hbondPending.set(structureId, detKey)
     // 并发闸：槽位空出后再投递（排队期间设置又变 → 过期丢弃）
-    void this.hbondSlots.acquire('氢键检测').then(release => {
+    void this.hbondSlots.acquire(tt({ zh: '氢键检测', en: 'H-bond detection' })).then(release => {
       if (this.hbondPending.get(structureId) !== detKey) { release(); return }
       this.hbondSlots.post(release)
       w.postMessage({
@@ -2260,7 +2261,7 @@ export class MolEngine {
     const data = dataRegistry.get(structureId)
     const store = useMolStore.getState()
     const entry = store.structures.find(s => s.id === structureId)
-    if (!data || !entry) return { ok: false, count: 0, message: '结构不存在' }
+    if (!data || !entry) return { ok: false, count: 0, message: tt({ zh: '结构不存在', en: 'Structure not found' }) }
     if (radius <= 0) {
       useMolStore.setState(s => ({
         structures: s.structures.map(x => x.id === structureId ? { ...x, symmetry: undefined } : x),
@@ -2271,14 +2272,14 @@ export class MolEngine {
       if (g && view) view.group.remove(g)
       this.symmetryGroups.delete(structureId)
       this.pickablesCache = null
-      return { ok: true, count: 0, message: `已关闭 ${entry.name} 的对称伴侣` }
+      return { ok: true, count: 0, message: tt({ zh: `已关闭 ${entry.name} 的对称伴侣`, en: `Symmetry mates disabled for ${entry.name}` }) }
     }
     if (!data.crystal) {
-      return { ok: false, count: 0, message: `${entry.name} 无晶胞信息（CRYST1 缺失）——无法生成对称伴侣` }
+      return { ok: false, count: 0, message: tt({ zh: `${entry.name} 无晶胞信息（CRYST1 缺失）——无法生成对称伴侣`, en: `${entry.name} has no unit cell info (CRYST1 missing) — cannot generate symmetry mates` }) }
     }
     const ops = symOpsFor(data.crystal.spaceGroup)
     if (!ops) {
-      return { ok: false, count: 0, message: `空间群 "${data.crystal.spaceGroup.trim()}" 不在支持列表（65 个手性群）内` }
+      return { ok: false, count: 0, message: tt({ zh: `空间群 "${data.crystal.spaceGroup.trim()}" 不在支持列表（65 个手性群）内`, en: `Space group "${data.crystal.spaceGroup.trim()}" is not in the supported list (65 chiral groups)` }) }
     }
     const mates = mateTransforms(data.crystal, data.crystal.spaceGroup, data.bbox.center, radius, data.bbox.radius)
     useMolStore.setState(s => ({
@@ -2293,7 +2294,10 @@ export class MolEngine {
     }
     return {
       ok: true, count: mates.length,
-      message: `${entry.name}：已生成 ${mates.length} 个对称伴侣（空间群 ${data.crystal.spaceGroup.trim()} · 半径 ${radius} Å · ${ops.length} 个对称操作）`,
+      message: tt({
+        zh: `${entry.name}：已生成 ${mates.length} 个对称伴侣（空间群 ${data.crystal.spaceGroup.trim()} · 半径 ${radius} Å · ${ops.length} 个对称操作）`,
+        en: `${entry.name}: ${mates.length} symmetry mates generated (space group ${data.crystal.spaceGroup.trim()} · radius ${radius} Å · ${ops.length} symmetry operations)`,
+      }),
     }
   }
 
@@ -2421,8 +2425,8 @@ export class MolEngine {
   superpose(mobileId: string, refId: string, mobileChain?: string, refChain?: string): SuperposeResult {
     const mobile = dataRegistry.get(mobileId)
     const ref = dataRegistry.get(refId)
-    if (!mobile || !ref) return { ...NULL_RESULT, error: '结构不存在' }
-    if (mobileId === refId) return { ...NULL_RESULT, error: '移动与参考结构相同' }
+    if (!mobile || !ref) return { ...NULL_RESULT, error: tt({ zh: '结构不存在', en: 'Structure not found' }) }
+    if (mobileId === refId) return { ...NULL_RESULT, error: tt({ zh: '移动与参考结构相同', en: 'Mobile and reference structures are the same' }) }
     const t0 = performance.now()
     const result = superposeStructures(mobile, ref, mobileChain, refChain)
     if (!result.ok) return result
@@ -2470,8 +2474,8 @@ export class MolEngine {
     const store = useMolStore.getState()
     const entry = store.structures.find(s => s.id === structureId)
     const data = dataRegistry.get(structureId)
-    if (!entry || !data) return { ok: false, message: '结构不存在' }
-    if (!entry.transform) return { ok: false, message: '该结构未应用叠合变换' }
+    if (!entry || !data) return { ok: false, message: tt({ zh: '结构不存在', en: 'Structure not found' }) }
+    if (!entry.transform) return { ok: false, message: tt({ zh: '该结构未应用叠合变换', en: 'No superposition transform applied to this structure' }) }
     const t = entry.transform
     // superpose.ts 约定 (w,x,y,z)；THREE.Quaternion 为 (x,y,z,w)
     const q = new THREE.Quaternion(t.quat[1], t.quat[2], t.quat[3], t.quat[0])
@@ -2488,7 +2492,7 @@ export class MolEngine {
       visualRev: s.visualRev + 1,
     }))
     this.rebuildStructureVisuals(data)
-    return { ok: true, message: `已重置 ${entry.name} 到原始位姿` }
+    return { ok: true, message: tt({ zh: `已重置 ${entry.name} 到原始位姿`, en: `${entry.name} reset to its original pose` }) }
   }
 
   // ---------- SASA 溶剂可及面积（Shrake–Rupley，大结构走 Web Worker） ----------
@@ -2527,7 +2531,7 @@ export class MolEngine {
     this.sasaPending.set(structureId, key)
     useSasaStore.getState().setComputing(true)
     // 并发闸：槽位空出后再投递（排队期间被新请求取代 → 过期丢弃）
-    void this.sasaSlots.acquire('SASA 计算').then(release => {
+    void this.sasaSlots.acquire(tt({ zh: 'SASA 计算', en: 'SASA computation' })).then(release => {
       if (this.sasaPending.get(structureId) !== key) { release(); return }
       this.sasaSlots.post(release)
       w.postMessage({
@@ -2580,7 +2584,7 @@ export class MolEngine {
     }
     this.sasaPending.set(structureId, key)
     useSasaStore.getState().setBuriedComputing(true)
-    void this.sasaSlots.acquire('ΔSASA 计算').then(release => {
+    void this.sasaSlots.acquire(tt({ zh: 'ΔSASA 计算', en: 'ΔSASA computation' })).then(release => {
       if (this.sasaPending.get(structureId) !== key) { release(); return }
       this.sasaSlots.post(release)
       w.postMessage({
@@ -2636,7 +2640,7 @@ export class MolEngine {
       const store = useMolStore.getState()
       if (store.activeId === structureId) {
         store.applyColor('sasa')
-        store.appendLog('out', 'SASA 数据就绪——已自动完成暴露度着色（埋藏蓝紫 → 暴露橙红）')
+        store.appendLog('out', tt({ zh: 'SASA 数据就绪——已自动完成暴露度着色（埋藏蓝紫 → 暴露橙红）', en: 'SASA data ready — exposure coloring applied automatically (buried blue-violet → exposed orange-red)' }))
       }
     }
   }
@@ -2736,7 +2740,7 @@ export class MolEngine {
       buriedA: 0, buriedB: 0, coreA: [], coreB: [], ms: 0,
       cross: { idA, idB, labelA, labelB },
     })
-    void this.sasaSlots.acquire('跨结构 ΔSASA').then(release => {
+    void this.sasaSlots.acquire(tt({ zh: '跨结构 ΔSASA', en: 'cross-structure ΔSASA' })).then(release => {
       if (this.sasaPending.get(idA) !== key) { release(); return }
       this.sasaSlots.post(release)
       w.postMessage({
@@ -2786,7 +2790,10 @@ export class MolEngine {
       atomsA, atomsB, buriedA, buriedB, coreA, coreB, ms,
       cross: { idA, idB, labelA, labelB },
     })
-    useMolStore.getState().appendLog('out', `跨结构 ΔSASA 完成（Web Worker）：合计 ${(buriedA + buriedB).toFixed(0)} Å²（${labelA} ${buriedA.toFixed(0)} + ${labelB} ${buriedB.toFixed(0)}）· 核心残基 ${labelA} ${coreA.length} / ${labelB} ${coreB.length} · ${ms.toFixed(0)} ms`)
+    useMolStore.getState().appendLog('out', tt({
+      zh: `跨结构 ΔSASA 完成（Web Worker）：合计 ${(buriedA + buriedB).toFixed(0)} Å²（${labelA} ${buriedA.toFixed(0)} + ${labelB} ${buriedB.toFixed(0)}）· 核心残基 ${labelA} ${coreA.length} / ${labelB} ${coreB.length} · ${ms.toFixed(0)} ms`,
+      en: `Cross-structure ΔSASA complete (Web Worker): total ${(buriedA + buriedB).toFixed(0)} Å² (${labelA} ${buriedA.toFixed(0)} + ${labelB} ${buriedB.toFixed(0)}) · core residues ${labelA} ${coreA.length} / ${labelB} ${coreB.length} · ${ms.toFixed(0)} ms`,
+    }))
   }
 
   /** 同步路径返回摘要（不动 store——applyCrossBuriedResult 已写入） */
@@ -2831,7 +2838,7 @@ export class MolEngine {
         const b = useSasaStore.getState().buried
         if (b?.computing) {
           useSasaStore.getState().setBuried(null)
-          useMolStore.getState().appendLog('err', 'SASA Worker 异常终止——ΔSASA 计算已取消（可重试；后续计算将回退主线程）')
+          useMolStore.getState().appendLog('err', tt({ zh: 'SASA Worker 异常终止——ΔSASA 计算已取消（可重试；后续计算将回退主线程）', en: 'SASA Worker terminated abnormally — ΔSASA computation cancelled (you can retry; later computations fall back to the main thread)' }))
         }
       }
       this.sasaWorker = w
@@ -2885,7 +2892,10 @@ export class MolEngine {
       const probe = parseFloat(msg.key.split('|')[1]) || 1.4
       const nPoints = parseInt(msg.key.split('|')[2]) || 92
       this.applySasaResult(msg.structureId, data, stats, probe, nPoints)
-      useMolStore.getState().appendLog('out', `SASA 完成（Web Worker，probe ${probe} Å，${nPoints} 点）：总计 ${stats.total.toFixed(0)} Å² · 疏水 ${stats.hydrophobic.toFixed(0)} · 极性 ${stats.polar.toFixed(0)} · ${stats.ms.toFixed(0)} ms`)
+      useMolStore.getState().appendLog('out', tt({
+        zh: `SASA 完成（Web Worker，probe ${probe} Å，${nPoints} 点）：总计 ${stats.total.toFixed(0)} Å² · 疏水 ${stats.hydrophobic.toFixed(0)} · 极性 ${stats.polar.toFixed(0)} · ${stats.ms.toFixed(0)} ms`,
+        en: `SASA complete (Web Worker, probe ${probe} Å, ${nPoints} points): total ${stats.total.toFixed(0)} Å² · hydrophobic ${stats.hydrophobic.toFixed(0)} · polar ${stats.polar.toFixed(0)} · ${stats.ms.toFixed(0)} ms`,
+      }))
     } else if (msg.kind === 'buried' && msg.delta) {
       // 残基聚合 + 核心界面残基（>1 Å²）
       const perResidue = new Float32Array(data.residues.length)
@@ -2924,7 +2934,10 @@ export class MolEngine {
         buriedA, buriedB, coreA, coreB, ms: msg.ms,
         cross: null,
       })
-      useMolStore.getState().appendLog('out', `ΔSASA 完成（Web Worker）：合计 ${(buriedA + buriedB).toFixed(0)} Å²（A ${buriedA.toFixed(0)} + B ${buriedB.toFixed(0)}）· 界面核心残基 A ${coreA.length} / B ${coreB.length} · ${msg.ms.toFixed(0)} ms`)
+      useMolStore.getState().appendLog('out', tt({
+        zh: `ΔSASA 完成（Web Worker）：合计 ${(buriedA + buriedB).toFixed(0)} Å²（A ${buriedA.toFixed(0)} + B ${buriedB.toFixed(0)}）· 界面核心残基 A ${coreA.length} / B ${coreB.length} · ${msg.ms.toFixed(0)} ms`,
+        en: `ΔSASA complete (Web Worker): total ${(buriedA + buriedB).toFixed(0)} Å² (A ${buriedA.toFixed(0)} + B ${buriedB.toFixed(0)}) · interface core residues A ${coreA.length} / B ${coreB.length} · ${msg.ms.toFixed(0)} ms`,
+      }))
     }
   }
 
@@ -3437,12 +3450,12 @@ export class MolEngine {
       this.perfPrFactor = 1
       this.applyPixelRatio()
       usePerfStore.getState().setDegraded(false)
-      useMolStore.getState().appendLog('out', '自动性能模式：检测到手动开启后处理，已交还控制权并退出（perf on 可重新开启）')
+      useMolStore.getState().appendLog('out', tt({ zh: '自动性能模式：检测到手动开启后处理，已交还控制权并退出（perf on 可重新开启）', en: 'Auto performance mode: manual post-processing detected — control handed back and mode exited (perf on to re-enable)' }))
       useMolStore.getState().updateSettings({ autoPerf: false })
     }
     // 自动模式被关闭（perf off / 开关/会话恢复）→ 立即还原基线，不等下一个统计窗口
     if (prev && prev.autoPerf && !settings.autoPerf && this.perfBaseline) {
-      this.restorePerfBaseline('自动性能模式已关闭，画质设置已还原')
+      this.restorePerfBaseline(tt({ zh: '自动性能模式已关闭，画质设置已还原', en: 'Auto performance mode off — quality settings restored' }))
     }
     if (!changed) return
     // 背景

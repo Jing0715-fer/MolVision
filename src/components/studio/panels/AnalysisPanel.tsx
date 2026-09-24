@@ -11,6 +11,7 @@ import { useHBondStore, type HBondPairSummary } from '@/lib/molecular/hbond-stor
 import { useSasaStore } from '@/lib/molecular/sasa-store'
 import { evaluateSelection } from '@/lib/molecular/selection'
 import type { StructureData } from '@/lib/molecular/parser'
+import { useI18n, tt } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Slider } from '@/components/ui/slider'
@@ -34,6 +35,7 @@ const XBSA_EXPR_EXAMPLES: { label: string; expr: string }[] = [
 ]
 
 export function AnalysisPanel() {
+  const { t } = useI18n()
   const activeId = useMolStore(s => s.activeId)
   const structures = useMolStore(s => s.structures)
   const setSelection = useMolStore(s => s.setSelection)
@@ -144,12 +146,12 @@ export function AnalysisPanel() {
   const runSasa = useCallback(() => {
     if (!activeId) return
     const r = engineRef.current?.requestSasa(activeId, { probe, nPoints })
-    if (!r) return appendLog('err', '渲染引擎未就绪')
+    if (!r) return appendLog('err', tt({ zh: '渲染引擎未就绪', en: 'Rendering engine not ready' }))
     if (r.done && r.stats) {
       const st = r.stats
-      appendLog('out', `SASA（Shrake–Rupley，probe ${probe} Å，${nPoints} 点）：总计 ${st.total.toFixed(0)} Å² · 疏水 ${st.hydrophobic.toFixed(0)} · 极性 ${st.polar.toFixed(0)} · ${st.ms.toFixed(0)} ms`)
+      appendLog('out', tt({ zh: `SASA（Shrake–Rupley，probe ${probe} Å，${nPoints} 点）：总计 ${st.total.toFixed(0)} Å² · 疏水 ${st.hydrophobic.toFixed(0)} · 极性 ${st.polar.toFixed(0)} · ${st.ms.toFixed(0)} ms`, en: `SASA (Shrake–Rupley, probe ${probe} Å, ${nPoints} points): total ${st.total.toFixed(0)} Å² · hydrophobic ${st.hydrophobic.toFixed(0)} · polar ${st.polar.toFixed(0)} · ${st.ms.toFixed(0)} ms` }))
     } else {
-      appendLog('out', `SASA 计算中（Web Worker，probe ${probe} Å，${nPoints} 点）…`)
+      appendLog('out', tt({ zh: `SASA 计算中（Web Worker，probe ${probe} Å，${nPoints} 点）…`, en: `Computing SASA (Web Worker, probe ${probe} Å, ${nPoints} points)…` }))
     }
   }, [activeId, probe, nPoints, appendLog])
 
@@ -176,7 +178,7 @@ export function AnalysisPanel() {
     setActive(id)
     const idx = interfaceAtomIndices(d, core)
     setSelection(id, idx)
-    appendLog('out', `已选择 ${label} 侧跨结构界面核心残基：${core.length} 残基（${idx.length} 原子，ΔSASA > 1 Å²）`)
+    appendLog('out', tt({ zh: `已选择 ${label} 侧跨结构界面核心残基：${core.length} 残基（${idx.length} 原子，ΔSASA > 1 Å²）`, en: `Selected ${label}-side cross-structure interface core residues: ${core.length} residues (${idx.length} atoms, ΔSASA > 1 Å²)` }))
   }, [setActive, setSelection, appendLog])
 
   // ---------- 2D 接触图谱 ----------
@@ -299,7 +301,7 @@ export function AnalysisPanel() {
     for (let i = d.residues[p.resA].start; i < d.residues[p.resA].end; i++) idx.push(i)
     for (let i = d.residues[p.resB].start; i < d.residues[p.resB].end; i++) idx.push(i)
     setSelection(activeId, idx)
-    appendLog('out', `已选择接触残基对：${d.residues[p.resA].chainId.trim()}:${d.residues[p.resA].resName}${d.residues[p.resA].resSeq} ↔ ${d.residues[p.resB].chainId.trim()}:${d.residues[p.resB].resName}${d.residues[p.resB].resSeq}（${p.minDist.toFixed(2)} Å，${p.count} 个原子对）`)
+    appendLog('out', tt({ zh: `已选择接触残基对：${d.residues[p.resA].chainId.trim()}:${d.residues[p.resA].resName}${d.residues[p.resA].resSeq} ↔ ${d.residues[p.resB].chainId.trim()}:${d.residues[p.resB].resName}${d.residues[p.resB].resSeq}（${p.minDist.toFixed(2)} Å，${p.count} 个原子对）`, en: `Selected contact residue pair: ${d.residues[p.resA].chainId.trim()}:${d.residues[p.resA].resName}${d.residues[p.resA].resSeq} ↔ ${d.residues[p.resB].chainId.trim()}:${d.residues[p.resB].resName}${d.residues[p.resB].resSeq} (${p.minDist.toFixed(2)} Å, ${p.count} atom pairs)` }))
   }
 
   // ---------- 选择界面残基 ----------
@@ -311,7 +313,7 @@ export function AnalysisPanel() {
         ? interfaceAtomIndices(data, residuesB)
         : [...interfaceAtomIndices(data, residuesA), ...interfaceAtomIndices(data, residuesB)]
     setSelection(activeId, idx)
-    appendLog('out', `已选择${side === 'a' ? 'A 侧' : side === 'b' ? 'B 侧' : '全部'}界面残基：${idx.length} 原子（${side === 'a' ? residuesA.length : side === 'b' ? residuesB.length : residuesA.length + residuesB.length} 残基）`)
+    appendLog('out', tt({ zh: `已选择${side === 'a' ? 'A 侧' : side === 'b' ? 'B 侧' : '全部'}界面残基：${idx.length} 原子（${side === 'a' ? residuesA.length : side === 'b' ? residuesB.length : residuesA.length + residuesB.length} 残基）`, en: `Selected ${side === 'a' ? 'A-side' : side === 'b' ? 'B-side' : 'all'} interface residues: ${idx.length} atoms (${side === 'a' ? residuesA.length : side === 'b' ? residuesB.length : residuesA.length + residuesB.length} residues)` }))
   }
 
   // ---------- 残基对跳转（接触/氢键表格共用：选择两侧残基原子 + 相机聚焦） ----------
@@ -325,7 +327,7 @@ export function AnalysisPanel() {
     for (let i = rb.start; i < rb.end; i++) idx.push(i)
     setSelection(activeId, idx)
     engineRef.current?.fitView([{ structureId: activeId, indices: idx }])
-    appendLog('out', `已选择并聚焦残基对：${label}`)
+    appendLog('out', tt({ zh: `已选择并聚焦残基对：${label}`, en: `Selected and focused residue pair: ${label}` }))
   }, [activeId, data, setSelection, appendLog])
 
   // ---------- 氢键网络残基对（跟随 B 键 / hbonds 命令的实时状态） ----------
@@ -340,14 +342,14 @@ export function AnalysisPanel() {
     <div className="pb-4">
       <SectionTitle right={
         <span className="text-[10px] font-normal font-mono tabular-nums text-muted-foreground">
-          {entry ? entry.name : '无活动结构'}
+          {entry ? entry.name : t({ zh: '无活动结构', en: 'No active structure' })}
         </span>
       }>
-        界面接触检测
+        {t({ zh: '界面接触检测', en: 'Interface contact analysis' })}
       </SectionTitle>
 
       {!entry && (
-        <PanelHint>加载结构后，检测两组原子选择间的重原子接触（≤ 距离截断），获得残基级界面与 2D 接触图谱。</PanelHint>
+        <PanelHint>{t({ zh: '加载结构后，检测两组原子选择间的重原子接触（≤ 距离截断），获得残基级界面与 2D 接触图谱。', en: 'After loading a structure, detect heavy-atom contacts between two selections (≤ distance cutoff) to get a residue-level interface and a 2D contact map.' })}</PanelHint>
       )}
 
       {entry && structures.length >= 2 && (
@@ -360,7 +362,7 @@ export function AnalysisPanel() {
             )}
           >
             <Network className="h-3 w-3" />
-            单结构界面
+            {t({ zh: '单结构界面', en: 'Single structure' })}
           </button>
           <button
             onClick={() => setXMode(true)}
@@ -370,7 +372,7 @@ export function AnalysisPanel() {
             )}
           >
             <ArrowLeftRight className="h-3 w-3" />
-            跨结构接触
+            {t({ zh: '跨结构接触', en: 'Cross-structure' })}
           </button>
         </div>
       )}
@@ -385,7 +387,7 @@ export function AnalysisPanel() {
               const tone = side === 'A' ? 'text-rose-600 dark:text-rose-400' : 'text-cyan-600 dark:text-cyan-400'
               return (
                 <label key={side} className="rounded-lg border border-border px-2 py-1.5">
-                  <span className={cn('text-[10px] font-semibold', tone)}>结构 {side}</span>
+                  <span className={cn('text-[10px] font-semibold', tone)}>{t({ zh: `结构 ${side}`, en: `Structure ${side}` })}</span>
                   <select
                     value={val}
                     onChange={e => setVal(e.target.value)}
@@ -402,20 +404,20 @@ export function AnalysisPanel() {
             })}
           </div>
           <ExprInput
-            label="A 选择" tone="rose"
+            label={t({ zh: 'A 选择', en: 'A selection' })} tone="rose"
             value={xExprA} onChange={setXExprA}
             count={xCounts.a}
-            placeholder="如 protein / chain A"
+            placeholder={t({ zh: '如 protein / chain A', en: 'e.g. protein / chain A' })}
           />
           <ExprInput
-            label="B 选择" tone="cyan"
+            label={t({ zh: 'B 选择', en: 'B selection' })} tone="cyan"
             value={xExprB} onChange={setXExprB}
             count={xCounts.b}
-            placeholder="如 protein / chain A"
+            placeholder={t({ zh: '如 protein / chain A', en: 'e.g. protein / chain A' })}
           />
           <div className="rounded-lg border border-border px-2.5 py-2">
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground">距离截断</span>
+              <span className="text-muted-foreground">{t({ zh: '距离截断', en: 'Distance cutoff' })}</span>
               <span className="font-mono font-semibold tabular-nums text-amber-600 dark:text-amber-400">{xCutoff.toFixed(1)} Å</span>
             </div>
             <Slider
@@ -431,12 +433,12 @@ export function AnalysisPanel() {
               className="mol-btn-primary flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
             >
               <ArrowLeftRight className="h-3.5 w-3.5" />
-              检测跨结构接触
+              {t({ zh: '检测跨结构接触', en: 'Detect cross-contacts' })}
             </button>
             {cross && (
               <button
                 onClick={() => { clear(); engineRef.current?.updateContacts() }}
-                title="清除跨结构结果与连线"
+                title={t({ zh: '清除跨结构结果与连线', en: 'Clear cross-structure results and lines' })}
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:border-destructive/50 hover:text-destructive"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -444,20 +446,20 @@ export function AnalysisPanel() {
             )}
           </div>
           <p className="text-[10px] leading-relaxed text-muted-foreground">
-            检测两结构间的原子接触（复合物界面）。两结构需已 superpose 对齐到同一坐标系——未对齐时距离无意义。
+            {t({ zh: '检测两结构间的原子接触（复合物界面）。两结构需已 superpose 对齐到同一坐标系——未对齐时距离无意义。', en: 'Detects atom contacts between two structures (complex interface). Both must be superposed into a common coordinate frame — distances are meaningless without alignment.' })}
           </p>
 
           {/* 跨结构结果卡片 */}
           {cross && crossPairs.length > 0 && (
             <div className="panel-card p-2.5">
               <div className="flex items-center justify-between">
-                <span className="mol-micro text-muted-foreground">跨结构界面</span>
+                <span className="mol-micro text-muted-foreground">{t({ zh: '跨结构界面', en: 'Cross-structure interface' })}</span>
                 <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{cross.cutoff.toFixed(1)} Å</span>
               </div>
               <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-                <Stat label="接触对" value={crossPairs.length.toLocaleString()} />
-                <Stat label={`${cross.labelA} 侧`} value={residuesA.length.toLocaleString()} tone="rose" />
-                <Stat label={`${cross.labelB} 侧`} value={residuesB.length.toLocaleString()} tone="cyan" />
+                <Stat label={t({ zh: '接触对', en: 'Contact pairs' })} value={crossPairs.length.toLocaleString()} />
+                <Stat label={t({ zh: `${cross.labelA} 侧`, en: `${cross.labelA} side` })} value={residuesA.length.toLocaleString()} tone="rose" />
+                <Stat label={t({ zh: `${cross.labelB} 侧`, en: `${cross.labelB} side` })} value={residuesB.length.toLocaleString()} tone="cyan" />
               </div>
               <div className="mt-2 space-y-1">
                 {crossPairs.slice(0, 5).map((p, i) => {
@@ -477,14 +479,14 @@ export function AnalysisPanel() {
                   )
                 })}
                 {crossPairs.length > 5 && (
-                  <p className="text-center text-[10px] tabular-nums text-muted-foreground">… 共 {crossPairs.length} 对（按距离排序）</p>
+                  <p className="text-center text-[10px] tabular-nums text-muted-foreground">{t({ zh: `… 共 ${crossPairs.length} 对（按距离排序）`, en: `… ${crossPairs.length} pairs (sorted by distance)` })}</p>
                 )}
               </div>
             </div>
           )}
           {cross && crossPairs.length === 0 && (
             <p className="rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-600 dark:text-amber-400">
-              未发现跨结构接触——确认两结构已 superpose 对齐，或增大距离截断。
+              {t({ zh: '未发现跨结构接触——确认两结构已 superpose 对齐，或增大距离截断。', en: 'No cross-structure contacts found — make sure both structures are superposed, or increase the cutoff.' })}
             </p>
           )}
 
@@ -494,38 +496,38 @@ export function AnalysisPanel() {
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1 text-[11px] font-semibold text-foreground">
                   <Droplets className="h-3.5 w-3.5 text-primary" />
-                  跨结构埋藏面积 (xbsa)
+                  {t({ zh: '跨结构埋藏面积 (xbsa)', en: 'Cross-structure buried area (xbsa)' })}
                 </span>
                 <button
                   onClick={runXbsa}
                   disabled={!!(buried?.cross && buried.computing)}
                   className="mol-btn-primary rounded-md bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                 >
-                  {buried?.cross && buried.computing ? '计算中…' : '联合三路 SASA'}
+                  {buried?.cross && buried.computing ? t({ zh: '计算中…', en: 'Computing…' }) : t({ zh: '联合三路 SASA', en: 'Run 3-way SASA' })}
                 </button>
               </div>
               {buried && buried.cross && buried.cross.idA === cross.idA && buried.cross.idB === cross.idB && !buried.computing && (
                 <div className="mt-1.5">
                   <div className="grid grid-cols-3 gap-1.5">
-                    <Stat label={`${buried.cross.labelA} 埋藏`} value={`${buried.buriedA.toFixed(0)} Å²`} tone="rose" />
-                    <Stat label={`${buried.cross.labelB} 埋藏`} value={`${buried.buriedB.toFixed(0)} Å²`} tone="cyan" />
-                    <Stat label="合计" value={`${(buried.buriedA + buried.buriedB).toFixed(0)} Å²`} />
+                    <Stat label={t({ zh: `${buried.cross.labelA} 埋藏`, en: `${buried.cross.labelA} buried` })} value={`${buried.buriedA.toFixed(0)} Å²`} tone="rose" />
+                    <Stat label={t({ zh: `${buried.cross.labelB} 埋藏`, en: `${buried.cross.labelB} buried` })} value={`${buried.buriedB.toFixed(0)} Å²`} tone="cyan" />
+                    <Stat label={t({ zh: '合计', en: 'Total' })} value={`${(buried.buriedA + buried.buriedB).toFixed(0)} Å²`} />
                   </div>
                   <div className="mt-1.5 text-[10px] tabular-nums text-muted-foreground">
-                    核心残基（ΔSASA &gt; 1 Å²）：{buried.cross.labelA} {buried.coreA.length} · {buried.cross.labelB} {buried.coreB.length} · {buried.ms.toFixed(0)} ms
+                    {t({ zh: `核心残基（ΔSASA > 1 Å²）：${buried.cross.labelA} ${buried.coreA.length} · ${buried.cross.labelB} ${buried.coreB.length} · ${buried.ms.toFixed(0)} ms`, en: `Core residues (ΔSASA > 1 Å²): ${buried.cross.labelA} ${buried.coreA.length} · ${buried.cross.labelB} ${buried.coreB.length} · ${buried.ms.toFixed(0)} ms` })}
                   </div>
                   <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                     <button
                       onClick={() => selectXbsaSide('a')}
                       className="rounded-md border border-rose-500/40 px-2 py-1.5 text-[10px] font-medium text-rose-600 transition hover:bg-rose-500/15 dark:text-rose-300"
                     >
-                      选 {buried.cross.labelA} 核心
+                      {t({ zh: `选 ${buried.cross.labelA} 核心`, en: `Select ${buried.cross.labelA} core` })}
                     </button>
                     <button
                       onClick={() => selectXbsaSide('b')}
                       className="rounded-md border border-cyan-500/40 px-2 py-1.5 text-[10px] font-medium text-cyan-600 transition hover:bg-cyan-500/15 dark:text-cyan-300"
                     >
-                      选 {buried.cross.labelB} 核心
+                      {t({ zh: `选 ${buried.cross.labelB} 核心`, en: `Select ${buried.cross.labelB} core` })}
                     </button>
                   </div>
                 </div>
@@ -533,15 +535,15 @@ export function AnalysisPanel() {
               {(!buried || !buried.cross || buried.cross.idA !== cross.idA || buried.cross.idB !== cross.idB) && (
                 <div className="mt-1 space-y-1.5">
                   <p className="text-[10px] leading-relaxed text-muted-foreground">
-                    三路 SASA（A 单独 / B 单独 / A∪B 联合）——游离构象视角的界面埋藏面积，与复合物本体 <span className="font-mono">bsa</span> 对照可佐证表位保守性。
-                    <span className="text-foreground/70">默认 protein 会纳入两结构全部原子</span>；叠合后若有大范围重合（如游离抗原 vs 复合物同源链），数值会明显偏大——建议改用链限定后重跑检测，xbsa 自动沿用新掩码。
+                    {t({ zh: '三路 SASA（A 单独 / B 单独 / A∪B 联合）——游离构象视角的界面埋藏面积，与复合物本体 ', en: 'Three-way SASA (A alone / B alone / A∪B combined) — interface buried area from the free-state perspective; comparing against the complex’s own ' })}<span className="font-mono">bsa</span>{t({ zh: ' 对照可佐证表位保守性。', en: ' corroborates epitope conservation.' })}
+                    <span className="text-foreground/70">{t({ zh: '默认 protein 会纳入两结构全部原子', en: 'The default protein expression includes all atoms of both structures' })}</span>{t({ zh: '；叠合后若有大范围重合（如游离抗原 vs 复合物同源链），数值会明显偏大——建议改用链限定后重跑检测，xbsa 自动沿用新掩码。', en: '; after superposition, extensive overlap (e.g. free antigen vs a complex homolog chain) inflates values markedly — rerun detection with a chain-restricted expression, xbsa reuses the new masks automatically.' })}
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {XBSA_EXPR_EXAMPLES.map(ex => (
                       <button
                         key={ex.label}
                         onClick={() => { setXExprA(ex.expr); setXExprB(ex.expr) }}
-                        title={`两结构同用：${ex.expr}（设置后需重新检测跨结构接触）`}
+                        title={t({ zh: `两结构同用：${ex.expr}（设置后需重新检测跨结构接触）`, en: `Apply to both structures: ${ex.expr} (re-run cross-contact detection after setting)` })}
                         className="rounded-md border border-border bg-background px-2 py-0.5 font-mono text-[9px] text-muted-foreground transition hover:border-primary/50 hover:text-primary"
                       >
                         {ex.label}
@@ -559,20 +561,20 @@ export function AnalysisPanel() {
         <>
           <div className="space-y-2 px-2">
             <ExprInput
-              label="A 组" tone="rose"
+              label={t({ zh: 'A 组', en: 'Group A' })} tone="rose"
               value={aExpr} onChange={v => setExpr('a', v)}
               count={counts.a} error={errors.a}
-              placeholder="如 chain A / resn HEM / within 8 of ..."
+              placeholder={t({ zh: '如 chain A / resn HEM / within 8 of ...', en: 'e.g. chain A / resn HEM / within 8 of ...' })}
             />
             <ExprInput
-              label="B 组" tone="cyan"
+              label={t({ zh: 'B 组', en: 'Group B' })} tone="cyan"
               value={bExpr} onChange={v => setExpr('b', v)}
               count={counts.b} error={errors.b}
-              placeholder="如 chain B / protein / ligand"
+              placeholder={t({ zh: '如 chain B / protein / ligand', en: 'e.g. chain B / protein / ligand' })}
             />
             <div className="rounded-lg border border-border px-2.5 py-2">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">距离截断</span>
+                <span className="text-muted-foreground">{t({ zh: '距离截断', en: 'Distance cutoff' })}</span>
                 <span className="font-mono font-semibold tabular-nums text-amber-600 dark:text-amber-400">{cutoff.toFixed(1)} Å</span>
               </div>
               <Slider
@@ -588,12 +590,12 @@ export function AnalysisPanel() {
                 className="mol-btn-primary flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90"
               >
                 <Play className="h-3.5 w-3.5" />
-                分析接触
+                {t({ zh: '分析接触', en: 'Analyze contacts' })}
               </button>
               {hasResult && (
                 <button
                   onClick={() => { clear(); engineRef.current?.updateContacts() }}
-                  title="清除结果与连线"
+                  title={t({ zh: '清除结果与连线', en: 'Clear results and lines' })}
                   className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:border-destructive/50 hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -604,7 +606,7 @@ export function AnalysisPanel() {
 
           {stale && (
             <p className="mx-2 mt-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-600 dark:text-amber-400">
-              结果属于其它结构，重新运行分析以更新。
+              {t({ zh: '结果属于其它结构，重新运行分析以更新。', en: 'These results belong to another structure — re-run the analysis to update.' })}
             </p>
           )}
 
@@ -618,18 +620,18 @@ export function AnalysisPanel() {
                       onCheckedChange={v => { setVisible(v); engineRef.current?.updateContacts() }}
                       className="scale-90"
                     />
-                    连线
+                    {t({ zh: '连线', en: 'Lines' })}
                   </label>
                 </div>
               }>
-                接触图谱 ({pairs.length} 对)
+                {t({ zh: `接触图谱 (${pairs.length} 对)`, en: `Contact map (${pairs.length} pairs)` })}
               </SectionTitle>
 
               <div className="px-2">
                 <div className="mb-2 grid grid-cols-3 gap-1.5">
-                  <Stat label="接触对" value={pairs.length.toLocaleString()} />
-                  <Stat label="A 侧残基" value={residuesA.length.toLocaleString()} tone="rose" />
-                  <Stat label="B 侧残基" value={residuesB.length.toLocaleString()} tone="cyan" />
+                  <Stat label={t({ zh: '接触对', en: 'Contact pairs' })} value={pairs.length.toLocaleString()} />
+                  <Stat label={t({ zh: 'A 侧残基', en: 'A-side residues' })} value={residuesA.length.toLocaleString()} tone="rose" />
+                  <Stat label={t({ zh: 'B 侧残基', en: 'B-side residues' })} value={residuesB.length.toLocaleString()} tone="cyan" />
                 </div>
 
                 <div className="mol-scroll panel-card relative overflow-x-auto p-1.5">
@@ -641,7 +643,7 @@ export function AnalysisPanel() {
                     className={cn('block cursor-pointer', !mapData && 'hidden')}
                   />
                   {!mapData && (
-                    <p className="px-2 py-3 text-center text-[10px] text-muted-foreground">无接触数据</p>
+                    <p className="px-2 py-3 text-center text-[10px] text-muted-foreground">{t({ zh: '无接触数据', en: 'No contact data' })}</p>
                   )}
                   {hover && hoverPair && mapData && (
                     <div
@@ -654,13 +656,13 @@ export function AnalysisPanel() {
                       {mapData.data.residues[hoverPair.resB].chainId.trim()}:
                       {mapData.data.residues[hoverPair.resB].resName}{mapData.data.residues[hoverPair.resB].resSeq}
                       <span className="ml-1.5 font-bold text-amber-600 dark:text-amber-400">{hoverPair.minDist.toFixed(2)} Å</span>
-                      <span className="ml-1 text-muted-foreground">({hoverPair.count} 对)</span>
+                      <span className="ml-1 text-muted-foreground">({t({ zh: `${hoverPair.count} 对`, en: `${hoverPair.count} pairs` })})</span>
                     </div>
                   )}
                 </div>
                 <p className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                   <MousePointerClick className="h-3 w-3 shrink-0" />
-                  点击图谱单元格选择该残基对；颜色近红远琥珀，对应 3D 视图连线。
+                  {t({ zh: '点击图谱单元格选择该残基对；颜色近红远琥珀，对应 3D 视图连线。', en: 'Click a map cell to select that residue pair; color runs red (near) to amber (far), matching the 3D view lines.' })}
                 </p>
 
                 <div className="mt-2 grid grid-cols-3 gap-1.5">
@@ -668,19 +670,19 @@ export function AnalysisPanel() {
                     onClick={() => selectSide('a')}
                     className="flex items-center justify-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1.5 text-[10px] font-medium text-rose-600 transition hover:bg-rose-500/20 dark:text-rose-400"
                   >
-                    选 A 侧界面
+                    {t({ zh: '选 A 侧界面', en: 'Select A-side interface' })}
                   </button>
                   <button
                     onClick={() => selectSide('b')}
                     className="flex items-center justify-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2 py-1.5 text-[10px] font-medium text-cyan-600 transition hover:bg-cyan-500/20 dark:text-cyan-300"
                   >
-                    选 B 侧界面
+                    {t({ zh: '选 B 侧界面', en: 'Select B-side interface' })}
                   </button>
                   <button
                     onClick={() => selectSide('both')}
                     className="flex items-center justify-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent"
                   >
-                    选全部界面
+                    {t({ zh: '选全部界面', en: 'Select full interface' })}
                   </button>
                 </div>
 
@@ -702,16 +704,16 @@ export function AnalysisPanel() {
             <>
               <SectionTitle right={
                 <span className="text-[10px] font-normal tabular-nums text-muted-foreground">
-                  共 {hbCount.toLocaleString()} 键 · 按距离
+                  {t({ zh: `共 ${hbCount.toLocaleString()} 键 · 按距离`, en: `${hbCount.toLocaleString()} bonds · by distance` })}
                 </span>
               }>
-                氢键网络 · 残基对
+                {t({ zh: '氢键网络 · 残基对', en: 'H-bond network · residue pairs' })}
               </SectionTitle>
               <div className="px-2">
                 <HBondPairsTable data={data} pairs={hbPairs} onPick={focusResiduePair} />
                 <p className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                   <Crosshair className="h-3 w-3 shrink-0" />
-                  点击行选择并聚焦该氢键两侧残基；范围随当前选择变化（B 键重开）。
+                  {t({ zh: '点击行选择并聚焦该氢键两侧残基；范围随当前选择变化（B 键重开）。', en: 'Click a row to select and focus the residues flanking that H-bond; the scope follows the current selection (press B to re-run).' })}
                 </p>
               </div>
             </>
@@ -719,15 +721,15 @@ export function AnalysisPanel() {
 
           <SectionTitle right={
             <span className="text-[10px] font-normal font-mono tabular-nums text-muted-foreground">
-              {sasaStructureId === activeId && sasaTotal > 0 ? `${sasaProbe} Å · ${sasaPoints} 点 · ${sasaMs.toFixed(0)} ms` : 'Shrake–Rupley'}
+              {sasaStructureId === activeId && sasaTotal > 0 ? t({ zh: `${sasaProbe} Å · ${sasaPoints} 点 · ${sasaMs.toFixed(0)} ms`, en: `${sasaProbe} Å · ${sasaPoints} pts · ${sasaMs.toFixed(0)} ms` }) : 'Shrake–Rupley'}
             </span>
           }>
-            溶剂可及面积 (SASA)
+            {t({ zh: '溶剂可及面积 (SASA)', en: 'Solvent-accessible area (SASA)' })}
           </SectionTitle>
           <div className="px-2">
             <div className="rounded-lg border border-border px-2.5 py-2">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">水探针半径</span>
+                <span className="text-muted-foreground">{t({ zh: '水探针半径', en: 'Water probe radius' })}</span>
                 <span className="font-mono font-semibold tabular-nums text-cyan-600 dark:text-cyan-400">{probe.toFixed(1)} Å</span>
               </div>
               <Slider
@@ -737,7 +739,7 @@ export function AnalysisPanel() {
                 className="mt-1.5"
               />
               <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">采样点数/原子</span>
+                <span className="text-muted-foreground">{t({ zh: '采样点数/原子', en: 'Sample points/atom' })}</span>
                 <div className="flex gap-1">
                   {[64, 92, 128, 256].map(np => (
                     <button
@@ -761,11 +763,11 @@ export function AnalysisPanel() {
                 className="mol-btn-primary flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
               >
                 {sasaComputing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Droplets className="h-3.5 w-3.5" />}
-                {sasaComputing ? '计算中…' : '计算 SASA'}
+                {sasaComputing ? t({ zh: '计算中…', en: 'Computing…' }) : t({ zh: '计算 SASA', en: 'Compute SASA' })}
               </button>
               <button
-                onClick={() => { applyColor('sasa'); appendLog('out', '已按 SASA 暴露度着色：埋藏蓝紫 → 暴露橙红（需先计算 SASA）') }}
-                title="按暴露度着色（埋藏蓝 → 暴露橙红）"
+                onClick={() => { applyColor('sasa'); appendLog('out', tt({ zh: '已按 SASA 暴露度着色：埋藏蓝紫 → 暴露橙红（需先计算 SASA）', en: 'Colored by SASA exposure: buried blue-violet → exposed orange-red (compute SASA first)' })) }}
+                title={t({ zh: '按暴露度着色（埋藏蓝 → 暴露橙红）', en: 'Color by exposure (buried blue → exposed orange-red)' })}
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition hover:border-primary/50 hover:text-primary"
               >
                 <Palette className="h-3.5 w-3.5" />
@@ -775,18 +777,18 @@ export function AnalysisPanel() {
             {sasaStructureId === activeId && sasaTotal > 0 && (
               <>
                 <div className="mt-2 grid grid-cols-4 gap-1.5">
-                  <Stat label="总 SASA" value={sasaTotal.toFixed(0)} />
-                  <Stat label="疏水" value={sasaHydrophobic.toFixed(0)} tone="cyan" />
-                  <Stat label="极性" value={sasaPolar.toFixed(0)} tone="rose" />
-                  <Stat label="水/配体" value={sasaHet.toFixed(0)} />
+                  <Stat label={t({ zh: '总 SASA', en: 'Total SASA' })} value={sasaTotal.toFixed(0)} />
+                  <Stat label={t({ zh: '疏水', en: 'Hydrophobic' })} value={sasaHydrophobic.toFixed(0)} tone="cyan" />
+                  <Stat label={t({ zh: '极性', en: 'Polar' })} value={sasaPolar.toFixed(0)} tone="rose" />
+                  <Stat label={t({ zh: '水/配体', en: 'Water/ligand' })} value={sasaHet.toFixed(0)} />
                 </div>
-                <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full" title="疏水/极性/水与配体的面积占比">
+                <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full" title={t({ zh: '疏水/极性/水与配体的面积占比', en: 'Area share of hydrophobic / polar / water & ligand' })}>
                   <div className="bg-cyan-500/70" style={{ width: `${sasaHydrophobic / sasaTotal * 100}%` }} />
                   <div className="bg-rose-500/70" style={{ width: `${sasaPolar / sasaTotal * 100}%` }} />
                   <div className="bg-muted" style={{ width: `${sasaHet / sasaTotal * 100}%` }} />
                 </div>
                 <div className="mol-scroll panel-card mt-2 max-h-40 overflow-y-auto">
-                  <p className="mol-micro sticky top-0 bg-card px-2 py-1 text-muted-foreground">Top 暴露残基（Å²）</p>
+                  <p className="mol-micro sticky top-0 bg-card px-2 py-1 text-muted-foreground">{t({ zh: 'Top 暴露残基（Å²）', en: 'Top exposed residues (Å²)' })}</p>
                   {topResidues.map(({ resIdx, area }, i) => {
                     const r = data?.residues[resIdx]
                     if (!r) return null
@@ -820,25 +822,25 @@ export function AnalysisPanel() {
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1 text-[11px] font-semibold text-foreground">
                     <Layers className="h-3.5 w-3.5 text-primary" />
-                    界面埋藏面积 (ΔSASA)
+                    {t({ zh: '界面埋藏面积 (ΔSASA)', en: 'Interface buried area (ΔSASA)' })}
                   </span>
                   <button
                     onClick={runBsa}
                     disabled={buried?.computing}
                     className="mol-btn-primary rounded-md bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
                   >
-                    {buried?.computing ? '计算中…' : buried?.structureId === activeId ? '重算' : '计算'}
+                    {buried?.computing ? t({ zh: '计算中…', en: 'Computing…' }) : buried?.structureId === activeId ? t({ zh: '重算', en: 'Recompute' }) : t({ zh: '计算', en: 'Compute' })}
                   </button>
                 </div>
                 {buried && buried.structureId === activeId && !buried.computing && (
                   <div className="mt-1.5">
                     <div className="grid grid-cols-3 gap-1.5">
-                      <Stat label="A 侧埋藏" value={`${buried.buriedA.toFixed(0)} Å²`} tone="rose" />
-                      <Stat label="B 侧埋藏" value={`${buried.buriedB.toFixed(0)} Å²`} tone="cyan" />
-                      <Stat label="合计" value={`${(buried.buriedA + buried.buriedB).toFixed(0)} Å²`} />
+                      <Stat label={t({ zh: 'A 侧埋藏', en: 'A-side buried' })} value={`${buried.buriedA.toFixed(0)} Å²`} tone="rose" />
+                      <Stat label={t({ zh: 'B 侧埋藏', en: 'B-side buried' })} value={`${buried.buriedB.toFixed(0)} Å²`} tone="cyan" />
+                      <Stat label={t({ zh: '合计', en: 'Total' })} value={`${(buried.buriedA + buried.buriedB).toFixed(0)} Å²`} />
                     </div>
                     <div className="mt-1.5 flex items-center justify-between text-[10px] tabular-nums text-muted-foreground">
-                      <span>核心界面残基（ΔSASA &gt; 1 Å²）：A {buried.coreA.length} · B {buried.coreB.length} · {buried.ms.toFixed(0)} ms</span>
+                      <span>{t({ zh: `核心界面残基（ΔSASA > 1 Å²）：A ${buried.coreA.length} · B ${buried.coreB.length} · ${buried.ms.toFixed(0)} ms`, en: `Core interface residues (ΔSASA > 1 Å²): A ${buried.coreA.length} · B ${buried.coreB.length} · ${buried.ms.toFixed(0)} ms` })}</span>
                     </div>
                     <button
                       onClick={() => {
@@ -848,46 +850,45 @@ export function AnalysisPanel() {
                           ...interfaceAtomIndices(data, buried.coreB),
                         ]
                         setSelection(activeId, idx)
-                        appendLog('out', `已选择界面核心残基：A ${buried.coreA.length} + B ${buried.coreB.length} 残基（${idx.length} 原子，ΔSASA > 1 Å²）`)
+                        appendLog('out', tt({ zh: `已选择界面核心残基：A ${buried.coreA.length} + B ${buried.coreB.length} 残基（${idx.length} 原子，ΔSASA > 1 Å²）`, en: `Selected core interface residues: A ${buried.coreA.length} + B ${buried.coreB.length} residues (${idx.length} atoms, ΔSASA > 1 Å²)` }))
                       }}
                       className="mt-1.5 w-full rounded-md border border-border px-2 py-1.5 text-[10px] font-medium text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
                     >
-                      选核心界面残基（ΔSASA 判据，比距离截断更准）
+                      {t({ zh: '选核心界面残基（ΔSASA 判据，比距离截断更准）', en: 'Select core interface residues (ΔSASA criterion, more precise than the distance cutoff)' })}
                     </button>
                   </div>
                 )}
                 {(!buried || buried.structureId !== activeId) && (
-                  <p className="mt-1 text-[10px] text-muted-foreground">基于接触 A/B 组三路 SASA（单独/单独/复合）计算埋藏面积，判据比距离截断更严格。</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">{t({ zh: '基于接触 A/B 组三路 SASA（单独/单独/复合）计算埋藏面积，判据比距离截断更严格。', en: 'Buried area from three-way SASA of the contact A/B groups (alone / alone / complex) — a stricter criterion than the distance cutoff.' })}</p>
                 )}
               </div>
             )}
           </div>
 
-          <SectionTitle>二级结构</SectionTitle>
+          <SectionTitle>{t({ zh: '二级结构', en: 'Secondary structure' })}</SectionTitle>
           <div className="px-2">
             <SSComposition structureId={activeId} />
             <button
               onClick={() => {
                 if (!activeId) return
                 const r = recomputeSS(activeId)
-                if (r.error) return appendLog('err', `DSSP 失败：${r.error}`)
+                if (r.error) return appendLog('err', tt({ zh: `DSSP 失败：${r.error}`, en: `DSSP failed: ${r.error}` }))
                 const total = r.helix + r.strand + r.loop
                 const pct = (v: number) => total > 0 ? (v / total * 100).toFixed(0) : '0'
-                appendLog('out', `DSSP 重算完成：螺旋 ${r.helix}（${pct(r.helix)}%）· 折叠 ${r.strand}（${pct(r.strand)}%）· 环 ${r.loop}（${pct(r.loop)}%）`)
+                appendLog('out', tt({ zh: `DSSP 重算完成：螺旋 ${r.helix}（${pct(r.helix)}%）· 折叠 ${r.strand}（${pct(r.strand)}%）· 环 ${r.loop}（${pct(r.loop)}%）`, en: `DSSP recompute done: helix ${r.helix} (${pct(r.helix)}%) · strand ${r.strand} (${pct(r.strand)}%) · loop ${r.loop} (${pct(r.loop)}%)` }))
               }}
               className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-medium text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              DSSP 重算二级结构
+              {t({ zh: 'DSSP 重算二级结构', en: 'Recompute secondary structure (DSSP)' })}
             </button>
           </div>
         </>
       )}
 
       <PanelHint>
-        <span className="flex items-center gap-1"><Network className="inline h-3 w-3" /> contacts 命令同样可用：</span>
-        <span className="font-mono">contacts chain A | chain B 4.0</span> 或快捷链间
-        <span className="font-mono">interface A B</span>。
+        <span className="flex items-center gap-1"><Network className="inline h-3 w-3" /> {t({ zh: 'contacts 命令同样可用：', en: 'The contacts command also works:' })}</span>
+        <span className="font-mono">contacts chain A | chain B 4.0</span>{t({ zh: ' 或快捷链间 ', en: ' or the quick inter-chain ' })}<span className="font-mono">interface A B</span>{t({ zh: '。', en: '.' })}
       </PanelHint>
     </div>
   )
@@ -904,6 +905,7 @@ function ExprInput({ label, tone, value, onChange, count, error, placeholder }: 
   error?: string
   placeholder?: string
 }) {
+  const { t } = useI18n()
   const toneCls = tone === 'rose'
     ? 'border-rose-500/40 text-rose-600 dark:text-rose-400'
     : 'border-cyan-500/40 text-cyan-600 dark:text-cyan-300'
@@ -913,7 +915,7 @@ function ExprInput({ label, tone, value, onChange, count, error, placeholder }: 
         <span className={cn('rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider', toneCls)}>
           {label}
         </span>
-        {count !== undefined && <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{count.toLocaleString()} 原子</span>}
+        {count !== undefined && <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{t({ zh: `${count.toLocaleString()} 原子`, en: `${count.toLocaleString()} atoms` })}</span>}
       </div>
       <input
         value={value}
@@ -944,6 +946,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'ro
 
 /** 二级结构组成（H/E/L 堆叠条 + 百分比） */
 function SSComposition({ structureId }: { structureId: string | null }) {
+  const { t } = useI18n()
   const visualRev = useMolStore(s => s.visualRev)
   const stats = useMemo(() => {
     void visualRev
@@ -960,19 +963,19 @@ function SSComposition({ structureId }: { structureId: string | null }) {
     const total = h + e + l
     return total > 0 ? { h, e, l, total } : null
   }, [structureId, visualRev])
-  if (!stats) return <p className="px-1 text-[10px] text-muted-foreground">无聚合物残基</p>
+  if (!stats) return <p className="px-1 text-[10px] text-muted-foreground">{t({ zh: '无聚合物残基', en: 'No polymer residues' })}</p>
   const pct = (v: number) => (v / stats.total * 100).toFixed(0)
   return (
     <div className="panel-card px-2.5 py-2">
       <div className="flex h-3 w-full overflow-hidden rounded-full">
-        <div className="bg-rose-500/80" style={{ width: `${stats.h / stats.total * 100}%` }} title={`螺旋 ${stats.h}`} />
-        <div className="bg-amber-500/80" style={{ width: `${stats.e / stats.total * 100}%` }} title={`折叠 ${stats.e}`} />
-        <div className="bg-muted" style={{ width: `${stats.l / stats.total * 100}%` }} title={`环 ${stats.l}`} />
+        <div className="bg-rose-500/80" style={{ width: `${stats.h / stats.total * 100}%` }} title={t({ zh: `螺旋 ${stats.h}`, en: `Helix ${stats.h}` })} />
+        <div className="bg-amber-500/80" style={{ width: `${stats.e / stats.total * 100}%` }} title={t({ zh: `折叠 ${stats.e}`, en: `Strand ${stats.e}` })} />
+        <div className="bg-muted" style={{ width: `${stats.l / stats.total * 100}%` }} title={t({ zh: `环 ${stats.l}`, en: `Loop ${stats.l}` })} />
       </div>
       <div className="mt-1.5 flex justify-between font-mono text-[10px] tabular-nums">
-        <span className="text-rose-600 dark:text-rose-400">螺旋 {stats.h}（{pct(stats.h)}%）</span>
-        <span className="text-amber-600 dark:text-amber-400">折叠 {stats.e}（{pct(stats.e)}%）</span>
-        <span className="text-muted-foreground">环 {stats.l}（{pct(stats.l)}%）</span>
+        <span className="text-rose-600 dark:text-rose-400">{t({ zh: `螺旋 ${stats.h}（${pct(stats.h)}%）`, en: `Helix ${stats.h} (${pct(stats.h)}%)` })}</span>
+        <span className="text-amber-600 dark:text-amber-400">{t({ zh: `折叠 ${stats.e}（${pct(stats.e)}%）`, en: `Strand ${stats.e} (${pct(stats.e)}%)` })}</span>
+        <span className="text-muted-foreground">{t({ zh: `环 ${stats.l}（${pct(stats.l)}%）`, en: `Loop ${stats.l} (${pct(stats.l)}%)` })}</span>
       </div>
     </div>
   )
@@ -991,6 +994,7 @@ function PairTableToolbar({
   shown: number
   total: number
 }) {
+  const { t } = useI18n()
   return (
     <div className="mb-1.5 flex items-center gap-1.5">
       <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border bg-card px-1.5 py-1">
@@ -999,35 +1003,35 @@ function PairTableToolbar({
           value={filter}
           onChange={e => onFilter(e.target.value)}
           onKeyDown={e => e.stopPropagation()}
-          placeholder="筛选残基 / 链…"
+          placeholder={t({ zh: '筛选残基 / 链…', en: 'Filter residues / chains…' })}
           spellCheck={false}
-          aria-label="筛选残基对"
+          aria-label={t({ zh: '筛选残基对', en: 'Filter residue pairs' })}
           className="min-w-0 flex-1 bg-transparent font-mono text-[10px] text-foreground outline-none placeholder:text-muted-foreground/50"
         />
         {filter && (
           <button
             onClick={() => onFilter('')}
-            aria-label="清除筛选"
+            aria-label={t({ zh: '清除筛选', en: 'Clear filter' })}
             className="shrink-0 rounded text-[9px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
           >
             ✕
           </button>
         )}
       </div>
-      <div className="flex shrink-0 overflow-hidden rounded-md border border-border" role="group" aria-label="排序方式">
+      <div className="flex shrink-0 overflow-hidden rounded-md border border-border" role="group" aria-label={t({ zh: '排序方式', en: 'Sort by' })}>
         <button
           onClick={() => onSortBy('dist')}
           aria-pressed={sortBy === 'dist'}
           className={cn('px-1.5 py-1 text-[9px] font-medium transition', sortBy === 'dist' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent')}
         >
-          距离
+          {t({ zh: '距离', en: 'Distance' })}
         </button>
         <button
           onClick={() => onSortBy('count')}
           aria-pressed={sortBy === 'count'}
           className={cn('px-1.5 py-1 text-[9px] font-medium transition', sortBy === 'count' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent')}
         >
-          数量
+          {t({ zh: '数量', en: 'Count' })}
         </button>
       </div>
       <span className="shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">{shown}/{total.toLocaleString()}</span>
@@ -1042,6 +1046,7 @@ function ContactPairsTable({ data, pairs, cutoff, onPick }: {
   cutoff: number
   onPick: (resA: number, resB: number, label: string) => void
 }) {
+  const { t } = useI18n()
   const [filter, setFilter] = useState('')
   const [sortBy, setSortBy] = useState<'dist' | 'count'>('dist')
   const [showAll, setShowAll] = useState(false)
@@ -1062,7 +1067,7 @@ function ContactPairsTable({ data, pairs, cutoff, onPick }: {
   return (
     <div className="panel-card mt-2 p-1.5">
       <PairTableToolbar filter={filter} onFilter={setFilter} sortBy={sortBy} onSortBy={setSortBy} shown={shown.length} total={rows.length} />
-      <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label="接触残基对列表">
+      <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label={t({ zh: '接触残基对列表', en: 'Contact residue pair list' })}>
         {shown.map(({ p, la, lb }) => {
           // 距离热力（近红远琥珀，与 2D 图谱/3D 连线同族）
           const t = Math.max(0, Math.min(1, (p.minDist - 2.5) / Math.max(0.5, cutoff - 2.5)))
@@ -1072,7 +1077,7 @@ function ContactPairsTable({ data, pairs, cutoff, onPick }: {
               key={`${p.resA}:${p.resB}`}
               role="option"
               aria-selected={false}
-              onClick={() => onPick(p.resA, p.resB, `${la} ↔ ${lb}（${p.minDist.toFixed(2)} Å）`)}
+              onClick={() => onPick(p.resA, p.resB, tt({ zh: `${la} ↔ ${lb}（${p.minDist.toFixed(2)} Å）`, en: `${la} ↔ ${lb} (${p.minDist.toFixed(2)} Å)` }))}
               className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] tabular-nums transition hover:bg-accent/60"
             >
               <span className="min-w-0 flex-1 truncate">
@@ -1094,7 +1099,7 @@ function ContactPairsTable({ data, pairs, cutoff, onPick }: {
           onClick={() => setShowAll(v => !v)}
           className="mt-1 w-full rounded py-1 text-center text-[9px] tabular-nums text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
-          {showAll ? '收起（仅前 50 行）' : `展开全部 ${rows.length} 行`}
+          {showAll ? t({ zh: '收起（仅前 50 行）', en: 'Collapse (top 50 rows)' }) : t({ zh: `展开全部 ${rows.length} 行`, en: `Expand all ${rows.length} rows` })}
         </button>
       )}
     </div>
@@ -1107,6 +1112,7 @@ function HBondPairsTable({ data, pairs, onPick }: {
   pairs: HBondPairSummary[]
   onPick: (resA: number, resB: number, label: string) => void
 }) {
+  const { t } = useI18n()
   const [filter, setFilter] = useState('')
   const [showAll, setShowAll] = useState(false)
   const rows = useMemo(() => {
@@ -1132,15 +1138,15 @@ function HBondPairsTable({ data, pairs, onPick }: {
             value={filter}
             onChange={e => setFilter(e.target.value)}
             onKeyDown={e => e.stopPropagation()}
-            placeholder="筛选残基 / 链…"
+            placeholder={t({ zh: '筛选残基 / 链…', en: 'Filter residues / chains…' })}
             spellCheck={false}
-            aria-label="筛选氢键残基对"
+            aria-label={t({ zh: '筛选氢键残基对', en: 'Filter H-bond residue pairs' })}
             className="min-w-0 flex-1 bg-transparent font-mono text-[10px] text-foreground outline-none placeholder:text-muted-foreground/50"
           />
           {filter && (
             <button
               onClick={() => setFilter('')}
-              aria-label="清除筛选"
+              aria-label={t({ zh: '清除筛选', en: 'Clear filter' })}
               className="shrink-0 rounded text-[9px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
             >
               ✕
@@ -1149,7 +1155,7 @@ function HBondPairsTable({ data, pairs, onPick }: {
         </div>
         <span className="shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">{shown.length}/{rows.length}</span>
       </div>
-      <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label="氢键残基对列表">
+      <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label={t({ zh: '氢键残基对列表', en: 'H-bond residue pair list' })}>
         {shown.map(({ p, ld, la }) => {
           const t = Math.max(0, Math.min(1, (p.minDist - 2.0) / 1.5))
           return (
@@ -1157,7 +1163,7 @@ function HBondPairsTable({ data, pairs, onPick }: {
               key={`${p.donorRes}:${p.acceptorRes}`}
               role="option"
               aria-selected={false}
-              onClick={() => onPick(p.donorRes, p.acceptorRes, `${ld} → ${la}（${p.minDist.toFixed(2)} Å）`)}
+              onClick={() => onPick(p.donorRes, p.acceptorRes, tt({ zh: `${ld} → ${la}（${p.minDist.toFixed(2)} Å）`, en: `${ld} → ${la} (${p.minDist.toFixed(2)} Å)` }))}
               className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] tabular-nums transition hover:bg-accent/60"
             >
               <span className="min-w-0 flex-1 truncate">
@@ -1182,7 +1188,7 @@ function HBondPairsTable({ data, pairs, onPick }: {
           onClick={() => setShowAll(v => !v)}
           className="mt-1 w-full rounded py-1 text-center text-[9px] tabular-nums text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
-          {showAll ? '收起（仅前 50 行）' : `展开全部 ${rows.length} 行`}
+          {showAll ? t({ zh: '收起（仅前 50 行）', en: 'Collapse (top 50 rows)' }) : t({ zh: `展开全部 ${rows.length} 行`, en: `Expand all ${rows.length} rows` })}
         </button>
       )}
     </div>

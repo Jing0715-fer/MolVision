@@ -4,6 +4,7 @@
 import type { StructureData } from './parser'
 import { SpatialGrid } from './parser'
 import { residueOneLetter, residueClass } from './chemistry'
+import { tt } from '@/i18n'
 
 export interface ChainSequence {
   chainId: string
@@ -252,20 +253,20 @@ export function quatToMatrix(q: [number, number, number, number]): number[][] {
 export function superposeStructures(mobile: StructureData, ref: StructureData, mobileChain?: string, refChain?: string): SuperposeResult {
   const mobileSeqs = extractAllSequences(mobile)
   const refSeqs = extractAllSequences(ref)
-  if (!mobileSeqs.length) return fail('移动结构没有可识别的蛋白链')
-  if (!refSeqs.length) return fail('参考结构没有可识别的蛋白链')
+  if (!mobileSeqs.length) return fail(tt({ zh: '移动结构没有可识别的蛋白链', en: 'The mobile structure has no recognizable protein chain' }))
+  if (!refSeqs.length) return fail(tt({ zh: '参考结构没有可识别的蛋白链', en: 'The reference structure has no recognizable protein chain' }))
   // 移动链：显式指定 or 最长
   let mob = mobileSeqs[0]
   if (mobileChain) {
     const found = mobileSeqs.find(s => s.chainId.trim().toUpperCase() === mobileChain.trim().toUpperCase())
-    if (!found) return fail(`移动结构没有蛋白链 "${mobileChain}"（可用：${mobileSeqs.map(s => s.chainId.trim()).join(', ')}）`)
+    if (!found) return fail(tt({ zh: `移动结构没有蛋白链 "${mobileChain}"（可用：${mobileSeqs.map(s => s.chainId.trim()).join(', ')}）`, en: `Mobile structure has no protein chain "${mobileChain}" (available: ${mobileSeqs.map(s => s.chainId.trim()).join(', ')})` }))
     mob = found
   }
   let best: { seq: ChainSequence; score: number; pairs: [number, number][] } | null = null
   if (refChain) {
     // 显式参考链
     const rs = refSeqs.find(s => s.chainId.trim().toUpperCase() === refChain.trim().toUpperCase())
-    if (!rs) return fail(`参考结构没有蛋白链 "${refChain}"（可用：${refSeqs.map(s => s.chainId.trim()).join(', ')}）`)
+    if (!rs) return fail(tt({ zh: `参考结构没有蛋白链 "${refChain}"（可用：${refSeqs.map(s => s.chainId.trim()).join(', ')}）`, en: `Reference structure has no protein chain "${refChain}" (available: ${refSeqs.map(s => s.chainId.trim()).join(', ')})` }))
     const { pairs, score } = alignSequences(mob.sequence, rs.sequence)
     best = { seq: rs, score, pairs }
   } else {
@@ -296,9 +297,9 @@ export function superposeStructures(mobile: StructureData, ref: StructureData, m
     Q.push([rp[refCA * 3], rp[refCA * 3 + 1], rp[refCA * 3 + 2]])
     residuePairs.push([mob.residueIdx[ai], best.seq.residueIdx[bi]])
   }
-  if (P.length < 3) return fail(`比对匹配的 CA 原子不足（${P.length} < 3），序列相似度过低`)
+  if (P.length < 3) return fail(tt({ zh: `比对匹配的 CA 原子不足（${P.length} < 3），序列相似度过低`, en: `Too few matched CA atoms (${P.length} < 3); sequence similarity too low` }))
   const fit = rigidFit(P, Q)
-  if (!fit) return fail('刚体拟合失败')
+  if (!fit) return fail(tt({ zh: '刚体拟合失败', en: 'Rigid-body fitting failed' }))
   return {
     ok: true,
     mobileChain: mob.chainId.trim() || '?',
