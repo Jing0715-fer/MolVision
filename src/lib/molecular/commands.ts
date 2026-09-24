@@ -106,11 +106,14 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'load <id>', desc: '从 RCSB 加载 PDB 结构', example: 'load 4hhb' },
   { cmd: 'create <名> = <选择>', desc: '从选择创建新对象', example: 'create pocket = within 5 of resn HEM' },
   { cmd: 'split_chains', desc: '按链组拆分为多个对象', example: 'split_chains' },
-  { cmd: 'select [name=]expr', desc: '选择原子（可命名）', example: 'select site = within 5 of resn HEM' },
+  { cmd: 'select [name=]expr', desc: '选择原子（可命名；sele=当前选择）', example: 'select site = within 5 of resn HEM' },
+  { cmd: 'spectrum count|b, [彩虹] [选择]', desc: '按属性连续渐变着色（PyMOL 兼容）', example: 'spectrum b, rainbow · spectrum count' },
+  { cmd: 'iterate (选择), 字段…', desc: '遍历选择打印原子属性（只读）', example: 'iterate (chain A and name CA), name resn resi b' },
+  { cmd: 'alter (选择), 属性=值', desc: '修改原子属性（b/q/name）', example: 'alter (resi 100-110), b=b+10' },
   { cmd: 'show <rep> [sel]', desc: '添加表示法（逗号/空格分隔皆可）', example: 'show ballstick, ligand · show cartoon protein' },
   { cmd: 'hide <rep> [sel]', desc: '移除匹配的表示法', example: 'hide lines' },
   { cmd: 'color <方案|颜色> [sel]', desc: '给选择上色（pocket=配体距离渐变）', example: 'color red chain A · color pocket' },
-  { cmd: 'util cbc|cnc|ss|cbaw', desc: '实用着色（链/灰/二级结构/元素+白碳）', example: 'util cbc' },
+  { cmd: 'util cbc|cnc|ss|cbss|cbao|cbaw', desc: '实用着色（链/灰/SS卡通/元素+AO/元素+白碳）', example: 'util cbc · util cbss' },
   { cmd: 'set <项> <值>', desc: '渲染设置（灯光/fov/质量/过渡手感 transition…）', example: 'set ambient 0.5 · set transition cinematic' },
   { cmd: 'bg <颜色>', desc: '设置背景色', example: 'bg black' },
   { cmd: 'zoom [sel|in|out]', desc: '聚焦选择/推拉镜头（zoom ligand, 5 带缓冲）', example: 'zoom ligand · zoom in · zoom out' },
@@ -150,6 +153,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'png [倍率]', desc: '截图导出 PNG', example: 'png 2' },
   { cmd: 'ray [宽px]', desc: 'Ray 级静帧渲染（软阴影+1.5× 真超采样抗锯齿：内部高分辨率渲染后高质量降采样）', example: 'ray 1920' },
   { cmd: 'svg [宽px]', desc: '矢量图导出（CPU 投影，无限缩放不失真；可入稿 Illustrator/Inkscape）', example: 'svg 2400' },
+  { cmd: 'show cell / hide cell', desc: '晶胞盒线框（CRYST1，a红 b绿 c蓝）', example: 'show cell' },
   { cmd: 'axes on|off', desc: '视口坐标轴指示器（点击轴端对齐视角）', example: 'axes off' },
   { cmd: 'fps on|off', desc: '状态栏性能指示器（FPS/绘制调用/三角形）', example: 'fps on' },
   { cmd: 'perf on|off|status|restore', desc: '自动性能模式（低帧率降级/恢复）', example: 'perf status · perf off' },
@@ -398,7 +402,15 @@ export function runCommand(raw: string): void {
 
   if (cmd === 'select' || cmd === 'sel') {
     const rest = input.slice(parts[0].length).trim()
-    const assign = rest.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/)
+    // PyMOL 宽容：裸等号写法（resn = HEM / chain = A）——左侧是选择谓词时把「谓词 = 值」
+    // 规整为「谓词 值」（否则 assign 正则会把 resn = HEM 误判成命名选择「resn」=「HEM」）；
+    // 左侧不是谓词（如 site = within …）仍按命名选择处理
+    const PRED_WORDS = new Set(['chain', 'chainidx', 'resi', 'resn', 'name', 'elem', 'element', 'molecule', 'mol', 'id', 'ss', 'b', 'q', 'bfactor', 'occupancy'])
+    const eqMatch = rest.match(/^([a-zA-Z_][\w]*)\s*=\s*(.+)$/)
+    const normalized = eqMatch && PRED_WORDS.has(eqMatch[1].toLowerCase())
+      ? rest.replace(/^([a-zA-Z_][\w]*)\s*=\s*/, '$1 ')
+      : rest
+    const assign = normalized.match(/^([A-Za-z_][\w]*)\s*=\s*(.+)$/)
     if (assign) {
       const name = assign[1]
       const expr = assign[2]
@@ -414,7 +426,7 @@ export function runCommand(raw: string): void {
       ok(`已选择 ${res.count.toLocaleString()} 个原子 → ${name === 'sele' ? '当前选择' : name}`)
     } else {
       if (!rest) return err('用法: select <表达式> 或 select <名> = <表达式>')
-      const res = store.selectFromExpr(rest)
+      const res = store.selectFromExpr(normalized)
       if (res.error) return err(`选择错误: ${res.error}`)
       ok(`已选择 ${res.count.toLocaleString()} 个原子`)
     }
@@ -454,6 +466,14 @@ export function runCommand(raw: string): void {
       }
       return ok(`已显示水分子${converted ? `（${converted} 个结构的水 rep 已转为小球显示）` : added ? `（新增小球 rep）` : ''}——hide waters 隐藏`)
     }
+    // PyMOL show cell：晶胞盒线框
+    if (repAlias === 'cell') {
+      const st = useMolStore.getState()
+      st.updateSettings({ showCell: true })
+      const data = st.activeId ? dataRegistry.get(st.activeId) : null
+      const info = data?.crystal ? `（${data.crystal.a.toFixed(1)}×${data.crystal.b.toFixed(1)}×${data.crystal.c.toFixed(1)}Å · ${data.crystal.spaceGroup.trim()}）` : '（当前结构无 CRYST1 晶胞信息——线框不显示）'
+      return ok(`晶胞盒开启 ${info}——a 红 / b 绿 / c 蓝 · hide cell 关闭 · symmetry 20 可生成晶格邻居`)
+    }
     const repType = REP_ALIASES[repAlias]
     if (!repType) return err(`未知表示法 "${headWords[0]}"。可用: ${Object.keys(REP_ALIASES).slice(0, 7).join(', ')}…`)
     const selExpr = joinSel(headWords.slice(1).join(' '), tail) || 'all'
@@ -485,6 +505,10 @@ export function runCommand(raw: string): void {
     if (arg === 'waters' || arg === 'water') {
       useMolStore.getState().updateSettings({ hideWater: true })
       return ok('已隐藏水分子')
+    }
+    if (arg === 'cell') {
+      useMolStore.getState().updateSettings({ showCell: false })
+      return ok('晶胞盒已关闭（show cell 开启）')
     }
     const repType = REP_ALIASES[arg]
     const s = useMolStore.getState()
@@ -523,6 +547,8 @@ export function runCommand(raw: string): void {
         const eng = engineRef.current
         const r = eng?.requestSasa(s.activeId)
         if (!r?.done) {
+          // r59-a2 #2 修复：命令路径也要登记烘焙回调（旧版漏掉——worker 完成后从不自动上色）
+          eng?.queueSasaBake(s.activeId)
           return ok('SASA 后台计算中（Web Worker）——完成后将自动按暴露度着色（埋藏蓝紫 → 暴露橙红）')
         }
       }
@@ -563,9 +589,13 @@ export function runCommand(raw: string): void {
     const selExpr = head.trim()
     const s = useMolStore.getState()
     if (selExpr) {
-      const res = s.selectFromExpr(selExpr)
-      if (res.error) return err(`选择错误: ${res.error}`)
-      const sel = useMolStore.getState().selection
+      // r59-a2 #6 修复：zoom 是纯取景命令（PyMOL 语义），不该改写「当前选择」——
+      // 旧版走 selectFromExpr 落 setSelection，其后裸 color/util cbc 作用域被静默缩小
+      const evalRes = evalActiveSelection(selExpr)
+      if (evalRes.error) return err(evalRes.error)
+      if (!evalRes.indices.length) return err(`选择 "${selExpr}" 命中 0 个原子（zoom 需要非空选择）`)
+      const sid = s.activeId!
+      const sel = { structureId: sid, indices: evalRes.indices }
       // 多实例均布提示（纯数据层计算，不依赖引擎）：选择覆盖 2~12 个彼此远离的残基拷贝
       // （如血红蛋白 4×HEM）时全部入框会拉远到全景——输出单实例聚焦写法供用户/修正轮参考
       let spreadNote = ''
@@ -703,6 +733,126 @@ export function runCommand(raw: string): void {
     return ok(`已添加 ${s.selection.indices.length} 个标签`)
   }
 
+  // ---------- PyMOL 兼容动词（r60：spectrum / iterate / alter / util.cbss / cell） ----------
+
+  if (cmd === 'spectrum') {
+    // PyMOL spectrum：按数值属性连续渐变上色。spectrum count / spectrum b, rainbow [起点色 终点色]
+    const rest = input.slice(parts[0].length).trim()
+    const { head, tail } = commaSplit(rest)
+    const headWords = head.split(/\s+/).filter(Boolean)
+    const attr = (headWords[0] ?? 'count').toLowerCase()
+    const ATTRS: Record<string, 'spectrum' | 'bfactor' | 'uniform'> = {
+      count: 'spectrum', rainbow: 'spectrum', spectrum: 'spectrum',
+      b: 'bfactor', bfactor: 'bfactor', factor: 'bfactor',
+    }
+    const scheme = ATTRS[attr]
+    if (!scheme) return err(`spectrum 不支持的属性 "${headWords[0]}"。可用: count（链序渐变） / b（B 因子）`)
+    if (scheme === 'uniform') return err('属性错误')
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有加载结构')
+    // 可选自定义起终点色（PyMOL spectrum b, rainbow, blue red）
+    const tailWords = tail.split(/\s+/).filter(Boolean)
+    let note = ''
+    if (tailWords.length >= 2) {
+      const c1 = parseCssColor(tailWords[tailWords.length - 2])
+      const c2 = parseCssColor(tailWords[tailWords.length - 1])
+      if (c1 && c2) note = `（自定义起终点 ${c1}→${c2} 需「color ${scheme}」配合色板编辑，暂用内置渐变）`
+    }
+    // 选择范围（可选）：spectrum b, rainbow, chain A —— 排除属性/配色词后的剩余
+    const selWords = tailWords.filter(w => !['rainbow', 'count', 'b', 'bfactor', 'factor'].includes(w.toLowerCase()))
+    const selExpr = selWords.join(' ')
+    if (selExpr) {
+      const res = s.selectFromExpr(selExpr)
+      if (res.error) return err(`选择错误: ${res.error}`)
+    }
+    s.applyColor(scheme)
+    return ok(`已按${scheme === 'bfactor' ? ' B 因子（低蓝 → 高红连续渐变）' : '链序（多链连续渐变）'}上色${note}${selExpr ? `（范围: ${selExpr}）` : ''}——PyMOL spectrum 兼容`)
+  }
+
+  if (cmd === 'iterate') {
+    // PyMOL iterate：遍历选择打印原子属性（只读）。iterate (chain A and name CA), print resi+resn
+    const rest = input.slice(parts[0].length).trim()
+    const { head, tail } = commaSplit(rest)
+    const expr = (head || 'all').trim()
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有加载结构')
+    const data = dataRegistry.get(s.activeId)
+    if (!data) return err('结构数据不存在')
+    const named = buildNamedMasks(s.activeId, data)
+    const r = evaluateSelection(expr, { structure: data, named })
+    if (r.error) return err(`选择错误: ${r.error}`)
+    const idx = maskToIndices(r.mask)
+    if (!idx.length) return err(`选择 "${expr}" 命中 0 个原子`)
+    // 表达式变量（PyMOL 词法子集）：model/name/resn/resi/chain/ss/b/q/elem/index
+    const fields = (tail || 'name resn resi chain').split(/[\s,+]+/).filter(Boolean)
+    const upper = 20 // 输出上限（防刷屏；PyMOL 无上限但命令行面板有）
+    let n = 0
+    ok(`iterate ${expr ? `(${expr})` : '(all)'} —— ${idx.length.toLocaleString()} 原子${idx.length > upper ? `（前 ${upper} 行）` : ''}:`)
+    for (const i of idx) {
+      if (n >= upper) break
+      const vals: Record<string, string | number> = {
+        index: i + 1, model: s.activeId, name: data.atoms.names[i], resn: data.atoms.resNames[i],
+        resi: data.atoms.resSeqs[i], chain: data.atoms.chainIds[i].trim() || 'A',
+        ss: data.residues[data.atomResidue[i]].ss, b: data.atoms.bfactors[i].toFixed(2),
+        q: data.atoms.occupancies[i].toFixed(2), elem: data.atoms.elements[i],
+      }
+      const line = fields.filter(f => f in vals).map(f => `${f}=${vals[f]}`).join('  ')
+      if (line) { ok(`  ${line}`); n++ }
+    }
+    return ok(`（变量可用: index / model / name / resn / resi / chain / ss / b / q / elem——完整输出可 save <file>.pdb 后离线分析）`)
+  }
+
+  if (cmd === 'alter') {
+    // PyMOL alter：修改原子属性（本工具支持 b / q / name——改坐标无意义，rep 自动重建）
+    const rest = input.slice(parts[0].length).trim()
+    const { head, tail } = commaSplit(rest)
+    const expr = (head || '').trim()
+    const assign = tail.match(/^(\w+)\s*=\s*(.+)$/)
+    if (!expr || !assign) return err('用法：alter (选择), 属性=表达式。如 alter (chain A and name CA), b=50 · alter (resn HEM), q=1')
+    const field = assign[1].toLowerCase()
+    const valExpr = assign[2].trim()
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有加载结构')
+    const data = dataRegistry.get(s.activeId)
+    if (!data) return err('结构数据不存在')
+    const named = buildNamedMasks(s.activeId, data)
+    const r = evaluateSelection(expr, { structure: data, named })
+    if (r.error) return err(`选择错误: ${r.error}`)
+    const idx = maskToIndices(r.mask)
+    if (!idx.length) return err(`选择 "${expr}" 命中 0 个原子`)
+    if (!['b', 'q', 'name'].includes(field)) return err(`alter 暂支持 b / q / name（当前 "${field}"）——改坐标在本工具无意义（叠合/变换有专用命令）`)
+    // 数值表达式：仅允许数值/简单算术（安全边界，不 eval 任意代码）
+    if (field !== 'name') {
+      if (!/^[\d.+\-*/()\s]+$/.test(valExpr)) return err(`数值表达式非法 "${valExpr}"（仅数字与 + - * / 括号）`)
+    }
+    let n = 0
+    for (const i of idx) {
+      if (field === 'name') { data.atoms.names[i] = valExpr.replace(/^["']|["']$/g, '') }
+      else {
+        // 支持 b=b+5 形式（valExpr 引用原值）
+        const raw = valExpr.replace(/\bb\b/g, String(data.atoms.bfactors[i])).replace(/\bq\b/g, String(data.atoms.occupancies[i]))
+        const v = new Function(`return (${raw})`)() as number
+        if (!isFinite(v)) continue
+        if (field === 'b') data.atoms.bfactors[i] = v
+        else data.atoms.occupancies[i] = Math.min(1, Math.max(0, v))
+      }
+      n++
+    }
+    useMolStore.getState().bumpVisual()
+    return ok(`已修改 ${n.toLocaleString()} 个原子的 ${field}（putty/spectrum b 可见效果）`)
+  }
+
+  if (cmd === 'cell') {
+    const arg = (parts[1] ?? '').toLowerCase()
+    if (arg && arg !== 'on' && arg !== 'off' && arg !== '1' && arg !== '0') return err('用法：show cell / hide cell（CRYST1 晶胞盒，a红 b绿 c蓝）')
+    const s = useMolStore.getState()
+    const on = arg ? ['on', '1'].includes(arg) : !s.settings.showCell
+    s.updateSettings({ showCell: on })
+    const st = s.activeId ? dataRegistry.get(s.activeId) : null
+    const info = st?.crystal ? `（${st.crystal.a.toFixed(1)}×${st.crystal.b.toFixed(1)}×${st.crystal.c.toFixed(1)}Å ${st.crystal.spaceGroup.trim()}）` : '（当前结构无 CRYST1 晶胞信息）'
+    return ok(on ? `晶胞盒开启 ${info}——a 红 / b 绿 / c 蓝` : '晶胞盒已关闭')
+  }
+
   if (cmd === 'isolate') {
     return runIsolateCommand(input, parts, ok, err)
   }
@@ -718,6 +868,15 @@ export function runCommand(raw: string): void {
     if (cmd === 'scene' && SCENE_SUBS.has(name)) {
       return runSceneCommand(parts, ok, err)
     }
+    // 场景组合预设先查（r59-a2 #4：键冲突——SCENE_PRESETS.publication 曾被 PRESETS.publication
+    // 永久遮蔽，命令行永远无法触达「出版级渲染」场景；scene <键> 一律走场景语义）
+    if (cmd === 'scene') {
+      const scene = SCENE_PRESETS[name]
+      if (scene) {
+        for (const c of scene.commands) runCommand(c)
+        return ok(`已应用场景: ${scene.label}（${scene.commands.length} 条命令）`)
+      }
+    }
     const p = PRESETS[name]
     if (p) {
       useMolStore.getState().applyPreset(name)
@@ -729,7 +888,7 @@ export function runCommand(raw: string): void {
       }
       return ok(`已应用预设: ${p.label}`)
     }
-    // 场景组合预设（多命令链：表示法 + 环境 + 相机）
+    // preset/style 动词仍可触达场景组合预设（含 publication 场景的完整渲染链）
     const scene = SCENE_PRESETS[name]
     if (scene) {
       for (const c of scene.commands) runCommand(c)
@@ -1102,6 +1261,36 @@ export function runCommand(raw: string): void {
       s.applyColor('ss')
       return ok('已按二级结构着色（util.ss：螺旋红 · 折叠黄 · 环灰）')
     }
+    if (sub === 'cbss') {
+      // PyMOL util.cbss： cartoons 按二级结构（螺旋红折叠黄环灰）+ 其余元素色——最常用的卡通配色
+      s.applyColor('ss')
+      const st = useMolStore.getState()
+      const e2 = st.structures.find(x => x.id === st.activeId)
+      if (!e2) return err('结构数据不存在')
+      const scope = st.selection.structureId === e2.id && st.selection.indices.length ? new Set(st.selection.indices) : null
+      const overrides = { ...e2.colorOverrides }
+      // SS 配色只写 polymer 残基；非聚合物原子（配体/水/离子）回元素色
+      let n = 0
+      for (let i = 0; i < data.atoms.count; i++) {
+        const r = data.residues[data.atomResidue[i]]
+        if (r.polymer) continue
+        if (scope && !scope.has(i)) continue
+        overrides[i] = '#c9cdd4'
+        n++
+      }
+      useMolStore.setState(s2 => ({
+        structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
+        visualRev: s2.visualRev + 1,
+      }))
+      return ok(`已 util.cbss：卡通按二级结构（螺旋红 · 折叠黄 · 环灰），配体/水/离子 ${n.toLocaleString()} 原子回元素灰基色——PyMOL 经典组合`)
+    }
+    if (sub === 'cbao') {
+      // PyMOL util.cbao：元素色 + 环境光遮蔽提示（本工具 ao 即 ssao）——PyMOL 用户迁移最顺手的「立体感一键」
+      s.applyColor('element')
+      const st = useMolStore.getState()
+      if (!st.settings.ssao) st.updateSettings({ ssao: true })
+      return ok('已 util.cbao：元素配色 + 环境光遮蔽开启（PyMOL 的 ambient occlusion——立体感提升；ssao off 关闭）')
+    }
     if (sub === 'cbaw' || sub === 'cbac') {
       // 元素着色 + 碳改白/灰（PyMOL 论文图风格：白底黑碳）
       s.applyColor('element')
@@ -1124,7 +1313,7 @@ export function runCommand(raw: string): void {
       }))
       return ok(`已按元素着色 + 碳${sub === 'cbaw' ? '白' : '灰'}（util.${sub}，${n.toLocaleString()} 个碳原子）——适合白底论文图`)
     }
-    return err('用法：util cbc | cnc | ss | cbaw | cbac（按链 / 灰化 / 二级结构 / 元素+白碳 / 元素+灰碳）')
+    return err('用法：util cbc | cnc | ss | cbss | cbao | cbaw | cbac（按链 / 灰化 / 二级结构 / SS卡通+配体基色 / 元素+AO立体 / 元素+白碳 / 元素+灰碳）')
   }
 
   if (cmd === 'set') {
@@ -2005,6 +2194,8 @@ export function runCommand(raw: string): void {
       const dur = hasSecs ? secs : 2.6
       const n = isNaN(loops) ? undefined : loops
       const smooth = hasSmooth ? true : hasHold ? false : useMovieStore.getState().smooth
+      // r59-a2 #5 修复：欢迎页/agent 首轮 views-store 尚未水合——与 view 命令同款 hydrate 先行
+      useViewsStore.getState().hydrate()
       const vs = useViewsStore.getState()
       const tl = useMovieStore.getState().timeline
       const byId = new Map(vs.bookmarks.map(b => [b.id, b] as const))
@@ -2130,7 +2321,10 @@ export function runCommand(raw: string): void {
       else if (depth === 0 && ch.trim()) topJunk += ch
     }
     if (depth !== 0) return err('括号不匹配')
-    if (topJunk.trim()) return err(`括号组之间存在多余内容「${topJunk.trim()}」——每个选择用一对括号包裹`)
+    if (topJunk.trim()) {
+      // PyMOL 宽容：组间仅逗号+空白时静默容忍（measure dist (A), (B) 习惯写法）
+      if (!/^[\s,]+$/.test(topJunk)) return err(`括号组之间存在多余内容「${topJunk.trim()}」——每个选择用一对括号包裹`)
+    }
     if (groups.length !== need) {
       return err(`${mode === 'distance' ? '距离' : mode === 'angle' ? '角度' : '二面角'}测量需要 ${need} 个选择（括号组），当前 ${groups.length} 个`)
     }

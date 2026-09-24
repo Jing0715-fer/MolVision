@@ -94,7 +94,10 @@ export function splitCommands(text: string[]): string[] {
  */
 export async function execAgentCmd(cmd: string): Promise<AgentCmdRecord> {
   const store = useMolStore.getState()
-  const before = store.consoleLog.length
+  // r59-a2 #1 修复：consoleLog 是 slice(-200) 滚动窗口，长度饱和后绝对下标切片会失聪
+  // （每条命令 output 为空、hasErr 恒 false → agent 自动修正与 VLM 修正双反馈环失效）。
+  // 改用单调 seq 过滤：执行前记 seq 高水位，执行后取 seq 更大的条目——滚动不影响。
+  const seqBefore = store.consoleLog.reduce((m, l) => Math.max(m, l.seq ?? 0), 0)
   try {
     runCommand(cmd)
   } catch (e) {
@@ -102,10 +105,10 @@ export async function execAgentCmd(cmd: string): Promise<AgentCmdRecord> {
   }
   const grab = () => {
     const logs = useMolStore.getState().consoleLog
-    const added = logs.slice(before).filter(l => l.type !== 'in')
+    const added = logs.filter(l => (l.seq ?? 0) > seqBefore && l.type !== 'in')
     return added.map(l => l.text).join('\n').slice(0, 300)
   }
-  const hasErr = () => useMolStore.getState().consoleLog.slice(before).some(l => l.type === 'err')
+  const hasErr = () => useMolStore.getState().consoleLog.some(l => (l.seq ?? 0) > seqBefore && l.type === 'err')
   const head = cmd.trim().toLowerCase().split(/\s+/)[0] ?? ''
 
   // load/fetch：轮询等待结构数量增加（最多 ~20s）；失败（err 已落地）提前退出

@@ -66,6 +66,8 @@ export interface EngineCallbacks {
   onHover?: (info: HoverInfo | null) => void
   onPick?: (pick: AtomPick | null, empty: boolean) => void
   onContext?: (pick: AtomPick | null, x: number, y: number) => void
+  /** PyMOL 橡皮带框选：Ctrl/Cmd+拖拽松手时回调框内原子（项目坐标 + 修饰键） */
+  onBoxSelect?: (rect: { x0: number; y0: number; x1: number; y1: number; additive: boolean; subtractive: boolean }) => void
 }
 
 interface RepView {
@@ -248,11 +250,18 @@ export class MolEngine {
   private disposed = false
   private lastHoverTime = 0
   private downPos = { x: 0, y: 0, t: 0, button: -1 }
+  /** 橡皮带框选进行中（Ctrl/Cmd+拖拽） */
+  private boxSelecting: { x0: number; y0: number; x1: number; y1: number; additive: boolean; subtractive: boolean; active: boolean } | null = null
+  /** 橡皮带覆盖 div（px 坐标跟随拖拽；primary 色半透明框） */
+  private rubberBandEl: HTMLDivElement | null = null
   private lastLabelsKey = ''
   private lastMeasureKey = ''
   private hbondGroup = new THREE.Group()
   private hbondCache = new Map<string, { key: string; hbonds: HBond[] }>()
   private lastHbondKey = ''
+  // 晶胞盒线框（show cell：CRYST1 单胞平行六面体，a 红 b 绿 c 蓝——PyMOL cell 惯例）
+  private cellGroup = new THREE.Group()
+  private cellKey = ''
   // 接触界面连线（分析面板触发计算，引擎仅负责渲染）
   private contactGroup = new THREE.Group()
   // 氢键检测 Web Worker（大结构异步计算）
@@ -403,6 +412,8 @@ export class MolEngine {
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color('#ffffff')
     this.scene.add(this.measureGroup)
+    this.cellGroup.userData.isOverlay = true
+    this.scene.add(this.cellGroup)
     this.scene.add(this.pickMarkerGroup)
     this.scene.add(this.hbondGroup)
     this.scene.add(this.contactGroup)
@@ -1285,6 +1296,13 @@ export class MolEngine {
   }
 
   private onPointerMove = (e: PointerEvent) => {
+    // 橡皮带拖拽中：更新覆盖框 + 回调悬停抑制（不旋转、不 hover）
+    if (this.boxSelecting?.active) {
+      this.boxSelecting.x1 = e.clientX
+      this.boxSelecting.y1 = e.clientY
+      this.updateRubberBand()
+      return
+    }
     this.ndcFromEvent(e)
     const now = performance.now()
     if (now - this.lastHoverTime < 40) return
@@ -1309,6 +1327,13 @@ export class MolEngine {
 
   private onPointerDown = (e: PointerEvent) => {
     this.downPos = { x: e.clientX, y: e.clientY, t: performance.now(), button: e.button }
+    // PyMOL 橡皮带框选：Ctrl/Cmd + 左键拖拽 → 框选（不旋转相机；轨道控制同步禁用）
+    if ((e.ctrlKey || e.metaKey) && e.button === 0) {
+      this.boxSelecting = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, additive: e.shiftKey, subtractive: e.altKey, active: true }
+      this.controls.enabled = false
+      e.preventDefault()
+      return
+    }
     // 用户接管相机：取消书签过渡/巡航动画
     if (this.camAnim || this.camPath) this.camAnimCancelCount++
     this.camAnim = null
@@ -1330,6 +1355,22 @@ export class MolEngine {
   }
 
   private onPointerUp = (e: PointerEvent) => {
+    // 橡皮带框选收尾：松手提交选择并清除覆盖层
+    if (this.boxSelecting?.active) {
+      const bs = this.boxSelecting
+      this.boxSelecting = null
+      this.clearRubberBand()
+      this.controls.enabled = true
+      const w = Math.abs(bs.x1 - bs.x0), h = Math.abs(bs.y1 - bs.y0)
+      if (w > 8 && h > 8) {
+        this.callbacks.onBoxSelect?.({
+          x0: Math.min(bs.x0, bs.x1), y0: Math.min(bs.y0, bs.y1),
+          x1: Math.max(bs.x0, bs.x1), y1: Math.max(bs.y0, bs.y1),
+          additive: bs.additive, subtractive: bs.subtractive,
+        })
+      }
+      return
+    }
     const dx = e.clientX - this.downPos.x
     const dy = e.clientY - this.downPos.y
     const dt = performance.now() - this.downPos.t
@@ -1388,6 +1429,89 @@ export class MolEngine {
       }
     }
     this.pickablesCache = out
+    return out
+  }
+
+  /** 橡皮带覆盖框 DOM 更新（拖拽中每 move 调用） */
+  private updateRubberBand() {
+    const bs = this.boxSelecting
+    if (!bs?.active) return
+    if (!this.rubberBandEl) {
+      const el = document.createElement('div')
+      el.style.cssText = 'position:fixed;pointer-events:none;z-index:40;border:1.5px solid rgba(20,148,132,0.9);background:rgba(20,148,132,0.12);border-radius:3px;mix-blend-mode:normal;'
+      document.body.appendChild(el)
+      this.rubberBandEl = el
+    }
+    const rect = this.canvas.getBoundingClientRect()
+    const x = Math.min(bs.x0, bs.x1) - rect.left
+    const y = Math.min(bs.y0, bs.y1) - rect.top
+    const w = Math.abs(bs.x1 - bs.x0), h = Math.abs(bs.y1 - bs.y0)
+    const el = this.rubberBandEl
+    el.style.display = 'block'
+    el.style.left = `${x}px`
+    el.style.top = `${y}px`
+    el.style.width = `${w}px`
+    el.style.height = `${h}px`
+    el.style.borderColor = bs.subtractive ? 'rgba(220,80,80,0.9)' : bs.additive ? 'rgba(60,140,220,0.9)' : 'rgba(20,148,132,0.9)'
+    el.style.background = bs.subtractive ? 'rgba(220,80,80,0.10)' : bs.additive ? 'rgba(60,140,220,0.08)' : 'rgba(20,148,132,0.12)'
+  }
+
+  private clearRubberBand() {
+    if (this.rubberBandEl) {
+      this.rubberBandEl.remove()
+      this.rubberBandEl = null
+    }
+  }
+
+  /** 矩形框选拾取：返回框内可见原子（按各 rep 的拾取几何投影到屏幕像素判定） */
+  pickInRect(px0: number, py0: number, px1: number, py1: number): { structureId: string; atomIdx: number }[] {
+    const rect = this.canvas.getBoundingClientRect()
+    const list = this.collectPickables()
+    const out: { structureId: string; atomIdx: number }[] = []
+    if (!list.length) return out
+    // 相机矩阵（世界→屏幕像素）
+    this.activeCamera.updateMatrixWorld()
+    const projScreen = new THREE.Matrix4().multiplyMatrices(this.activeCamera.projectionMatrix, this.activeCamera.matrixWorldInverse)
+    const v = new THREE.Vector3()
+    for (const entry of list) {
+      const data = dataRegistry.get(entry.structureId)
+      if (!data) continue
+      const { pick } = entry
+      const pos = data.atoms.positions
+      // 各 rep 可拾取的原子集：spheres/cylinders→atomMap；lines→lineAtomMap；cartoon/surface→残基代表原子
+      let atomIdxs: Iterable<number>
+      if (pick.kind === 'spheres' || pick.kind === 'cylinders') {
+        atomIdxs = pick.atomMap ? Array.from(new Set(Array.from(pick.atomMap))) : []
+      } else if (pick.kind === 'lines') {
+        atomIdxs = pick.lineAtomMap ? Array.from(new Set(Array.from(pick.lineAtomMap))) : []
+      } else {
+        // cartoon/surface：按残基代表原子（CA 优先）判定——与点选语义一致
+        const resSet = new Set<number>()
+        const reps: number[] = []
+        if (pick.kind === 'cartoon' && pick.resAttr) {
+          const geo = (pick.mesh as THREE.Mesh).geometry
+          const attr = geo.getAttribute(pick.resAttr)
+          if (attr) for (let i = 0; i < attr.count; i++) resSet.add(Math.round(attr.getX(i)))
+        }
+        for (const ri of resSet) {
+          const r = data.residues[ri]
+          if (!r) continue
+          let rep = r.start
+          for (let i = r.start; i < r.end; i++) if (data.atoms.names[i] === 'CA') { rep = i; break }
+          reps.push(rep)
+        }
+        atomIdxs = reps
+      }
+      for (const ai of atomIdxs) {
+        v.set(pos[ai * 3], pos[ai * 3 + 1], pos[ai * 3 + 2])
+        v.applyMatrix4(projScreen)
+        if (v.z < -0.05 || v.z > 1) continue // 相机后方 / 裁剪外
+        // px0..px1 是视口客户区坐标（clientX/clientY 同系）——先减 rect 原点再比对
+        const sx = (v.x * 0.5 + 0.5) * rect.width
+        const sy = (-v.y * 0.5 + 0.5) * rect.height
+        if (sx >= px0 - rect.left && sx <= px1 - rect.left && sy >= py0 - rect.top && sy <= py1 - rect.top) out.push({ structureId: entry.structureId, atomIdx: ai })
+      }
+    }
     return out
   }
 
@@ -1483,6 +1607,9 @@ export class MolEngine {
         this.scene.add(view.group)
         this.views.set(entry.id, view)
       }
+      // r59-a1 #1 修复：可见性翻转必须使拾取缓存失效（three Raycaster 不查 visible——
+      // 旧版眼睛关闭后鼠标仍能命中不可见原子并触发 setActive 切换）
+      if (view.group.visible !== entry.visible) this.pickablesCache = null
       view.group.visible = entry.visible
       // 重建变化的 rep
       const repIds = new Set(entry.reps.map(r => r.id))
@@ -1495,9 +1622,24 @@ export class MolEngine {
         }
       }
       for (const rep of entry.reps) {
-        const hash = JSON.stringify([rep, entry.rev, filtersKey])
         const existing = view.reps.get(rep.id)
-        if (existing && existing.hash === hash) continue
+        if (existing) {
+          const fullHash = JSON.stringify([rep, entry.rev, filtersKey])
+          if (existing.hash === fullHash) continue
+          // r59-a1 #7 修复：纯 rep.visible 翻转不重建几何（surface/cartoon 秒级重建代价）——
+          // 剔除 visible 字段比对，一致则直接切 build.group.visible（不触发秒级重建）
+          const repNoVis = JSON.stringify([{ ...rep, visible: 0 }, entry.rev, filtersKey]).replace('"visible":0', '"visible":X')
+          const existNoVis = existing.hash.replace(/"visible":(?:true|false)/, '"visible":X')
+          if (repNoVis === existNoVis) {
+            if (existing.build.group.visible !== rep.visible) {
+              existing.build.group.visible = rep.visible
+              existing.hash = fullHash
+              this.pickablesCache = null
+            }
+            continue
+          }
+        }
+        const hash = JSON.stringify([rep, entry.rev, filtersKey])
         if (existing) {
           view.repContainer.remove(existing.build.group)
           existing.build.dispose()
@@ -1557,6 +1699,8 @@ export class MolEngine {
         }
       }
     }
+    // 晶胞盒（show cell）
+    this.updateCellBox(state)
     // 标签
     const labelsKey = state.labels.map(l => l.id + l.atomIdx).join(',') + '#' + state.labels.length
     if (labelsKey !== this.lastLabelsKey) {
@@ -1579,6 +1723,8 @@ export class MolEngine {
       state.settings.showHBonds, state.settings.hbondMaxDist, state.settings.hbondIncludeWater,
       state.settings.hbondSelOnly, state.settings.hideWater, state.settings.background,
       state.structures.filter(s => s.visible).map(s => s.id).join('|'),
+      // r59-a1 #2 修复：链显隐签名（isolate / chains hide 后虚线重渲——旧版悬空指向已隐藏链原子）
+      state.structures.map(s => `${s.id}:${(s.hiddenChains ?? []).join(',')}`).join('|'),
       state.selection.structureId, state.selection.rev,
       state.hbondScope ? state.hbondScope.structureId + ':' + state.hbondScope.rev : '-',
     ].join('#')
@@ -2149,6 +2295,76 @@ export class MolEngine {
       ok: true, count: mates.length,
       message: `${entry.name}：已生成 ${mates.length} 个对称伴侣（空间群 ${data.crystal.spaceGroup.trim()} · 半径 ${radius} Å · ${ops.length} 个对称操作）`,
     }
+  }
+
+  /** 晶胞盒（show cell）：CRYST1 单胞平行六面体线框——a 红 / b 绿 / c 蓝（PyMOL cell 惯例）。
+   *  盒原点取晶格原点对齐包围盒（orthoMatrix 的格矢即笛卡尔方向），结构通常落在 [0,1)^3 分数坐标内。 */
+  private updateCellBox(state: { structures: StructureEntry[]; settings: Settings }) {
+    const on = !!state.settings.showCell
+    const active = state.structures.find(s => s.visible)
+    const crystal = active ? dataRegistry.get(active.id)?.crystal : undefined
+    const key = on && crystal ? `${active!.id}|${crystal.a.toFixed(3)}|${crystal.b.toFixed(3)}|${crystal.c.toFixed(3)}|${crystal.alpha.toFixed(2)}|${crystal.beta.toFixed(2)}|${crystal.gamma.toFixed(2)}` : ''
+    if (key === this.cellKey) return
+    this.cellKey = key
+    for (const child of [...this.cellGroup.children]) {
+      this.cellGroup.remove(child)
+      const line = child as THREE.LineSegments
+      line.geometry?.dispose()
+      const mat = line.material
+      if (Array.isArray(mat)) mat.forEach(m => m.dispose())
+      else mat?.dispose()
+    }
+    if (!on || !crystal) return
+    // 格矢（笛卡尔）：orthoMatrix 列 = a/b/c 向量
+    const { o } = orthoMatrix(crystal)
+    const av: [number, number, number] = [o[0], o[3], o[6]]
+    const bv: [number, number, number] = [o[1], o[4], o[7]]
+    const cv: [number, number, number] = [o[2], o[5], o[8]]
+    // 原点：把结构包围盒中心折回最近的格点原点（盒子套住结构，而非飘在原点）
+    const data = dataRegistry.get(active!.id)!
+    const center = data.bbox.center
+    const oi = orthoMatrix(crystal).oi
+    const fx = oi[0] * center[0] + oi[1] * center[1] + oi[2] * center[2]
+    const fy = oi[3] * center[0] + oi[4] * center[1] + oi[5] * center[2]
+    const fz = oi[6] * center[0] + oi[7] * center[1] + oi[8] * center[2]
+    const origin: [number, number, number] = [
+      (Math.floor(fx)) * av[0] + (Math.floor(fy)) * bv[0] + (Math.floor(fz)) * cv[0],
+      (Math.floor(fx)) * av[1] + (Math.floor(fy)) * bv[1] + (Math.floor(fz)) * cv[1],
+      (Math.floor(fx)) * av[2] + (Math.floor(fy)) * bv[2] + (Math.floor(fz)) * cv[2],
+    ]
+    // 12 条棱：a×4 / b×4 / c×4，各自配色
+    const edges: { from: [number, number, number]; to: [number, number, number]; color: string }[] = []
+    const add = (i0: number, j0: number, k0: number, i1: number, j1: number, k1: number, color: string) => {
+      const p = (i: number, j: number, k: number): [number, number, number] => [
+        origin[0] + i * av[0] + j * bv[0] + k * cv[0],
+        origin[1] + i * av[1] + j * bv[1] + k * cv[1],
+        origin[2] + i * av[2] + j * bv[2] + k * cv[2],
+      ]
+      edges.push({ from: p(i0, j0, k0), to: p(i1, j1, k1), color })
+    }
+    for (let k = 0; k <= 1; k++) for (let j = 0; j <= 1; j++) {
+      add(0, j, k, 1, j, k, '#e05252') // a 边红
+      add(j, 0, k, j, 1, k, '#4fae5c') // b 边绿
+    }
+    for (let j = 0; j <= 1; j++) for (let i = 0; i <= 1; i++) {
+      add(i, j, 0, i, j, 1, '#5a8fd8') // c 边蓝
+    }
+    const positions = new Float32Array(edges.length * 6)
+    const colors = new Float32Array(edges.length * 6)
+    const col = new THREE.Color()
+    edges.forEach((e, idx) => {
+      positions.set(e.from, idx * 6)
+      positions.set(e.to, idx * 6 + 3)
+      col.set(e.color)
+      colors.set([col.r, col.g, col.b, col.r, col.g, col.b], idx * 6)
+    })
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    const mat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })
+    const lines = new THREE.LineSegments(geo, mat)
+    lines.renderOrder = 4
+    this.cellGroup.add(lines)
   }
 
   /** 重建对称克隆组：克隆各 rep 的 group（共享几何/材质），挂刚体矩阵（不参与拾取）。radius 显式传入（避免旧 entry 引用读取到未更新的 symmetry） */
@@ -4048,6 +4264,7 @@ export class MolEngine {
     this.canvas.removeEventListener('contextmenu', this.onContextMenu)
     this.canvas.removeEventListener('dblclick', this.onDoubleClick)
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave)
+    this.clearRubberBand()
     this.controls.dispose()
     for (const view of this.views.values()) {
       for (const rv of view.reps.values()) rv.build.dispose()

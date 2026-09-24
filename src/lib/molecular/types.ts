@@ -182,6 +182,8 @@ export interface Settings {
   stereo: boolean
   /** 视口右上角 3D 坐标轴指示器（朝向罗盘；点击轴可对齐视角） */
   showAxes: boolean
+  /** 晶胞盒（CRYST1 单胞平行六面体线框；show cell 开启） */
+  showCell: boolean
   /** 状态栏 FPS/性能指示器（引擎每 500ms 上报） */
   showFps: boolean
   /** 自动性能模式：帧率持续偏低时自动降级（关后处理/降像素比），恢复后自动还原 */
@@ -236,6 +238,7 @@ export function defaultSettings(): Settings {
     specular: true,
     stereo: false,
     showAxes: true,
+    showCell: false,
     showFps: false,
     autoPerf: true,
     outline: false,

@@ -2078,3 +2078,126 @@ Stage Summary:
 - 三问题全部根因修复；agent 教育同步（直接 isolate/完整残基/水语义）
 - 遗留：口袋水 6Å 固定半径；VLM 视觉终审受 SwiftShader 限制待用户预览确认
 - 下阶段建议：用户侧确认观感/序列条 compact mode/ray OOM 守卫/agent 记忆面板
+
+---
+Task ID: r59-a1
+Agent: general-purpose
+Task: 引擎层代码审查（只读不改）：engine.ts / representations.ts / symmetry.ts / hbonds(.ts+worker) / contacts.ts / sasa(.ts+worker) / marching-cubes.ts / ccp4.ts / map-worker.ts / movie.ts / 五个 zustand store
+
+Work Log:
+- 【审查方式】全文精读 engine.ts（4095 行）+ hbonds/hbond-worker/contacts/sasa/sasa-worker/movie/各 store 全文；symmetry/marching-cubes/ccp4 读算法核心段并核对自检覆盖；关键疑点回读 store.ts/commands.ts/MolViewer.tsx/RepsPanel.tsx 交叉验证调用链；three@0.186 Raycaster 源码核实（不做 visible 检查——P1-1 的关键证据）
+- 【P1-1 拾取穿透隐藏结构】engine.ts:1379-1392/1486：setStructureVisible（store.ts:380 只 bump visualRev 不 bump entry.rev）→ sync 里仅置 view.group.visible，pickablesCache 不失效；three r186 Raycaster 不测 visible → 结构面板眼睛关掉后 hover/点击仍命中不可见原子（还会 setActive 切换结构）。修法：sync 中 group.visible 翻转时 this.pickablesCache = null
+- 【P1-2 isolate 后氢键虚线悬空不重渲】engine.ts:1578-1584 hbondKey 不含 hiddenChains/entry.rev；updateHBonds 内 1656-1659 的隐藏链过滤（r50 加的）因 key 未变永不重跑——isolate/chains hide 后虚线仍指向已隐藏链原子，正是该过滤注释声称要防的场景（r50/r58 isolate 系列回归风险）。修法：hbondKey 拼入各结构 hiddenChains 签名
+- 【P2-3 SASA 并发键覆盖】engine.ts:2298/2311/2353/2504：sasaPending 以 structureId 单键存放，同结构 full→buried/xburied 连续请求互相覆盖；先到结果 key 不匹配被丢弃（2642 早退不清 computing）→ SASA 面板「计算中」永久挂起、data.sasa 不落库（重跑 sasa 才恢复）。修法：pending 键加 kind 前缀，或不匹配且 kind=full 时也 setComputing(false)
+- 【P2-4 ensemble+大结构氢键 worker 满载+虚线闪烁】engine.ts:2092-2095 每帧删 hbondCache + detKey 含 entry.rev：≥2000 原子结构播放时 worker 检测 back-to-back 循环（每轮结构化克隆全量 positions），且 updateHBonds 开头清空旧虚线→结果到达前的帧全部无氢键（闪烁）；detKey 含 rev 还使颜色/滑杆类 updateRep 也触发重检测。修法：ensemble 播放期对 worker 氢键检测节流或跳过，detKey 去掉 entry.rev（坐标变化路径已另有删缓存）
+- 【P2-5 单结构 contacts 不排氢】contacts.ts:62-67 detectContacts 的 listA/listB 未过滤 H/D，跨结构路径（174-179/196-197）与模块头注释都是重原子语义——含氢结构（NMR/MD）minDist 被 H 主导、计数偏多，与同面板 bsa（内部去氢）口径不一致。修法：同 cross 路径加 H/D 过滤
+- 【P2-6 标签/高亮/测量线不随 isolate 隐藏】engine.ts:1560-1576 labelsKey 仅含 label id/atomIdx；updateLabels 3122-3124 的 hiddenChains 过滤逻辑因 key 未变永不重跑（链隔离后标签悬浮空白处）；同因 selection.rev 未变 → amber 高亮球与测量线也不隐藏。修法：labelsKey 拼入 hiddenChains 签名（高亮/测量线同法）
+- 【P2-7 eye 按钮/可见性开关全几何重建】store.ts:416-421 updateRep({visible}) bump entry.rev → engine hash 变化 → surface/cartoon 大 rep 整体重建（数百 ms-秒级），纯可见性切换本可只切 group.visible。修法：sync 特判「仅 visible 差异」直接置 build.group.visible（symKey 已含 rep 可见性，克隆会同步）
+- 【P2-8 差图非对称时等值面颜色错位】engine.ts:2769-2780 setMapAppearance 以 meshes[i] 下标 0/1 映射正/负峰色，但 rebuildMapMesh 2856 对空 isoDefs continue——正峰无输出时 meshes[0] 实为负峰面，被涂成正峰绿色（wires 同）。修法：mesh.userData 记 isoDef 索引（或正负标志）而非按数组下标
+- 【P3 组】①engine.ts:2943-2955 stopRecording 未 stop captureStream 的 track（录像停止后浏览器仍采样画布）；②engine.ts:4040-4093 dispose 未清 window.__molEngine（HMR 后旧引擎整场景图无法 GC）、未 dispose scene.environment 与 hbond/contact/measure/label 组子几何；③map-load.ts:112-128 mapWorker 单例无 terminate（dev HMR 每次泄漏一个）；④engine.ts:627 tick slab 分支每帧 new Vector3（与全文件 TMP 复用约定不一致）；⑤hbond-worker.ts:70/sasa-worker.ts:79 Grid key (ix<<20)|(iy<<10)|iz 只给 iy/iz 10 位，+2048 偏移下常规坐标必然溢出位域——碰撞对偶 cell 在 ~6144Å 外为空故实际无害，但坐标超 ±6144Å 会塌缩性能（可改字符串键）；⑥engine.ts:2681-2696 worker buried 路径用 contactStore 现场重建 maskA 判侧别——请求里明明传了 maskA 却不回传，contacts 在飞行期变更则 A/B 归属可能错；⑦rayRender await Image 解码期间渲染循环以超采样尺寸+阴影继续出帧（录像中短暂画质跳变）；⑧RepsPanel selection 输入每键触发整 rep 重建（无 debounce）
+- 【确认无恙区】symmetry.ts 空间群表+自检闭包校验严谨；marching-cubes.ts 流形自检+规范插值方向防 1-ulp 裂缝；ccp4.ts 端序/轴序/大端三态判定+自检；movie.ts running 守卫+finally 复位+接管计数完整；worker 三件套结果 transfer 正确；heavy-queue 全局 2 槽 + dispose 防死锁；engine dispose 的 worker terminate/SlotLane dispose/事件解绑齐全（本次未发现 worker 泄漏级问题）
+
+Stage Summary:
+- 16 项发现：P1×2（隐藏结构拾取穿透、isolate 后氢键虚线不重渲——均在 r50/r58 isolate 系列改动周边，属高回归风险区）、P2×6（SASA 并发键覆盖卡 computing、ensemble 氢键 worker 满载+闪烁、contacts 单结构不排氢、标签/高亮不随 isolate 隐藏、可见性开关全重建、差图非对称颜色错位）、P3×8（资源清理/性能打磨）
+- 共性根因两条：①引擎各「重渲 key」（hbondKey/labelsKey/pickablesCache）未把 hiddenChains/visible 纳入签名——isolate/显隐这类 r50-r58 新增状态维度没有传导到全部重渲路径；②sasaPending/hbondCache 的去重键粒度与请求空间不匹配（kind/坐标变化混在 structureId+rev 单键里）
+- 建议 P1×2 与 P2-3/P2-4 优先排期（用户可感知：错拾取、悬空虚线、面板卡计算中、播放闪烁）；其余可随下轮打磨清账
+- 审查覆盖度：engine.ts 4095 行全文精读；representations.ts 全文；hbonds.ts/hbond-worker.ts/contacts.ts/sasa.ts/sasa-worker.ts/movie.ts/scene-store.ts/ensemble-store.ts/contacts-store.ts/hbond-store.ts/map-store.ts 全文；symmetry.ts（操作表抽样+868-1300 算法段全文）；marching-cubes.ts（表数据抽样+358-566 核心实现+自检段）；ccp4.ts（60-239 解析核心）；map-worker.ts/map-load.ts 全文；交叉验证 store.ts（1-560）/commands.ts（isolate/show waters/scene 段）/MolViewer.tsx（生命周期与 sync 段）/RepsPanel.tsx（updateRep 调用点）/heavy-queue.ts/three@0.186 Raycaster 源码。未覆盖：sffourier.ts/superpose.ts/parser.ts/selection.ts（非本次任务范围，仅按需抽查接口）
+
+---
+Task ID: r59-a2
+Agent: general-purpose
+Task: 命令/AI/持久化层代码审查（只读不改）：commands.ts / store.ts / complete.ts / selection.ts / agent/* / scenes+scene-store / session / tours+tour-store / 各轻量 store / api/agent
+
+Work Log:
+- 【审查范围】commands.ts 全量 2230 行、store/selection/complete/session/scenes/scene-store/tours/tour-store/views-store/cmd-history 等 17 个文件 + agent 五件套 + api/agent/route.ts 全量；engine.ts 仅交叉验证引用点（fitView/requestSasa/queueSasaBake）；AgentPanel/MolViewer/ViewBar 交叉核对 hydrate 时序与 busy 守卫
+- 【P1 ×3】①runner.ts execAgentCmd 以 consoleLog 绝对长度下标抓输出——日志饱和（appendLog slice(-200) 封顶 201）后 slice(before) 恒空 → agent 每条命令输出丢失、hasErr 恒 false（报错被记成 ok，自动修正与 VLM 修正双循环失聪；修法=执行前数组引用做 Set 差集或日志条目加单调 seq）；②commands.ts `color sasa` 大结构（≥2200 原子走 worker）提前 return 但从未调 queueSasaBake（该方法仅 store.applyColor:469 调用）→「完成后自动按暴露度着色」承诺落空；③complete.ts SEL_KEYWORDS 建议 `sele` 但 selection.ts zeroPredicates 无此词、buildNamedMasks 也不注册 → 按建议输入必报「无法识别的选择词」
+- 【P2 ×7】④`scene publication` 命中 PRESETS 优先级 → SCENE_PRESETS.publication（出版级渲染）命令行不可达（错误信息与工具栏菜单均列出该键，名实不符）；⑤`movie play`/`movie` 状态未 hydrate views-store（view 命令有）→ 欢迎页/agent 首轮误报「至少需要 2 个视角书签（当前 0）」；⑥`zoom <sel>` 经 selectFromExpr 隐式改写当前选择（PyMOL zoom 无此副作用；orient/view from 均无）→ 其后裸 color/util 作用域被缩到 zoom 范围，与 agent 场景说明矛盾；⑦mergeSessionFile 命名选择映射 base+structureIndex 假设文件结构连续追加——含 textless 结构时偏移错位绑错结构；⑧AgentPanel act()（confirm 执行/重跑）不置 busy 不判 busy → 与 send() 并发时 consoleLog 抓取互相污染（叠加①）；⑨quota 兜底 lite 版仍保留 colorOverrides/namedSelections.indices（MB 级）二次写仍可能静默失败，scenes（10×全量 overrides）与 agent 会话（20×80 条）同病；⑩`zoom <空命中表达式>` 静默回退整结构取景且输出成功文案（orient/view from 均报错）——误导 agent 修正轮
+- 【P3 ×6】⑪selection parseValueList 把 '=' 收为值：`resn = ALA` 静默 0 原子而 `resn=ALA` 报错（同意图两种反馈）；⑫补全同步缺口合并项：SCENE_PRESETS 键（pocket/popular/clean）未进补全、measure 无补全、map 缺 mesh/surface/both/hide/show、set 补全缺 outline 主键、约 12 个命令别名不在注册表、set 用法/错误清单缺 seq_focus/bg_follow；⑬movie play 时间轴模式 totalMs 汇总含书签已删的无效段（时长虚高）；⑭`resi 45A` 插入码被 parseInt 前缀吞掉与残基 45 合并；⑮`zoom in/out` 无结构守卫即入队（turn/move/orient 有）→ 欢迎页连按后 load 冲刷时连放 dolly；⑯newSession 清书签/时间轴/密度图但不清 scene-store 快照（close 命令文案称 session new 为「彻底重置」）
+- 【验证过无问题的项（避免后续误报）】measure 的 groupStarts 用 count 对齐 maskToIndices 长度（count=popcount，一致，无错位）；chain/resn/name/resi 大小写不敏感 ✓；resi 范围 1-60/负数/1+3-5 列表混合 ✓；r54 相机 up/fov 入档+setCameraState 恢复管线 ✓；r58 预设 reps/ballScale/hiddenChains 全字段落档恢复 ✓；旧会话 defaultSettings 展开迁移（camTransition/orbitClamp/seqFocus）✓；agent 流式中断三分支（decision/aborted/error）均清 streaming 态且持久化跳过流式中写入 ✓；busy 期间会话切换/新建/删活动会话 store 层拒绝 ✓；V 键/Shift+数字路径 hydrate 时序安全（ViewBar effect 先于任何用户按键）✓；COMMAND_REF 与 commands 实际语法逐条比对（isolate/chains/scene/hbonds in/movie smooth/zoom 缓冲/view from/measure 括号组）一致 ✓；classifyCmd 白名单与命令全集对齐（死代码豁免项无害）✓
+- 【覆盖度说明】指定清单内文件 100% 通读（providers.ts 供应商目录仅略读注册表与凭据落盘逻辑）；engine.ts/movie.ts/contacts.ts/loader.ts 等非指定文件只交叉验证引用点；api/pdb、api/sf 代理路由未审（非本任务层）
+
+Stage Summary:
+- 结论：命令/选择/补全/持久化主链路总体扎实（r54-r58 交付经查均正确入档与恢复），但发现 3 个 P1（agent 输出捕获在长会话失聪、color sasa worker 路径烘焙断链、补全建议非法关键词 sele）+ 7 个 P2（scene publication 键冲突不可达、movie 未 hydrate、zoom 隐式改选择、mergeSessionFile 索引错位、act 并发竞态、quota 兜底不彻底、空选择 zoom 误导）+ 6 个 P3，共 16 条，全部附文件:行号与一句话修法，未发现 P0 级数据损毁/崩溃
+- 最高优先修复建议：①（agent 反馈环路是本项目核心竞争力，长会话必现）→ ②（color sasa 是分析高频命令）→ ④/⑤（功能不可达/误报，一行修）
+- 本轮零文件修改（纯审查）；worklog 本节为唯一写入
+
+---
+Task ID: r59-a3
+Agent: general-purpose
+Task: UI 组件层代码审查（只读不改）：MolViewer.tsx + src/components/studio 全部 24 组件 + panels 9 面板 + app/page.tsx
+
+Work Log:
+- 【审查方式】指定清单文件 100% 全文精读（MolViewer 715 / AgentPanel 937 / SequenceBar 876 / ProviderSettingsDialog 809 / Toolbar 694 / ConsoleBar 459 / MovieTimeline 388 / CommandPalette 345 / WelcomeScreen 338 及其余 16 个小组件、panels 9 个、page.tsx）；关键疑点交叉验证：movie.ts setLoopsEdit 钳位（1-10，无越界）、store.ts PRESETS 段（9 个预设）、@radix-ui/react-dismissable-layer dist 源码（Escape 只 preventDefault 不 stopPropagation——P2-3 的关键证据）、cmd-history/views-store 事件协议；与 r59-a1/a2 已报条目去重（act() 并发、RepsPanel 逐键重建、movie totalMs 失效段、stopRecording track 等均不重复报）
+- 【P1 ×2】①中文 IME 组态 Enter 误触发：AgentPanel.tsx:893-898（textarea 发送）、ConsoleBar.tsx:217（命令执行）、SequenceBar.tsx:486/565/617（搜索/命名保存）的 Enter 处理均未检查 e.nativeEvent.isComposing——拼音输入法选字确认的 Enter 会把半成品直接发出/执行/保存（中文为主语言的产品必现路径）；修法：Enter 分支加 `if (e.nativeEvent.isComposing || e.keyCode === 229) return`。②MolViewer.tsx:230-317 快捷键 switch 无修饰键守卫：Ctrl+S/F/P/L/B 与 Ctrl+1..9（浏览器切标签页）全部同时触发视口动作（旋转开关/加标签/氢键开关/预设整体重建——Ctrl+数字切标签即静默换表示法）；且任意 Radix 弹窗打开（焦点落在弹窗按钮上）时裸字母键仍生效（'v' 分支 296-297 已有正确守卫范式可复用）；修法：switch 前统一 `if (e.ctrlKey || e.metaKey || e.altKey) break` + 弹窗态（helpOpen/loadOpen/historyOpen 等）早退
+- 【P2 ×9】③Escape 跨层穿透：MolViewer.tsx:309-312 window 级监听不查 defaultPrevented，Radix Dialog 关闭（只 preventDefault 不 stopPropagation，已核对 dismissable-layer dist/index.js:97-105）时同帧执行清空选择/退出测量——关帮助/历史/命令面板附带丢选择；修法：Escape 分支前检查 `document.querySelector('[data-state=open][role=dialog]')` 或维护弹窗计数。④反引号「关不掉」：MolViewer.tsx:196-198 INPUT 早退 + ConsoleBar 无 Backquote 分支（已 grep 证实）——命令行打开且焦点在输入行（常态）时按 ` 无效，与 HelpDialog.tsx:38 宣称的「打开/关闭」名实不符；修法：ConsoleBar onKeyDown 加 `` ` `` 关闭分支。⑤ProviderSettingsDialog.tsx:590 onPaste 闭包过期：setTimeout 500ms 后读的 apiKey 是粘贴前的渲染闭包值——粘贴 Key 自动探测永不触发（或用旧 Key 探测）；修法：改读 e.currentTarget.value 或 clipboardData。⑥ProviderSettingsDialog.tsx:186-195/474-511 setDefault 不查 res.ok 即 toast 成功、save/remove 无 catch（fetch 失败 → unhandled rejection + 误导性成功提示）；修法：补 res.ok 判定与 catch toast。⑦CommandPalette.tsx:236-241「新建会话」无确认直接清空，Toolbar.tsx:658-690 同一操作有 AlertDialog——破坏性操作双入口不一致；修法：palette 侧复用确认或跳 helpOpen 式二次确认。⑧AgentPanel.tsx:394-396 无条件滚底：流式期间每次 delta（patchCmds/流式文本）都 smooth scrollTo——用户上滚阅读历史被强制拽回底部；修法：滚前判 `scrollHeight - scrollTop - clientHeight < 60` 才跟随。⑨LeftPanel.tsx:101-108+195-199 移动端抽屉里的「折叠面板」按钮只写 ui.panelOpen（抽屉不关、无任何视觉反馈），且关闭抽屉后桌面面板被意外折叠——状态脱节；修法：Sheet 内该按钮改 setMobileOpen(false)。⑩键盘可达性缺口（合并）：SequenceBar.tsx:840-843 ResidueCell 显式 outline-none 且无 focus-visible 样式（数百可聚焦格无焦点指示）、MovieTimeline.tsx:201-218 关键帧卡片纯 pointer div（无 tabIndex/键盘）、LoadDialog.tsx:78-88 文件拖放区 div onClick（无 role/tabIndex）——键盘用户无法触达；修法：统一加 focus-visible:ring + tabIndex+role。⑪Toolbar.tsx:72-91 DropTrigger show="md"/"lg" 硬隐藏（display:none）：768-1024px 平板「示例/风格预设/演示」、<768px「会话」菜单完全不可达（mol-toolbar-scroll 横滚救不了 display:none；命令面板/QuickPreses/LoadDialog 有替代入口但不可发现）；修法：窄屏收敛进单个「更多」下拉而非隐藏
+- 【P3 ×9】⑫MolViewer.tsx:685+657 键位标注「1-8」vs 实际 9 个预设（231-233，含 putty；HelpDialog.tsx:26 已写 1–9）——9 号 Putty 快捷键不可发现；⑬EnsembleBar.tsx:29+125 prevPlaying 捕获后从未使用（dead ref）——拖帧滑块把播放永久暂停不恢复，与「临时暂停」意图不符；⑭SceneBar.tsx:91 key 拼 '#'+rev 强制全卡片重挂载——任何 scene-store rev 变化（保存/召回/改名）丢失重命名草稿 + 无谓 remount；⑮渲染性能杂项：AnalysisPanel.tsx:185 mapData 内联对象每渲染新建 → axis memo 失效 → 每次 hover 触发 Set/sort/Map 重建 + canvas 全量重绘（大接触集拖图谱卡）；HistoryDialog.tsx:78 Row 组件定义在渲染体内 → 搜索每键全列表 unmount/remount；⑯SequenceBar.tsx:199-214 rAF step 循环常驻空转（无拖拽也每帧跑）；⑰MapsPanel.tsx:92-95 点击已激活的图类型按钮无条件重算（数秒 worker 重跑，无 kind 变化守卫）；⑱MolViewer.tsx:474-477+462-470 右键菜单/悬停 tooltip 定位无视口钳制（近右/底缘被 overflow-hidden 裁切；MovieTimeline.tsx:339-342 已有正确钳制范式）；⑲移动端左上 FAB（LeftPanel.tsx:188-194）与 REC 徽章（RecordBadge.tsx:62）同位重叠（left-3 top-3，z-20 被 z-30 遮挡）——录制时面板入口不可点；⑳SelectionPanel.tsx:212 死代码 `<div className={cn('hidden', st ? '' : '')} />`；㉑触达目标：Toolbar 工具按钮 h-7（28px）/测量分段 27×22px 低于 44px 触控标准（StructuresPanel.tsx:56-58 已有 after:-inset-1.5 的 44px 热区范式未推广）
+- 【验证过无恙项（避免误报）】MolViewer 引擎生命周期/订阅清理/beforeunload 存档齐全；s/r/b/p 等快捷键 toast 新旧值语义正确；SequenceBar 拖拽（capture Esc + stopPropagation + suppressClick 350ms + elementFromPoint 重命中）实现严谨；MovieTimeline 拖拽排序 insert 语义/loopsEdit 1-10 钳位（movie.ts:154-158）正确；MapLegend 拖拽 clamp+持久化、LeftPanel 宽度拖拽/水合安全（useSyncExternalStore mounted）正确；ConsoleBar Ctrl+R 反向搜索三分支（进/循环/退出）自洽且 preventDefault 挡住浏览器刷新；CommandPalette Tab 填充走 data-palette-id 回查不依赖文本拼接；SessionListPopover 双击删除 2.6s 计时器随关浮层清理；page.tsx 布局为 flex h-dvh + StatusBar 常规 flex 子项（无 sticky 重叠/遮挡问题，footer 检查通过）；欢迎页 SessionResumeSlot dynamic(ssr:false) 水合安全；AnalysisPanel SASA/接触 loading 态与 stale 结构守卫完整（按钮 disabled + computing 指示 + 错误出口）；EnsembleBar 播放条 setTarget 同步逻辑正确
+
+Stage Summary:
+- 结论：22 项发现——P1×2（中文 IME Enter 误发送/误执行〔主语言用户必现〕、MolViewer 快捷键无修饰键守卫致 Ctrl+S/F/P/L/B/数字 与浏览器快捷键全面冲突且弹窗内裸字母仍生效）、P2×9（Radix Escape 穿透清选择、` 键关不掉命令行、ProviderSettings 粘贴探测闭包过期 + 失败仍报成功、命令面板新建会话绕过确认、AgentPanel 流式强制滚底、移动抽屉折叠按钮失效、键盘可达性三缺口、<lg 工具栏菜单硬隐藏）、P3×11（键位标注 1-8≠实际 1-9、EnsembleBar 永久暂停、SceneBar rev 键重挂载、hover 全量重绘/Row 内联重挂载、rAF 常驻、同类型重算、菜单/tooltip 无钳制、移动 FAB 与 REC 重叠、死代码、触控目标）
+- 最高优先修复建议：①IME（一行守卫 ×4 文件，主语言路径）→ ②修饰键守卫（一行）→ ③Escape 穿透与 ④` 关闭（均为数行，快捷键名实相符）；⑤ProviderSettings 粘贴探测是「功能存在但从未生效」型静默缺陷，值得排期
+- 本轮零文件修改（纯审查）；worklog 本节为唯一写入；未重复 r59-a1/a2 已报的 16+16 条引擎/命令层发现
+- 审查覆盖度：指定清单 100% 通读——MolViewer.tsx 715 行全文、studio 24 组件全文（含 AgentPanel 937/SequenceBar 876/ProviderSettingsDialog 809/Toolbar 694）、panels 9 面板全文（含 AnalysisPanel 1190/StructuresPanel 826）、page.tsx 全文；交叉验证 movie.ts（loops 钳位段）/store.ts（PRESETS 段）/views-store/chat-store（API 签名）/@radix-ui react-dismissable-layer dist 源码（Escape 传播证据）/use-mobile hook。未覆盖：components/ui shadcn 内部实现（任务豁免）、engine/loader/session/commands 等非 UI 层（r59-a1/a2 已审）、globals.css 样式令牌细节、真实浏览器 IME/触屏实测（静态代码审查结论，建议修复后用真实输入法回归）
+
+---
+Task ID: r60-ui
+Agent: general-purpose
+Task: UI 层 P1 修复打包：r59-a3 审查定案 16 条全部修复（只改 src/components/studio/** 与 molecular/MolViewer.tsx，未触碰 src/lib/**）
+
+Work Log:
+- 【#1 IME Enter 误触发】6 处全部加 `if (e.nativeEvent.isComposing || e.keyCode === 229) return` 守卫：AgentPanel textarea 发送（~902）、ConsoleBar 命令执行（~218）、SequenceBar 选择库命名/残基搜索/框选保存三处输入（~491/575/632）、HistoryDialog 搜索执行（~160）——拼音选字确认的 Enter 不再发出/执行/保存半成品
+- 【#2 修饰键守卫】MolViewer 键盘 switch 前统一 `if (e.ctrlKey || e.metaKey || e.altKey) return`（~232）：Ctrl+S/F/P/L/B 与 Ctrl+1..9 不再同时触发旋转/加标签/氢键/预设重建；tour 与 movie 的前置分支各自原有修饰键判断保持不动，'v' 分支内既有守卫保留（冗余无害）
+- 【#3 Escape 跨层穿透】MolViewer Escape 分支守卫 `if (e.defaultPrevented || document.querySelector('[data-state=open][role=dialog]')) break`（~316）。**重要实测修正**：任务原定「查 [data-state=open] DOM」单判据不可靠——Radix dismissable-layer 在 document 层（先于本 window 层）处理 Escape 且 zustand 外部 store 更新同步重渲，window 层执行到时 data-state 往往已翻成 closed（agent-browser 双探针实证：capture 阶段 openDlg=true，window bubble 阶段 openDlg=false、defaultPrevented=true）。故以 defaultPrevented 为主判据（Radix 关弹窗必调 preventDefault 且不 stopPropagation），DOM 查询留作非 Radix 弹窗兜底
+- 【#4 反引号关命令行】ConsoleBar onKeyDown 新增 Backquote 分支（`` ` `` 与 `~` 均 preventDefault + setUi({consoleOpen:false})，~284）——命令行打开且焦点在输入行（常态）时按 ` 可关闭，与 HelpDialog「` 打开/关闭」宣称名实相符；MolViewer INPUT 早退导致的全局监听盲区由此补上
+- 【#5 ProviderSettingsDialog】①onPaste 闭包过期（粘贴探测从未生效）：改为 setTimeout 外捕获 `const v = e.currentTarget.value + e.clipboardData.getData('text')`（paste 时 state 尚未含粘贴文本，拼接近似粘贴后 Key 长度）+ 探测本体走 runProbeRef.current（500ms 后重渲闭包已携带新 Key）②setDefault/save/remove 三处全部补 res.ok 检查（HTTP 状态码入 toast 文案）与 catch（网络错误 toast），失败不再误报成功、不再 unhandled rejection
+- 【#6 CommandPalette 新建会话确认】qa-session-new 改为打开与 Toolbar.tsx 同款 AlertDialog（标题含结构计数、录制中警示段落、destructive 主按钮、doNewSession toast 文案同 Toolbar「已新建会话（关闭 N 个结构）」）——破坏性操作双入口一致
+- 【#7 AgentPanel 强制滚底】自动滚底 effect 改为仅当 `scrollHeight - scrollTop - clientHeight < 60` 才 scrollTo（~397）——流式期间上滚阅读历史不再被拽回底部
+- 【#8 AgentPanel act busy 守卫】act() 入口 `if (busy && mode !== 'confirm-skip')` toast「助手正在执行，请稍候」并 return（~613）；confirm-skip 仅改本地卡片状态不拦；依赖数组补 busy
+- 【#9 LeftPanel 移动端折叠按钮】content 参数化 content(inSheet)：Sheet 内「折叠面板」→ setMobileOpen(false)（关抽屉），桌面端保持 setUi({ panelOpen: false })——状态脱节修复
+- 【#10 SceneBar key 去 rev】key={sc.id}（去掉 '#'+rev 段）；rev 订阅随之删除（避免 unused）——场景保存/召回/改名不再整卡片 remount 丢重命名草稿
+- 【#11 EnsembleBar 拖后恢复播放】commitFrame 提交帧后 `if (prevPlaying.current)` 置 false + playEnsemble(sid)（~83）——拖帧滑块从「永久暂停」回到「临时暂停」；非循环拖到末帧由引擎播满自动停（updateEnsemble 既有语义），无需特判
+- 【#12 移动端 FAB 避让 REC】FAB 从 left-3 top-3（与 RecordBadge 同位被 z-30 遮挡）移至 bottom-24 right-4，尺寸 h-9 w-9 → h-11 w-11（44px 触达达标），aria-label「打开控制面板」不变
+- 【#13 键位标注 1-8→1-9】MolViewer 空视口快捷键速查「1–8 表示法预设」与 QuickPresets 触发器「1-8」均改 1-9（putty 第 9 预设可发现，与 HelpDialog 一致）
+- 【#14 SelectionPanel 死代码】`<div className={cn('hidden', st ? '' : '')} />` 删除；随之清理无其他使用的 cn import 与 st 变量（eslint 0 依赖）
+- 【#15 SequenceBar rAF 空转】step 循环改为仅 `d && d.moved && autoDir !== 0` 时续排下一帧（否则 raf=0 idle），移除挂载即启动的常驻 requestAnimationFrame；move 进入边缘区时 wake() 重新唤醒——无拖拽时零 rAF 空转，拖拽边缘自动滚动行为不变
+- 【#16 MapsPanel 重复计算】图类型按钮点击 `if (kind === k.key) return` no-op——点击已激活的 2Fo−Fc/Fo−Fc 不再重跑数秒 worker（想重算走「合成」按钮）
+- 【lint】bun run lint → 0 errors 0 warnings（输出仅 "$ eslint ."）
+- 【tsc】bunx tsc --noEmit | rg "^src/" → 零输出（src 无类型错误）
+- 【agent-browser 抽查①】命令行打开（body 焦点按 ` 全局监听生效）+ 焦点自动落输入行后按 ` → consoleStillOpen=false 焦点回 BODY ✓（修复前该路径因 MolViewer INPUT 早退 + ConsoleBar 无分支而无效）
+- 【agent-browser 抽查②】select resi 1-5（序列条「已选 20」徽章）→ 开帮助弹窗（data-state=open 确认）→ 按 Escape → 弹窗关、徽章仍在「已选 20」✓；反向回归：无弹窗时裸 Escape 仍正常清选择（守卫未过度拦截）✓。过程发现任务原定 DOM 查询判据被 zustand 同步重渲时序击穿（见 #3），defaultPrevented 叠加后通过
+- 【agent-browser 抽查③】AgentPanel textarea 聚焦按 Ctrl+K → 零视口快捷键副作用（toast 数量不变、无旋转/预设/氢键动作、选择保留、AgentPanel 未被误关）✓；附带验证 body 焦点下 Ctrl+S/Ctrl+1/Ctrl+F 连按 toast 数量恒定（修复前 Ctrl+S 会开旋转、Ctrl+1 静默换预设）、裸 s 仍正常开关旋转（守卫未误伤单键）
+- 【附加抽查】移动端 390×844：FAB 位于 right-4 bottom-24 区 44×44px、与左上 REC 徽章位零重叠；FAB → Sheet 打开 → Sheet 内「折叠面板」按钮 → Sheet 关闭 ✓（#9/#12 行为级验证）
+- 【console】整个验证会话零运行时错误、零 warning（errors/console 均空）
+- 修复方式全部为外科手术式：业务语义零改动；未触碰 src/lib/**（引擎/命令/选区主线程并行修改中）
+
+Stage Summary:
+- 16/16 条全部修复并通过验证：lint 0/0、tsc src 零错、agent-browser 三条抽查全过（` 关命令行 / Escape 只关弹窗不清选择 + 反向回归 / Ctrl+K 零视口副作用）+ 移动端 FAB/折叠按钮行为级附加验证
+- 关键技术发现：Radix Dialog Escape 穿透的守卫判据必须用 e.defaultPrevented 而非 [data-state=open] DOM 查询——Radix dismissable-layer 在 document 层先执行且 zustand useSyncExternalStore 离散事件内同步重渲，window 层 handler 执行时 DOM 状态已翻转（双探针实证，已写入代码注释供后人避坑）
+- 遗留观察（未修，不在 16 条范围）：①AgentPanel textarea 对所有按键 e.stopPropagation()，导致其聚焦时 Ctrl+K 无法打开命令面板（CommandPalette 注释宣称输入框聚焦同样生效——被截胡；非本次引入的回归）②EnsembleBar togglePlay 的「非循环末帧从头播放」先 playEnsemble 后 setEnsembleFrame 的顺序会把 playing 重新置 false（引擎 setEnsembleFrame 副作用），疑似既有小 bug，建议下轮与 P2-4 一起处理
+- 下一步：主线程 commit/push（本 agent 按约定未做 git 操作）；真实输入法（iOS 拼音/桌面搜狗）回归 #1 可再补一轮人工验证
+
+---
+Task ID: r59+r60
+Agent: main
+Task: 全面代码审查 + 全功能 E2E（用户指令）→ PyMOL 源码语义深挖移植（用户新指令：让熟悉 PyMOL 的用户快速上手）
+
+Work Log:
+- 【审查层（r59）】三并行子代理（r59-a1 引擎 16 条 / r59-a2 命令层 16 条 / r59-a3 UI 层 22 条）通读 ~30k 行代码，产出 P1×7 + P2×~20 + P3×~25 分级问题清单（各自 worklog 有完整记录）
+- 【UI 修复（r60-ui 子代理，16/16 完成）】IME Enter 误触发×6 处 / MolViewer 修饰键守卫 / Escape 跨层穿透（defaultPrevented 主判据+DOM 兜底——radix document 层同步重渲会击穿 data-state 单判据）/ 反引号关命令行 / ProviderSettings 粘贴探测闭包+res.ok 检查 / 命令面板新建会话二次确认 / AgentPanel 滚底跟随 + busy 守卫 / 移动端折叠按钮 / SceneBar key 去 rev / EnsembleBar 恢复播放 / FAB 移位 / 键位 1-9 / 死代码 / rAF 空转 / MapsPanel no-op
+- 【PyMOL 选区语法移植】selection.ts：q(occupancy) 比较 / ss h|s|l / id 序号范围 / in / like 集合算子（按残基匹配取子集）/ byobject / hydrogen 零参谓词；parseValueList 容忍裸 = ；PRESET_SELECTIONS 列表扩充
+- 【select 裸等号修复】commands.ts select 分支：左侧是谓词词（chain/resn/name/…）时「谓词 = 值」规整为空格语法（旧版 assign 正则把 resn = HEM 误判成命名选择「resn」→ 报「无法识别 HEM」）；非谓词左侧（site = within …）仍按命名选择
+- 【PyMOL 命令动词移植】spectrum count|b（连续渐变上色）/ iterate (sel), 字段（属性打印，20 行上限）/ alter (sel), b=表达式（安全算术白名单 + b/q 原值引用）/ util cbss（SS 卡通+配体基色）/ util cbao（元素+AO）/ show cell / hide cell / cell on|off（晶胞盒）/ measure 括号组间逗号容忍
+- 【晶胞盒引擎层】Settings.showCell + engine cellGroup/updateCellBox：orthoMatrix 格矢构建平行六面体 12 棱线框（a 红 b 绿 c 蓝——PyMOL cell 惯例），原点按包围盒中心分数坐标 floor 对齐；sync 每帧 key 缓存；dispose 清理
+- 【PyMOL 橡皮带框选】引擎 boxSelecting 状态机：Ctrl/Cmd+左键拖拽 → controls 禁用 + rubberBand DOM 覆盖框（teal 边框半透明，Shift 追加蓝/Alt 移除红变体）+ pickInRect（各 rep 拾取几何投影屏幕像素判定，cartoon/surface 按残基代表原子 CA）→ MolViewer onBoxSelect 残基扩展 + 分子级配体扩展 + 置换/追加/移除三模式；坐标系修复（视口客户区坐标 rect 原点偏移）
+- 【sele 关键词】buildNamedMasks 注入当前选择掩码——color red sele / show cartoon sele / zoom sele 全动词通用（旧版补全提示 sele 却报非法词）
+- 【r59 P1 结清】runner.ts 日志捕获 seq 化（consoleLog slice(-200) 饱和后绝对下标失聪——agent 修正反馈环失效根因）/ color sasa 命令路径补 queueSasaBake / zoom 改 evaluateSelection 不落选择态（PyMOL 语义：取景命令无副作用）+ 空选择报错 / scene publication 键冲突（SCENE_PRESETS 先查）/ movie play 补 views-store hydrate / pickablesCache 可见性翻转失效 / hbondKey 加 hiddenChains 签名（isolate 后虚线重渲）/ eye 按钮纯 visible 翻转不重建几何（hash 剔除 visible 比对轻量切换）
+- 【帮助与教育】HelpDialog 新增「PyMOL 用户速查（习惯迁移）」节（13 条 PyMOL→MolVision 映射卡）+ MOUSE 表框选三行；COMMAND_HELP 注册新命令；complete.ts 补全 SEL_KEYWORDS 扩充 + spectrum/iterate/alter/cell 注册；agent COMMAND_REF 全面更新（新动词 + 选择语法 + PyMOL 语法照搬指令）
+- 【E2E（agent-browser 数据探针）】①show cell：63.1×83.6×53.8Å P 1 21 1 正确读取 + cellGroup 1 子节点 ✓ ②ss h 3328 / q>0.5 4779 / b>60 145 ✓ ③name CA in chain A 141（in 算子）/ id 1-100 100 / resn = HEM 172（裸等号）/ site3 = within… 命名 710（规整不误伤）④spectrum b, rainbow 上色 ✓ ⑤iterate FE 4 原子（resi 142/148 ×4 链，b 值精确）✓ ⑥alter b=99.5 → iterate 复核 b=99.50 ✓ ⑦util cbss ✓ ⑧measure 逗号语法「距离 0.00 Å A/HEM142/FE—A/HEM142/FE」✓ ⑨框选全链路：合成 Ctrl 拖拽 → boxSelecting 激活/controls 禁用/rubberBand DOM → pickInRect 262 原子 → 108 残基 → 947 原子选择（序列条「已选 108」+ 面板「947 selected」）✓ ⑩反引号关命令行 ✓ ⑪help 含 spectrum/pyMOL 速查节 ✓ ⑫console 零错误 + lint 0/0 + tsc src 零错
+- 【沙箱经验】①合成 PointerEvent 须 cancelable:true 才让 preventDefault 生效（defaultPrevented 探针验证）②consoleLog 徽章读「已选择 N」会命中历史日志文本——选择态断言要看序列条/面板实时数字③HMR 后命令字符串缓存（__runCmd 闭包持旧 input）会假性复现旧 bug，重装 helper 或换参数名验证④pickInRect 坐标系：调用方传视口客户区坐标（clientX 同系），内部投影后须减 rect 原点再比对（首次实现双重加 rect.left 导致框选空命中）
+
+Stage Summary:
+- 交付（PyMOL 习惯迁移大满贯）：①选区语法全面对齐（q/ss/id/in/like/byobject/hydrogen + 裸等号 + sele 关键词）②新动词 spectrum/iterate/alter/util.cbss/util.cbao/show cell/measure 逗号③晶胞盒线框（CRYST1 实测精确）④Ctrl+拖拽橡胶带框选（残基级、三模式、覆盖框 UI）⑤帮助系统 PyMOL 速查节 + 补全/agent 教育同步
+- r59 审查 P1 全部结清（7 条）+ r60-ui 16 条 UI 修复（子代理）+ 主线程引擎/命令层 8 条
+- 验证：lint 0/0 / tsc src 0 / console 0 / 12 项 E2E 数据探针全绿
+- 未解决与遗留：①iterate 输出上限 20 行（save 离线全量）②alter 仅 b/q/name（改坐标无意义已明确提示）③spectrum 自定义起终点色暂用内置渐变 ④r59-a1 剩余 P2/P3（sasaPending 键覆盖、ensemble 播放氢键节流、dispose HMR 清理等 12 条）留待下轮
+- 下阶段建议：①r59-a1/a2 剩余 P2 清账 ②agent 记忆可视化面板 ③序列条 compact mode ④口袋水 6Å 可调

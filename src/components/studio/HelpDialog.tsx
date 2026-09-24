@@ -46,12 +46,32 @@ const MOUSE: [string, string][] = [
   ['左键拖动', '旋转视角'],
   ['滚轮', '缩放'],
   ['右键拖动', '平移'],
+  ['Ctrl+拖动', '框选（橡胶带：框内可见残基整体选中，不旋转）'],
+  ['Ctrl+Shift+拖动', '框选追加到当前选择'],
+  ['Ctrl+Alt+拖动', '框选从当前选择移除'],
   ['单击', '选择残基'],
   ['Ctrl + 单击', '选择单个原子'],
   ['Shift + 单击', '追加选择'],
   ['Alt + 单击', '从选择中移除'],
   ['双击', '聚焦残基'],
   ['右键', '上下文菜单（原子/残基/链/同类残基/周围环境 5Å/测距/标注）'],
+]
+
+/** PyMOL → MolVision 习惯迁移速查（PyMOL 老用户零成本上手） */
+const PYMOL_MAP: [string, string, string][] = [
+  ['select / sele', 'select site = within 5 of resn HEM', '选择语法同源：chain/resi/resn/name/elem + and or not；sele = 当前选择；命名选择同 PyMOL 对象语义'],
+  ['show / hide', 'show ballstick, ligand · hide cartoon', '逗号语法完全兼容；reps 面板同步可视编辑'],
+  ['color / spectrum', 'color element, ligand · spectrum b, rainbow', 'spectrum 连续渐变；color pocket = 配体距离渐变（本工具特色）'],
+  ['zoom / orient', 'zoom ligand, 5 · orient', 'zoom 不改写当前选择（与 PyMOL 一致）；带缓冲距离参数'],
+  ['iterate / alter', 'iterate (name CA), resn resi b · alter (resi 1-10), b=b+5', '属性查看/修改（b/q/name）；输出到命令行面板'],
+  ['util.*', 'util cbc · util cbss · util cbaw', 'cbc 链色 / cbss SS 卡通 / cbao 元素+AO / cbaw 白碳论文图'],
+  ['byres / in / like', 'byres(within 5 of ligand) · name CA in chain A', '残基扩展与集合算子同源；bychain/byobject 同可用'],
+  ['ss / b / q 谓词', 'ss h+s · b > 50 · q > 0.5', '二级结构/B 因子/占据率比较选择'],
+  ['show cell', 'show cell · symmetry 25', '晶胞盒（a红 b绿 c蓝）+ 晶格邻居克隆'],
+  ['distance', 'measure dist (resn HEM) (resi 93)', 'PyMOL distance 命令在本工具为 measure（逗号/空格分隔皆可）'],
+  ['get_view / set_view', 'get_view · set_view {…}', '视角 JSON 导出/恢复，格式更丰富（含 up/fov）'],
+  ['session', 'session save · session export', '会话存档（自动）/ .molvision 文件导出导入'],
+  ['ray / png', 'ray 1920 · png 2', 'ray 真超采样软阴影静帧；png 截屏倍率'],
 ]
 
 export function HelpDialog() {
@@ -99,6 +119,28 @@ export function HelpDialog() {
                 <div key={k} className="flex items-center gap-3 text-xs">
                   <span className="inline-flex w-24 shrink-0 items-center justify-center rounded border border-border bg-muted px-1.5 py-0.5 text-center font-mono text-[10px]">{k}</span>
                   <span className="text-muted-foreground">{v}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <Separator />
+
+          <section>
+            <h3 className="mol-micro mb-2 flex items-center gap-1.5 text-muted-foreground">
+              <Wand2 className="h-3 w-3" /> PyMOL 用户速查（习惯迁移）
+            </h3>
+            <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
+              选择语法、命令动词、逗号参数、命名对象语义均与 PyMOL 对齐——熟悉的命令直接输入即可：
+            </p>
+            <div className="grid gap-1.5">
+              {PYMOL_MAP.map(([k, ex, v]) => (
+                <div key={k} className="rounded-lg border border-border bg-muted/30 px-2.5 py-1.5">
+                  <div className="flex items-baseline gap-2 text-xs">
+                    <span className="shrink-0 font-mono font-semibold text-foreground">{k}</span>
+                    <code className="min-w-0 truncate font-mono text-[10px] text-primary/90">{ex}</code>
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{v}</p>
                 </div>
               ))}
             </div>

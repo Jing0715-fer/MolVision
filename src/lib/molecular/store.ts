@@ -23,6 +23,8 @@ export const engineRef: { current: import('./engine').MolEngine | null } = { cur
 
 let uid = 0
 const nextId = () => `s${Date.now().toString(36)}${(uid++).toString(36)}`
+/** 控制台日志单调序号（滚动窗口外的绝对定位靠它——见 appendLog 注释） */
+let logSeq = 0
 
 export interface MolState {
   structures: StructureEntry[]
@@ -55,7 +57,7 @@ export interface MolState {
     /** AI 助手面板（自然语言 → 命令） */
     agentOpen: boolean
   }
-  consoleLog: { type: 'in' | 'out' | 'err'; text: string; time: string }[]
+  consoleLog: { type: 'in' | 'out' | 'err'; text: string; time: string; seq?: number }[]
   /** 本次页面生命周期内是否加载过结构（防止恢复失败后被空自动保存抹掉存档） */
   everHadStructures: boolean
 
@@ -709,7 +711,10 @@ export const useMolStore = create<MolState>()((set, get) => ({
   appendLog: (type, text) => {
     const now = new Date()
     const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
-    set(s => ({ consoleLog: [...s.consoleLog.slice(-200), { type, text, time }] }))
+    // 单调序号（r59-a2 #1：consoleLog slice(-200) 饱和后长度不变，绝对下标切片会失聪——
+    // agent 输出捕获按 seq 过滤，日志滚动不影响）
+    logSeq += 1
+    set(s => ({ consoleLog: [...s.consoleLog.slice(-200), { type, text, time, seq: logSeq }] }))
   },
 
   bumpVisual: () => set(s => ({ visualRev: s.visualRev + 1 })),
@@ -724,6 +729,12 @@ function labelForAtom(data: StructureData, i: number): string {
 export function buildNamedMasks(structureId: string, data: StructureData): Map<string, Uint8Array> {
   const store = useMolStore.getState()
   const out = new Map<string, Uint8Array>()
+  // PyMOL 关键词 sele：当前选择（所有作用域动词 color red sele / show cartoon sele / zoom sele 通用）
+  if (store.selection.structureId === structureId && store.selection.indices.length) {
+    const m = new Uint8Array(data.atoms.count)
+    for (const i of store.selection.indices) m[i] = 1
+    out.set('sele', m)
+  }
   for (const ns of store.namedSelections) {
     if (ns.structureId !== structureId) continue
     if (ns.indices) {

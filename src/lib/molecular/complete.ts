@@ -51,6 +51,14 @@ const SEL_KEYWORDS: [string, string][] = [
   ['within', '距离内：within 5 of (…)'],
   ['byres', '按残基扩展'],
   ['bychain', '按链扩展'],
+  ['ss', '二级结构：ss h/s/l（PyMOL 字母）'],
+  ['id', 'PDB 原子序号：id 100-200'],
+  ['b', 'B 因子比较：b > 50'],
+  ['q', '占据率比较：q > 0.5'],
+  ['hydrogen', '氢原子（not hydrogen 排氢）'],
+  ['in', '按残基交集（A in B）'],
+  ['like', '按残基+原子交集（A like B）'],
+  ['byobject', '扩展到整个对象'],
   ['all', '全部原子'],
   ['none', '空集'],
   ['and', '交集'],
@@ -124,6 +132,27 @@ const REGISTRY: CmdDef[] = [
   { names: ['load', 'fetch'], args: () => null },
   { names: ['select', 'sel'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
   { names: ['deselect', 'desel'], args: () => null },
+  {
+    names: ['spectrum'],
+    args: (pos) => (pos === 1
+      ? [
+          { insert: 'count', kind: 'sub', detail: '链序连续渐变' },
+          { insert: 'b', kind: 'sub', detail: 'B 因子渐变（低蓝→高红）' },
+        ]
+      : pos === 2
+        ? [{ insert: 'rainbow', kind: 'value', detail: '彩虹渐变（PyMOL 惯例词）' }]
+        : null),
+    expr: true,
+  },
+  {
+    names: ['iterate'],
+    expr: true,
+    args: (pos) => (pos >= 2
+      ? ['name', 'resn', 'resi', 'chain', 'ss', 'b', 'q', 'elem', 'index'].map(f => ({ insert: f, kind: 'value', detail: 'iterate 输出字段' }))
+      : null),
+  },
+  { names: ['alter'], expr: true, args: (pos) => (pos >= 2 ? ['b', 'q', 'name'].map(f => ({ insert: `${f}=`, kind: 'value', detail: 'alter 可改属性' })) : null) },
+  { names: ['cell'], args: (pos) => (pos === 1 ? [{ insert: 'on', kind: 'sub', detail: '晶胞盒开启' }, { insert: 'off', kind: 'sub', detail: '晶胞盒关闭' }] : null) },
   {
     names: ['create'],
     expr: true,

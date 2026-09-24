@@ -180,6 +180,8 @@ class Evaluator {
 
   parseValueList(): string[] | { error: string } {
     const values: string[] = []
+    // PyMOL 宽容语法：谓词后裸 '='（resn = ALA / chain = A）——静默跳过，语义与省略等价
+    if (this.peek()?.t === 'punct' && (this.peek() as { v: string }).v === '=') this.next()
     const first = this.next()
     if (!first) return { error: '缺少参数值' }
     // 负数首值：'-5'（'-' 是独立 punct）
@@ -287,7 +289,7 @@ const onePredicates: Record<string, OnePred> = {
     // 解析范围列表：45, 45-60, -5
     const ranges: [number, number][] = []
     for (const v of vs) {
-      const m = v.match(/^(-?\d+)-(-?\d+)$/)
+      const m = v.match(/^(\d+)-(\d+)$/) || v.match(/^(-\d+)-(-\d+)$/)
       if (m) { ranges.push([parseInt(m[1], 10), parseInt(m[2], 10)]); continue }
       const num = parseInt(v, 10)
       if (!isNaN(num)) ranges.push([num, num])
@@ -296,6 +298,31 @@ const onePredicates: Record<string, OnePred> = {
       const s = ctx.structure.atoms.resSeqs[i]
       return ranges.some(([a, b]) => s >= a && s <= b)
     })
+  },
+  // PyMOL id：按 PDB 原子序号（ATOM/HETATM serial）选择，支持 id 100 / id 100-200
+  id: (ctx, vs) => {
+    const set = new Set<number>()
+    for (const v of vs) {
+      const m = v.match(/^(\d+)-(\d+)$/)
+      if (m) {
+        const a = parseInt(m[1], 10), b = parseInt(m[2], 10)
+        if (b - a > 200000) return predAtom(ctx, () => false)
+        for (let k = a; k <= b; k++) set.add(k)
+        continue
+      }
+      const n = parseInt(v, 10)
+      if (!isNaN(n)) set.add(n)
+    }
+    return predAtom(ctx, (i) => set.has(ctx.structure.atoms.serial[i]))
+  },
+  // PyMOL ss h/s/l：按二级结构选择（h=螺旋 s=折叠 l/c=环——PyMOL 字母体系）
+  ss: (ctx, vs) => {
+    const types = new Set<string>()
+    for (const v of vs) {
+      const c = v.toLowerCase()
+      types.add(c === 'h' ? 'H' : c === 's' ? 'E' : c === 'c' ? 'L' : c)
+    }
+    return predRes(ctx, (r) => types.has(r.ss))
   },
 }
 
@@ -365,6 +392,33 @@ function bfactorCmp(ctx: EvalContext, op: string, val: number): Uint8Array {
   return m
 }
 
+function occupancyCmp(ctx: EvalContext, op: string, val: number): Uint8Array {
+  const m = newMask(ctx)
+  const occ = ctx.structure.atoms.occupancies
+  for (let i = 0; i < m.length; i++) {
+    const ok = op === '<' ? occ[i] < val : op === '>' ? occ[i] > val : Math.abs(occ[i] - val) < 0.01
+    if (ok) m[i] = 1
+  }
+  return m
+}
+
+/** PyMOL「A in B / A like B」：A 中位于 B 所含残基内的原子子集。
+ *  in = 按残基匹配（A 中属于 B 出现过的残基的全部原子）；
+ *  like = 更严格（A 中原子且其原子名出现在同残基的 B 中）——这里按 PyMOL 语义近似：先按残基匹配再限 A∩B 原子集 */
+function matchByResidue(ctx: EvalContext, left: Uint8Array, right: Uint8Array, strict: boolean): Uint8Array {
+  const st = ctx.structure
+  const resMask = new Map<number, boolean>()
+  for (let i = 0; i < right.length; i++) {
+    if (right[i]) resMask.set(st.atomResidue[i], true)
+  }
+  const m = new Uint8Array(left.length)
+  for (let i = 0; i < left.length; i++) {
+    if (!left[i]) continue
+    if (resMask.get(st.atomResidue[i])) m[i] = strict ? (right[i] ? 1 : 0) : 1
+  }
+  return m
+}
+
 // ---------- 预设选择 ----------
 
 export const PRESET_SELECTIONS: { value: string; label: string }[] = [
@@ -381,6 +435,10 @@ export const PRESET_SELECTIONS: { value: string; label: string }[] = [
   { value: 'sidechain', label: 'sidechain — 侧链' },
   { value: 'helix', label: 'helix — 螺旋' },
   { value: 'sheet', label: 'sheet — β折叠' },
+  { value: 'ss h', label: 'ss h/s/l — 二级结构（PyMOL 字母体系）' },
+  { value: 'b > 50', label: 'b > 50 — B 因子比较（q 占据率同理）' },
+  { value: 'chain A and resi 50-100', label: 'chain X and resi N-M — 链+残基号组合' },
+  { value: 'not hydrogen', label: 'not hydrogen — 排除氢原子' },
 ]
 
 // ---------- 求值入口 ----------

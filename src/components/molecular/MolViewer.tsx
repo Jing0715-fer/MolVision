@@ -128,6 +128,43 @@ export default function MolViewer() {
         const rect = el.getBoundingClientRect()
         setCtxMenu(pick ? { x: x - rect.left, y: y - rect.top, pick } : null)
       },
+      // PyMOL 橡皮带框选：框内原子（cartoon/surface 记残基）→ 置换/追加/去除选择
+      onBoxSelect: (rectSel) => {
+        const eng = engineRef.current
+        if (!eng) return
+        const hits = eng.pickInRect(rectSel.x0, rectSel.y0, rectSel.x1, rectSel.y1)
+        if (!hits.length) {
+          if (!rectSel.additive && !rectSel.subtractive) useMolStore.getState().setSelection(null, [])
+          return
+        }
+        const store = useMolStore.getState()
+        // 多结构命中：全部归到第一个命中的结构并激活它（与点选语义一致）
+        const sid = hits[0].structureId
+        const data = dataRegistry.get(sid)
+        if (!data) return
+        // 原子 → 残基扩展（PyMOL 框选为「可见残基级」；配体原子扩展到整个分子）
+        const resSet = new Set<number>()
+        for (const h of hits) {
+          if (h.structureId !== sid) continue
+          const molIdx = data.atomMolecule[h.atomIdx] ?? -1
+          if (molIdx >= 0) {
+            for (const ri of data.molecules[molIdx].residues) resSet.add(ri)
+          } else {
+            resSet.add(data.atomResidue[h.atomIdx])
+          }
+        }
+        const indices: number[] = []
+        for (const ri of resSet) {
+          const r = data.residues[ri]
+          for (let i = r.start; i < r.end; i++) indices.push(i)
+        }
+        if (rectSel.subtractive) {
+          store.setSelection(sid, indices, 'remove')
+        } else {
+          if (!rectSel.additive) store.setActive(sid)
+          store.setSelection(sid, indices, rectSel.additive ? 'add' : 'replace')
+        }
+      },
     })
     engineRef.current = eng
     engine.current = eng
