@@ -178,8 +178,8 @@ export function SelectionPanel() {
           <SectionTitle>命名选择</SectionTitle>
           <div className="space-y-0.5 px-2">
             {namedSelections.map(ns => (
-              <div key={ns.name} className="group flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-accent">
-                <span className="flex-1 truncate font-mono text-[11px] font-medium">{ns.name}</span>
+              <div key={ns.name} className="group flex items-center gap-2 rounded-md border-l-2 border-l-[#9c4a4a]/70 px-2 py-1.5 transition hover:bg-accent">
+                <span className="flex-1 truncate font-mono text-[11px] font-medium text-[#c76a6a] dark:text-[#d98a8a]">{ns.name}</span>
                 <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{ns.count.toLocaleString()} at</span>
                 <button
                   onClick={() => {

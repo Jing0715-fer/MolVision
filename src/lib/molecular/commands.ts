@@ -47,16 +47,20 @@ function joinSel(head: string, tail: string): string {
 }
 
 const REP_ALIASES: Record<string, RepType> = {
-  cartoon: 'cartoon', ribbon: 'cartoon',
+  cartoon: 'cartoon', ribbon: 'cartoon', ribbons: 'cartoon',
   putty: 'putty', 'b-factor': 'putty', bfactor: 'putty',
   ballstick: 'ballstick', 'ball&stick': 'ballstick', bs: 'ballstick',
-  sticks: 'sticks', stick: 'sticks', lines: 'lines', wire: 'lines', wireframe: 'lines',
+  // ChimeraX 风格表示名兼容（atoms/ball/balls/stick/surfaces/wires）
+  atoms: 'ballstick', ball: 'ballstick', balls: 'ballstick',
+  sticks: 'sticks', stick: 'sticks', lines: 'lines', wire: 'lines', wires: 'lines', wireframe: 'lines',
   spacefill: 'spacefill', sphere: 'spacefill', spheres: 'spacefill', cpk: 'spacefill',
-  surface: 'surface', surf: 'surface',
+  surface: 'surface', surf: 'surface', surfaces: 'surface',
 }
 
 const SCHEME_ALIASES: Record<string, ColorScheme> = {
   element: 'element', cpk: 'element',
+  // ChimeraX color byX 双词方案兼容
+  byelement: 'element', bychain: 'chain', byhetero: 'element', byhet: 'element',
   chain: 'chain', spectrum: 'spectrum', rainbow: 'spectrum',
   residue: 'residue', resn: 'residue', byresidue: 'residue',
   ss: 'ss', secondary: 'ss', secstr: 'ss',
@@ -103,7 +107,7 @@ function nearestInstance(data: StructureData, indices: number[], eng: NonNullabl
 }
 
 export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
-  { cmd: 'load <id>', desc: '从 RCSB 加载 PDB 结构', example: 'load 4hhb' },
+  { cmd: 'load|open <id>', desc: '从 RCSB 加载 PDB 结构（ChimeraX open 同义）', example: 'load 4hhb · open 4hhb' },
   { cmd: 'create <名> = <选择>', desc: '从选择创建新对象', example: 'create pocket = within 5 of resn HEM' },
   { cmd: 'split_chains', desc: '按链组拆分为多个对象', example: 'split_chains' },
   { cmd: 'select [name=]expr', desc: '选择原子（可命名；sele=当前选择）', example: 'select site = within 5 of resn HEM' },
@@ -116,7 +120,7 @@ export const COMMAND_HELP: { cmd: string; desc: string; example: string }[] = [
   { cmd: 'util cbc|cnc|ss|cbss|cbao|cbaw', desc: '实用着色（链/灰/SS卡通/元素+AO/元素+白碳）', example: 'util cbc · util cbss' },
   { cmd: 'set <项> <值>', desc: '渲染设置（灯光/fov/质量/过渡手感 transition…）', example: 'set ambient 0.5 · set transition cinematic' },
   { cmd: 'bg <颜色>', desc: '设置背景色', example: 'bg black' },
-  { cmd: 'zoom [sel|in|out]', desc: '聚焦选择/推拉镜头（zoom ligand, 5 带缓冲）', example: 'zoom ligand · zoom in · zoom out' },
+  { cmd: 'zoom [sel|in|out|N]', desc: '聚焦选择/推拉镜头（纯数字=ChimeraX 倍率；focus 同义）', example: 'zoom ligand · zoom 2 · focus :HEM' },
   { cmd: 'turn <x|y|z> <±°>', desc: '旋转视角（x俯仰 y水平 z滚转）', example: 'turn y 30 · turn x -15' },
   { cmd: 'move <x|y|z> <±Å>', desc: '平移视角（x右 y上 z推拉）', example: 'move z -10 · move x 5' },
   { cmd: 'view <front|top|left|right|back|bottom|x|y|z>', desc: '正交视角预设（保持距离平滑转）', example: 'view top · view front' },
@@ -368,17 +372,113 @@ export function runCommand(raw: string): void {
   const input = raw.trim()
   if (!input) return
   store.appendLog('in', input)
-  const lower = input.toLowerCase()
-  const parts = input.split(/\s+/)
-  const cmd = parts[0].toLowerCase()
+  let lower = input.toLowerCase()
+  let parts = input.split(/\s+/)
+  let cmd = parts[0].toLowerCase()
 
   const ok = (msg: string) => store.appendLog('out', msg)
   const err = (msg: string) => store.appendLog('err', msg)
 
+  // ---------- ChimeraX 动词/取反前缀兼容（进入各分支前统一改写） ----------
+  // ~display / ~show / ~label → hide 类语义（ChimeraX 波浪号否定命令）
+  if (cmd.startsWith('~')) {
+    const negated = cmd.slice(1)
+    if (negated === 'display' || negated === 'show') return runCommand(`hide ${input.slice(cmd.length).trim() || 'all'}`)
+    if (negated === 'label') { useMolStore.getState().clearLabels(); return ok('标签已清除（~label）') }
+  }
+  // open → load（ChimeraX 加载动词）
+  if (cmd === 'open') cmd = 'load'
+  // focus → zoom 拟合（ChimeraX focus）
+  if (cmd === 'focus') cmd = 'zoom'
+  // bgcolor → bg（ChimeraX）
+  if (cmd === 'bgcolor') cmd = 'bg'
+  // silhouettes → outline（ChimeraX 轮廓线）
+  if (cmd === 'silhouettes' || cmd === 'silhouette') cmd = 'outline'
+  // rotate/translate → turn/move（ChimeraX 同义词）
+  if (cmd === 'rotate') cmd = 'turn'
+  if (cmd === 'translate') cmd = 'move'
+  // save image → png（ChimeraX 截图保存）
+  if (cmd === 'save' && (parts[1] ?? '').toLowerCase() === 'image') {
+    return runCommand(`png ${parts[2] ?? '2'}`)
+  }
+  // presets <名> → preset <名>（ChimeraX presets；interactive→hybrid 近似、publication 直通）
+  if (cmd === 'presets') {
+    const p = (parts[1] ?? '').toLowerCase()
+    const mapped = p === 'interactive' ? 'hybrid' : p === 'publication' ? 'publication' : p === 'simple' ? 'cartoon' : p === 'hairball' ? 'spacefill' : p
+    return runCommand(`preset ${mapped}`)
+  }
+  // transparency <n> [target] → set transparency（ChimeraX 透明度）
+  if (cmd === 'transparency') {
+    const v = parseFloat(parts[1] ?? '')
+    if (isNaN(v) || v < 0 || v > 1) return err('用法：transparency <0-1>（ChimeraX 语义；0=不透明）——等效 set transparency')
+    return runCommand(`set transparency ${(1 - v).toFixed(2)}`)
+  }
+  // 重新计算改写后的分词（open/focus 等改写 cmd 后 parts[0] 保持原词——各分支用 input.slice(parts[0].length) 取参数，
+  // cmd 比较已用改写值，参数切取基于首个 token 长度不受影响；但 zoom 数字语义需在此先行拦截）
+  if (cmd === 'zoom') {
+    const rest0 = input.slice(parts[0].length).trim()
+    const zoomNum = parseFloat(rest0.split(/\s+/)[0] ?? '')
+    // ChimeraX zoom <倍率>：zoom 2 = 放大 2 倍（纯数字参数；PyMOL zoom 无数字语义——选择表达式不可能以纯数字开头）
+    if (rest0 && !isNaN(zoomNum) && /^[\d.]+\s*$/.test(rest0)) {
+      const factor = Math.max(0.05, Math.min(20, zoomNum))
+      whenEngineReady(() => engineRef.current?.dollyCamera(1 / factor))
+      return ok(`ChimeraX 式缩放 ×${factor}（zoom <倍率>；聚焦选择用 zoom <选择> 或 focus <选择>）`)
+    }
+  }
+  // select add|subtract|intersect <expr>（ChimeraX 选择修饰动词）
+  if (cmd === 'select' && ['add', 'subtract', 'intersect'].includes((parts[1] ?? '').toLowerCase())) {
+    const mode = (parts[1] ?? '').toLowerCase()
+    const expr = input.slice(parts[0].length).trim().slice(mode.length).trim()
+    if (!expr) return err('用法：select add|subtract|intersect <表达式>（ChimeraX 兼容）')
+    const s = useMolStore.getState()
+    if (!s.activeId) return err('没有加载结构')
+    const data = dataRegistry.get(s.activeId)
+    if (!data) return err('结构数据不存在')
+    const named = buildNamedMasks(s.activeId, data)
+    const r = evaluateSelection(expr, { structure: data, named })
+    if (r.error) return err(`选择错误: ${r.error}`)
+    const idxs = maskToIndices(r.mask)
+    if (mode === 'add') {
+      s.setSelection(s.activeId, idxs, 'add')
+      const total = useMolStore.getState().selection.indices.length
+      return ok(`已追加 ${r.count.toLocaleString()} 原子（select add）→ 当前共 ${total.toLocaleString()}`)
+    }
+    if (mode === 'subtract') {
+      s.setSelection(s.activeId, idxs, 'remove')
+      const total = useMolStore.getState().selection.indices.length
+      return ok(`已移除 ${r.count.toLocaleString()} 原子（select subtract）→ 当前共 ${total.toLocaleString()}`)
+    }
+    // intersect：当前选择 ∩ 新表达式（手动求交）
+    const cur = new Set(s.selection.structureId === s.activeId ? s.selection.indices : [])
+    const inter = idxs.filter(i => cur.has(i))
+    s.setSelection(s.activeId, inter)
+    return ok(`交集 ${inter.length.toLocaleString()} 原子（select intersect）`)
+  }
+  // measure distance/angle/dihedral 无括号 ChimeraX 形式：measure distance @CA :42 → 自动包括号
+  if ((cmd === 'measure' || cmd === 'dist' || cmd === 'distance') && input.indexOf('(') < 0) {
+    const words = input.split(/\s+/).filter(Boolean)
+    const head = words[0].toLowerCase()
+    // 剥掉动词与模式词，剩余每个空白 token 视为一个选择组（ChimeraX 习惯：空格分隔即不同原子组）
+    const MODES = ['dist', 'distance', 'angle', 'dihedral', 'torsion', 'dihe', 'ang']
+    let argStart = 1
+    if (head === 'measure' && MODES.includes(words[1]?.toLowerCase() ?? '')) argStart = 2
+    const args = words.slice(argStart)
+    if (args.length >= 2) {
+      const groups = args.map(a => `(${a})`).join(' ')
+      return runCommand(`measure ${head === 'distance' ? 'dist' : head === 'measure' ? words[1].toLowerCase() : 'dist'} ${groups}`)
+    }
+  }
+  if (cmd === 'distance' && input.indexOf('(') >= 0) {
+    return runCommand(`measure dist ${input.slice(cmd.length).trim()}`)
+  }
+  parts = input.split(/\s+/)
+  lower = input.toLowerCase()
+
   if (cmd === 'help' || cmd === '?') {
     ok('可用命令：')
     for (const h of COMMAND_HELP) ok(`  ${h.cmd.padEnd(22)} ${h.desc}  例: ${h.example}`)
-    ok('选择语法：chain A / chainidx 4（按链组精确选择） / resi 1-60 / resn ALA+GLY / name CA / elem C / protein / ligand / water / backbone / helix / sheet / within 5 of (...) / byres(...)，支持 and or not ( )')
+    ok('选择语法（PyMOL 风格）：chain A / resi 1-60 / resn ALA / name CA / protein / within 5 of (...) / byres(...) / and or not ( )；sele = 当前选择')
+    ok('选择语法（ChimeraX 风格）：/A 链 · :42 残基号 · :HEM 残基名 · @CA 原子 · #1 模型 · & | ~ 与或非 · X zone 5 邻域（如 select #1/A:42@CA zone 5）——两种语法可混用')
     return
   }
 
@@ -1371,6 +1471,13 @@ export function runCommand(raw: string): void {
         s.updateSettings({ backgroundPinned: !on })
         return ok(on ? '背景恢复主题跟随（切换深浅主题时同步）' : '背景固定（不随主题切换）')
       }
+      case 'bgcolor': case 'background': {
+        // ChimeraX set bgColor <色>
+        const css = parseCssColor(rawVal.toLowerCase())
+        if (!css) return err('用法：set bgColor <#hex 或颜色名>（ChimeraX 风格；本工具 bg 命令同效）')
+        s.updateSettings({ background: css, backgroundPinned: true })
+        return ok(`背景色 → ${css}`)
+      }
       case 'fog_strength': case 'fog_density': {
         if (isNaN(num)) return err('用法：set fog_strength <0-1>')
         s.updateSettings({ fog: true, fogStrength: clampNum(num, 0, 1, 0.5) })
@@ -1436,10 +1543,10 @@ export function runCommand(raw: string): void {
         s.updateSettings({ autoPerf: on })
         return ok(on ? '自动性能模式开启（帧率持续偏低时自动关闭后处理并降分辨率）' : '自动性能模式关闭（画质设置已还原）')
       }
-      case 'outline': {
-        if (!on && !off) return err('用法：set outline on|off（出版级轮廓线；或 outline on 1.5 2）')
+      case 'outline': case 'silhouettes': case 'silhouette': {
+        if (!on && !off) return err('用法：set outline on|off（出版级轮廓线；或 outline on 1.5 2；ChimeraX 称 silhouettes）')
         s.updateSettings({ outline: on })
-        return ok(`轮廓线 ${on ? '开启（Sobel 深度+亮度描边；ray 静帧同样生效）' : '关闭'}`)
+        return ok(`轮廓线 ${on ? '开启（Sobel 深度+亮度描边；ray 静帧同样生效；ChimeraX silhouettes 同义）' : '关闭'}`)
       }
       case 'outline_strength': {
         if (isNaN(num)) return err('用法：set outline_strength <0.2-3>，默认 1')

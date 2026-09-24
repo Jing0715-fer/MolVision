@@ -2201,3 +2201,23 @@ Stage Summary:
 - 验证：lint 0/0 / tsc src 0 / console 0 / 12 项 E2E 数据探针全绿
 - 未解决与遗留：①iterate 输出上限 20 行（save 离线全量）②alter 仅 b/q/name（改坐标无意义已明确提示）③spectrum 自定义起终点色暂用内置渐变 ④r59-a1 剩余 P2/P3（sasaPending 键覆盖、ensemble 播放氢键节流、dispose HMR 清理等 12 条）留待下轮
 - 下阶段建议：①r59-a1/a2 剩余 P2 清账 ②agent 记忆可视化面板 ③序列条 compact mode ④口袋水 6Å 可调
+
+---
+Task ID: r61
+Agent: main
+Task: 用户需求：①UI 参考 PyMOL 的设计 ②ChimeraX 与 PyMOL 类似功能兼容双语法——两款软件用户都容易上手
+
+Work Log:
+- 【ChimeraX 选区语法（selection.ts）】preprocessChimeraX 预处理器：/A 链 · :42 残基号 · :HEM 残基名 · @CA 原子名 · #N 模型号（buildNamedMasks 注册 modelN 掩码，命中结构=全原子其余=空集）· & | ~ 与或非（~ → not 前缀）· 拼接即交集（#1/A:42-60@CA,CB 展开为段级 and 子式）· <spec> zone <Å> → within（select zone N 省略式=当前选择扩展）· sel=sele 同义关键词 · ions/solvent 谓词；纯 PyMOL 语法（无 : @ # ~ / 记号）零开销直通；三处关键坑修复：zone 替换须在分块展开前捕获原始 spec（否则括号不平衡）· segRe 字符类须排除 ()（包裹括号被吞进残基名产生多余右括号）· & | 须空格填充（无空格拼接 :HEM&/A 可分段）
+- 【ChimeraX 命令动词（commands.ts 入口改写层）】open→load · focus→zoom · bgcolor→bg · silhouettes→outline · rotate/translate→turn/move · presets interactive|publication|simple|hairball→hybrid|publication|cartoon|spacefill · transparency <0-1>→set transparency（ChimeraX 语义 0=不透明转本工具 opacity）· zoom <纯数字>=ChimeraX 倍率语义（zoom 2 放大两倍走 dollyCamera）· ~display/~show/~label 波浪号取反前缀→hide/label off · select add|subtract|intersect 选择修饰动词（集运算）· measure distance <specA> <specB> 无括号形式自动包装为括号组 · distance 全词别名 · save image→png · set bgColor/silhouettes ChimeraX 键名直通；REP_ALIASES 增 atoms/ball/balls/ribbons/surfaces/wires；SCHEME_ALIASES 增 byelement/bychain/byhetero/byhet
+- 【PyMOL 对象面板 A/S/H/L/C（ObjectActionBar 新组件）】结构卡新增五字母按钮行（22×22px 方形平面 + 44px 负外扩热区 + mono 大写字母）：A=Actions（聚焦/主轴对齐/复位/拆链/导出 PDB/导出会话/显隐/关闭）· S=Show（七种表示法 + 氢/水/晶胞/出版级一键）· H=Hide（对称移除 + 全部）· L=Label（全选/标注当前选择/清除，有标注时字母高亮）· C=Color（八方案 + util.cbss/cbaw/重置）——全部走 runCommand 与命令行同源；折叠卡片时隐藏
+- 【PyMOL 视觉语言】defaultTheme light→dark + enableSystem false（PyMOL 深色默认）；.dark token 中性炭灰化（去琥珀暖调：background 0.15→0.135 / card 0.19→0.178 / secondary 0.248→0.235，chroma 0.005→0.003——PyMOL #303030 系中性灰）；--radius 0.625rem→0.375rem（扁平直角工具气质）；命名选择行 PyMOL maroon 栗色强调（左轨 2px + 名称 #c76a6a）
+- 【三线教育同步】HelpDialog 新增「ChimeraX 用户速查（双语法并轨）」14 条映射卡（含说明符五记号/动词对照/双词配色/zone 语义）；help 命令输出双语法选择语法行；COMMAND_HELP 更新 load|open/zoom 条目；complete.ts 注册 open/focus/bgcolor/silhouettes/rotate/translate/presets/transparency 动词 + SEL_KEYWORDS 增 /A/:42/@CA/#1/zone/sel/ions ChimeraX 提示 + select 补全首位 add/subtract/zone；agent COMMAND_REF 头部新增 ChimeraX 兼容段（动词+说明符全集，声明与 PyMOL 语法可混用）
+- 【E2E（agent-browser 数据探针，一次成型）】①/A=1168 原子 · :HEM=172 · @CA=574 · #1=4779 ✓ ②复合 /A:42@CA=1 原子 ✓ ③:HEM zone 5=535 · ~:HEM=4607（4779-172）· :42-60=580 ✓ ④select add :42（+46→556）· select subtract :HEM（-172→384）✓ ⑤measure distance @CA :42 → 自动包装 (@CA) (:42) 距离输出 ✓ ⑥silhouettes on / set bgColor #101418 / presets interactive→hybrid / rotate y 30 / zoom 2 倍率 / transparency 0.5→set 路径 ✓ ⑦~display cartoon → hide cartoon 移除 1 表示 ✓ ⑧A/S/H/L/C 按钮渲染 + S 菜单 11 项 + 点击派发 show ballstick, all 实证 ✓ ⑨深色默认 + 炭黑 bodyBg lab(2.2%) + --radius .375rem ✓ ⑩help 含 ChimeraX 语法行 ✓ ⑪lint 0/0 + tsc src 零错 + console 零错误
+- 【沙箱经验】①Turbopack CSS 缓存：同值修改+注释不触发 CSS 块再生成——须结构性新增规则推动（追加 .mol-nudge 类后 0.375rem 即刻生效，随后可删）②服务 CSS 存在新旧两套 token 块（hex 旧 + lab 新），后者级联覆盖——判断生效看 computed 而非首个 :root 块③Radix DropdownMenuTrigger 合成事件须 pointerdown（click 不触发 asChild 按钮）④HMR 全页刷新会重置 window helper 与会话——E2E 电池要么一次跑完要么重装；本轮策略=代码全改完再统一验证⑤bun 直跑 selection.ts 单测（import 真源码）比浏览器 HMR 循环快 10 倍
+
+Stage Summary:
+- 交付：①ChimeraX 全语法层（五记号说明符+拼接交集+zone+取反+选择修饰动词+全部命令动词改写）与 PyMOL 语法并存可混用②PyMOL 对象面板 A/S/H/L/C 动作条（结构卡级，命令同源）③PyMOL 视觉语言（深色炭灰默认+扁平半径+栗色选区强调）④双软件速查表/补全/agent 教育三线同步
+- 验证：lint 0/0 / tsc 0 / console 0 / 11 项 E2E 全绿（含 zone 括号平衡修复、measure 无括号包装、A/S/H/L/C 菜单派发）
+- 遗留与风险：①presets 映射为近似（interactive→hybrid）②ChimeraX 高级说明符（::属性 @@原子属性）未支持（低频）③命名选择栗色为固定色值未入 token④双主题下 maroon 对比度未做 WCAG 复核
+- 下阶段建议：①ChimeraX 高级属性选择器（::element 等）②maroon 入 CSS token + 浅色主题适配③A/S/H/L/C 移动端 Sheet 化④VLM 视觉终审新深色工作台

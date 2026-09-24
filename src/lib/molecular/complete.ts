@@ -64,7 +64,14 @@ const SEL_KEYWORDS: [string, string][] = [
   ['and', '交集'],
   ['or', '并集'],
   ['not', '补集'],
-  ['sele', '当前选择'],
+  ['sele', '当前选择（sel 同义）'],
+  ['sel', '当前选择（ChimeraX 关键词）'],
+  ['/A', '链说明符（ChimeraX /A）'],
+  [':42', '残基号/名（ChimeraX :42/:HEM）'],
+  ['@CA', '原子名（ChimeraX @CA）'],
+  ['#1', '模型号（ChimeraX #1）'],
+  ['zone', '邻域（ChimeraX :HEM zone 5）'],
+  ['ions', '金属离子（ChimeraX）'],
 ]
 
 const COMMON_COLORS: [string, string][] = [
@@ -129,9 +136,20 @@ const sceneNameItems = (): CompletionItem[] => {
 }
 
 const REGISTRY: CmdDef[] = [
-  { names: ['load', 'fetch'], args: () => null },
-  { names: ['select', 'sel'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
+  { names: ['load', 'fetch', 'open'], args: () => null },
+  { names: ['select', 'sel'], expr: true, args: (pos, ctx) => (pos === 1 ? [{ insert: 'add', kind: 'sub', detail: '追加（ChimeraX）' }, { insert: 'subtract', kind: 'sub', detail: '移除（ChimeraX）' }, { insert: 'zone', kind: 'sub', detail: '邻域扩展（ChimeraX）' }, ...selItems(ctx)] : pos >= 2 ? selItems(ctx) : null) },
   { names: ['deselect', 'desel'], args: () => null },
+  // ChimeraX 动词兼容注册（open/focus/bgcolor/silhouettes/rotate/translate/presets/transparency）
+  { names: ['focus'], expr: true, args: (pos, ctx) => (pos >= 1 ? selItems(ctx) : null) },
+  { names: ['bgcolor'] },
+  { names: ['silhouettes', 'silhouette'], args: (pos) => (pos === 1 ? [{ insert: 'on', kind: 'sub', detail: '轮廓线开启' }, { insert: 'off', kind: 'sub', detail: '轮廓线关闭' }] : null) },
+  { names: ['rotate'], args: (pos) => (pos === 1 ? ['x', 'y', 'z'].map(a => ({ insert: a, kind: 'value', detail: '旋转轴' })) : null) },
+  { names: ['translate'], args: (pos) => (pos === 1 ? ['x', 'y', 'z'].map(a => ({ insert: a, kind: 'value', detail: '平移轴' })) : null) },
+  { names: ['presets'], args: (pos) => (pos === 1 ? [
+    { insert: 'interactive', kind: 'sub', detail: '交互预设（ChimeraX）→ hybrid' },
+    { insert: 'publication', kind: 'sub', detail: '出版预设（ChimeraX）→ publication' },
+  ] : null) },
+  { names: ['transparency'], args: (pos) => (pos === 1 ? ['0.3', '0.5', '0.7'].map(v => ({ insert: v, kind: 'value', detail: '透明度 0-1（ChimeraX 语义）' })) : null) },
   {
     names: ['spectrum'],
     args: (pos) => (pos === 1

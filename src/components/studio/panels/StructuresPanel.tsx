@@ -10,6 +10,7 @@ import type { StructureEntry } from '@/lib/molecular/types'
 import { spaceGroupInfo } from '@/lib/molecular/symmetry'
 import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
+import { ObjectActionBar } from '../ObjectActionBar'
 import { Badge } from '@/components/ui/badge'
 import { Slider } from '@/components/ui/slider'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -335,6 +336,13 @@ export function StructuresPanel() {
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
+            {/* PyMOL 式对象动作条：A/S/H/L/C 五字母按钮（对象面板标志性交互，与命令行同源） */}
+            {!collapsed.has(st.name) && (
+              <div className="mt-1 flex items-center justify-between gap-2 pl-7">
+                <ObjectActionBar st={st} />
+                <span className="hidden shrink-0 font-mono text-[9px] leading-none text-muted-foreground/50 sm:inline">PyMOL 对象面板</span>
+              </div>
+            )}
             {!collapsed.has(st.name) && (
               /* r56：统计行从散落徽章改为单条仪器读数带（点分隔 + 统一 tabular-nums，消除「数据飘在空中」） */
               <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-md bg-muted/45 px-2 py-[5px] font-mono text-[9.5px] leading-none tabular-nums text-muted-foreground dark:bg-white/[0.04]">

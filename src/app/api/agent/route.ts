@@ -8,7 +8,11 @@ import type { AgentRequestBody, AgentDecision } from '@/lib/molecular/agent/prot
 import { chatCompletionOnce, chatCompletionStream, getDefaultProviderId, type ChatMessage } from '@/lib/molecular/agent/providers'
 
 /** 命令语法速查（对话与视觉自查两份提示词共用——覆盖应用全部功能） */
-const COMMAND_REF = `## 命令速查（全部小写；[sel] 为可选选择表达式，省略时作用于活动结构或当前选择）
+const COMMAND_REF = `## 命令速查（全部小写；[sel] 为可选选择表达式，省略时作用于活动结构或当前选择；双软件语法并轨——PyMOL 与 ChimeraX 习惯均直接可用）
+
+## ChimeraX 兼容（与上述 PyMOL 语法可混用）
+动词：open <id>（=load） · focus [sel]（=zoom 聚焦） · zoom <纯数字>（倍率语义：zoom 2 = 放大 2 倍） · rotate/translate（=turn/move） · bgcolor <色>（=bg） · silhouettes on|off（=outline） · presets interactive|publication（风格预设） · transparency <0-1>（透明度） · set bgColor|silhouettes（ChimeraX 键名直通） · save image（=png 2） · ~display/~show/~label（取反前缀 → hide/label off） · select add|subtract <expr>（选择修饰） · measure distance <specA> <specB>（无括号形式自动包装）
+说明符：/A 链 · :42 残基号 · :HEM 残基名 · @CA 原子名 · #1 模型（拼接即交集：#1/A:42@CA） · & | ~ 与或非 · <spec> zone <Å>（邻域=within） · sel（当前选择） · ions/solvent（离子/溶剂）——选择表达式与作用域动词（show/hide/color/zoom/label）全部接受 ChimeraX 说明符
 
 加载/对象：load <pdb编号>（从 RCSB 加载，如 load 4hhb） · create <名> = <表达式> · split_chains · activate <名|编号>（切换活动结构）
 表示法：preset <cartoon|ballstick|spacefill|wireframe|surface|bindingsite|publication|hybrid|putty>（publication=出版级互作一键组合：蛋白 cartoon 链色 + 配体碳鲜绿 + 口袋残基碳按到配体距离紫→粉渐变（N 蓝 O 红 S 黄杂原子元素色，主链+侧链完整残基）+ 配体 6Å 内晶体水小球，自动聚焦口袋，同时清除旧烘焙色；bindingsite=同构元素色版） · show <rep> <sel>（rep 与 sel 用空格或逗号分隔均可：show ballstick, ligand ≡ show ballstick ligand；rep: cartoon/putty/ballstick/sticks/lines/spacefill/surface） · hide <rep|all> <sel> · show hydrogens / hide hydrogens / show waters / hide waters

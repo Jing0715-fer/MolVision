@@ -238,6 +238,11 @@ const zeroPredicates: Record<string, ZeroPred> = {
   water: (ctx) => predRes(ctx, (r) => r.water),
   ligand: (ctx) => predRes(ctx, (r) => r.hetero && !r.water && !r.polymer),
   metal: (ctx) => predAtom(ctx, (i) => elementInfo(ctx.structure.atoms.elements[i]).metal),
+  // PyMOL hydrogen：元素氢（常用于 not hydrogen）
+  hydrogen: (ctx) => predAtom(ctx, (i) => ctx.structure.atoms.elements[i].toUpperCase() === 'H'),
+  // ChimeraX ions / solvent：离子残基 / 水+离子（两种软件的溶剂语义并轨）
+  ions: (ctx) => predAtom(ctx, (i) => elementInfo(ctx.structure.atoms.elements[i]).metal && !ctx.structure.residues[ctx.structure.atomResidue[i]].water),
+  solvent: (ctx) => predAtom(ctx, (i) => ctx.structure.residues[ctx.structure.atomResidue[i]].water || elementInfo(ctx.structure.atoms.elements[i]).metal),
   backbone: (ctx) => predAtom(ctx, (i) => BACKBONE_ATOMS.has(ctx.structure.atoms.names[i]) && ctx.structure.residues[ctx.structure.atomResidue[i]].polymer),
   sidechain: (ctx) => predAtom(ctx, (i) => !BACKBONE_ATOMS.has(ctx.structure.atoms.names[i]) && ctx.structure.residues[ctx.structure.atomResidue[i]].polymer),
   helix: (ctx) => predRes(ctx, (r) => r.ss === 'H'),
@@ -443,13 +448,94 @@ export const PRESET_SELECTIONS: { value: string; label: string }[] = [
 
 // ---------- 求值入口 ----------
 
+// ---------- ChimeraX 说明符兼容层 ----------
+
+/**
+ * ChimeraX 原子说明符 → 内部 PyMOL 风格语法转写。
+ * ChimeraX 记号：`#1` 模型 · `/A` 链 · `:42` 残基号 · `:HEM` 残基名 · `@CA` 原子名 ·
+ * `& |` 与或 · `~` 非 · `<spec> zone <Å>` 邻域 · 拼接即交集（`#1/A:42@CA`）。
+ * 纯 PyMOL 语法（不含 : / @ # ~ 记号）原样通过——两种软件用户零成本上手的关键。
+ */
+export function preprocessChimeraX(expr: string): string {
+  // 无 ChimeraX 记号且非「zone N」省略形式 → PyMOL 语法零开销直通
+  if (!/[:@#~/]/.test(expr) && !/^zone\s+[\d.]+$/i.test(expr)) return expr
+  let s = ` ${expr} `
+  // 1) ~ 取反 → not（ChimeraX ~sel / ~:A）；& | 操作符加空格（无空格拼接形式 :HEM&/A 可分段）
+  s = s.replace(/~(?=[\w@:#/(])/g, ' not ')
+  s = s.replace(/([&|])/g, ' $1 ')
+  // 2) zone：<说明符块> zone <Å> → within <Å> of (<说明符块>)——在分块展开前做
+  //    （zone 词与说明符同属一个空白分块序列，先捕获原始 spec 再统一送展开）
+  //    另支持 ChimeraX「select zone 5」省略形式（当前选择的 zone 扩展）
+  for (let guard = 0; guard < 12; guard++) {
+    const m = s.match(/([:@#/\w][:@#/\w,.\-]*)\s+zone\s+([\d.]+)/)
+    if (!m) break
+    s = s.replace(m[0], ` within ${m[2]} of (${m[1]}) `)
+  }
+  s = s.replace(/^\s*zone\s+([\d.]+)\s*$/, ' within $1 of (sele) ')
+  // 3) 说明符 token 展开（含拼接形式 #1/A:42-60@CA,CB）
+  //    按空白切块；含记号的块做段级展开，其余词原样保留
+  s = s.split(/\s+/).map(chunk => expandSpecChunk(chunk)).join(' ')
+  return s.replace(/\s+/g, ' ').trim()
+}
+
+/** 单个 ChimeraX 说明符块展开为内部子表达式；非说明符块原样返回 */
+function expandSpecChunk(chunk: string): string {
+  if (!chunk || !/[@:#/]/.test(chunk)) return chunk
+  // 剥离块内包裹的操作符（& | ! 与我们语法重合的记号留在字符串里由外层处理）
+  // 顺序扫描四种记号段：#model /chain :residue @atom
+  const segRe = /(#[\w.]+)|(\/[^\/:@#\s&|(),]+(?:,[^\/:@#\s&|(),]+)*)|(:[^\/:@#\s&|()]+)|(@[^\/:@#\s&|()]+)/g
+  const clauses: string[] = []
+  let consumed = ''
+  let m: RegExpExecArray | null
+  while ((m = segRe.exec(chunk)) !== null) {
+    consumed += m[0]
+    if (m[1]) {
+      // #N 模型号 → modelN 命名引用（buildNamedMasks 注册：命中=全部原子，否则空集）
+      const num = m[1].slice(1).split('.')[0]
+      if (!/^\d+$/.test(num)) return chunk
+      clauses.push(`model${num}`)
+    } else if (m[2]) {
+      const chains = m[2].slice(1).split(',').filter(Boolean).join('+')
+      if (!chains) return chunk
+      clauses.push(`chain ${chains}`)
+    } else if (m[3]) {
+      // :残基——数字/范围→resi；名称→resn；逗号列表混排用 or 组合
+      const items = m[3].slice(1).split(',').filter(Boolean)
+      if (!items.length) return chunk
+      const numClauses: string[] = []
+      const nameClauses: string[] = []
+      for (const it of items) {
+        const rm = it.match(/^(\d+)-(\d+)$/)
+        if (rm) numClauses.push(`resi ${rm[1]}-${rm[2]}`)
+        else if (/^\d+$/.test(it)) numClauses.push(`resi ${it}`)
+        else if (it) nameClauses.push(`resn ${it}`)
+      }
+      const ors: string[] = []
+      if (numClauses.length) ors.push(numClauses.length === 1 ? numClauses[0] : `(${numClauses.join(' or ')})`)
+      if (nameClauses.length) ors.push(nameClauses.length === 1 ? nameClauses[0] : `(${nameClauses.join(' or ')})`)
+      clauses.push(ors.length === 1 ? ors[0] : `(${ors.join(' or ')})`)
+    } else if (m[4]) {
+      const atoms = m[4].slice(1).split(',').filter(Boolean).join('+')
+      if (!atoms) return chunk
+      clauses.push(`name ${atoms}`)
+    }
+  }
+  // 块内除记号段外还有未消费内容（如 :A:HEM 双冒号等异形）→ 放弃转写走原路径（会报可读语法错）
+  const rest = chunk.replace(consumed, '')
+  if (rest.trim() && /[\w]/.test(rest)) return chunk
+  if (!clauses.length) return chunk
+  return `(${clauses.join(' and ')})`
+}
+
 export function evaluateSelection(expr: string, ctx: EvalContext): EvalResult {
   const trimmed = expr.trim()
   if (!trimmed || trimmed.toLowerCase() === 'all' || trimmed === '*') {
     const m = new Uint8Array(ctx.structure.atoms.count).fill(1)
     return { mask: m, count: m.length }
   }
-  const toks = tokenize(trimmed)
+  // ChimeraX 说明符兼容（含记号才转写；PyMOL 语法零开销直通）
+  const internal = preprocessChimeraX(trimmed)
+  const toks = tokenize(internal)
   if (toks && 'error' in toks) return { mask: new Uint8Array(ctx.structure.atoms.count), count: 0, error: toks.error }
   const ev = new Evaluator(toks as Tok[], ctx)
   const r = ev.parse()

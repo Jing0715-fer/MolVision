@@ -74,6 +74,24 @@ const PYMOL_MAP: [string, string, string][] = [
   ['ray / png', 'ray 1920 · png 2', 'ray 真超采样软阴影静帧；png 截屏倍率'],
 ]
 
+/** ChimeraX → MolVision 习惯迁移速查（双软件语法并轨） */
+const CHIMERAX_MAP: [string, string, string][] = [
+  ['open / close', 'open 4hhb · close', '加载=load · 关闭同义（open 直接可用）'],
+  ['说明符 /A :42 :HEM @CA #1', 'select /A:42@CA · show ballstick :HEM zone 5', '链/残基号/残基名/原子/模型五记号，拼接即交集；zone N = 邻域（within）'],
+  ['& | ~ 取反', 'select :HEM & /A · ~display cartoon · ~:HEM', '与/或/非与命令取反前缀均支持'],
+  ['show atoms|stick|ribbon', 'show atoms, :HEM · show ribbon · hide surfaces', 'ChimeraX 表示名全兼容（atoms→球棍 · ribbon→cartoon · surfaces→表面）'],
+  ['color byX 双词', 'color bychain · color byelement, :HEM · color rainbow', 'bychain/byelement/byresidue/byhet/rainbow 全部可用'],
+  ['focus / zoom <倍率>', 'focus :HEM · zoom 2', 'focus=聚焦适配 · zoom 纯数字=倍率语义（zoom 2 放大两倍）'],
+  ['rotate / translate', 'rotate y 30 · translate z -10', 'turn/move 同义词（ChimeraX 习惯直接用）'],
+  ['presets', 'presets interactive · presets publication', '交互预设/出版预设一键切换'],
+  ['set bgColor / silhouettes', 'set bgColor black · set silhouettes true', '背景色/轮廓线（ChimeraX 键名直通）'],
+  ['transparency', 'transparency 0.6', '透明度（ChimeraX 0-1 语义）'],
+  ['select add|subtract', 'select add :42 · select subtract :HEM', '选择修饰动词（追加/移除）'],
+  ['measure distance', 'measure distance @CA :42', '无括号形式自动包装（PyMOL 括号形式同样支持）'],
+  ['save image', 'save image', '截图导出 PNG（= png 2）'],
+  ['sel / zone', 'color red sel · select zone 5', '当前选择 sel（PyMOL sele 同义）· zone 扩展当前选择'],
+]
+
 export function HelpDialog() {
   const ui = useMolStore(s => s.ui)
   const setUi = useMolStore(s => s.setUi)
@@ -135,6 +153,28 @@ export function HelpDialog() {
             </p>
             <div className="grid gap-1.5">
               {PYMOL_MAP.map(([k, ex, v]) => (
+                <div key={k} className="rounded-lg border border-border bg-muted/30 px-2.5 py-1.5">
+                  <div className="flex items-baseline gap-2 text-xs">
+                    <span className="shrink-0 font-mono font-semibold text-foreground">{k}</span>
+                    <code className="min-w-0 truncate font-mono text-[10px] text-primary/90">{ex}</code>
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{v}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <Separator />
+
+          <section>
+            <h3 className="mol-micro mb-2 flex items-center gap-1.5 text-muted-foreground">
+              <FlaskConical className="h-3 w-3" /> ChimeraX 用户速查（双语法并轨）
+            </h3>
+            <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
+              原子说明符（/A :42 @CA #1）与 ChimeraX 命令动词直接可用，与 PyMOL 语法可混用：
+            </p>
+            <div className="grid gap-1.5">
+              {CHIMERAX_MAP.map(([k, ex, v]) => (
                 <div key={k} className="rounded-lg border border-border bg-muted/30 px-2.5 py-1.5">
                   <div className="flex items-baseline gap-2 text-xs">
                     <span className="shrink-0 font-mono font-semibold text-foreground">{k}</span>

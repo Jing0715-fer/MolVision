@@ -735,6 +735,17 @@ export function buildNamedMasks(structureId: string, data: StructureData): Map<s
     for (const i of store.selection.indices) m[i] = 1
     out.set('sele', m)
   }
+  // ChimeraX 关键词 sel：同 sele（两种软件当前选择关键词都通用）
+  if (out.has('sele')) out.set('sel', out.get('sele')!.slice())
+  // ChimeraX #N 模型号：modelN 命名掩码（命中=全部原子，其余结构=空集）
+  const idx = store.structures.findIndex(s => s.id === structureId)
+  if (idx >= 0) {
+    for (let i = 0; i < store.structures.length; i++) {
+      const m = new Uint8Array(data.atoms.count)
+      if (i === idx) m.fill(1)
+      out.set(`model${i + 1}`, m)
+    }
+  }
   for (const ns of store.namedSelections) {
     if (ns.structureId !== structureId) continue
     if (ns.indices) {
