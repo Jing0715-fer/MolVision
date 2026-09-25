@@ -12,18 +12,18 @@ import { useViewportStore } from './viewport-store'
 import { AnaglyphEffect } from 'three/examples/jsm/effects/AnaglyphEffect.js'
 import { marchingCubes } from './marching-cubes'
 import { mateTransforms, orthoMatrix, symOpsFor, type CrystalCell } from './symmetry'
-import { computeAtomColors } from './colors'
+import { computeAtomColors, invalidatePocketField } from './colors'
 import { elementInfo } from './chemistry'
 import {
   buildCartoon, buildLines, buildSpheres, buildSticks, buildSurface,
   type Pickable, type RepBuild,
 } from './representations'
-import type { StructureData } from './parser'
+import { SpatialGrid, type StructureData } from './parser'
 import { evaluateSelection } from './selection'
 import { detectHBonds, type HBond } from './hbonds'
 import { contactColor } from './contacts'
 import { useContactStore } from './contacts-store'
-import { superposeStructures, applyRigidTransform, type SuperposeResult } from './superpose'
+import { superposeStructures, applyRigidTransform, recomputeBbox, type SuperposeResult } from './superpose'
 import {
   computeSasa, computeBuriedSasa, computeBuriedSasaArrays, sasaStats, compileRadii,
   type SasaComputeOptions, type SasaStats, type BuriedSasaResult,
@@ -294,6 +294,9 @@ export class MolEngine {
   private lastPicksKey = ''
   /** ensemble 播放内部状态（插值帧号与时间戳） */
   private ensemblePlay: { frame: number; lastT: number } | null = null
+  /** ensemble/morph 帧写入过坐标但派生缓存（grid/bbox/SASA/口袋场）尚未失效的结构（null = 干净）。
+ *  持有 data 引用而非 id：结构被关闭后（撤销关闭闭包持有同一 data）仍能在引擎 sync 移除分支完成失效 */
+  private ensembleDirty: { id: string; data: StructureData } | null = null
   /** rock 摇摆：基准偏移与相位 */
   private rockBase: THREE.Vector3 | null = null
   private rockT = 0
@@ -1688,9 +1691,11 @@ export class MolEngine {
     // 移除消失的结构
     for (const [id, view] of this.views) {
       if (!seen.has(id)) {
-        // 若移除的结构正在播放 ensemble，先停止
+        // 若移除的结构正在播放 ensemble，先停止（坐标停在最后一帧→统一失效派生缓存；
+        // flush 持 data 引用，结构已出 registry 也能重建，撤销关闭快照拿到的是一致的 grid）
         if (useEnsembleStore.getState().structureId === id) {
           this.ensemblePlay = null
+          this.flushEnsembleCaches()
           const es = useEnsembleStore.getState()
           es.setPlaying(false)
           es.setTarget(null, 0)
@@ -2149,6 +2154,8 @@ export class MolEngine {
   pauseEnsemble() {
     this.ensemblePlay = null
     useEnsembleStore.getState().setPlaying(false)
+    // 播放→停止状态切换点：坐标已定格在最后一帧，一次性重建派生缓存（r63-review-a P2-8）
+    this.flushEnsembleCaches()
   }
 
   /** 跳到指定整数帧（暂停状态下拖动滑块） */
@@ -2158,7 +2165,7 @@ export class MolEngine {
     const f = Math.max(0, Math.min(frame, data.ensemble.frames.length - 1))
     this.ensemblePlay = null
     useEnsembleStore.getState().setPlaying(false)
-    this.applyEnsembleFrame(data, f)
+    this.applyEnsembleFrame(data, f, true)
     useEnsembleStore.getState().setFrame(f)
   }
 
@@ -2169,7 +2176,7 @@ export class MolEngine {
     this.ensemblePlay = null
     const es = useEnsembleStore.getState()
     es.setPlaying(false)
-    this.applyEnsembleFrame(data, 0)
+    this.applyEnsembleFrame(data, 0, true)
     es.setFrame(0)
   }
 
@@ -2190,7 +2197,9 @@ export class MolEngine {
       if (es.loop) ep.frame %= frames
       else {
         ep.frame = frames - 1
-        this.applyEnsembleFrame(data, ep.frame)
+        // 自然播完落末帧：写坐标后立即失效派生缓存（后续 rebuild 即用新 grid），
+        // pauseEnsemble 内的 flush 因脏标记已清而为 no-op
+        this.applyEnsembleFrame(data, ep.frame, true)
         const store = useEnsembleStore.getState()
         store.setFrame(Math.floor(ep.frame))
         this.pauseEnsemble()
@@ -2204,8 +2213,11 @@ export class MolEngine {
     }
   }
 
-  /** 应用帧（含插值）到原子坐标并增量重建该结构全部视图 */
-  private applyEnsembleFrame(data: StructureData, frameF: number) {
+  /** 应用帧（含插值）到原子坐标并增量重建该结构全部视图。
+ *  invalidate=true（seek/reset/播完落帧等“坐标落定点”）在写坐标后、重建视觉前
+ *  一次性重建派生缓存；播放路径（每帧 10–60fps）不失效——grid 重建是 O(n) 大分配
+ *  不可逐帧承受，只置脏标记，待播放状态切换时统一 flush（见 flushEnsembleCaches） */
+  private applyEnsembleFrame(data: StructureData, frameF: number, invalidate = false) {
     if (!data.ensemble) return
     const frames = data.ensemble.frames
     const n = frames.length
@@ -2221,7 +2233,36 @@ export class MolEngine {
     } else {
       pos.set(a)
     }
+    if (invalidate) this.invalidateDerivedCaches(data)
+    else if (this.ensembleDirty?.data !== data) this.ensembleDirty = { id: data.id, data }
     this.rebuildStructureVisuals(data)
+  }
+
+  /** 坐标突变后的派生缓存重建（对齐 applyRigidTransform 的失效范式）：
+ *  a) SpatialGrid（within 选区/近邻查询/口袋距离场均依赖）；b) 包围盒；
+ *  c) data.sasa（构象相关量，失效后由下一次 sasa / color sasa 请求自动重算）；
+ *  d) colors.ts 口袋距离场 WeakMap 缓存。 */
+  private invalidateDerivedCaches(data: StructureData) {
+    this.ensembleDirty = null
+    data.grid = new SpatialGrid(data.atoms.positions, data.atoms.count, data.grid.cell)
+    recomputeBbox(data)
+    data.sasa = undefined
+    // 在途 SASA worker 结果基于旧坐标快照：丢弃，防失效后被写回旧构象数据
+    this.sasaPending.delete(data.id)
+    if (this.sasaPending.size === 0) useSasaStore.getState().setComputing(false)
+    invalidatePocketField(data)
+  }
+
+  /** 播放状态切换点（暂停/停止/结构移除）的统一失效入口：脏标记闸门保证幂等、
+ *  无帧写入时零开销；失效后若存在口袋着色 rep 立即重建（距离场渐变即刻对齐新构象） */
+  private flushEnsembleCaches() {
+    const dirty = this.ensembleDirty
+    if (!dirty) return
+    this.invalidateDerivedCaches(dirty.data)
+    const entry = useMolStore.getState().structures.find(s => s.id === dirty.id)
+    if (entry?.reps.some(r => r.colorScheme === 'pocket')) {
+      this.rebuildStructureVisuals(dirty.data)
+    }
   }
 
   /** 坐标变化后重建该结构的全部视觉（reps/高亮/标签/测量/拾取标记/氢键） */
@@ -4334,6 +4375,8 @@ export class MolEngine {
     this.sasaSlots.dispose()
     this.hbondPending.clear()
     this.sasaPending.clear()
+    this.ensemblePlay = null
+    this.ensembleDirty = null
     // 坐标轴指示器资源释放（几何/材质/圆盘纹理；轴字母纹理走全局缓存不单独释放）
     if (this.gizmoScene) {
       const seen = new Set<THREE.Material>()

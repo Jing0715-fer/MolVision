@@ -941,7 +941,9 @@ export async function chatCompletionOnce(
 ): Promise<string> {
   const { baseURL, apiKey, headers, model, locale } = await prepareRequest(providerId)
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000)
+  // 超时中止带 TimeoutError reason（controller.abort(reason)）：与外部 signal 的 AbortError
+  // （客户端取消）区分——调用方对前者可重试、对后者应立即放弃
+  const timer = setTimeout(() => controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError')), opts.timeoutMs ?? 60_000)
   const onAbort = () => controller.abort()
   opts.signal?.addEventListener('abort', onAbort)
   try {
@@ -963,18 +965,24 @@ export async function chatCompletionOnce(
   }
 }
 
-/** 直连补全（SSE 流式）：onDelta 收增量，返回完整文本；controller.abort() 中断 */
+/** 直连补全（SSE 流式）：onDelta 收增量，返回完整文本；signal 中止（客户端取消 / 超时兜底） */
 export async function chatCompletionStream(
   providerId: string,
   messages: ChatMessage[],
   opts: { onDelta?: (piece: string) => void; signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<string> {
   const { baseURL, apiKey, headers, model, locale } = await prepareRequest(providerId)
+  // 上游 fetch 兜底超时：外部 signal（客户端取消传播）与 60s 超时合并——任一触发即中止连接，
+  // 上游挂起时不再占着连接等自然结束（与非流式 chatCompletionOnce 的 60s 兜底对齐；
+  // Node 20+ 的 AbortSignal.any 直接可用——超时帧经 any 合并后 fetch 以 TimeoutError 拒绝，
+  // 与客户端取消的 AbortError 可区分：前者按上游瞬时故障重试，后者视为主动取消不重试）
+  const timeoutSignal = AbortSignal.timeout(opts.timeoutMs ?? 60_000)
+  const signal = opts.signal ? AbortSignal.any([opts.signal, timeoutSignal]) : timeoutSignal
   const res = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify({ model, messages, stream: true, temperature: 0.3 }),
-    signal: opts.signal,
+    signal,
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -985,24 +993,30 @@ export async function chatCompletionStream(
   const decoder = new TextDecoder()
   let buf = ''
   let full = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buf += decoder.decode(value, { stream: true })
-    const events = buf.split('\n\n')
-    buf = events.pop() ?? ''
-    for (const ev of events) {
-      for (const line of ev.split('\n')) {
-        if (!line.startsWith('data:')) continue
-        const payload = line.slice(5).trim()
-        if (!payload || payload === '[DONE]') continue
-        try {
-          const j = JSON.parse(payload) as { choices?: { delta?: { content?: string }; message?: { content?: string } }[] }
-          const piece = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ''
-          if (piece) { full += piece; opts.onDelta?.(piece) }
-        } catch { /* 不可解析分片跳过 */ }
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const events = buf.split('\n\n')
+      buf = events.pop() ?? ''
+      for (const ev of events) {
+        for (const line of ev.split('\n')) {
+          if (!line.startsWith('data:')) continue
+          const payload = line.slice(5).trim()
+          if (!payload || payload === '[DONE]') continue
+          try {
+            const j = JSON.parse(payload) as { choices?: { delta?: { content?: string }; message?: { content?: string } }[] }
+            const piece = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ''
+            if (piece) { full += piece; opts.onDelta?.(piece) }
+          } catch { /* 不可解析分片跳过 */ }
+        }
       }
     }
+  } catch (e) {
+    // 中止/网络错误路径：主动取消上游 reader，尽快释放连接（多数场景 fetch signal 已代劳）
+    try { await reader.cancel() } catch { /* 已关闭 */ }
+    throw e
   }
   return full
 }

@@ -2559,3 +2559,97 @@ Stage Summary:
   4. 【中】mock-llm 补 SSE 分支（当前只覆盖 /models 探测，主对话路径联调不了）
   5. 【中】ensemble/morph 播放后 SpatialGrid/pocketField/sasa 缓存不失效（大形变下 within 选区/口袋渐变错位）
   6. 【低】color/spectrum 副作用改写当前选择（PyMOL 不改）应文档化；Parser occupancy=0 被改 1；CONECT 80 列越界；短 Key 掩码还原
+
+---
+Task ID: r64-a
+Agent: general-purpose
+Task: SSR 首屏真直出修复（r63-review-b P1-1：英文用户服务端 HTML title 英文但正文恒中文）
+
+Work Log:
+- 复现实锤：`curl --cookie molvision-locale=en /` → title「MolVision — 3D Molecular Visualization Workbench」+ html lang="en"，正文却是「加载结构」——根因确认为 zustand v5 `useSyncExternalStore` 的 SSR/水合快照恒取 `getInitialState()`（store 创建时冻结的 'zh'），I18nProvider 渲染期 setLocale 写 store 无法影响服务端快照；全仓扫描确认渲染期唯一 store 订阅点就是 useI18n 自身（map-load.ts 三处 getState 为事件时直读、store.ts:735 为引导日志订阅、LanguageToggle 为唯一 setLocale 调用方且单参签名），修复面收敛
+- 【核心修复 · React Context 直传】src/i18n/index.tsx 重写（唯一改动文件，layout.tsx 的 initialLocale 链路 r62 已通无需动）：
+  · 新增 `LocaleCtx = createContext<{ locale, setLocale }>`；I18nProvider 以 `useState<Locale>(initialLocale)` 为渲染期状态源——SSR 与客户端首渲染执行同一 server prop（layout detectLocale：cookie > accept-language）→ 服务端正文按请求语言直出且零 hydration mismatch
+  · useI18n() 的 locale/setLocale/t() 全部改读 ctx（t 闭包捕获 ctx locale，切换即全局重渲）；LanguageToggle 走 ctx setLocale → 双写：`useI18nStore.getState().setLocale(next)`（store 真相源镜像 + <html lang> + cookie 持久化）+ `setLocaleState(next)`（ctx 驱动消费组件重渲染）
+  · zustand store 原样保留为运行时真相源：tt() 事件时求值、map-load 非组件直读、store.ts 引导日志订阅均不受影响。Provider 保留原「useState 初始化器渲染期镜像」：首渲染（SSR+水合）同步把 initialLocale 写入 store（persist:false）——SSR 侧不影响 getInitialState 快照（渲染走 ctx）、客户端侧让 tt()/store 直连方挂载前即读正确语言，且同步触发引导日志订阅早于 ConsoleBar 读取（r62 已验证的水合零闪烁行为原样保留）
+  · 【任务书偏差说明】未采用「store 初始化读 document.cookie」建议：那会使客户端 getInitialState()('en') 与服务端('zh')不对称，未来任何 `useI18nStore(s => s.locale)` 渲染期订阅者都将必然水合错配；保持创建态恒 'zh' 则直订者水合 zh→zh 一致、挂载后经订阅校正，Provider 初始化器镜像已保证两端首渲染值一致，安全等价
+- 验证矩阵：①curl en cookie → 「Load structure」+ lang="en" + 英文 title（修复前同请求正文为「加载结构」）②curl zh cookie → 「加载结构」「示例」+ lang="zh-CN" ③curl 无 cookie + Accept-Language: en-US,en → 英文正文；Accept-Language: zh-CN → 中文正文（默认路径不回归）④agent-browser（独立 session，en cookie）：页面正文全英文（LOAD STRUCTURE/CLASSIC EXAMPLES…），console 过滤 hydrat|warning|did not expect|mismatch 零命中、page errors 零；zh cookie 水合路径同样零警告 ⑤语言切换实测：点「中文」→ lang="zh-CN"+全文切换+cookie 写入 molvision-locale=zh；点「EN」反向亦然 ⑥加载 1CRN 示例（327 原子）后开命令行 → 引导日志「MolVision command line ready…」英文（tt()/store 同步链路端到端正确）⑦bunx tsc --noEmit src 零错误（5 个报错均在 examples//mini-services//skills/，先在）；bun run lint 退出码 0 零输出
+- 环境注记：验证中 dev server 一次掉线（ERR_CONNECTION_REFUSED，bun run dev 守护进程 9/24 起已陈旧），重启后全部复验通过；git 工作区另有 r63 轮次遗留改动（route.ts/LanguageToggle/Toolbar/providers.ts/mock-llm），本轮仅触碰 src/i18n/index.tsx
+
+Stage Summary:
+- 交付：SSR 正文按请求 locale 真直出——根因（zustand v5 服务端快照冻结 'zh'）经 React Context 直传修复，单一文件 56 行净改动，DualText 数据/locales.ts 常量/layout 链路零变更
+- 架构：ctx 为渲染期状态源（SSR 直出 + 零水合错配），zustand 仍为运行时真相源（tt()/事件时/订阅），Provider 首渲染镜像 + 切换双写保持同步
+- 验证：三路 curl（en cookie/zh cookie/accept-language）+ 浏览器双向切换 + 引导日志 tt() 链路 + 水合零警告 + tsc/lint 全绿
+
+---
+Task ID: r64-c
+Agent: general-purpose
+Task: 缓存失效与回归防线——ensemble/morph 播放后派生缓存不失效（r63-review-a P2-8）修复 + r60 修复 grep 级防线脚本（r63-review-b 建议②）
+
+Work Log:
+- 【任务 1 · 派生缓存失效】读 r63 审查记录与 applyRigidTransform 范式（superpose.ts:322-338：坐标写入后 new SpatialGrid + recomputeBbox），定位 engine.ts applyEnsembleFrame（改后 :2220）写 positions 后仅 rebuildStructureVisuals 的缺口
+- 【colors.ts】导出 invalidatePocketField(data)（pocketFieldCache WeakMap.delete，:118-122）——刚体 superpose 无需调用（平移旋转不改变残基-配体距离），仅 ensemble/morph 帧路径需要
+- 【superpose.ts】recomputeBbox 改导出（:341，applyRigidTransform 与 ensemble 失效共用，DRY）
+- 【engine.ts · 失效时点策略】播放期间（updateEnsemble 每帧 10-60fps）**不**重建——grid 重建 O(n) 大分配不可逐帧承受，只置 ensembleDirty = { id, data } 脏标记（幂等赋值防每帧小对象分配）；**状态切换点统一失效**：
+  · pauseEnsemble() → flushEnsembleCaches()（覆盖 UI 暂停键/命令 ensemble pause/目标结构切换）
+  · setEnsembleFrame / resetEnsemble / 自然播完落末帧 → applyEnsembleFrame(data, f, true)（invalidate 参数：写坐标后、rebuildStructureVisuals 前失效 → 紧随的重建即用新 grid，避免同一帧两次全量重建；pauseEnsemble 内 flush 因脏标记已清而为 no-op）
+  · 引擎 sync 移除分支（播放中关闭结构）→ flushEnsembleCaches()；脏标记持 data 引用而非 id——结构已出 dataRegistry 也能完成失效，撤销关闭快照（闭包持同一 data）拿到一致的 grid
+- 【invalidateDerivedCaches 四步】a) data.grid = new SpatialGrid(positions, count, data.grid.cell)（范式对齐 applyRigidTransform，cell 沿用原网格粒度：主解析 6 / 子集 morph 5）；b) recomputeBbox(data)；c) data.sasa = undefined + 在途 sasaPending 丢弃（worker 结果是旧坐标快照，防失效后被写回；pending 清空时 setComputing(false) 防「计算中」残留，对齐 onSasaWorkerResult 既有守卫）；d) invalidatePocketField(data)
+- 【flush 后置动作】结构存在 pocket 着色 rep 时立即 rebuildStructureVisuals——距离场渐变即刻对齐新构象（其余 rep 颜色与坐标无关）；sasa 着色 rep 不自动重算（SASA 重计算重且有 worker 链路），保持已烘焙色直至用户下次 sasa / color sasa 命令（store.applyColor 的 !data.sasa 分支自动触发重算）——数据失效与视觉刷新分离的取舍已在代码注释注明
+- 【morph 路径确认】morph/multimorph 对象即 ensembleKind 标记的 ensemble 结构（morph.ts:238/358），播放走同一 ensemble 管线，本修复天然覆盖；morph-refine 仅在构建期改帧数组不动 positions，无额外失效点
+- 【验证 · 纯函数】bun 临时脚本（已删）：伪 HEM+LYS 结构——LYS 拉近 3Å 后无失效时 pocket 色不变（P2-8 实锤），走失效链路后 0.279,0.279,0.279（灰）→ 0.352,0.028,0.631（近端深紫红）、bbox.radius=25 精确重算、queryRadius 命中移动原子、sasa=undefined，ALL CHECKS PASS
+- 【验证 · E2E agent-browser】localhost:3000 加载 1D3Z（NMR 10 帧 1231 原子）：①播放 1.5s 中坐标已变（52.923→52.966）且 grid 对象身份不变（逐帧不重建 ✓）②pause 后 grid 换新对象（cell=6 保持）、bbox=29.108 与按当前坐标手算完全一致、sasa=undefined、脏标记清零 ③setEnsembleFrame(5) 后 grid 再换新、positions 严格等于 frames[5]、bbox=28.185 匹配、脏标记清零 ④暂停同步生效且 700ms 后无复活；console 清零后无新错误
+- 【任务 2 · 回归防线】scripts/regression-guards.sh（bash + chmod +x，package.json 加 "guards" 脚本）：12 条规则变量化组织（check 函数：名称/rg 正则/路径/最小命中数，rg -c 多文件 "path:count" 与单文件裸 count 双形态按末字段求和，--no-messages 吞路径缺失），FAIL 明确打印规则名+路径+实距要求，exit 1 供 CI 拦截；含 IME 守卫≥10 / Escape 守卫 / palette 确认 / 智能滚动 / 帧滑块续播 / res.ok≥3 / q 谓词≥2 / matchByResidue≥2 / rep 拾取过滤≥2 / chmodSync / git check-ignore 凭据 / ViewBar 时间 locale
+- 【脚本勘误】任务书 R2 路径 src/components/studio/MolViewer.tsx 实际不存在——MolViewer 位于 src/components/molecular/（守卫正则修正为真实路径，非代码缺失）；其余 11 条按任务书原样
+- 【运行结果】bun run guards → 12/12 全 PASS（命中数：IME 11 / Escape 2 / 确认 17 / 滚动 5 / 续播 4 / res.ok 4 / q 谓词 4 / matchByResidue 2 / 拾取过滤 7 / chmodSync 2 / ignore 1 / locale 1）；负向测试（篡改一条正则）仅该条 FAIL 且 exit=1，其余不受牵连
+
+Stage Summary:
+- 任务 1 落地：engine.ts（applyEnsembleFrame invalidate 参数 + invalidateDerivedCaches/flushEnsembleCaches 双方法 + ensembleDirty 脏标记 + 5 个状态切换点接线 + dispose 清理）+ colors.ts invalidatePocketField 导出 + superpose.ts recomputeBbox 导出；核心语义＝「播放中容忍旧 grid（性能），停止/暂停/seek 落帧/结构移除时一次性重建 grid+bbox 并失效 sasa/口袋场（正确性）」
+- 任务 2 落地：scripts/regression-guards.sh + bun run guards 入口；12/12 PASS 实证 r63-fix-b 的 14 项重放全部在位，防线可入 CI
+- 验证：bunx tsc --noEmit grep -cE "^src/" = 0；bun run lint 零输出退出码 0；纯函数自测 + 浏览器 E2E（播放中不重建/停止即失效/seek 即失效三态断言）双层通过；dev server 持续 200
+- 遗留与说明：①sasa 着色 rep 在失效后保持旧烘焙色直至下次 sasa 相关命令（有意取舍，避免自动触发重计算链）；②分析面板 sasaStore 统计数字不随失效清零（下次分析重算覆盖）；③守卫为 grep 级标志检查，防回滚不防语义漂移（正则与实现强耦合，重构时需同步更新脚本）
+---
+Task ID: r64-b
+Agent: general-purpose
+Task: Agent 流式超时与取消传播（r63-review-c P2-2）+ mock-llm SSE 流式分支（P2-5）
+
+Work Log:
+- 【修复 1 · route.ts 流式分支（P2-2）】ReadableStream 构造补 cancel() 回调 + 上游中止汇聚：新增 upstreamAbort（AbortController），req.signal（客户端断开）与本流 cancel()（用户点「停止」）双源接入（已 aborted 时直接置位、避免漏挂监听）；start() 重试循环每轮先查 upstreamAbort.signal.aborted（退避 sleep 期间取消也立即跳出）；completeWithProvider 调用处改传 { onDelta, signal: upstreamAbort.signal }（任务书写 req.signal——汇聚信号为其超集，cancel() 路径必须能独立触发才真正闭环）；controller.close() 收口为幂等 close() 包装（cancel 后 close 抛 TypeError 被吞，send() 既有 try/catch 保持不动）；取消时不再发 err 事件（取消不是错误，客户端也已不在）
+- 【修复 1 · 取消 vs 上游错误区分】catch 分支：upstreamAbort.signal.aborted || e.name === 'AbortError' → break 不重试不报错（客户端主动取消）；TimeoutError/网络错/限流走既有 isRate 退避重试两轮逻辑（零破坏）；非流式分支对称补 req.signal 透传 + AbortError 不重试
+- 【修复 1 · completeWithProvider zai 分支】SDK 不接受 fetch signal——取消传播自管：opts.signal 的 abort 监听即刻 reader.cancel()（打断挂起的 read()，pending read 按 streams 规范 resolve done），循环内逐轮轮询 aborted 双保险，finally 摘监听；直连分支原本就透传 signal 给 chatCompletionStream（缺口在 route 调用处从不传，本次补上）
+- 【修复 1 · providers.ts chatCompletionStream】上游 fetch 加兜底超时：AbortSignal.timeout(60s)（与非流式 chatCompletionOnce 对齐，opts.timeoutMs 可调）经 AbortSignal.any([外部 signal, 超时帧]) 合并——Node 20+ 直接可用（本环境 Node 24 实测）；语义分离实测验证：超时帧触发 → fetch 以 TimeoutError 拒绝（按上游瞬时故障可重试），外部 signal 触发 → AbortError（客户端取消不重试）；chatCompletionOnce 的定时器同步改 controller.abort(new DOMException(..., 'TimeoutError'))（原裸 abort 会把 60s 超时误判成取消）；SSE 读取循环外包 try/catch + reader.cancel() 释放连接
+- 【修复 2 · mock-llm SSE 分支（P2-5）】POST /chat/completions 解析请求体：stream:true → Content-Type: text/event-stream，OpenAI 分片协议输出——首帧 delta:{role:"assistant"}、3 个内容增量帧（40ms 间隔模拟生成）、末帧 finish_reason:"stop"、终帧 data: [DONE]\n\n（共 5 个 data: 帧）；流内容为可配置协议 JSON：buildDecision 从最后一条 user 消息按关键词选模板——颜色类（染/颜色/color 或裸颜色词，红蓝绿黄映射，含「B 链蓝色」无动词形态）→ commands [select chain X, color <色>, chain X]；显示类 → [select, show cartoon]；隐藏类 → [hide lines]；默认选择类 → [select, zoom]；链 ID 提取兼容「A 链/A链/链 A/chain A」四种写法；非流式分支同步从 'mock-ok' 常量升级为同款协议 JSON（callAgent 非流式路径同样可联调）；鉴权放宽为「携带错误 Key 401、省略头放行」（应用侧总带 Key，裸 curl 冒烟不再被 401 挡）；流侧 write 包 try/catch + clientGone 断流（取消传播测试下 mock 不再对死 socket 疯写
+- 【环境】mock-llm 已在跑（bun --hot，改文件自动热载，端口 3999 确认 /models 200）；验证用慢速 mock（1.5s/片，端口 3998）与 node 挂死服务器均为一次性脚本（已停），.molvision/agent-providers.json 测试期间临时指向 mock、验证后已恢复原样（{"configs":{},"default":"zai"}）
+
+Stage Summary:
+- 三文件修复：route.ts（流式 cancel() 回调 + upstreamAbort 汇聚 + AbortError 不重试 + 非流式 signal 透传 + 幂等 close）+ providers.ts（chatCompletionStream AbortSignal.any 60s 兜底 + chatCompletionOnce TimeoutError reason 区分 + 连接释放）+ mini-services/mock-llm/index.ts（SSE 流式分支 + 协议 JSON 模板引擎）
+- curl 验证（任务书原样命令）：mock SSE 输出 5 个 data: 帧 + data: [DONE]，拼接还原 {"reply":"已将 A 链染为红色。","commands":["select chain A","color red, chain A"]}；四类模板 + 默认 + 错误 Key 401 + 非流式全通过
+- 取消传播实证（慢速 mock 1.5s/片）：客户端读到首个增量后 abort @1576ms → 12ms 内上游流 cancel() 被调、后续 3 个分片与 [DONE] 不再生成（旧版会继续消费完全部 6s 生成）——「停止后 token 白烧」缺口关闭；AbortSignal 语义三分验证：TimeoutError@803ms（精准）/ 预中止 AbortError / 飞行中 abort AbortError
+- 端到端（agent-browser 独立会话）：provider 临时指向 mock → Agent 面板输入「染红 A 链」→ 流式回复「已将 A 链染为红色。」+ 两条命令真实执行（1,168 atoms selected / Colored: #e04545 (chain A)），console 零错误
+- 验证：bunx tsc --noEmit grep -cE "^src/" = 0；bun run lint 零输出退出码 0；dev server 持续编译无错、GET / 200
+- 遗留说明：①60s 流式兜底覆盖整个流生命周期（防挂起语义，非首字节超时），超长生成会被切断并按上游错误重试一次——需更长窗口可调 opts.timeoutMs；②zai SDK 路径的取消靠 reader.cancel() 轮询+监听双保险（SDK 无原生 signal 支持）；③mock 非流式分支行为变更（mock-ok → 协议 JSON）为联调增益，全仓无 'mock-ok' 消费方（已 grep 确认）
+
+---
+Task ID: r64-main
+Agent: main
+Task: 语言切换按钮可发现性修复 + 后续改进落地（SSR 直出/流式收口/缓存失效/回归防线）+ 全链路 E2E（用户反馈「看不到切换语言按钮」）
+
+Work Log:
+- 【用户反馈排查】语言切换按钮实存但可发现性差：仅 StatusBar（text-[9px] 21×14px 微型胶囊）与欢迎页两处，顶部 Toolbar 无入口——「看不到」是真实可用性缺陷
+- 【LanguageToggle 三变体重构】新增 toolbar 变体（tool-btn 28px 高、Languages 图标、中文/EN 段控，窄屏响应式缩写 中/隐藏图标）；status 变体放大 h-5→h-6 text-[10px]；default 变体 h-8 带图标；修正组件默认 variant 'status'→'default'（WelcomeScreen 裸渲染曾错拿微型胶囊——E2E DOM 比对揪出）
+- 【Toolbar 插入主入口】主题按钮旁新增 <LanguageToggle variant="toolbar">，全视口可见（header 无响应式隐藏），移动端 <sm 自动收缩
+- 【三个并行子代理改进】
+  · r64-a SSR 首屏真直出：i18n LocaleCtx + useState 状态源双写（zustand 保留运行时真相源），curl 三态验证 en-cookie/zh-cookie/Accept-Language 全部正文直出正确语言，hydration 零警告——r63-review-b P1-1 关闭
+  · r64-b Agent 流式收口：ReadableStream cancel() 回调 + req.signal/上游 abort 双源汇聚（客户端停止 12ms 内中止上游）；chatCompletionStream AbortSignal.any 60s 兜底；TimeoutError 与 AbortError 语义三分；mock-llm 补 SSE 协议（OpenAI 分片格式 + 关键词→协议 JSON 模板引擎）——E2E「染红 A 链」流式回复→命令真实执行（1168 原子选中 + #e04545 染色）
+  · r64-c 缓存失效 + 回归防线：ensemble/morph 播放期间脏标记、暂停/seek/播完/关结构四时点一次性重建 SpatialGrid+bbox+失效 sasa/pocketField（E2E: 1D3Z 播放逐帧 grid 身份不变、pause 后重建且 bbox 精确匹配手算）；scripts/regression-guards.sh 12 条 grep 级守卫（IME/Escape/确认弹窗/q 谓词/拾取过滤/凭据权限等）全 PASS + package.json guards 脚本——r60 回滚事故防线建立
+- 【E2E 全链路回归】三层切换入口（欢迎页 121×32 带图标 / Toolbar 113×28 带图标 / StatusBar 74×24）· toolbar 点击切换 lang=en 生效 · SSR curl 双语直出 · q>0.3→4779 · name CA in chain A→141 精确 · alter b=b+10→340 原子 · spectrum blue red 正常 · byobject→4779 · palette New session 确认弹窗 + 取消保留 · mock-llm SSE data: 分片 + [DONE] · console 零错误 · canvas 渲染正常
+- 【门禁】tsc src 0 错 · lint 零输出 · guards 12/12 PASS · dev server 200
+
+Stage Summary:
+- 交付：语言切换可发现性三入口（用户反馈根因关闭）+ SSR 真直出 + Agent 流式取消传播 + mock-llm SSE 联调能力 + ensemble 派生缓存失效 + 12 条回归守卫防线
+- 验证：E2E 全绿（语言三层入口/SSR 双语 curl/命令谓词精确断言/确认弹窗/流式协议/console 零错）
+- 下一轮建议（按优先级）：
+  1. 【高】API 鉴权边界：全部路由无鉴权（本地沙箱可接受，部署前必须加 token/middleware）+ /models SSRF 反射面（baseURL 无 scheme/IP 校验）
+  2. 【中】P1-1 SSR 已关，但 ViewBar/SceneBar 外尚有零散 zh-CN 硬编码日期格式化点可继续接线
+  3. 【中】agents 流式 60s 全流上限对长生成偏紧，可按 provider 分档（thinking 模型 120s）
+  4. 【中】mock-llm 协议模板扩展（measure/hbonds/superpose 关键词），使 Agent 面板全命令面可离线回归
+  5. 【低】HistoryDialog Row 组件外提、ConsoleBar seq key、RepsPanel/ScenePanel slider aria-label 补齐

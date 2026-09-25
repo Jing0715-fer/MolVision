@@ -337,7 +337,8 @@ export function applyRigidTransform(data: StructureData, quat: [number, number, 
   recomputeBbox(data)
 }
 
-function recomputeBbox(data: StructureData) {
+/** 坐标突变后重算包围盒（applyRigidTransform / ensemble 帧落定共用） */
+export function recomputeBbox(data: StructureData) {
   const pos = data.atoms.positions
   const min: [number, number, number] = [Infinity, Infinity, Infinity]
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]

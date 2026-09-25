@@ -133,6 +133,7 @@ interface ZAIMessage { role: 'assistant' | 'user'; content: string }
  * - zai → 内置 SDK（双形态流式/整段）
  * - 其余 → OpenAI 兼容直连（SSE 流式解析与 SDK 同源 data: 行协议）
  * 返回值统一为「完整文本」；onDelta 收到增量时透传（流式模式共用）
+ * opts.signal 中止时即刻停止消费上游生成（SDK 路径 cancel reader；直连路径 fetch signal）
  */
 async function completeWithProvider(
   messages: ZAIMessage[],
@@ -145,30 +146,39 @@ async function completeWithProvider(
     const raw = await zai.chat.completions.create({ messages, stream: true, thinking: { type: 'disabled' } })
     if (raw instanceof ReadableStream || (raw && typeof raw.getReader === 'function')) {
       const reader = (raw as ReadableStream<Uint8Array>).getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-      let full = ''
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        // SSE 行协议：空行分隔事件，data: 前缀承载 JSON（与 OpenAI 兼容端点同构）
-        const events = buf.split('\n\n')
-        buf = events.pop() ?? ''
-        for (const ev of events) {
-          for (const line of ev.split('\n')) {
-            if (!line.startsWith('data:')) continue
-            const payload = line.slice(5).trim()
-            if (!payload || payload === '[DONE]') continue
-            try {
-              const j = JSON.parse(payload) as { choices?: { delta?: { content?: string }; message?: { content?: string } }[] }
-              const piece = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ''
-              if (piece) { full += piece; opts.onDelta?.(piece) }
-            } catch { /* 忽略不可解析的分片 */ }
+      // SDK 不接受 fetch signal——取消传播只能自管：abort 即刻 cancel 上游 reader
+      // （打断挂起的 read()，不再消费后续生成），读取循环再逐轮轮询双保险
+      const onAbort = () => { void reader.cancel().catch(() => { /* 已结束 */ }) }
+      opts.signal?.addEventListener('abort', onAbort)
+      try {
+        const decoder = new TextDecoder()
+        let buf = ''
+        let full = ''
+        for (;;) {
+          if (opts.signal?.aborted) { try { await reader.cancel() } catch { /* 已结束 */ } break }
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          // SSE 行协议：空行分隔事件，data: 前缀承载 JSON（与 OpenAI 兼容端点同构）
+          const events = buf.split('\n\n')
+          buf = events.pop() ?? ''
+          for (const ev of events) {
+            for (const line of ev.split('\n')) {
+              if (!line.startsWith('data:')) continue
+              const payload = line.slice(5).trim()
+              if (!payload || payload === '[DONE]') continue
+              try {
+                const j = JSON.parse(payload) as { choices?: { delta?: { content?: string }; message?: { content?: string } }[] }
+                const piece = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ''
+                if (piece) { full += piece; opts.onDelta?.(piece) }
+              } catch { /* 忽略不可解析的分片 */ }
+            }
           }
         }
+        return full
+      } finally {
+        opts.signal?.removeEventListener('abort', onAbort)
       }
-      return full
     }
     // 非流式形态（服务端忽略 stream 参数）：一次性文本，包装为单增量
     const text = (raw as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content ?? ''
@@ -363,21 +373,31 @@ export async function POST(req: Request) {
 
   // ---------- 流式模式：SDK stream:true → ReadableStream(SSE) → NDJSON 转发 ----------
   // 事件协议见 protocol.ts AgentStreamEvent；瞬时故障重试（仅在未流出增量时——防内容重复）
+  // 取消传播：客户端点「停止」→ fetch abort → req.signal / 下游流 cancel() 双源汇聚到
+  // upstreamAbort —— 任一触发即中止上游 LLM 拉取（不再白烧 token 等它自然结束）
   if (body.stream) {
     const encoder = new TextEncoder()
+    const upstreamAbort = new AbortController()
+    const onReqAbort = () => upstreamAbort.abort()
+    if (req.signal.aborted) upstreamAbort.abort()
+    else req.signal.addEventListener('abort', onReqAbort)
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         const send = (ev: { t: string; [k: string]: unknown }) => {
           try { controller.enqueue(encoder.encode(`${JSON.stringify(ev)}\n`)) } catch { /* 已中止 */ }
         }
+        // controller.close() 幂等包装：cancel 路径与正常收尾共用，重复关闭只吞一次 TypeError
+        const close = () => { try { controller.close() } catch { /* 客户端已断开/已关闭 */ } }
         let full = ''
         let decision: AgentDecision | null = null
         let lastErr = ''
         try {
           for (let attempt = 0; attempt < 2; attempt++) {
+            if (upstreamAbort.signal.aborted) break // 退避等待期间客户端已取消
             try {
-              // 供应商无关补全（zai SDK / OpenAI 兼容直连统一分派）；增量逐条转发
-              full = await completeWithProvider(messages, { onDelta: piece => send({ t: 'd', v: piece }) })
+              // 供应商无关补全（zai SDK / OpenAI 兼容直连统一分派）；增量逐条转发；
+              // signal = req.signal + 本流 cancel() 的汇聚信号——客户端停止即刻传播到上游 fetch
+              full = await completeWithProvider(messages, { onDelta: piece => send({ t: 'd', v: piece }), signal: upstreamAbort.signal })
               decision = sanitizeDecision(extractJson(full))
               if (!decision) {
                 // 降级兜底：全文当 reply + 打捞命令行（可用性优先于严格协议）
@@ -389,6 +409,9 @@ export async function POST(req: Request) {
               if (decision || full.trim().length > 4) break // 有产出即成功
               lastErr = 'AI 返回为空'
             } catch (e) {
+              // 区分「客户端主动取消」与「上游错误」：AbortError / 汇聚信号已触发 = 取消
+              // ——不重试、不报错（重试只留给限流/网络抖动等瞬时上游故障）
+              if (upstreamAbort.signal.aborted || (e instanceof Error && e.name === 'AbortError')) break
               lastErr = e instanceof Error ? e.message : 'LLM 调用异常'
               if (full) break // 已流出内容不重试（重发会重复推送增量）
             }
@@ -400,11 +423,18 @@ export async function POST(req: Request) {
           lastErr = e instanceof Error ? e.message : errText(locale, 'LLM 调用异常', 'LLM call failed')
         }
         if (decision) send({ t: 'end', decision })
-        else {
+        else if (!upstreamAbort.signal.aborted) {
+          // 客户端取消不是错误——不再给已断开的下游发 err 事件
           const isRate = /429|too many|rate.?limit/i.test(lastErr)
           send({ t: 'err', error: isRate ? errText(locale, '服务限流中，请稍候片刻再试', 'The service is rate-limited — please retry in a moment') : `${lastErr}${errText(locale, '，请重试或换个说法', ' — please retry or rephrase')}` })
         }
-        try { controller.close() } catch { /* 客户端已断开 */ }
+        close()
+        req.signal.removeEventListener('abort', onReqAbort)
+      },
+      // 客户端断开/点「停止」：置中止标志并中止上游（completeWithProvider 内部随即
+      // cancel 上游 reader / fetch signal 中止直连流），start() 循环跳出后走幂等 close
+      cancel() {
+        upstreamAbort.abort()
       },
     })
     return new Response(stream, {
@@ -418,7 +448,8 @@ export async function POST(req: Request) {
     let lastErr = ''
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const text = await completeWithProvider(messages)
+        // 客户端断开传播到上游（非流式模式同样不该继续烧完 LLM 生成）
+        const text = await completeWithProvider(messages, { signal: req.signal })
         decision = sanitizeDecision(extractJson(text))
         if (decision) break
         // 降级兜底：LLM 未按 JSON 说话但有实质文本 → 全文当 reply + 打捞命令行（可用性优先于严格协议）
@@ -432,6 +463,8 @@ export async function POST(req: Request) {
         }
         lastErr = errText(locale, 'AI 返回为空', 'AI returned an empty response')
       } catch (e) {
+        // 客户端主动取消（AbortError）不是上游故障：不重试（响应也无人接收）
+        if (req.signal.aborted || (e instanceof Error && e.name === 'AbortError')) break
         lastErr = e instanceof Error ? e.message : errText(locale, 'LLM 调用异常', 'LLM call failed')
       }
     }

@@ -23,6 +23,7 @@ import { useTourStore } from '@/lib/molecular/tour-store'
 import { useRecordStore } from '@/lib/molecular/record-store'
 import { stopMovie, useMovieStore } from '@/lib/molecular/movie'
 import type { MeasureMode } from '@/lib/molecular/types'
+import { LanguageToggle } from './LanguageToggle'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -616,6 +617,9 @@ export function Toolbar() {
           </TooltipTrigger>
           <TooltipContent>{t({ zh: 'PyMOL 风格命令行', en: 'PyMOL-style command line' })}</TooltipContent>
         </Tooltip>
+
+        {/* 语言切换：主入口（与主题切换并列，任何视口可见） */}
+        <LanguageToggle variant="toolbar" />
 
         <Tooltip>
           <TooltipTrigger asChild>

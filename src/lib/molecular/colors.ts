@@ -115,6 +115,12 @@ interface PocketField {
 }
 const pocketFieldCache = new WeakMap<StructureData, PocketField>()
 
+/** 失效口袋距离场缓存：ensemble/morph 帧改写坐标后由引擎调用（距离场随构象变化，
+ *  刚体 superpose 不需要——平移旋转不改变残基-配体距离） */
+export function invalidatePocketField(structure: StructureData) {
+  pocketFieldCache.delete(structure)
+}
+
 const isLigandResidue = (r: { hetero: boolean; water: boolean; polymer: boolean }) =>
   r.hetero && !r.water && !r.polymer
 
