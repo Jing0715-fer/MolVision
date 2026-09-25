@@ -59,7 +59,7 @@ interface DragView {
 }
 
 export function SequenceBar() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const ui = useMolStore(s => s.ui)
   const setUi = useMolStore(s => s.setUi)
   const structures = useMolStore(s => s.structures)
@@ -432,7 +432,7 @@ export function SequenceBar() {
           <Dna className="h-3 w-3 shrink-0 text-muted-foreground/70" />
           <span className="mol-micro shrink-0">{t({ zh: '序列', en: 'Sequence' })}</span>
           <span className="min-w-0 truncate font-mono text-[9px] tabular-nums text-muted-foreground/60">
-            {t({ zh: `${st.name} · ${polymerChains.length} 条链 · ${data.residues.length.toLocaleString()} 残基`, en: `${st.name} · ${polymerChains.length} chains · ${data.residues.length.toLocaleString()} residues` })}
+            {t({ zh: `${st.name} · ${polymerChains.length} 条链 · ${data.residues.length.toLocaleString(locale)} 残基`, en: `${st.name} · ${polymerChains.length} chains · ${data.residues.length.toLocaleString(locale)} residues` })}
           </span>
           {selectedResidues.size > 0 && (
             <span
@@ -498,7 +498,7 @@ export function SequenceBar() {
                         if (e.nativeEvent.isComposing || e.keyCode === 229) return
                         if (e.key === 'Enter') doSaveLib()
                       }}
-                      placeholder={t({ zh: `命名保存当前选择（${selection.indices.length.toLocaleString()} 原子）…`, en: `Name and save current selection (${selection.indices.length.toLocaleString()} atoms)…` })}
+                      placeholder={t({ zh: `命名保存当前选择（${selection.indices.length.toLocaleString(locale)} 原子）…`, en: `Name and save current selection (${selection.indices.length.toLocaleString(locale)} atoms)…` })}
                       className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[11px] outline-none transition focus:border-foreground/30"
                       aria-label={t({ zh: '命名保存当前选择', en: 'Name and save current selection' })}
                     />
@@ -523,7 +523,7 @@ export function SequenceBar() {
                       return (
                         <div key={ns.name} className="group flex items-center gap-1 rounded-md px-1.5 py-1 transition hover:bg-accent">
                           <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium">{ns.name}</span>
-                          <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">{ns.count.toLocaleString()} at</span>
+                          <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">{ns.count.toLocaleString(locale)} at</span>
                           {stName && ns.structureId !== activeId && (
                             <span className="max-w-14 shrink-0 truncate text-[9px] text-muted-foreground/70" title={t({ zh: `属于结构 ${stName}`, en: `Belongs to structure ${stName}` })}>{stName}</span>
                           )}
@@ -629,7 +629,7 @@ export function SequenceBar() {
                 {t({ zh: '已框选', en: 'Box-selected' })} <span className="font-mono tabular-nums">{saveBar.chainId} {saveBar.from}–{saveBar.to}</span>
               </span>
               <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                {t({ zh: `${saveBar.residues} 残基 · ${saveBar.atoms.toLocaleString()} 原子`, en: `${saveBar.residues} residues · ${saveBar.atoms.toLocaleString()} atoms` })}
+                {t({ zh: `${saveBar.residues} 残基 · ${saveBar.atoms.toLocaleString(locale)} 原子`, en: `${saveBar.residues} residues · ${saveBar.atoms.toLocaleString(locale)} atoms` })}
               </span>
               <input
                 value={saveName}

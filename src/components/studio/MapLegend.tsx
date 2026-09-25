@@ -44,7 +44,7 @@ function savePos(p: FreePos | null) {
 }
 
 export function MapLegend() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const info = useMapStore(s => s.info)
   // 控制台打开时隐藏（底部命令行覆盖层遮挡图例区）
   const consoleOpen = useMolStore(s => s.ui.consoleOpen)
@@ -226,7 +226,7 @@ export function MapLegend() {
           className="ml-auto shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground/80"
           title={t({ zh: `等值面三角形${info.truncated ? '（已截断）' : ''}`, en: `Isosurface triangles${info.truncated ? ' (truncated)' : ''}` })}
         >
-          {info.triangles.toLocaleString()}△{info.truncated ? '+' : ''}
+          {info.triangles.toLocaleString(locale)}△{info.truncated ? '+' : ''}
         </span>
       </div>
     </div>

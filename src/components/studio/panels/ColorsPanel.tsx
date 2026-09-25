@@ -22,7 +22,7 @@ const SCHEMES: { key: ColorScheme; swatches: string[] }[] = [
 ]
 
 export function ColorsPanel() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const applyColor = useMolStore(s => s.applyColor)
   const resetColors = useMolStore(s => s.resetColors)
   const selection = useMolStore(s => s.selection)
@@ -121,7 +121,7 @@ export function ColorsPanel() {
             overrideCount > 0 ? 'hover:bg-accent' : 'opacity-40',
           )}
         >
-          <RotateCcw className="h-3 w-3" /> {t({ zh: '重置全部', en: 'Reset all' })} (<span className="font-mono tabular-nums">{overrideCount.toLocaleString()}</span>)
+          <RotateCcw className="h-3 w-3" /> {t({ zh: '重置全部', en: 'Reset all' })} (<span className="font-mono tabular-nums">{overrideCount.toLocaleString(locale)}</span>)
         </button>
       </div>
 

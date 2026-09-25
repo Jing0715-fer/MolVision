@@ -26,7 +26,7 @@ import { buildSvgExport, downloadSvg } from './svg-export'
 import { clearCmdHistory } from './cmd-history'
 import { whenEngineReady } from './engine-ready'
 import { toast } from 'sonner'
-import { tt, type DualText } from '@/i18n'
+import { tt, loc, type DualText } from '@/i18n'
 
 /** 数值裁剪（NaN 时取默认值） */
 function clampNum(v: number, min: number, max: number, dflt: number): number {
@@ -461,18 +461,18 @@ export function runCommand(raw: string): void {
     if (mode === 'add') {
       s.setSelection(s.activeId, idxs, 'add')
       const total = useMolStore.getState().selection.indices.length
-      return ok(tt({ zh: `已追加 ${r.count.toLocaleString()} 原子（select add）→ 当前共 ${total.toLocaleString()}`, en: `Added ${r.count.toLocaleString()} atoms (select add) → ${total.toLocaleString()} now selected` }))
+      return ok(tt({ zh: `已追加 ${r.count.toLocaleString(loc())} 原子（select add）→ 当前共 ${total.toLocaleString(loc())}`, en: `Added ${r.count.toLocaleString(loc())} atoms (select add) → ${total.toLocaleString(loc())} now selected` }))
     }
     if (mode === 'subtract') {
       s.setSelection(s.activeId, idxs, 'remove')
       const total = useMolStore.getState().selection.indices.length
-      return ok(tt({ zh: `已移除 ${r.count.toLocaleString()} 原子（select subtract）→ 当前共 ${total.toLocaleString()}`, en: `Removed ${r.count.toLocaleString()} atoms (select subtract) → ${total.toLocaleString()} now selected` }))
+      return ok(tt({ zh: `已移除 ${r.count.toLocaleString(loc())} 原子（select subtract）→ 当前共 ${total.toLocaleString(loc())}`, en: `Removed ${r.count.toLocaleString(loc())} atoms (select subtract) → ${total.toLocaleString(loc())} now selected` }))
     }
     // intersect：当前选择 ∩ 新表达式（手动求交）
     const cur = new Set(s.selection.structureId === s.activeId ? s.selection.indices : [])
     const inter = idxs.filter(i => cur.has(i))
     s.setSelection(s.activeId, inter)
-    return ok(tt({ zh: `交集 ${inter.length.toLocaleString()} 原子（select intersect）`, en: `Intersection: ${inter.length.toLocaleString()} atoms (select intersect)` }))
+    return ok(tt({ zh: `交集 ${inter.length.toLocaleString(loc())} 原子（select intersect）`, en: `Intersection: ${inter.length.toLocaleString(loc())} atoms (select intersect)` }))
   }
   // measure distance/angle/dihedral 无括号 ChimeraX 形式：measure distance @CA :42 → 自动包括号
   if ((cmd === 'measure' || cmd === 'dist' || cmd === 'distance') && input.indexOf('(') < 0) {
@@ -543,12 +543,12 @@ export function runCommand(raw: string): void {
           }],
         }))
       }
-      ok(tt({ zh: `已选择 ${res.count.toLocaleString()} 个原子 → ${name === 'sele' ? '当前选择' : name}`, en: `${res.count.toLocaleString()} atoms selected → ${name === 'sele' ? 'current selection' : name}` }))
+      ok(tt({ zh: `已选择 ${res.count.toLocaleString(loc())} 个原子 → ${name === 'sele' ? '当前选择' : name}`, en: `${res.count.toLocaleString(loc())} atoms selected → ${name === 'sele' ? 'current selection' : name}` }))
     } else {
       if (!rest) return err(tt({ zh: '用法: select <表达式> 或 select <名> = <表达式>', en: 'Usage: select <expression> or select <name> = <expression>' }))
       const res = store.selectFromExpr(normalized)
       if (res.error) return err(tt({ zh: `选择错误: ${res.error}`, en: `Selection error: ${res.error}` }))
-      ok(tt({ zh: `已选择 ${res.count.toLocaleString()} 个原子`, en: `${res.count.toLocaleString()} atoms selected` }))
+      ok(tt({ zh: `已选择 ${res.count.toLocaleString(loc())} 个原子`, en: `${res.count.toLocaleString(loc())} atoms selected` }))
     }
     return
   }
@@ -917,7 +917,7 @@ export function runCommand(raw: string): void {
     const fields = (tail || 'name resn resi chain').split(/[\s,+]+/).filter(Boolean)
     const upper = 20 // 输出上限（防刷屏；PyMOL 无上限但命令行面板有）
     let n = 0
-    ok(tt({ zh: `iterate ${expr ? `(${expr})` : '(all)'} —— ${idx.length.toLocaleString()} 原子${idx.length > upper ? `（前 ${upper} 行）` : ''}:`, en: `iterate ${expr ? `(${expr})` : '(all)'} — ${idx.length.toLocaleString()} atoms${idx.length > upper ? ` (first ${upper} rows)` : ''}:` }))
+    ok(tt({ zh: `iterate ${expr ? `(${expr})` : '(all)'} —— ${idx.length.toLocaleString(loc())} 原子${idx.length > upper ? `（前 ${upper} 行）` : ''}:`, en: `iterate ${expr ? `(${expr})` : '(all)'} — ${idx.length.toLocaleString(loc())} atoms${idx.length > upper ? ` (first ${upper} rows)` : ''}:` }))
     for (const i of idx) {
       if (n >= upper) break
       const vals: Record<string, string | number> = {
@@ -971,7 +971,7 @@ export function runCommand(raw: string): void {
       n++
     }
     useMolStore.getState().bumpVisual()
-    return ok(tt({ zh: `已修改 ${n.toLocaleString()} 个原子的 ${field}（putty/spectrum b 可见效果）`, en: `Modified ${field} on ${n.toLocaleString()} atoms (visible via putty/spectrum b)` }))
+    return ok(tt({ zh: `已修改 ${n.toLocaleString(loc())} 个原子的 ${field}（putty/spectrum b 可见效果）`, en: `Modified ${field} on ${n.toLocaleString(loc())} atoms (visible via putty/spectrum b)` }))
   }
 
   if (cmd === 'cell') {
@@ -1059,7 +1059,7 @@ export function runCommand(raw: string): void {
     if (!target) return err(tt({ zh: '没有活动结构（close <名> 指定，或 close all）', en: 'No active structure (specify close <name>, or close all)' }))
     const atoms = target.summary.atoms
     s.removeStructure(target.id)
-    return ok(tt({ zh: `已关闭 ${target.name}（${atoms.toLocaleString()} 原子）。结构卡片 X 按钮关闭时 toast 内可撤销`, en: `Closed ${target.name} (${atoms.toLocaleString()} atoms). Undo is available in the toast when closing via the structure card X button` }))
+    return ok(tt({ zh: `已关闭 ${target.name}（${atoms.toLocaleString(loc())} 原子）。结构卡片 X 按钮关闭时 toast 内可撤销`, en: `Closed ${target.name} (${atoms.toLocaleString(loc())} atoms). Undo is available in the toast when closing via the structure card X button` }))
   }
 
   if (cmd === 'clear' || cmd === 'reset') {
@@ -1093,7 +1093,7 @@ export function runCommand(raw: string): void {
         cnt = indices.length
       }
       whenEngineReady(() => engineRef.current?.orient(refs))
-      return ok(cnt ? tt({ zh: `已按主轴对齐视角（${cnt.toLocaleString()} 个原子，PCA）`, en: `View aligned to principal axes (${cnt.toLocaleString()} atoms, PCA)` }) : tt({ zh: '已按主轴对齐视角（全部可见结构）', en: 'View aligned to principal axes (all visible structures)' }))
+      return ok(cnt ? tt({ zh: `已按主轴对齐视角（${cnt.toLocaleString(loc())} 个原子，PCA）`, en: `View aligned to principal axes (${cnt.toLocaleString(loc())} atoms, PCA)` }) : tt({ zh: '已按主轴对齐视角（全部可见结构）', en: 'View aligned to principal axes (all visible structures)' }))
     }
     if (rest) {
       if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
@@ -1105,7 +1105,7 @@ export function runCommand(raw: string): void {
       const indices = maskToIndices(r.mask)
       if (!indices.length) return err(tt({ zh: '选择为空', en: 'Selection is empty' }))
       eng.orient([{ structureId: s.activeId, indices }])
-      return ok(tt({ zh: `已按主轴对齐视角（${indices.length.toLocaleString()} 个原子，PCA）`, en: `View aligned to principal axes (${indices.length.toLocaleString()} atoms, PCA)` }))
+      return ok(tt({ zh: `已按主轴对齐视角（${indices.length.toLocaleString(loc())} 个原子，PCA）`, en: `View aligned to principal axes (${indices.length.toLocaleString(loc())} atoms, PCA)` }))
     }
     eng.orient()
     return ok(tt({ zh: '已按主轴对齐视角（全部可见结构）', en: 'View aligned to principal axes (all visible structures)' }))
@@ -1300,7 +1300,7 @@ export function runCommand(raw: string): void {
         if (!x.visible) continue
         n += dataRegistry.get(x.id)?.atoms.count ?? 0
       }
-      return ok(tt({ zh: `可见结构共 ${n.toLocaleString()} 个原子（${s.structures.filter(x => x.visible).length} 个对象）`, en: `${n.toLocaleString()} atoms in visible structures (${s.structures.filter(x => x.visible).length} objects)` }))
+      return ok(tt({ zh: `可见结构共 ${n.toLocaleString(loc())} 个原子（${s.structures.filter(x => x.visible).length} 个对象）`, en: `${n.toLocaleString(loc())} atoms in visible structures (${s.structures.filter(x => x.visible).length} objects)` }))
     }
     if (!s.activeId) return err(tt({ zh: '没有活动结构', en: 'No active structure' }))
     const data = dataRegistry.get(s.activeId)
@@ -1308,7 +1308,7 @@ export function runCommand(raw: string): void {
     const named = buildNamedMasks(s.activeId, data)
     const r = evaluateSelection(rest, { structure: data, named })
     if (r.error) return err(tt({ zh: `选择错误: ${r.error}`, en: `Selection error: ${r.error}` }))
-    return ok(tt({ zh: `选择包含 ${r.count.toLocaleString()} 个原子（不改变当前选择）`, en: `Selection contains ${r.count.toLocaleString()} atoms (current selection unchanged)` }))
+    return ok(tt({ zh: `选择包含 ${r.count.toLocaleString(loc())} 个原子（不改变当前选择）`, en: `Selection contains ${r.count.toLocaleString(loc())} atoms (current selection unchanged)` }))
   }
 
   if (cmd === 'create') {
@@ -1335,8 +1335,8 @@ export function runCommand(raw: string): void {
       const id = useMolStore.getState().addStructure(sub, name, ms)
       // 生成 PDB 文本登记（会话持久化用；坐标为当前世界坐标）
       textRegistry.set(id, structureToPdbText(sub))
-      useMolStore.getState().appendLog('out', tt({ zh: `已创建对象 ${name}：${sub.atoms.count.toLocaleString()} 原子 · ${sub.residues.length} 残基 · ${ms.toFixed(0)} ms（源：${entry.name}）`, en: `Object ${name} created: ${sub.atoms.count.toLocaleString()} atoms · ${sub.residues.length} residues · ${ms.toFixed(0)} ms (from: ${entry.name})` }))
-      return ok(tt({ zh: `对象 "${name}" 已创建（${r.count.toLocaleString()} 原子）——可用 show/color 独立控制，已自动登记进会话存档`, en: `Object "${name}" created (${r.count.toLocaleString()} atoms) — control independently with show/color; registered in the session archive` }))
+      useMolStore.getState().appendLog('out', tt({ zh: `已创建对象 ${name}：${sub.atoms.count.toLocaleString(loc())} 原子 · ${sub.residues.length} 残基 · ${ms.toFixed(0)} ms（源：${entry.name}）`, en: `Object ${name} created: ${sub.atoms.count.toLocaleString(loc())} atoms · ${sub.residues.length} residues · ${ms.toFixed(0)} ms (from: ${entry.name})` }))
+      return ok(tt({ zh: `对象 "${name}" 已创建（${r.count.toLocaleString(loc())} 原子）——可用 show/color 独立控制，已自动登记进会话存档`, en: `Object "${name}" created (${r.count.toLocaleString(loc())} atoms) — control independently with show/color; registered in the session archive` }))
     } catch (e) {
       return err(tt({ zh: `创建失败：${e instanceof Error ? e.message : String(e)}`, en: `Create failed: ${e instanceof Error ? e.message : String(e)}` }))
     }
@@ -1414,7 +1414,7 @@ export function runCommand(raw: string): void {
         structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
         visualRev: s2.visualRev + 1,
       }))
-      return ok(tt({ zh: `已 util.cbss：卡通按二级结构（螺旋红 · 折叠黄 · 环灰），配体/水/离子 ${n.toLocaleString()} 原子回元素灰基色——PyMOL 经典组合`, en: `util.cbss: cartoons by secondary structure (helix red · sheet yellow · loop gray), ${n.toLocaleString()} ligand/water/ion atoms back to element gray base — the classic PyMOL combo` }))
+      return ok(tt({ zh: `已 util.cbss：卡通按二级结构（螺旋红 · 折叠黄 · 环灰），配体/水/离子 ${n.toLocaleString(loc())} 原子回元素灰基色——PyMOL 经典组合`, en: `util.cbss: cartoons by secondary structure (helix red · sheet yellow · loop gray), ${n.toLocaleString(loc())} ligand/water/ion atoms back to element gray base — the classic PyMOL combo` }))
     }
     if (sub === 'cbao') {
       // PyMOL util.cbao：元素色 + 环境光遮蔽提示（本工具 ao 即 ssao）——PyMOL 用户迁移最顺手的「立体感一键」
@@ -1443,7 +1443,7 @@ export function runCommand(raw: string): void {
         structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
         visualRev: s2.visualRev + 1,
       }))
-      return ok(tt({ zh: `已按元素着色 + 碳${sub === 'cbaw' ? '白' : '灰'}（util.${sub}，${n.toLocaleString()} 个碳原子）——适合白底论文图`, en: `Element coloring + ${sub === 'cbaw' ? 'white' : 'gray'} carbons (util.${sub}, ${n.toLocaleString()} carbon atoms) — good for white-background figures` }))
+      return ok(tt({ zh: `已按元素着色 + 碳${sub === 'cbaw' ? '白' : '灰'}（util.${sub}，${n.toLocaleString(loc())} 个碳原子）——适合白底论文图`, en: `Element coloring + ${sub === 'cbaw' ? 'white' : 'gray'} carbons (util.${sub}, ${n.toLocaleString(loc())} carbon atoms) — good for white-background figures` }))
     }
     return err(tt({ zh: '用法：util cbc | cnc | ss | cbss | cbao | cbaw | cbac（按链 / 灰化 / 二级结构 / SS卡通+配体基色 / 元素+AO立体 / 元素+白碳 / 元素+灰碳）', en: 'Usage: util cbc | cnc | ss | cbss | cbao | cbaw | cbac (by-chain / gray / secondary structure / SS cartoon + ligand base color / element + AO depth / element + white C / element + gray C)' }))
   }
@@ -1749,10 +1749,10 @@ export function runCommand(raw: string): void {
       return err(tt({ zh: '未加载密度图。用法：map fetch <PDB编号> | map fofc <PDB编号> | isolevel <σ> | mesh | surface | both | hide | show | off（未加载的结构会自动获取；也可拖入 .ccp4/.map/.mrc 文件）', en: 'No map loaded. Usage: map fetch <PDB ID> | map fofc <PDB ID> | isolevel <σ> | mesh | surface | both | hide | show | off (an unloaded structure is auto-fetched; you can also drop a .ccp4/.map/.mrc file)' }))
     }
     return ok(tt({
-      zh: `密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString()} 三角形 · ${info.difference
+      zh: `密度图 ${info.name}：${info.dims.join('×')} 体素 · ${info.triangles.toLocaleString(loc())} 三角形 · ${info.difference
         ? (Math.abs(info.iso - info.isoNeg) < 1e-6 ? `±${info.iso.toFixed(1)}σ 差图` : `+${info.iso.toFixed(1)}/−${info.isoNeg.toFixed(1)}σ 差图`)
         : `${info.iso.toFixed(1)} σ`} · 模式 ${info.mode}${info.truncated ? '（已截断）' : ''} · rms ${info.rms.toFixed(3)}`,
-      en: `Map ${info.name}: ${info.dims.join('×')} voxels · ${info.triangles.toLocaleString()} triangles · ${info.difference
+      en: `Map ${info.name}: ${info.dims.join('×')} voxels · ${info.triangles.toLocaleString(loc())} triangles · ${info.difference
         ? (Math.abs(info.iso - info.isoNeg) < 1e-6 ? `±${info.iso.toFixed(1)}σ difference map` : `+${info.iso.toFixed(1)}/−${info.isoNeg.toFixed(1)}σ difference map`)
         : `${info.iso.toFixed(1)} σ`} · mode ${info.mode}${info.truncated ? ' (truncated)' : ''} · rms ${info.rms.toFixed(3)}`,
     }))
@@ -1832,7 +1832,7 @@ export function runCommand(raw: string): void {
     const skipped = r.skippedSurfaces.length
       ? tt({ zh: `；跳过 ${r.skippedSurfaces.length} 个表面表示（等值面无矢量原语）`, en: `; skipped ${r.skippedSurfaces.length} surface representation(s) (isosurfaces have no vector primitives)` })
       : ''
-    return ok(tt({ zh: `已导出矢量图 ${r.width}×${r.height} · ${r.items.toLocaleString()} 个原语 · ${r.ms.toFixed(0)} ms${skipped}——SVG 无限缩放不失真，可直接入稿`, en: `Vector image exported ${r.width}×${r.height} · ${r.items.toLocaleString()} primitives · ${r.ms.toFixed(0)} ms${skipped} — SVG scales losslessly, ready for publication` }))
+    return ok(tt({ zh: `已导出矢量图 ${r.width}×${r.height} · ${r.items.toLocaleString(loc())} 个原语 · ${r.ms.toFixed(0)} ms${skipped}——SVG 无限缩放不失真，可直接入稿`, en: `Vector image exported ${r.width}×${r.height} · ${r.items.toLocaleString(loc())} primitives · ${r.ms.toFixed(0)} ms${skipped} — SVG scales losslessly, ready for publication` }))
   }
 
   if (cmd === 'deselect' || cmd === 'desel') {
@@ -1874,8 +1874,8 @@ export function runCommand(raw: string): void {
         ? ''
         : tt({ zh: '。提示：范围写 byres(within 4.5 of (ligand)) and not water 可同时画出配体-残基氢键（含配体本身）', en: '. Tip: scope byres(within 4.5 of (ligand)) and not water also draws ligand–residue H-bonds (including the ligand itself)' })
       return ok(tt({
-        zh: `氢键已烘焙范围「${scopeExpr}」（${idx.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}）——不随 deselect 清除，端点球同步显示${scopeHint}`,
-        en: `H-bonds baked to scope "${scopeExpr}" (within ${idx.length.toLocaleString()} atoms${!isNaN(dist) && dist >= 2 && dist <= 6 ? `, distance limit ${dist} Å` : ''}) — not cleared by deselect, endpoint spheres shown${scopeHint}`,
+        zh: `氢键已烘焙范围「${scopeExpr}」（${idx.length.toLocaleString(loc())} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}）——不随 deselect 清除，端点球同步显示${scopeHint}`,
+        en: `H-bonds baked to scope "${scopeExpr}" (within ${idx.length.toLocaleString(loc())} atoms${!isNaN(dist) && dist >= 2 && dist <= 6 ? `, distance limit ${dist} Å` : ''}) — not cleared by deselect, endpoint spheres shown${scopeHint}`,
       }))
     }
     let dist = parseFloat(parts[2] ?? '')
@@ -1885,9 +1885,9 @@ export function runCommand(raw: string): void {
     s.updateSettings(patch)
     const hasSel = s.selection.indices.length > 0
     const scope = s.hbondScope
-    if (scope) return ok(tt({ zh: `氢键网络开启（烘焙范围 ${scope.indices.length.toLocaleString()} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}，deselect 不影响）`, en: `H-bond network on (within baked scope of ${scope.indices.length.toLocaleString()} atoms${!isNaN(dist) && dist >= 2 && dist <= 6 ? `, distance limit ${dist} Å` : ''}; deselect has no effect)` }))
+    if (scope) return ok(tt({ zh: `氢键网络开启（烘焙范围 ${scope.indices.length.toLocaleString(loc())} 原子内${!isNaN(dist) && dist >= 2 && dist <= 6 ? `，距离上限 ${dist} Å` : ''}，deselect 不影响）`, en: `H-bond network on (within baked scope of ${scope.indices.length.toLocaleString(loc())} atoms${!isNaN(dist) && dist >= 2 && dist <= 6 ? `, distance limit ${dist} Å` : ''}; deselect has no effect)` }))
     const scope2 = s.settings.hbondSelOnly
-      ? (hasSel ? tt({ zh: `当前选择集（${s.selection.indices.length.toLocaleString()} 原子）范围内`, en: `within the current selection (${s.selection.indices.length.toLocaleString()} atoms)` }) : tt({ zh: '仅选择集模式：请先选择残基/链，或用 hbonds on 3.4 in <表达式> 烘焙独立范围（不随 deselect 清除）', en: 'Selection-only mode: select residues/chains first, or bake a standalone scope with hbonds on 3.4 in <expression> (survives deselect)' }))
+      ? (hasSel ? tt({ zh: `当前选择集（${s.selection.indices.length.toLocaleString(loc())} 原子）范围内`, en: `within the current selection (${s.selection.indices.length.toLocaleString(loc())} atoms)` }) : tt({ zh: '仅选择集模式：请先选择残基/链，或用 hbonds on 3.4 in <表达式> 烘焙独立范围（不随 deselect 清除）', en: 'Selection-only mode: select residues/chains first, or bake a standalone scope with hbonds on 3.4 in <expression> (survives deselect)' }))
       : tt({ zh: '全结构网络（大结构较密，可在场景面板开启「仅选择集」缩小范围）', en: 'whole-structure network (dense for large structures; enable "selection only" in the scene panel to narrow the scope)' })
     return ok(tt({ zh: `氢键网络开启${!isNaN(dist) && dist >= 2 && dist <= 6 ? `（距离上限 ${dist} Å）` : ''}——${scope2}，快捷键 B 切换`, en: `H-bond network on${!isNaN(dist) && dist >= 2 && dist <= 6 ? ` (distance limit ${dist} Å)` : ''} — ${scope2}, hotkey B toggles` }))
   }
@@ -2253,7 +2253,7 @@ export function runCommand(raw: string): void {
     a.download = fileName.toLowerCase().endsWith('.ent') ? fileName : fileName.replace(/\.[^.]*$/, '') + '.pdb'
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 5000)
-    return ok(tt({ zh: `已导出 ${atomCount.toLocaleString()} 个原子 → ${a.download}${expr ? `（选择：${expr}）` : ''}（世界坐标，含 CRYST1）`, en: `Exported ${atomCount.toLocaleString()} atoms → ${a.download}${expr ? ` (selection: ${expr})` : ''} (world coordinates, incl. CRYST1)` }))
+    return ok(tt({ zh: `已导出 ${atomCount.toLocaleString(loc())} 个原子 → ${a.download}${expr ? `（选择：${expr}）` : ''}（世界坐标，含 CRYST1）`, en: `Exported ${atomCount.toLocaleString(loc())} atoms → ${a.download}${expr ? ` (selection: ${expr})` : ''} (world coordinates, incl. CRYST1)` }))
   }
 
   if (cmd === 'morph') {
@@ -2298,8 +2298,8 @@ export function runCommand(raw: string): void {
         const id = useMolStore.getState().addStructure(r.data, name, ms)
         textRegistry.set(id, structureToPdbText(r.data))
         const chainInfo = r.matchedChains.map(([a, b]) => `${a}↔${b}`).join(' ')
-        ok(tt({ zh: `多态 morph 对象 "${name}" 已创建：${r.knots} 个构象态 · ${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基 · ${r.frames} 帧（Catmull-Rom 样条，${ms.toFixed(0)} ms）${chainInfo ? ` · 链对 ${chainInfo}` : ''}`, en: `Multi-state morph object "${name}" created: ${r.knots} conformational states · ${r.matchedAtoms.toLocaleString()} atoms · ${r.matchedResidues.toLocaleString()} residues · ${r.frames} frames (Catmull-Rom spline, ${ms.toFixed(0)} ms)${chainInfo ? ` · chain pairs ${chainInfo}` : ''}` }))
-        if (r.refine) ok(tt({ zh: `帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString()} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString()} 处`, en: `Frame refinement (rigimol-style): ${r.refine.bonds.toLocaleString()} bond-length constraints · mean bond-length drift of intermediate frames zeroed at ${r.refine.bondDrift.toFixed(3)} Å (max ${r.refine.maxDrift.toFixed(3)} Å) · fixed ${r.refine.clashesFixed.toLocaleString()} non-bonded clashes` }))
+        ok(tt({ zh: `多态 morph 对象 "${name}" 已创建：${r.knots} 个构象态 · ${r.matchedAtoms.toLocaleString(loc())} 原子 · ${r.matchedResidues.toLocaleString(loc())} 残基 · ${r.frames} 帧（Catmull-Rom 样条，${ms.toFixed(0)} ms）${chainInfo ? ` · 链对 ${chainInfo}` : ''}`, en: `Multi-state morph object "${name}" created: ${r.knots} conformational states · ${r.matchedAtoms.toLocaleString(loc())} atoms · ${r.matchedResidues.toLocaleString(loc())} residues · ${r.frames} frames (Catmull-Rom spline, ${ms.toFixed(0)} ms)${chainInfo ? ` · chain pairs ${chainInfo}` : ''}` }))
+        if (r.refine) ok(tt({ zh: `帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString(loc())} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString(loc())} 处`, en: `Frame refinement (rigimol-style): ${r.refine.bonds.toLocaleString(loc())} bond-length constraints · mean bond-length drift of intermediate frames zeroed at ${r.refine.bondDrift.toFixed(3)} Å (max ${r.refine.maxDrift.toFixed(3)} Å) · fixed ${r.refine.clashesFixed.toLocaleString(loc())} non-bonded clashes` }))
         else if (noRefine) ok(tt({ zh: '帧精修已关闭（norefine）：中间帧保留纯样条插值', en: 'Frame refinement off (norefine): intermediate frames keep pure spline interpolation' }))
         r.rmsds.forEach((rmsd, i) => {
           if (rmsd !== null) ok(tt({ zh: `构象 ${i + 2}（${structToks[i + 1]}）叠合到参考：CA RMSD ${rmsd.toFixed(2)} Å`, en: `Conformer ${i + 2} (${structToks[i + 1]}) superposed onto the reference: CA RMSD ${rmsd.toFixed(2)} Å` }))
@@ -2316,8 +2316,8 @@ export function runCommand(raw: string): void {
       const id = useMolStore.getState().addStructure(r.data, name, ms)
       textRegistry.set(id, structureToPdbText(r.data))
       const chainInfo = r.matchedChains.map(([a, b]) => `${a}↔${b}`).join(' ')
-      ok(tt({ zh: `morph 对象 "${name}" 已创建：${r.matchedAtoms.toLocaleString()} 原子 · ${r.matchedResidues.toLocaleString()} 残基对 · ${r.frames} 帧${chainInfo ? ` · 链对 ${chainInfo}` : ''}（${ms.toFixed(0)} ms）`, en: `Morph object "${name}" created: ${r.matchedAtoms.toLocaleString()} atoms · ${r.matchedResidues.toLocaleString()} residue pairs · ${r.frames} frames${chainInfo ? ` · chain pairs ${chainInfo}` : ''} (${ms.toFixed(0)} ms)` }))
-      if (r.refine) ok(tt({ zh: `帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString()} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString()} 处`, en: `Frame refinement (rigimol-style): ${r.refine.bonds.toLocaleString()} bond-length constraints · mean bond-length drift of intermediate frames zeroed at ${r.refine.bondDrift.toFixed(3)} Å (max ${r.refine.maxDrift.toFixed(3)} Å) · fixed ${r.refine.clashesFixed.toLocaleString()} non-bonded clashes` }))
+      ok(tt({ zh: `morph 对象 "${name}" 已创建：${r.matchedAtoms.toLocaleString(loc())} 原子 · ${r.matchedResidues.toLocaleString(loc())} 残基对 · ${r.frames} 帧${chainInfo ? ` · 链对 ${chainInfo}` : ''}（${ms.toFixed(0)} ms）`, en: `Morph object "${name}" created: ${r.matchedAtoms.toLocaleString(loc())} atoms · ${r.matchedResidues.toLocaleString(loc())} residue pairs · ${r.frames} frames${chainInfo ? ` · chain pairs ${chainInfo}` : ''} (${ms.toFixed(0)} ms)` }))
+      if (r.refine) ok(tt({ zh: `帧精修（rigimol 风格）：${r.refine.bonds.toLocaleString(loc())} 键长度约束 · 中间帧键长偏差均值 ${r.refine.bondDrift.toFixed(3)} Å 已归零（最大 ${r.refine.maxDrift.toFixed(3)} Å）· 修复非键碰撞 ${r.refine.clashesFixed.toLocaleString(loc())} 处`, en: `Frame refinement (rigimol-style): ${r.refine.bonds.toLocaleString(loc())} bond-length constraints · mean bond-length drift of intermediate frames zeroed at ${r.refine.bondDrift.toFixed(3)} Å (max ${r.refine.maxDrift.toFixed(3)} Å) · fixed ${r.refine.clashesFixed.toLocaleString(loc())} non-bonded clashes` }))
       else if (noRefine) ok(tt({ zh: '帧精修已关闭（norefine）：中间帧保留纯插值', en: 'Frame refinement off (norefine): intermediate frames keep pure interpolation' }))
       if (r.alignRmsd !== null) ok(tt({ zh: `自动叠合 ${entries[1]!.name} → ${entries[0]!.name}：CA RMSD ${r.alignRmsd.toFixed(2)} Å（内存中完成，不改动原结构）`, en: `Auto-superposed ${entries[1]!.name} → ${entries[0]!.name}: CA RMSD ${r.alignRmsd.toFixed(2)} Å (in memory; original structures untouched)` }))
       if (r.strategy === 'identity') ok(tt({ zh: '匹配策略：恒等（同源结构按原子序对应）', en: 'Matching strategy: identity (homologous structures matched by atom order)' }))

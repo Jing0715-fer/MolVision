@@ -701,6 +701,8 @@ export interface ProviderConfig {
   apiKey?: string
   baseURL?: string
   defaultModel?: string
+  /** 流式/非流式补全超时（毫秒，5s-600s）：缺省按模型分档（推理类 120s / 常规 60s） */
+  timeoutMs?: number
   /** 最近一次 /models 探测结果（前端合并目录展示） */
   discoveredModels?: DiscoveredModel[]
 }
@@ -772,6 +774,35 @@ export function resolveModel(id: string): string | undefined {
   return conf?.defaultModel?.trim() || profile.defaultModel || undefined
 }
 
+/** Base URL 安全校验：仅允许 http(s)、拒绝 userinfo/畸形 URL（收敛 SSRF 反射面）。
+ *  本地单机工具语义：环回/私网地址放行（mock-llm 联调等合法场景）；
+ *  多用户部署前请设置 MOLVISION_API_TOKEN 开启 API 鉴权（见 src/proxy.ts，Next 16 约定）。 */
+export function sanitizeBaseURL(raw: string): { ok: true; url: string } | { ok: false; zh: string; en: string } {
+  const s = raw.trim()
+  if (!s) return { ok: false, zh: 'Base URL 为空', en: 'Base URL is empty' }
+  if (!/^https?:\/\//i.test(s)) return { ok: false, zh: 'Base URL 必须以 http:// 或 https:// 开头', en: 'Base URL must start with http:// or https://' }
+  let u: URL
+  try { u = new URL(s) } catch { return { ok: false, zh: 'Base URL 不是合法 URL', en: 'Base URL is not a valid URL' } }
+  if (u.username || u.password) return { ok: false, zh: 'Base URL 不允许携带 userinfo（user:pass@host）', en: 'Base URL must not contain userinfo (user:pass@host)' }
+  if (!u.hostname || /\s/.test(u.hostname)) return { ok: false, zh: 'Base URL 主机名无效', en: 'Base URL hostname is invalid' }
+  // 规范化：丢弃 query/hash，去除尾部多余斜杠（拼接 /chat/completions 语义不变）
+  return { ok: true, url: `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '')}` }
+}
+
+/** 推理/思考类模型生成更长——超时默认分档（ProviderConfig.timeoutMs 可显式覆盖） */
+function defaultTimeoutForModel(modelId: string): number {
+  const s = modelId.toLowerCase()
+  if (/\bo[134]\b|\br1\b|thinking|reasoner|deepseek-r|qwq|extended-thinking|glm-4\.[5-9]/.test(s)) return 120_000
+  return 60_000
+}
+
+/** 解析生效补全超时（毫秒）：显式配置（5s-600s 合法窗）> 模型分档默认 */
+export function resolveTimeoutMs(providerId: string): number {
+  const raw = loadStore().configs[providerId]?.timeoutMs
+  const explicit = typeof raw === 'number' && Number.isFinite(raw) && raw >= 5_000 && raw <= 600_000 ? raw : undefined
+  return explicit ?? defaultTimeoutForModel(resolveModel(providerId) ?? '')
+}
+
 /** 当前默认供应商 id（zai 保底） */
 export function getDefaultProviderId(): string {
   return loadStore().default
@@ -786,8 +817,17 @@ export function setDefaultProviderId(id: string): boolean {
 
 export function setProviderConfig(id: string, patch: ProviderConfig): boolean {
   if (!getProviderProfile(id)) return false
+  // baseURL 入库前防御性净化（API 层已先行校验并回 400；此处失败即拒绝保存，防未来新调用方绕过）
+  if (patch.baseURL !== undefined && patch.baseURL.trim() !== '') {
+    const san = sanitizeBaseURL(patch.baseURL)
+    if (!san.ok) return false
+    patch = { ...patch, baseURL: san.url }
+  }
   const store = loadStore()
   const prev = store.configs[id] ?? {}
+  // timeoutMs 钳制到合法窗（非数值/越界 → 清除，回落模型分档默认）
+  const t = typeof patch.timeoutMs === 'number' && Number.isFinite(patch.timeoutMs) ? Math.round(patch.timeoutMs) : undefined
+  const timeoutMs = t !== undefined && t >= 5_000 && t <= 600_000 ? t : undefined
   // apiKey 省略 = 保留原值；显式空串 = 清除
   const next: ProviderConfig = {
     ...prev,
@@ -795,6 +835,7 @@ export function setProviderConfig(id: string, patch: ProviderConfig): boolean {
     apiKey: patch.apiKey === undefined ? prev.apiKey : patch.apiKey.trim() || undefined,
     baseURL: (patch.baseURL ?? prev.baseURL)?.trim() || undefined,
     defaultModel: (patch.defaultModel ?? prev.defaultModel)?.trim() || undefined,
+    timeoutMs: patch.timeoutMs === undefined ? prev.timeoutMs : timeoutMs,
     discoveredModels: patch.discoveredModels === undefined ? prev.discoveredModels : patch.discoveredModels,
   }
   saveStore({ ...store, configs: { ...store.configs, [id]: next } })
@@ -832,6 +873,8 @@ export interface ProviderStatus extends ProviderProfile {
   envKeySource: boolean
   /** 目录模型 + 探测模型（去重合并，探测优先） */
   availableModels: AvailableModel[]
+  /** 当前生效请求超时（毫秒）：显式配置 > 模型分档默认（推理类 120s / 常规 60s） */
+  effectiveTimeoutMs: number
 }
 
 /** 目录 + 探测合并（同 id 探测版优先，保留目录命名） */
@@ -872,6 +915,7 @@ export function listProviderStatus(): ProviderStatus[] {
       maskedKey: key ? `${key.slice(0, 4)}…${key.slice(-4)}` : null,
       envKeySource: envKey,
       availableModels: mergeAvailableModels(p, conf?.discoveredModels),
+      effectiveTimeoutMs: resolveTimeoutMs(p.id),
     }
   })
 }
@@ -939,11 +983,11 @@ export async function chatCompletionOnce(
   messages: ChatMessage[],
   opts: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<string> {
-  const { baseURL, apiKey, headers, model, locale } = await prepareRequest(providerId)
+  const { baseURL, apiKey, headers, model, locale, defaultTimeout } = await prepareRequest(providerId)
   const controller = new AbortController()
   // 超时中止带 TimeoutError reason（controller.abort(reason)）：与外部 signal 的 AbortError
-  // （客户端取消）区分——调用方对前者可重试、对后者应立即放弃
-  const timer = setTimeout(() => controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError')), opts.timeoutMs ?? 60_000)
+  // （客户端取消）区分——调用方对前者可重试、对后者应立即放弃；默认档随模型分档（推理类 120s）
+  const timer = setTimeout(() => controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError')), opts.timeoutMs ?? defaultTimeout)
   const onAbort = () => controller.abort()
   opts.signal?.addEventListener('abort', onAbort)
   try {
@@ -971,12 +1015,13 @@ export async function chatCompletionStream(
   messages: ChatMessage[],
   opts: { onDelta?: (piece: string) => void; signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<string> {
-  const { baseURL, apiKey, headers, model, locale } = await prepareRequest(providerId)
-  // 上游 fetch 兜底超时：外部 signal（客户端取消传播）与 60s 超时合并——任一触发即中止连接，
-  // 上游挂起时不再占着连接等自然结束（与非流式 chatCompletionOnce 的 60s 兜底对齐；
+  const { baseURL, apiKey, headers, model, locale, defaultTimeout } = await prepareRequest(providerId)
+  // 上游 fetch 兜底超时：外部 signal（客户端取消传播）与分档超时合并——任一触发即中止连接，
+  // 上游挂起时不再占着连接等自然结束（与非流式 chatCompletionOnce 对齐；
   // Node 20+ 的 AbortSignal.any 直接可用——超时帧经 any 合并后 fetch 以 TimeoutError 拒绝，
-  // 与客户端取消的 AbortError 可区分：前者按上游瞬时故障重试，后者视为主动取消不重试）
-  const timeoutSignal = AbortSignal.timeout(opts.timeoutMs ?? 60_000)
+  // 与客户端取消的 AbortError 可区分：前者按上游瞬时故障重试，后者视为主动取消不重试）；
+  // 默认档随模型分档：推理/思考类 120s（长生成），常规 60s——ProviderConfig.timeoutMs 可显式覆盖
+  const timeoutSignal = AbortSignal.timeout(opts.timeoutMs ?? defaultTimeout)
   const signal = opts.signal ? AbortSignal.any([opts.signal, timeoutSignal]) : timeoutSignal
   const res = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
@@ -1022,12 +1067,16 @@ export async function chatCompletionStream(
 }
 
 /** 组装认证请求头 + 校验配置完备（async：错误文案需请求级 locale） */
-async function prepareRequest(providerId: string): Promise<{ baseURL: string; apiKey: string; headers: Record<string, string>; model: string; locale: Locale }> {
+async function prepareRequest(providerId: string): Promise<{ baseURL: string; apiKey: string; headers: Record<string, string>; model: string; locale: Locale; defaultTimeout: number }> {
   const locale = await reqLocale()
   const profile = getProviderProfile(providerId)
   if (!profile) throw new Error(bt(locale, `未知供应商：${providerId}`, `Unknown provider: ${providerId}`))
-  const baseURL = resolveBaseURL(providerId)
-  if (!baseURL) throw new Error(bt(locale, `供应商 ${profile.displayName} 未配置 Base URL`, `Provider ${profile.displayNameEn ?? profile.displayName} has no Base URL configured`))
+  const baseURLRaw = resolveBaseURL(providerId)
+  if (!baseURLRaw) throw new Error(bt(locale, `供应商 ${profile.displayName} 未配置 Base URL`, `Provider ${profile.displayNameEn ?? profile.displayName} has no Base URL configured`))
+  // 运行面二次卡点：历史脏数据/环境变量注入的非常规 URL 在出站前拦截
+  const san = sanitizeBaseURL(baseURLRaw)
+  if (!san.ok) throw new Error(bt(locale, `Base URL 无效：${san.zh}`, `Invalid Base URL: ${san.en}`))
+  const baseURL = san.url
   const apiKey = resolveApiKey(providerId)
   if (!apiKey) throw new Error(bt(locale, `供应商 ${profile.displayName} 未配置 API Key（设置页或环境变量 ${profile.apiKeyEnv}）`, `Provider ${profile.displayNameEn ?? profile.displayName} has no API Key configured (settings page or env var ${profile.apiKeyEnv})`))
   const model = resolveModel(providerId)
@@ -1036,5 +1085,5 @@ async function prepareRequest(providerId: string): Promise<{ baseURL: string; ap
     [profile.authHeader ?? 'Authorization']: `${profile.authPrefix ?? 'Bearer '}${apiKey}`,
     ...(profile.extraHeaders ?? {}),
   }
-  return { baseURL: baseURL.replace(/\/$/, ''), apiKey, headers, model, locale }
+  return { baseURL, apiKey, headers, model, locale, defaultTimeout: resolveTimeoutMs(providerId) }
 }

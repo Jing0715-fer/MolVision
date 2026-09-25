@@ -191,13 +191,13 @@ export function CommandPalette() {
     return structures.map(st => ({
       id: `st:${st.id}`,
       label: { zh: `切换到 ${st.name}`, en: `Switch to ${st.name}` },
-      desc: { zh: `${st.summary.atoms.toLocaleString()} 原子 · ${st.summary.chains} 链${st.id === activeId ? ' · 当前活动' : ''}`, en: `${st.summary.atoms.toLocaleString()} atoms · ${st.summary.chains} chains${st.id === activeId ? ' · active' : ''}` },
+      desc: { zh: `${st.summary.atoms.toLocaleString(locale)} 原子 · ${st.summary.chains} 链${st.id === activeId ? ' · 当前活动' : ''}`, en: `${st.summary.atoms.toLocaleString(locale)} atoms · ${st.summary.chains} chains${st.id === activeId ? ' · active' : ''}` },
       run: `activate ${st.name}`,
       fill: 'activate ',
       icon: Boxes,
       iconCls: st.id === activeId ? 'text-primary' : 'text-muted-foreground',
     }))
-  }, [structures, activeId])
+  }, [structures, activeId, locale])
 
   // ---------- 行为 ----------
   const execute = (item: PaletteItem) => {

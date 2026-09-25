@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
 import { maskToIndices, evaluateSelection, PRESET_SELECTIONS } from '@/lib/molecular/selection'
 import { buildNamedMasks } from '@/lib/molecular/store'
-import { useI18n, tt, type DualText } from '@/i18n'
+import { useI18n, tt, loc, type DualText } from '@/i18n'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Input } from '@/components/ui/input'
 
@@ -25,7 +25,7 @@ const QUICK_EXPRS: { expr: string; label: DualText }[] = [
 ]
 
 export function SelectionPanel() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [expr, setExpr] = useState('')
   const [name, setName] = useState('')
   const selection = useMolStore(s => s.selection)
@@ -60,7 +60,7 @@ export function SelectionPanel() {
     if (!expr.trim()) return
     const res = selectFromExpr(expr)
     if (res.error) toast.error(`${tt({ zh: '选择错误：', en: 'Selection error: ' })}${res.error}`)
-    else toast.success(tt({ zh: `已选择 ${res.count.toLocaleString()} 个原子`, en: `Selected ${res.count.toLocaleString()} atoms` }))
+    else toast.success(tt({ zh: `已选择 ${res.count.toLocaleString(loc())} 个原子`, en: `Selected ${res.count.toLocaleString(loc())} atoms` }))
   }
 
   return (
@@ -102,15 +102,15 @@ export function SelectionPanel() {
         <div className="mx-2 rounded-lg border border-primary/60 bg-primary/5 p-3">
           <div className="grid grid-cols-2 gap-y-1.5 text-[11px] tabular-nums">
             <span className="text-muted-foreground">{t({ zh: '原子', en: 'Atoms' })}</span>
-            <span className="text-right font-mono font-semibold">{stats.atoms.toLocaleString()}</span>
+            <span className="text-right font-mono font-semibold">{stats.atoms.toLocaleString(locale)}</span>
             <span className="text-muted-foreground">{t({ zh: '残基', en: 'Residues' })}</span>
-            <span className="text-right font-mono">{stats.residues.toLocaleString()}</span>
+            <span className="text-right font-mono">{stats.residues.toLocaleString(locale)}</span>
             <span className="text-muted-foreground">{t({ zh: '链', en: 'Chains' })}</span>
             <span className="text-right font-mono">{stats.chains}</span>
             {stats.het > 0 && (
               <>
                 <span className="text-muted-foreground">{t({ zh: '杂原子', en: 'Hetero atoms' })}</span>
-                <span className="text-right font-mono">{stats.het.toLocaleString()}</span>
+                <span className="text-right font-mono">{stats.het.toLocaleString(locale)}</span>
               </>
             )}
           </div>
@@ -179,7 +179,7 @@ export function SelectionPanel() {
             {namedSelections.map(ns => (
               <div key={ns.name} className="group flex items-center gap-2 rounded-md border-l-2 border-l-[#9c4a4a]/70 px-2 py-1.5 transition hover:bg-accent">
                 <span className="flex-1 truncate font-mono text-[11px] font-medium text-[#c76a6a] dark:text-[#d98a8a]">{ns.name}</span>
-                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{ns.count.toLocaleString()} at</span>
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{ns.count.toLocaleString(locale)} at</span>
                 <button
                   onClick={() => {
                     if (!data) return

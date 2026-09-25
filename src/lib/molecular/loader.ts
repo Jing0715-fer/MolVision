@@ -1,6 +1,6 @@
 // 结构加载：RCSB API 代理 / 本地文件
 import { toast } from 'sonner'
-import { tt, type DualText } from '@/i18n'
+import { tt, loc, type DualText } from '@/i18n'
 import { detectFormat, parseStructure } from './parser'
 import { useMolStore, engineRef } from './store'
 import { textRegistry } from './text-registry'
@@ -69,8 +69,8 @@ export function loadStructureText(text: string, name: string, format?: 'pdb' | '
       })
       toast.success(tt({ zh: `已加载 ${displayName}`, en: `Loaded ${displayName}` }), {
         description: tt({
-          zh: `${data.atoms.count.toLocaleString()} 原子 · ${data.residues.length.toLocaleString()} 残基 · ${data.chains.length} 条链 · 解析 ${ms < 1 ? '<1' : ms.toFixed(0)} ms`,
-          en: `${data.atoms.count.toLocaleString()} atoms · ${data.residues.length.toLocaleString()} residues · ${data.chains.length} chains · parsed in ${ms < 1 ? '<1' : ms.toFixed(0)} ms`,
+          zh: `${data.atoms.count.toLocaleString(loc())} 原子 · ${data.residues.length.toLocaleString(loc())} 残基 · ${data.chains.length} 条链 · 解析 ${ms < 1 ? '<1' : ms.toFixed(0)} ms`,
+          en: `${data.atoms.count.toLocaleString(loc())} atoms · ${data.residues.length.toLocaleString(loc())} residues · ${data.chains.length} chains · parsed in ${ms < 1 ? '<1' : ms.toFixed(0)} ms`,
         }),
       })
       useMolStore.getState().appendLog('out', tt({

@@ -30,6 +30,65 @@ function Matched({ text, q }: { text: string; q: string }) {
   )
 }
 
+/** 历史命令行（模块级组件：map 内联定义会让 React 每次渲染重建组件类型，
+ *  整棵子树重挂载丢失内部状态且无法享受复用——r65-c a11y/性能收口） */
+function HistoryRow({
+  cmd, pinnedRow, isPinned, q, t, onRun, onFill, onCopy,
+}: {
+  cmd: string
+  pinnedRow?: boolean
+  isPinned: boolean
+  q: string
+  t: ReturnType<typeof useI18n>['t']
+  onRun: (cmd: string) => void
+  onFill: (cmd: string) => void
+  onCopy: (cmd: string) => void
+}) {
+  return (
+    <div className={cn(
+      'group flex items-center gap-1.5 rounded-md border px-2 py-1.5 transition',
+      pinnedRow
+        ? 'border-border bg-muted/40 hover:border-foreground/20'
+        : 'border-transparent hover:border-border hover:bg-accent/40',
+    )}>
+      {pinnedRow && <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-500" />}
+      <button
+        onClick={() => onRun(cmd)}
+        className="min-w-0 flex-1 text-left font-mono text-[11px] leading-snug tabular-nums text-foreground/85 transition hover:text-foreground"
+        title={t({ zh: '点击执行（并打开控制台查看输出）', en: 'Click to run (opens the console to show output)' })}
+      >
+        <Matched text={cmd} q={q} />
+      </button>
+      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+        <button
+          onClick={() => toggleCmdPin(cmd)}
+          className={cn(
+            'flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-accent',
+            isPinned ? 'text-amber-500' : 'text-muted-foreground/60 hover:text-amber-500',
+          )}
+          title={isPinned ? t({ zh: '取消置顶', en: 'Unpin' }) : t({ zh: '置顶（常用工作流）', en: 'Pin (frequent workflows)' })}
+        >
+          <Star className={cn('h-3 w-3', isPinned && 'fill-current')} />
+        </button>
+        <button
+          onClick={() => onFill(cmd)}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-accent hover:text-foreground"
+          title={t({ zh: '填入控制台输入行编辑', en: 'Fill into the console input line for editing' })}
+        >
+          <PencilLine className="h-3 w-3" />
+        </button>
+        <button
+          onClick={() => onCopy(cmd)}
+          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-accent hover:text-foreground"
+          title={t({ zh: '复制命令', en: 'Copy command' })}
+        >
+          <Copy className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function HistoryDialog() {
   const { t } = useI18n()
   const open = useMolStore(s => s.ui.historyOpen)
@@ -75,53 +134,6 @@ export function HistoryDialog() {
     } catch {
       toast.error(tt({ zh: '复制失败（浏览器权限）', en: 'Copy failed (browser permission)' }))
     }
-  }
-
-  const Row = ({ cmd, pinnedRow }: { cmd: string; pinnedRow?: boolean }) => {
-    const isPinned = pins.includes(cmd)
-    return (
-      <div className={cn(
-        'group flex items-center gap-1.5 rounded-md border px-2 py-1.5 transition',
-        pinnedRow
-          ? 'border-border bg-muted/40 hover:border-foreground/20'
-          : 'border-transparent hover:border-border hover:bg-accent/40',
-      )}>
-        {pinnedRow && <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-500" />}
-        <button
-          onClick={() => run(cmd)}
-          className="min-w-0 flex-1 text-left font-mono text-[11px] leading-snug tabular-nums text-foreground/85 transition hover:text-foreground"
-          title={t({ zh: '点击执行（并打开控制台查看输出）', en: 'Click to run (opens the console to show output)' })}
-        >
-          <Matched text={cmd} q={q} />
-        </button>
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-          <button
-            onClick={() => toggleCmdPin(cmd)}
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-accent',
-              isPinned ? 'text-amber-500' : 'text-muted-foreground/60 hover:text-amber-500',
-            )}
-            title={isPinned ? t({ zh: '取消置顶', en: 'Unpin' }) : t({ zh: '置顶（常用工作流）', en: 'Pin (frequent workflows)' })}
-          >
-            <Star className={cn('h-3 w-3', isPinned && 'fill-current')} />
-          </button>
-          <button
-            onClick={() => fill(cmd)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-accent hover:text-foreground"
-            title={t({ zh: '填入控制台输入行编辑', en: 'Fill into the console input line for editing' })}
-          >
-            <PencilLine className="h-3 w-3" />
-          </button>
-          <button
-            onClick={() => copy(cmd)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-accent hover:text-foreground"
-            title={t({ zh: '复制命令', en: 'Copy command' })}
-          >
-            <Copy className="h-3 w-3" />
-          </button>
-        </div>
-      </div>
-    )
   }
 
   const total = history.length
@@ -208,7 +220,7 @@ export function HistoryDialog() {
                     <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> {t({ zh: '置顶', en: 'Pinned' })}
                   </div>
                   <div className="space-y-0.5">
-                    {pinned.map(cmd => <Row key={`p-${cmd}`} cmd={cmd} pinnedRow />)}
+                    {pinned.map(cmd => <HistoryRow key={`p-${cmd}`} cmd={cmd} pinnedRow isPinned={pins.includes(cmd)} q={q} t={t} onRun={run} onFill={fill} onCopy={copy} />)}
                   </div>
                 </div>
               )}
@@ -220,7 +232,7 @@ export function HistoryDialog() {
                     </div>
                   )}
                   <div className="space-y-0.5">
-                    {rest.slice(0, 120).map(cmd => <Row key={cmd} cmd={cmd} />)}
+                    {rest.slice(0, 120).map(cmd => <HistoryRow key={cmd} cmd={cmd} isPinned={pins.includes(cmd)} q={q} t={t} onRun={run} onFill={fill} onCopy={copy} />)}
                   </div>
                   {rest.length > 120 && (
                     <p className="px-2 pt-1.5 text-[10px] text-muted-foreground/60">

@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies, headers } from 'next/headers'
 import {
   listProviderStatus, getDefaultProviderId, setDefaultProviderId,
-  setProviderConfig, deleteProviderConfig, PROVIDER_CATALOG, type DiscoveredModel,
+  setProviderConfig, deleteProviderConfig, PROVIDER_CATALOG, sanitizeBaseURL, type DiscoveredModel,
 } from '@/lib/molecular/agent/providers'
 import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
 
@@ -49,7 +49,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const locale = await detectLocale()
-  let body: { providerId?: string; apiKey?: string; baseURL?: string; defaultModel?: string; discoveredModels?: unknown; setDefault?: boolean }
+  let body: { providerId?: string; apiKey?: string; baseURL?: string; defaultModel?: string; timeoutMs?: number; discoveredModels?: unknown; setDefault?: boolean }
   try {
     body = await request.json()
   } catch {
@@ -70,11 +70,23 @@ export async function POST(request: NextRequest) {
   if (!body.providerId) {
     return NextResponse.json({ error: errText(locale, 'providerId 必填', 'providerId is required') }, { status: 400 })
   }
+  // baseURL 入库前卡点（SSRF 反射面收敛：仅 http(s)、拒 userinfo/畸形 URL；环回/私网放行——本地单机语义）
+  if (body.baseURL !== undefined && body.baseURL.trim() !== '') {
+    const san = sanitizeBaseURL(body.baseURL)
+    if (!san.ok) return NextResponse.json({ error: errText(locale, san.zh, san.en) }, { status: 400 })
+    body.baseURL = san.url
+  }
+  // timeoutMs 类型卡点（非数值拒绝，防字符串注入存储）
+  if (body.timeoutMs !== undefined && (typeof body.timeoutMs !== 'number' || !Number.isFinite(body.timeoutMs))) {
+    return NextResponse.json({ error: errText(locale, 'timeoutMs 必须是数字（毫秒）', 'timeoutMs must be a number (milliseconds)') }, { status: 400 })
+  }
+
   const discoveredModels = sanitizeDiscovered(body.discoveredModels)
   const ok = setProviderConfig(body.providerId, {
     apiKey: body.apiKey,
     baseURL: body.baseURL,
     defaultModel: body.defaultModel,
+    ...(body.timeoutMs !== undefined ? { timeoutMs: body.timeoutMs } : {}),
     ...(discoveredModels !== undefined ? { discoveredModels } : {}),
   })
   if (!ok) return NextResponse.json({ error: errText(locale, '未知供应商', 'Unknown provider') }, { status: 404 })

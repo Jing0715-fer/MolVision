@@ -35,7 +35,7 @@ const XBSA_EXPR_EXAMPLES: { label: string; expr: string }[] = [
 ]
 
 export function AnalysisPanel() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const activeId = useMolStore(s => s.activeId)
   const structures = useMolStore(s => s.structures)
   const setSelection = useMolStore(s => s.setSelection)
@@ -423,6 +423,7 @@ export function AnalysisPanel() {
             <Slider
               value={[xCutoff]}
               min={3} max={8} step={0.5}
+              aria-label={t({ zh: '跨结构接触距离截断', en: 'Cross-contact distance cutoff' })}
               onValueChange={([v]) => setXCutoff(v)}
               className="mt-1.5"
             />
@@ -457,9 +458,9 @@ export function AnalysisPanel() {
                 <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{cross.cutoff.toFixed(1)} Å</span>
               </div>
               <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-                <Stat label={t({ zh: '接触对', en: 'Contact pairs' })} value={crossPairs.length.toLocaleString()} />
-                <Stat label={t({ zh: `${cross.labelA} 侧`, en: `${cross.labelA} side` })} value={residuesA.length.toLocaleString()} tone="rose" />
-                <Stat label={t({ zh: `${cross.labelB} 侧`, en: `${cross.labelB} side` })} value={residuesB.length.toLocaleString()} tone="cyan" />
+                <Stat label={t({ zh: '接触对', en: 'Contact pairs' })} value={crossPairs.length.toLocaleString(locale)} />
+                <Stat label={t({ zh: `${cross.labelA} 侧`, en: `${cross.labelA} side` })} value={residuesA.length.toLocaleString(locale)} tone="rose" />
+                <Stat label={t({ zh: `${cross.labelB} 侧`, en: `${cross.labelB} side` })} value={residuesB.length.toLocaleString(locale)} tone="cyan" />
               </div>
               <div className="mt-2 space-y-1">
                 {crossPairs.slice(0, 5).map((p, i) => {
@@ -580,6 +581,7 @@ export function AnalysisPanel() {
               <Slider
                 value={[cutoff]}
                 min={3} max={8} step={0.5}
+                aria-label={t({ zh: '接触距离截断', en: 'Contact distance cutoff' })}
                 onValueChange={([v]) => setCutoff(v)}
                 className="mt-1.5"
               />
@@ -629,9 +631,9 @@ export function AnalysisPanel() {
 
               <div className="px-2">
                 <div className="mb-2 grid grid-cols-3 gap-1.5">
-                  <Stat label={t({ zh: '接触对', en: 'Contact pairs' })} value={pairs.length.toLocaleString()} />
-                  <Stat label={t({ zh: 'A 侧残基', en: 'A-side residues' })} value={residuesA.length.toLocaleString()} tone="rose" />
-                  <Stat label={t({ zh: 'B 侧残基', en: 'B-side residues' })} value={residuesB.length.toLocaleString()} tone="cyan" />
+                  <Stat label={t({ zh: '接触对', en: 'Contact pairs' })} value={pairs.length.toLocaleString(locale)} />
+                  <Stat label={t({ zh: 'A 侧残基', en: 'A-side residues' })} value={residuesA.length.toLocaleString(locale)} tone="rose" />
+                  <Stat label={t({ zh: 'B 侧残基', en: 'B-side residues' })} value={residuesB.length.toLocaleString(locale)} tone="cyan" />
                 </div>
 
                 <div className="mol-scroll panel-card relative overflow-x-auto p-1.5">
@@ -704,7 +706,7 @@ export function AnalysisPanel() {
             <>
               <SectionTitle right={
                 <span className="text-[10px] font-normal tabular-nums text-muted-foreground">
-                  {t({ zh: `共 ${hbCount.toLocaleString()} 键 · 按距离`, en: `${hbCount.toLocaleString()} bonds · by distance` })}
+                  {t({ zh: `共 ${hbCount.toLocaleString(locale)} 键 · 按距离`, en: `${hbCount.toLocaleString(locale)} bonds · by distance` })}
                 </span>
               }>
                 {t({ zh: '氢键网络 · 残基对', en: 'H-bond network · residue pairs' })}
@@ -735,6 +737,7 @@ export function AnalysisPanel() {
               <Slider
                 value={[probe]}
                 min={0.8} max={2.0} step={0.1}
+                aria-label={t({ zh: '水探针半径', en: 'Water probe radius' })}
                 onValueChange={([v]) => setProbe(v)}
                 className="mt-1.5"
               />
@@ -905,7 +908,7 @@ function ExprInput({ label, tone, value, onChange, count, error, placeholder }: 
   error?: string
   placeholder?: string
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const toneCls = tone === 'rose'
     ? 'border-rose-500/40 text-rose-600 dark:text-rose-400'
     : 'border-cyan-500/40 text-cyan-600 dark:text-cyan-300'
@@ -915,7 +918,7 @@ function ExprInput({ label, tone, value, onChange, count, error, placeholder }: 
         <span className={cn('rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider', toneCls)}>
           {label}
         </span>
-        {count !== undefined && <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{t({ zh: `${count.toLocaleString()} 原子`, en: `${count.toLocaleString()} atoms` })}</span>}
+        {count !== undefined && <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{t({ zh: `${count.toLocaleString(locale)} 原子`, en: `${count.toLocaleString(locale)} atoms` })}</span>}
       </div>
       <input
         value={value}
@@ -994,7 +997,7 @@ function PairTableToolbar({
   shown: number
   total: number
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   return (
     <div className="mb-1.5 flex items-center gap-1.5">
       <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border bg-card px-1.5 py-1">
@@ -1034,7 +1037,7 @@ function PairTableToolbar({
           {t({ zh: '数量', en: 'Count' })}
         </button>
       </div>
-      <span className="shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">{shown}/{total.toLocaleString()}</span>
+      <span className="shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">{shown}/{total.toLocaleString(locale)}</span>
     </div>
   )
 }

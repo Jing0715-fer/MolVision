@@ -59,6 +59,15 @@ export function tt(text: TranslateInput): string {
 }
 
 /**
+ * 事件时 locale 直读（r65-c：数字/时间格式化接线）——`n.toLocaleString(loc())`
+ * 让命令输出、toast 等非渲染期数字随界面语言而非浏览器语言格式化。
+ * 渲染期请用 useI18n().locale（ctx）；Worker 内默认 zh（与 tt() 同语义）。
+ */
+export function loc(): Locale {
+  return useI18nStore.getState().locale
+}
+
+/**
  * 渲染期 locale 直传通道（r64-a）：SSR 与客户端首渲染同以 I18nProvider 的
  * initialLocale 执行。默认值仅兜底 Provider 外误用（生产树内不可能发生）。
  */

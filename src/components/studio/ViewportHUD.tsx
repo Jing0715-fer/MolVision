@@ -8,7 +8,7 @@ import { REP_LABELS } from '@/lib/molecular/types'
 import { useI18n } from '@/i18n'
 
 export function ViewportHUD() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   const spin = useMolStore(s => s.settings.spin)
@@ -24,7 +24,7 @@ export function ViewportHUD() {
       <span className="h-1 w-1 rounded-full bg-primary/70" />
       <span className="font-bold text-foreground/70">{st.name.slice(0, 8)}</span>
       <span aria-hidden className="h-2 w-px bg-foreground/15" />
-      <span>{st.summary.atoms.toLocaleString()} AT</span>
+      <span>{st.summary.atoms.toLocaleString(locale)} AT</span>
       {rep && (
         <>
           <span aria-hidden className="h-2 w-px bg-foreground/15" />

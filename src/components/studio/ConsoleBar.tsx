@@ -335,7 +335,9 @@ export function ConsoleBar() {
       </div>
       <div ref={logRef} className={cn('mol-scroll overflow-y-auto px-3 py-1.5 font-mono text-[11px] leading-relaxed transition-[height] duration-200', LOG_HEIGHT_CLASS[consoleHeight] ?? 'h-36')}>
         {consoleLog.map((l, i) => (
-          <div key={i} className={cn(
+          // 稳定 key（r63-review-b）：appendLog 单调 seq——slice(-200) 饱和后长度不变，
+          // 索引 key 会让首行身份每条新日志都漂移（复用错节点/DOM 抖动）；仅首条引导日志无 seq
+          <div key={l.seq ?? `boot-${i}`} className={cn(
             'whitespace-pre-wrap break-all',
             l.type === 'in' ? 'text-foreground' : l.type === 'err' ? 'text-destructive' : 'text-muted-foreground',
           )}>

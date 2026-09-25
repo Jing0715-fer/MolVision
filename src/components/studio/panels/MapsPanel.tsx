@@ -54,7 +54,7 @@ export function useIsoThrottle(key: 'iso' | 'isoNeg') {
 }
 
 export function MapsPanel() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const info = useMapStore(s => s.info)
   const computing = useMapStore(s => s.computing)
   const computeMsg = useMapStore(s => s.computeMsg)
@@ -216,11 +216,11 @@ export function MapsPanel() {
               <div className="text-muted-foreground">{t({ zh: '来源', en: 'Source' })}</div>
               <div className="text-right font-medium">{info.source === 'sf' ? (info.difference ? t({ zh: '结构因子 Fo−Fc', en: 'Structure factors Fo−Fc' }) : t({ zh: '结构因子 2Fo−Fc', en: 'Structure factors 2Fo−Fc' })) : t({ zh: 'CCP4 文件', en: 'CCP4 file' })}</div>
               <div className="text-muted-foreground">{t({ zh: '网格', en: 'Grid' })}</div>
-              <div className="text-right font-mono">{info.dims.map(d => d.toLocaleString()).join('×')}</div>
+              <div className="text-right font-mono">{info.dims.map(d => d.toLocaleString(locale)).join('×')}</div>
               <div className="text-muted-foreground">{t({ zh: '体素', en: 'Voxel' })}</div>
               <div className="text-right font-mono">{info.voxel.map(v => v.toFixed(2)).join('×')} Å</div>
               <div className="text-muted-foreground">{t({ zh: '三角形', en: 'Triangles' })}</div>
-              <div className="text-right font-mono">{info.triangles.toLocaleString()}{info.truncated ? '+' : ''}</div>
+              <div className="text-right font-mono">{info.triangles.toLocaleString(locale)}{info.truncated ? '+' : ''}</div>
               <div className="text-muted-foreground">rms</div>
               <div className="text-right font-mono">{info.rms.toFixed(4)}</div>
               <div className="text-muted-foreground">{t({ zh: '计算耗时', en: 'Compute time' })}</div>
@@ -276,6 +276,7 @@ export function MapsPanel() {
                 <Slider
                   value={[posIso.drag ?? info.iso]}
                   min={0.3} max={5} step={0.05}
+                  aria-label={t({ zh: '等值面 σ 级别', en: 'Isosurface σ level' })}
                   onValueChange={v => posIso.onDrag(v[0])}
                 />
                 <div className="mt-1 flex justify-between text-[9px] text-muted-foreground/70">

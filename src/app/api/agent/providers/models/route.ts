@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies, headers } from 'next/headers'
 import {
-  getProviderProfile, resolveApiKey, resolveBaseURL, normalizeModelsResponse, type DiscoveredModel,
+  getProviderProfile, resolveApiKey, resolveBaseURL, sanitizeBaseURL, normalizeModelsResponse, type DiscoveredModel,
 } from '@/lib/molecular/agent/providers'
 import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
 
@@ -61,13 +61,17 @@ export async function POST(request: NextRequest) {
 
   // 凭据优先级：请求携带（临时检测，不落盘）> 存储 > 环境变量
   const apiKey = body.apiKey?.trim() || resolveApiKey(providerId)
-  const baseURL = (body.baseURL?.trim() || resolveBaseURL(providerId) || '').replace(/\/$/, '')
+  const baseURLRaw = body.baseURL?.trim() || resolveBaseURL(providerId) || ''
   if (!apiKey) {
     return NextResponse.json({ ok: false, error: errText(locale, `未输入 API Key（${profile.displayName}）`, `No API Key entered (${profile.displayName})`) })
   }
-  if (!baseURL) {
+  if (!baseURLRaw) {
     return NextResponse.json({ ok: false, error: errText(locale, '未配置 Base URL（本地/自定义供应商需填写）', 'Base URL not configured (required for local/custom providers)') })
   }
+  // SSRF 卡点：临时传入或存量配置的 URL 统一过 sanitize（仅 http(s)、拒 userinfo/畸形；环回/私网放行——mock 联调合法）
+  const san = sanitizeBaseURL(baseURLRaw)
+  if (!san.ok) return NextResponse.json({ ok: false, error: errText(locale, san.zh, san.en) })
+  const baseURL = san.url
 
   const headers: Record<string, string> = {
     [profile.authHeader ?? 'Authorization']: `${profile.authPrefix ?? 'Bearer '}${apiKey}`,

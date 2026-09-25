@@ -2653,3 +2653,76 @@ Stage Summary:
   3. 【中】agents 流式 60s 全流上限对长生成偏紧，可按 provider 分档（thinking 模型 120s）
   4. 【中】mock-llm 协议模板扩展（measure/hbonds/superpose 关键词），使 Agent 面板全命令面可离线回归
   5. 【低】HistoryDialog Row 组件外提、ConsoleBar seq key、RepsPanel/ScenePanel slider aria-label 补齐
+
+---
+Task ID: r65-b
+Agent: general-purpose（回传超时，主线程验收补记）
+Task: mock-llm 协议模板引擎扩展到全命令面（r64-main 建议④：Agent 面板全命令面可离线回归）
+
+Work Log:
+- 读 worklog r64-b 段与 mini-services/mock-llm/index.ts，对照 src/lib/molecular/commands.ts 动词注册表 + runner.ts AUTO_PREFIXES + route.ts KNOWN_CMD_HEADS 逐一核对命令语法
+- buildDecision 模板从 4 类扩展到 14+ 类：彩虹渐变(spectrum count, rainbow)/距离测量(measure dist 双端选择)/氢键网络(hbonds on 3.2)/结构叠合(superpose X onto Y)/背景色(bg grey|white|black|红蓝绿黄)/二级结构(util cbss)/SASA 着色(color sasa)/定向主轴(orient+zoom)/表示法细分(cartoon|sticks|spheres|lines)/隐藏类/链染色/谓词选择(name/resn/resi/chain 中英四谓词)/默认选择
+- 新增辅助：链 ID 严格+宽容双提取、多链依序提取（测量双端）、PDB ID 提取（superpose 用）、色词表对齐 parseCssColor/NAMED_COLORS
+- 匹配顺序重排「具体优先于宽泛」：彩虹先于色词、bg 先于染色、sasa/ss 先于颜色、hide 先于 show（「不显示球棍」不再被显示模板吞掉）
+- 回复语言自适应：最后一条 user 消息含 CJK → 中文 reply，否则英文 reply（全部模板双语化）
+- 产出 mini-services/mock-llm/test-templates.sh（curl 断言：非流式全模板 + 中英双语 + 顺序边界 + 谓词 + 既有模板回归）
+
+Stage Summary:
+- 模板测试 58/58 全 PASS（含顺序边界「彩虹色/背景红色/不显示球棍/按二级结构染色」）
+- 主线程 E2E 复核：7 条模板命令在真实命令行逐条执行成功（spectrum/bg grey/orient/util cbss/hbonds on 3.2/measure dist 4.14 Å A/ALA111/CA—B/GLY119/CA/color sasa 含 SASA worker 92 点 24087 Å² 自动着色）
+- Agent 面板端到端：「彩虹着色」流式中文回复+命令下发；「染红 A 链」→ select chain A 1,168 atoms selected + color red #e04545 + Agent Visual check 自检通过
+
+---
+Task ID: r65-c
+Agent: general-purpose（回传超时，主线程验收补记）
+Task: locale 硬编码扫尾 + a11y 补齐 + 供应商设置页超时 UI（r64-main 建议②⑤）
+
+Work Log:
+- 全仓 toLocale*/Intl.* 扫描：commands.ts/loader.ts/map-load.ts/svg-export.ts 等非组件层数字格式化统一接 loc()（i18n 新导出：事件时 locale 直读，渲染期仍走 ctx）；组件层接 useI18n().locale
+- src/i18n/index.tsx 新增 loc() 导出（注释注明与 tt() 同语义、Worker 内默认 zh）
+- a11y：RepsPanel/ScenePanel 全部 Slider 补双语 aria-label（guards 计数 65）；HistoryDialog Row 外提为模块级组件；ConsoleBar 稳定 seq key
+- 超时 UI：providers.ts listProviderStatus 透出 effectiveTimeoutMs（resolveTimeoutMs）；ProviderSettingsDialog 新增 Timeout (s) 输入框（min 5 max 600 placeholder 显示当前生效档，保存 body timeoutMs=秒×1000，空值回落分档默认）
+- scripts/regression-guards.sh 新增 6 条守卫：toLocale locale 接线≥60（实测 78）/Slider aria-label≥60（实测 65）/供应商超时 UI≥3/超时档透出≥2/ConsoleBar seq key/HistoryDialog Row 外提
+
+Stage Summary:
+- guards 12→18 条全 PASS；tsc/lint 零错
+- 主线程 E2E 复核：Timeout (s) 输入框存在（label/placeholder 120/min 5/max 600）；HUD「4,779 原子·801 残基·12 链」中文格式化生效；命令输出千分位随语言
+- StatusBar 主分区硬编码英文（structure/atoms/res/ch/selection/selected/hidden/status 标签）由主线程补修双语化（本轮 E2E 发现的残留）
+
+---
+Task ID: r65-ops
+Agent: general-purpose (haiku)
+Task: dev server 拉起（排查发现旧 server 死因为 OOM：next-server RSS ~1.57GB 被 OOM-killer 杀掉，容器 4GB）
+
+Work Log:
+- 确认沙箱 Bash 会话结束时收割会话内派生的全部进程（setsid 亦不能幸免，60s 域内观察存活/域外即死实锤）；start-stop-daemon 因 mock-llm 同二进制进程存在而静默拒绝
+- 解法：setsid --fork 双重脱离启动（PPID=1 init 收养），跨会话稳定存活
+
+Stage Summary:
+- dev server（bun 2983/next-server 2998）持续 200；经验沉淀：本沙箱持久进程须由子代理会话 setsid --fork 拉起；OOM 风险需关注（4GB 容器，长会话多结构场景）
+
+---
+Task ID: r65-main
+Agent: main
+Task: API 边界加固（SSRF/鉴权/超时分档）+ 子代理编排 + 全链路 E2E + StatusBar 双语补修
+
+Work Log:
+- 【SSRF 收敛】providers.ts 新增 sanitizeBaseURL（仅 http(s)/拒 userinfo/畸形/去尾斜杠规范化，环回私网放行——本地单机语义）；三卡点：POST /api/agent/providers 入库前 400、setProviderConfig 防御性拒绝、prepareRequest 运行面 throw；/api/agent/providers/models 临时+存量 URL 统一过卡点
+- 【可选鉴权】src/proxy.ts（Next 16 约定，原 middleware——dev 警告「middleware file convention is deprecated」后改名）：MOLVISION_API_TOKEN 环境变量设置时 /api/* 须带 Authorization Bearer 或 x-api-token，常量时间 XOR 比较；未设置零影响（本地预览面板语义）；页面路由不受保护
+- 【超时分档】ProviderConfig.timeoutMs（5s-600s 窗，setProviderConfig 钳制）+ defaultTimeoutForModel（o1/o3/o4/r1/thinking/reasoner/deepseek-r/qwq/glm-4.5+ → 120s，常规 60s）+ resolveTimeoutMs 导出；chatCompletionOnce/Stream 的 opts.timeoutMs ?? prepareRequest 返回的 defaultTimeout（route.ts 零改动，分档内聚）
+- 【env 热载实测】.env.local 注入 token → Next dev「Reload env」生效：无/错 token 401（双语随 Accept-Language）、Bearer/x-api-token 200、页面路由不设卡；**删除 .env.local 不触发重载且进程级残留**——须重启 dev server 才清除（生产 env 启动时固定无此问题，已记入部署注意）
+- 【dev server 运维】旧 server OOM 死亡排查（dmesg 实锤）+ 沙箱进程收割机制实锤（Bash 调用结束即收割 setsid 后代）→ r65-ops 子代理 setsid --fork 拉起后跨会话稳定
+- 【E2E】4HHB 加载（SSR 英文直出）→ 命令行 7 条 mock 模板命令真实执行（spectrum count, rainbow/bg grey/orient/util cbss 395 配体回元素基色/hbonds on 3.2/measure dist 4.14 Å/color sasa 24087 Å² worker 全链路）→ Agent mock 端到端（彩虹着色流式中文回复；染红 A 链→1,168 selected+Colored #e04545+Visual check 自检）→ 语言双向切换（en→zh→en，HUD 千分位单位/footer/命令输出全随语言）→ Timeout (s) UI 存在性 → console 全程零错误
+- 【E2E 发现补修】StatusBar 主分区硬编码英文（structure/atoms/res/ch/selection/selected/hidden/status）双语化——中文模式 footer 现显示「结构 4HHB 4,779 原子 · 801 残基 · 12 链」
+- 【单测】sanitizeBaseURL 12/12 正反例（file://、ftp://、javascript:、userinfo、畸形、空白全拒；http(s)/localhost 放行）；timeout 钳制三分（explicit 90s 生效/999999 越界回落 o3-mini 120s 分档/无配置 glm-4.6→120s）；setProviderConfig file:// 拒绝且不污染 store
+- 【API 矩阵】8/8：timeoutMs 90s 落盘/字符串拒绝英文/file:// 拒绝/userinfo 拒绝中文/mock localhost 放行规范化/effectiveTimeoutMs 透出 90000/models 探测 ftp:// 拒绝/清理后 store 干净
+
+Stage Summary:
+- 交付：SSRF 三卡点 + 可选 token 鉴权（Next 16 proxy 约定）+ 流式超时模型分档（推理类 120s）+ 子代理 mock 全命令面（58 模板断言）+ locale/a11y/timeout UI 扫尾 + guards 12→18 条 + StatusBar 双语补修
+- 门禁：tsc src 0 错 · lint 0 · guards 18/18 · E2E 全绿（命令/Agent/语言/API/console 零错误）· dev server 持续 200
+- 下一轮建议（按优先级）：
+  1. 【高】PDB/SF 拉取无内存上限防护：大结构（如核糖体 ~30 万原子）一次入网可能复刻 OOM 事故（本轮 dev server 死因实锤）——加原子数上限提示 + 分批解析
+  2. 【中】鉴权中间件目前只覆盖数据面；部署场景可加 CSP/HTTPS-only cookie 等响应头硬化（Next next.config headers）
+  3. 【中】guards 18 条为 grep 级；可补最小 headless 断言（agent-browser 冒烟脚本入 package.json scripts，与 lint 并列跑）
+  4. 【中】mock-llm 协议模板可再加 VLM 路径（图片理解关键词→screenshot+VLM 决策），让 Agent 视觉链路可离线回归
+  5. 【低】「Loaded 4HHB: 4779 atoms」加载日志无千分位（loader 的 tt 字面量未接 loc()）；SSR 首屏 HTML 内 console 引导日志语言随 worker locale 已正确

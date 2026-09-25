@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check, ChevronsUpDown, CornerDownLeft, Eye, EyeOff, ExternalLink, Globe, KeyRound,
-  Loader2, Lock, RefreshCw, Search, ServerCog, Star, Trash2, X,
+  Loader2, Lock, RefreshCw, Search, ServerCog, Star, Timer, Trash2, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -59,6 +59,8 @@ export interface ProviderInfo {
   maskedKey: string | null
   envKeySource: boolean
   availableModels: AvailableModelInfo[]
+  /** 当前生效请求超时（毫秒）：显式配置 > 模型分档默认（推理类 120s / 常规 60s） */
+  effectiveTimeoutMs: number
 }
 
 /** /models 探测返回条目 */
@@ -91,6 +93,20 @@ const KIND_GROUP: { id: string; match: (k?: string) => boolean; label: DualText 
   { id: 'video', match: k => k === 'video', label: { zh: '视频', en: 'Video' } },
   { id: 'other', match: k => k === 'other', label: { zh: '其他', en: 'Other' } },
 ]
+
+/** 超时输入（秒）→ POST timeoutMs（毫秒）：合法 5–600s → 秒×1000；空/非法 → 0（越界哨兵，
+ *  服务端钳制清除 → 回落模型分档默认）。仅用户触碰过该字段时随保存体发送——未触碰不改动存量配置 */
+function parseTimeoutMs(sec: string): number {
+  const v = Number(sec.trim())
+  return Number.isFinite(v) && v >= 5 && v <= 600 ? Math.round(v * 1000) : 0
+}
+
+/** 初始展示：生效档非两档默认（60s/120s）即视为显式覆盖 → 预填输入框（清空后保存即回落默认）
+ *  ——恰好等于默认档的显式值与默认行为一致，不预填也无损 */
+function initTimeoutSec(p: ProviderInfo): string {
+  const eff = p.effectiveTimeoutMs
+  return Number.isFinite(eff) && eff !== 60_000 && eff !== 120_000 ? String(Math.round(eff / 1000)) : ''
+}
 
 /** 上下文窗口人性化（1M / 128k） */
 function fmtCtx(n?: number): string | null {
@@ -190,6 +206,8 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
   const selected = providers.find(p => p.id === selectedId)
 
   const setDefault = async (id: string) => {
+    // 注：仅切默认，不携带 timeoutMs——POST /api/agent/providers 的 setDefault 分支早退（服务端忽略其余字段），
+    // 超时配置随各供应商 setProviderConfig 持久化，切默认无需重发（r65-c）
     const res = await fetch('/api/agent/providers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -408,6 +426,10 @@ function ProviderDetail({
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [baseURL, setBaseURL] = useState(p.baseURL)
+  // 请求超时（秒，字符串态）：预填显式覆盖（非默认档）；dirty 标记区分「未触碰」（不发送、保留存量）
+  // 与「主动清空」（发送越界哨兵 0 → 服务端钳制清除回落默认档）
+  const [timeoutSec, setTimeoutSec] = useState(() => initTimeoutSec(p))
+  const [timeoutDirty, setTimeoutDirty] = useState(false)
   const [model, setModel] = useState(p.effectiveModel || p.defaultModel || '')
   const [modelOpen, setModelOpen] = useState(false)
   const [modelQuery, setModelQuery] = useState('')
@@ -494,6 +516,8 @@ function ProviderDetail({
           apiKey: apiKey.trim() || undefined,
           baseURL: baseURL.trim() || undefined,
           defaultModel: model.trim() || undefined,
+          // 超时：合法值显式落盘；主动清空发 0（越界哨兵 → 服务端钳制清除，回落分档默认）；未触碰不发送（保留存量）
+          ...(timeoutDirty ? { timeoutMs: parseTimeoutMs(timeoutSec) } : {}),
           ...(probe.status === 'ok' && probe.models.length > 0 ? { discoveredModels: probe.models } : {}),
         }),
       })
@@ -502,6 +526,7 @@ function ProviderDetail({
         return
       }
       setApiKey('')
+      // timeoutSec/dirty 不重置：输入框持续镜像显式覆盖（保存后仍在），清空再保存才回落默认档
       toast.success(tt({ zh: `已保存 ${tt(providerNameText(p))} 配置`, en: `Saved ${tt(providerNameText(p))} configuration` }), {
         description: p.isDefault
           ? tt({ zh: '该供应商即当前默认，下次对话生效', en: 'This provider is the current default; it takes effect from the next conversation' })
@@ -756,6 +781,33 @@ function ProviderDetail({
             spellCheck={false}
             className="h-9 w-full rounded-md border border-border bg-background px-3 font-mono text-xs outline-none transition placeholder:text-muted-foreground/45 focus:border-ring/60 focus:ring-2 focus:ring-ring/25"
           />
+        </section>
+
+        {/* 请求超时（高级）：显式覆盖 > 模型分档默认（推理类 120s / 常规 60s） */}
+        <section className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label htmlFor={`timeout-${p.id}`} className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80">
+              <Timer className="h-2.5 w-2.5" /> {t({ zh: '请求超时（秒）', en: 'Timeout (s)' })}
+            </label>
+            <span className="text-[9px] text-muted-foreground/50">{t({ zh: '留空 = 默认档', en: 'Empty = default tier' })}</span>
+          </div>
+          <input
+            id={`timeout-${p.id}`}
+            type="number"
+            min={5}
+            max={600}
+            step={1}
+            value={timeoutSec}
+            onChange={e => { setTimeoutSec(e.target.value); setTimeoutDirty(true) }}
+            placeholder={Number.isFinite(p.effectiveTimeoutMs) ? String(Math.round(p.effectiveTimeoutMs / 1000)) : '60'}
+            inputMode="numeric"
+            autoComplete="off"
+            aria-describedby={`timeout-hint-${p.id}`}
+            className="h-9 w-full rounded-md border border-border bg-background px-3 font-mono text-xs outline-none transition placeholder:text-muted-foreground/45 focus:border-ring/60 focus:ring-2 focus:ring-ring/25"
+          />
+          <p id={`timeout-hint-${p.id}`} className="text-[9px] leading-relaxed text-muted-foreground/55">
+            {t({ zh: '单次补全请求的超时上限（5–600 秒，当前生效档见占位符）。留空回落默认：常规模型 60s · 推理/思考类 120s。', en: 'Per-request timeout limit (5–600 s; the current effective tier shows as the placeholder). Empty falls back to the default: 60 s for regular models · 120 s for reasoning/thinking models.' })}
+          </p>
         </section>
 
         {/* 说明 */}

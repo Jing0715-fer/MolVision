@@ -8,7 +8,7 @@ import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
 import { textRegistry } from '@/lib/molecular/text-registry'
 import type { StructureEntry } from '@/lib/molecular/types'
 import { spaceGroupInfo } from '@/lib/molecular/symmetry'
-import { useI18n, tt, type DualText } from '@/i18n'
+import { useI18n, tt, loc, type DualText } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { ObjectActionBar } from '../ObjectActionBar'
@@ -139,7 +139,7 @@ function closeStructureWithUndo(st: StructureEntry) {
     return
   }
   toast.success(tt({ zh: `已关闭 ${st.name}`, en: `Closed ${st.name}` }), {
-    description: tt({ zh: `${st.summary.atoms.toLocaleString()} 原子 · 表示法与着色已快照，可撤销`, en: `${st.summary.atoms.toLocaleString()} atoms · representations & coloring snapshotted, undo available` }),
+    description: tt({ zh: `${st.summary.atoms.toLocaleString(loc())} 原子 · 表示法与着色已快照，可撤销`, en: `${st.summary.atoms.toLocaleString(loc())} atoms · representations & coloring snapshotted, undo available` }),
     action: {
       label: tt({ zh: '撤销', en: 'Undo' }),
       onClick: () => {
@@ -171,7 +171,7 @@ function loadCollapsed(): Set<string> {
 }
 
 export function StructuresPanel() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   const setActive = useMolStore(s => s.setActive)
@@ -350,9 +350,9 @@ export function StructuresPanel() {
             {!collapsed.has(st.name) && (
               /* r56：统计行从散落徽章改为单条仪器读数带（点分隔 + 统一 tabular-nums，消除「数据飘在空中」） */
               <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-md bg-muted/45 px-2 py-[5px] font-mono text-[9.5px] leading-none tabular-nums text-muted-foreground dark:bg-white/[0.04]">
-                <span>{t({ zh: `${st.summary.atoms.toLocaleString()} 原子`, en: `${st.summary.atoms.toLocaleString()} atoms` })}</span>
+                <span>{t({ zh: `${st.summary.atoms.toLocaleString(locale)} 原子`, en: `${st.summary.atoms.toLocaleString(locale)} atoms` })}</span>
                 <span aria-hidden className="text-muted-foreground/30">·</span>
-                <span>{t({ zh: `${st.summary.residues.toLocaleString()} 残基`, en: `${st.summary.residues.toLocaleString()} residues` })}</span>
+                <span>{t({ zh: `${st.summary.residues.toLocaleString(locale)} 残基`, en: `${st.summary.residues.toLocaleString(locale)} residues` })}</span>
                 <span aria-hidden className="text-muted-foreground/30">·</span>
                 <span>{t({ zh: `${st.summary.chains} 链`, en: `${st.summary.chains} chains` })}</span>
                 {st.meta.resolution && (
@@ -367,7 +367,7 @@ export function StructuresPanel() {
             )}
             {collapsed.has(st.name) && st.summary.atoms > 0 && (
               <div className="mt-0.5 pl-7 font-mono text-[9px] tabular-nums text-muted-foreground/60">
-                {t({ zh: `${st.summary.atoms.toLocaleString()} at · ${st.summary.chains} 链${st.meta.resolution ? ` · ${st.meta.resolution} Å` : ''}`, en: `${st.summary.atoms.toLocaleString()} at · ${st.summary.chains} ch${st.meta.resolution ? ` · ${st.meta.resolution} Å` : ''}` })}
+                {t({ zh: `${st.summary.atoms.toLocaleString(locale)} at · ${st.summary.chains} 链${st.meta.resolution ? ` · ${st.meta.resolution} Å` : ''}`, en: `${st.summary.atoms.toLocaleString(locale)} at · ${st.summary.chains} ch${st.meta.resolution ? ` · ${st.meta.resolution} Å` : ''}` })}
               </div>
             )}
           </div>
@@ -559,7 +559,7 @@ export function StructuresPanel() {
                         const res = selectChain()
                         if (!res.error && res.count > 0) {
                           useMolStore.getState().applyColor(hex)
-                          toast.success(tt({ zh: `链 ${label} 已上色`, en: `Chain ${label} colored` }), { description: tt({ zh: `${res.count.toLocaleString()} 个原子 · 再点色点可换色或重置`, en: `${res.count.toLocaleString()} atoms · click the dot again to recolor or reset` }) })
+                          toast.success(tt({ zh: `链 ${label} 已上色`, en: `Chain ${label} colored` }), { description: tt({ zh: `${res.count.toLocaleString(loc())} 个原子 · 再点色点可换色或重置`, en: `${res.count.toLocaleString(loc())} atoms · click the dot again to recolor or reset` }) })
                         }
                       }}
                       onReset={() => {
@@ -630,6 +630,7 @@ export function StructuresPanel() {
                         <Slider
                           value={[symRadius]}
                           min={5} max={80} step={1}
+                          aria-label={t({ zh: '对称伴包搜索半径', en: 'Symmetry mate search radius' })}
                           onValueChange={v => { setSymRadius(v[0]); apply(v[0]) }}
                         />
                       </div>
@@ -701,7 +702,7 @@ export function StructuresPanel() {
                           const store = useMolStore.getState()
                           const res = store.selectFromExpr(`byres (within 4.5 of resn ${lg.resName})`)
                           if (res.error) { toast.error(res.error); return }
-                          toast.success(tt({ zh: `${lg.resName} 结合口袋`, en: `${lg.resName} binding pocket` }), { description: tt({ zh: `${res.count.toLocaleString()} 个原子（含周围残基）· 可直接着色/新建表示法`, en: `${res.count.toLocaleString()} atoms (incl. surrounding residues) · color or create representations directly` }) })
+                          toast.success(tt({ zh: `${lg.resName} 结合口袋`, en: `${lg.resName} binding pocket` }), { description: tt({ zh: `${res.count.toLocaleString(loc())} 个原子（含周围残基）· 可直接着色/新建表示法`, en: `${res.count.toLocaleString(loc())} atoms (incl. surrounding residues) · color or create representations directly` }) })
                         }}
                         className="flex h-5 items-center gap-0.5 rounded-md border border-primary/40 bg-primary/5 px-1 text-[9px] font-medium text-primary opacity-80 transition hover:bg-primary/15 hover:opacity-100"
                         title={t({ zh: `选择 ${lg.resName} 周围 4.5Å 结合口袋（含完整残基）`, en: `Select the 4.5 Å binding pocket around ${lg.resName} (whole residues)` })}

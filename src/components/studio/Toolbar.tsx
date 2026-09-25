@@ -12,7 +12,7 @@ import {
   Award, Target, Minimize2,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
-import { useI18n, tt, type DualText } from '@/i18n'
+import { useI18n, tt, loc, type DualText } from '@/i18n'
 import { SCENE_PRESETS, applyScenePreset } from '@/lib/molecular/scenes'
 import { runCommand } from '@/lib/molecular/commands'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
@@ -200,7 +200,7 @@ export function Toolbar() {
     }
     downloadSvg(r.svg, structures[0]?.name ?? 'molvision')
     toast.success(tt({ zh: `矢量图已导出（${r.width}×${r.height}）`, en: `Vector image exported (${r.width}×${r.height})` }), {
-      description: tt({ zh: `${r.items.toLocaleString()} 个原语 · ${r.ms.toFixed(0)} ms · 无限缩放不失真${r.skippedSurfaces.length ? ` · 跳过 ${r.skippedSurfaces.length} 个表面表示` : ''}`, en: `${r.items.toLocaleString()} primitives · ${r.ms.toFixed(0)} ms · lossless at any zoom${r.skippedSurfaces.length ? ` · ${r.skippedSurfaces.length} surface representation${r.skippedSurfaces.length > 1 ? 's' : ''} skipped` : ''}` }),
+      description: tt({ zh: `${r.items.toLocaleString(loc())} 个原语 · ${r.ms.toFixed(0)} ms · 无限缩放不失真${r.skippedSurfaces.length ? ` · 跳过 ${r.skippedSurfaces.length} 个表面表示` : ''}`, en: `${r.items.toLocaleString(loc())} primitives · ${r.ms.toFixed(0)} ms · lossless at any zoom${r.skippedSurfaces.length ? ` · ${r.skippedSurfaces.length} surface representation${r.skippedSurfaces.length > 1 ? 's' : ''} skipped` : ''}` }),
     })
   }
 

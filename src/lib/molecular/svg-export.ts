@@ -4,7 +4,7 @@
 // 颜色与 3D 视图一致：computeAtomColors（线性）→ sRGB hex，叠加 colorOverrides。
 // surface 表示法为等值面几何（无原子级对应原语），导出时跳过并在返回值中列出。
 import * as THREE from 'three'
-import { tt } from '@/i18n'
+import { tt, loc } from '@/i18n'
 import { computeAtomColors } from './colors'
 import { elementInfo } from './chemistry'
 import { evaluateSelection } from './selection'
@@ -198,7 +198,7 @@ export function buildSvgExport(opts: { width?: number } = {}): SvgExportResult {
   prims.sort((a, b) => b.z - a.z)
 
   // 页脚：结构名 + 原子数 + 署名（出版友好）
-  const names = s.structures.filter(x => x.visible).map(x => tt({ zh: `${x.name}（${x.summary.atoms.toLocaleString()} 原子）`, en: `${x.name} (${x.summary.atoms.toLocaleString()} atoms)` })).join(' · ')
+  const names = s.structures.filter(x => x.visible).map(x => tt({ zh: `${x.name}（${x.summary.atoms.toLocaleString(loc())} 原子）`, en: `${x.name} (${x.summary.atoms.toLocaleString(loc())} atoms)` })).join(' · ')
   const now = new Date()
   const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const bg = s.settings.background || '#ffffff'

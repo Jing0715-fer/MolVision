@@ -148,6 +148,7 @@ function RepCard({
                   </div>
                   <Slider
                     value={[rep.ballScale]} min={0.1} max={2} step={0.05}
+                    aria-label={rep.type === 'spacefill' ? tr({ zh: '原子半径倍率', en: 'Atom radius scale' }) : tr({ zh: '球半径倍率', en: 'Ball radius scale' })}
                     onValueChange={v => onUpdate(structureId, rep.id, { ballScale: v[0] })}
                   />
                 </div>
@@ -159,6 +160,7 @@ function RepCard({
                   </div>
                   <Slider
                     value={[rep.stickRadius]} min={0.05} max={0.35} step={0.01}
+                    aria-label={tr({ zh: '棍半径', en: 'Stick radius' })}
                     onValueChange={v => onUpdate(structureId, rep.id, { stickRadius: v[0] })}
                   />
                 </div>
@@ -170,6 +172,7 @@ function RepCard({
                   </div>
                   <Slider
                     value={[rep.cartoonWidth]} min={0.3} max={2.5} step={0.05}
+                    aria-label={rep.type === 'putty' ? tr({ zh: '管径整体倍率', en: 'Tube width scale' }) : tr({ zh: '带状宽度', en: 'Ribbon width' })}
                     onValueChange={v => onUpdate(structureId, rep.id, { cartoonWidth: v[0] })}
                   />
                 </div>
@@ -181,6 +184,7 @@ function RepCard({
                   </div>
                   <Slider
                     value={[rep.puttyRange > 0 ? rep.puttyRange : 100]} min={0} max={200} step={5}
+                    aria-label={tr({ zh: 'B 因子上限', en: 'B-factor cap' })}
                     onValueChange={v => onUpdate(structureId, rep.id, { puttyRange: v[0] })}
                   />
                   <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground/80">{tr({ zh: '0 = 按结构实际 B 范围；调低可抑制高 B 离群值拉伸管径。', en: '0 = use the structure\'s actual B range; lower values keep high-B outliers from stretching the tube.' })}</p>
@@ -194,6 +198,7 @@ function RepCard({
                     </div>
                     <Slider
                       value={[rep.probe]} min={0} max={3} step={0.1}
+                      aria-label={tr({ zh: '探针半径', en: 'Probe radius' })}
                       onValueChange={v => onUpdate(structureId, rep.id, { probe: v[0] })}
                     />
                   </div>
@@ -203,6 +208,7 @@ function RepCard({
                     </div>
                     <Slider
                       value={[rep.opacity]} min={0.15} max={1} step={0.05}
+                      aria-label={tr({ zh: '不透明度', en: 'Opacity' })}
                       onValueChange={v => onUpdate(structureId, rep.id, { opacity: v[0] })}
                     />
                   </div>

@@ -31,7 +31,7 @@ function Readout({ label, children }: { label?: string; children: React.ReactNod
 }
 
 export function StatusBar() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const hoverText = useHoverStore(s => s.text)
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
@@ -66,14 +66,14 @@ export function StatusBar() {
     <footer className="instrument-bar flex h-7 shrink-0 items-center gap-2.5 px-3">
       {/* 结构读数（主分区：名称等宽加粗 + 统计） */}
       {st ? (
-        <Readout label="structure">
+        <Readout label={t({ zh: '结构', en: 'structure' })}>
           <span className="status-val font-bold tracking-tight" style={{ color: 'var(--status-hot)' }}>{st.name}</span>
           <span className="status-val opacity-80" style={{ color: 'var(--status-dim)' }}>
-            {st.summary.atoms.toLocaleString()} atoms · {st.summary.residues.toLocaleString()} res · {st.summary.chains} ch
+            {st.summary.atoms.toLocaleString(locale)} {t({ zh: '原子', en: 'atoms' })} · {st.summary.residues.toLocaleString(locale)} {t({ zh: '残基', en: 'res' })} · {st.summary.chains} {t({ zh: '链', en: 'ch' })}
           </span>
         </Readout>
       ) : (
-        <Readout label="status">
+        <Readout label={t({ zh: '状态', en: 'status' })}>
           <span className="status-val" style={{ color: 'var(--status-dim)' }}>{t({ zh: 'READY — 等待加载结构', en: 'READY — awaiting structure' })}</span>
         </Readout>
       )}
@@ -88,10 +88,10 @@ export function StatusBar() {
 
       {/* 选择读数（核心状态：高亮 + 语义点） */}
       {selection.indices.length > 0 && (
-        <Readout label="selection">
+        <Readout label={t({ zh: '选择', en: 'selection' })}>
           <Dot tone="bg-primary" />
           <span className="status-val font-semibold" style={{ color: 'var(--status-hot)' }}>
-            {selection.indices.length.toLocaleString()} selected
+            {selection.indices.length.toLocaleString(locale)} {t({ zh: '已选', en: 'selected' })}
           </span>
         </Readout>
       )}
@@ -102,7 +102,7 @@ export function StatusBar() {
           <Layers className="h-3 w-3" />
           {settings.hideHydrogens && 'H'}
           {settings.hideHydrogens && settings.hideWater && '+'}
-          {settings.hideWater && 'H₂O'} hidden
+          {settings.hideWater && 'H₂O'} {t({ zh: '已隐藏', en: 'hidden' })}
         </span>
       )}
 
@@ -126,7 +126,7 @@ export function StatusBar() {
           {hbond.computing
             ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
             : <Dot tone="bg-teal-400" />}
-          <span style={{ color: 'var(--status-fg)' }}>{hbond.computing ? t({ zh: '氢键计算中…', en: 'Computing H-bonds…' }) : t({ zh: `${hbond.count.toLocaleString()} 氢键`, en: `${hbond.count.toLocaleString()} H-bonds` })}</span>
+          <span style={{ color: 'var(--status-fg)' }}>{hbond.computing ? t({ zh: '氢键计算中…', en: 'Computing H-bonds…' }) : t({ zh: `${hbond.count.toLocaleString(locale)} 氢键`, en: `${hbond.count.toLocaleString(locale)} H-bonds` })}</span>
           {!hbond.computing && hbond.waterCount > 0 && <span style={{ color: 'var(--status-dim)' }}>{t({ zh: `（含水 ${hbond.waterCount}）`, en: `(${hbond.waterCount} via water)` })}</span>}
           <X className="h-2.5 w-2.5 opacity-50" aria-hidden />
         </button>
@@ -136,7 +136,7 @@ export function StatusBar() {
       {contact.structureId === activeId && contact.pairs.length > 0 && (
         <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" style={{ color: 'var(--status-dim)' }}>
           <Dot tone={contact.visible ? 'bg-orange-400' : 'bg-white/20'} />
-          {contact.pairs.length.toLocaleString()} {t({ zh: '接触', en: 'contacts' })}
+          {contact.pairs.length.toLocaleString(locale)} {t({ zh: '接触', en: 'contacts' })}
           <span className="text-[9px]">≤{contact.cutoff.toFixed(1)}Å</span>
         </span>
       )}
@@ -145,7 +145,7 @@ export function StatusBar() {
       {contact.cross && contact.crossPairs.length > 0 && (
         <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" style={{ color: 'var(--status-dim)' }}>
           <Dot tone={contact.visible ? 'bg-violet-400' : 'bg-white/20'} />
-          {contact.cross.labelA}↔{contact.cross.labelB} {contact.crossPairs.length.toLocaleString()}
+          {contact.cross.labelA}↔{contact.cross.labelB} {contact.crossPairs.length.toLocaleString(locale)}
           <span className="text-[9px]">≤{contact.cross.cutoff.toFixed(1)}Å</span>
         </span>
       )}
@@ -156,7 +156,7 @@ export function StatusBar() {
           {sasa.computing
             ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
             : <Dot tone="bg-cyan-400" />}
-          {sasa.computing ? t({ zh: 'SASA 计算中…', en: 'Computing SASA…' }) : `SASA ${sasa.total.toLocaleString(undefined, { maximumFractionDigits: 0 })} Å²`}
+          {sasa.computing ? t({ zh: 'SASA 计算中…', en: 'Computing SASA…' }) : `SASA ${sasa.total.toLocaleString(locale, { maximumFractionDigits: 0 })} Å²`}
         </span>
       )}
 

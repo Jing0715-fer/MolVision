@@ -7,7 +7,7 @@ import { useI18n, type DualText } from '@/i18n'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 
 export function InfoPanel() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
   const st = structures.find(x => x.id === activeId)
@@ -26,14 +26,14 @@ export function InfoPanel() {
     { label: { zh: '格式', en: 'Format' }, value: st.format.toUpperCase() },
     ...(st.meta.method ? [{ label: { zh: '实验方法', en: 'Experimental method' } as DualText, value: st.meta.method }] : []),
     ...(st.meta.resolution ? [{ label: { zh: '分辨率', en: 'Resolution' } as DualText, value: `${st.meta.resolution} Å` }] : []),
-    { label: { zh: '原子数', en: 'Atoms' }, value: st.summary.atoms.toLocaleString() },
-    { label: { zh: '残基数', en: 'Residues' }, value: st.summary.residues.toLocaleString() },
-    { label: { zh: '化学键', en: 'Bonds' }, value: st.summary.bonds.toLocaleString() },
+    { label: { zh: '原子数', en: 'Atoms' }, value: st.summary.atoms.toLocaleString(locale) },
+    { label: { zh: '残基数', en: 'Residues' }, value: st.summary.residues.toLocaleString(locale) },
+    { label: { zh: '化学键', en: 'Bonds' }, value: st.summary.bonds.toLocaleString(locale) },
     { label: { zh: '链数', en: 'Chains' }, value: String(st.summary.chains) },
-    ...(st.summary.hydrogens > 0 ? [{ label: { zh: '氢原子', en: 'Hydrogens' } as DualText, value: st.summary.hydrogens.toLocaleString() }] : []),
-    ...(st.summary.waters > 0 ? [{ label: { zh: '水分子', en: 'Waters' } as DualText, value: st.summary.waters.toLocaleString() }] : []),
-    ...(st.summary.ligandResidues > 0 ? [{ label: { zh: '配体残基', en: 'Ligand residues' } as DualText, value: st.summary.ligandResidues.toLocaleString() }] : []),
-    ...(st.summary.ligandMolecules > 0 ? [{ label: { zh: '配体分子', en: 'Ligand molecules' } as DualText, value: st.summary.ligandMolecules.toLocaleString() }] : []),
+    ...(st.summary.hydrogens > 0 ? [{ label: { zh: '氢原子', en: 'Hydrogens' } as DualText, value: st.summary.hydrogens.toLocaleString(locale) }] : []),
+    ...(st.summary.waters > 0 ? [{ label: { zh: '水分子', en: 'Waters' } as DualText, value: st.summary.waters.toLocaleString(locale) }] : []),
+    ...(st.summary.ligandResidues > 0 ? [{ label: { zh: '配体残基', en: 'Ligand residues' } as DualText, value: st.summary.ligandResidues.toLocaleString(locale) }] : []),
+    ...(st.summary.ligandMolecules > 0 ? [{ label: { zh: '配体分子', en: 'Ligand molecules' } as DualText, value: st.summary.ligandMolecules.toLocaleString(locale) }] : []),
     { label: { zh: '二级结构', en: 'Secondary structure' }, value: st.hasSS ? { zh: '来自 HELIX/SHEET 注释', en: 'From HELIX/SHEET records' } : { zh: '几何启发式推断', en: 'Inferred geometrically' } },
     { label: { zh: '解析耗时', en: 'Parse time' }, value: `${st.loadMs < 1 ? '<1' : st.loadMs.toFixed(0)} ms` },
   ]

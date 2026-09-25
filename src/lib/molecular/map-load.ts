@@ -1,7 +1,7 @@
 // 电子密度图加载：① RCSB 结构因子 → 模型相位 → 3D FFT 合成 2Fo−Fc / Fo−Fc 差图（Web Worker）；
 // ② CCP4/MRC 文件直读。引擎持有几何（setDensityMap），本模块负责取数/计算/镜像状态到 map-store。
 import { toast } from 'sonner'
-import { tt, useI18nStore } from '@/i18n'
+import { tt, loc, useI18nStore } from '@/i18n'
 import { engineRef, useMolStore, dataRegistry } from './store'
 import { useMapStore, type MapInfoMirror } from './map-store'
 import { parseSfCif, computeDensityMap, type ModelAtoms, type MapKind } from './sffourier'
@@ -319,13 +319,13 @@ export async function fetchAndComputeMap(
     syncMapMirror('sf', ms, { pdbId, kind })
     const log = useMolStore.getState().appendLog
     if (kind === 'fofc') {
-      log('out', tt({ zh: `Fo−Fc 差图就绪（${pdbId}）：${result.reflnCount.toLocaleString()} 条反射 · 网格 ${cropped ? `${dims.join('×')}（自 ${result.n}³ 裁剪）` : `${result.n}³`} · ${ms.toFixed(0)} ms · 默认 ±3σ（绿=正峰 模型缺失 / 红=负峰 模型多余）`, en: `Fo−Fc difference map ready (${pdbId}): ${result.reflnCount.toLocaleString()} reflections · grid ${cropped ? `${dims.join('×')} (cropped from ${result.n}³)` : `${result.n}³`} · ${ms.toFixed(0)} ms · default ±3σ (green = positive peak, model missing / red = negative peak, model redundant)` }))
+      log('out', tt({ zh: `Fo−Fc 差图就绪（${pdbId}）：${result.reflnCount.toLocaleString(loc())} 条反射 · 网格 ${cropped ? `${dims.join('×')}（自 ${result.n}³ 裁剪）` : `${result.n}³`} · ${ms.toFixed(0)} ms · 默认 ±3σ（绿=正峰 模型缺失 / 红=负峰 模型多余）`, en: `Fo−Fc difference map ready (${pdbId}): ${result.reflnCount.toLocaleString(loc())} reflections · grid ${cropped ? `${dims.join('×')} (cropped from ${result.n}³)` : `${result.n}³`} · ${ms.toFixed(0)} ms · default ±3σ (green = positive peak, model missing / red = negative peak, model redundant)` }))
     } else {
-      log('out', tt({ zh: `电子密度图就绪（${pdbId} 2Fo−Fc）：${result.reflnCount.toLocaleString()} 条反射 · 网格 ${cropped ? `${dims.join('×')}（自 ${result.n}³ 裁剪）` : `${result.n}³`} · ${ms.toFixed(0)} ms · 默认 2σ 等值面`, en: `Electron density map ready (${pdbId} 2Fo−Fc): ${result.reflnCount.toLocaleString()} reflections · grid ${cropped ? `${dims.join('×')} (cropped from ${result.n}³)` : `${result.n}³`} · ${ms.toFixed(0)} ms · default 2σ isosurface` }))
+      log('out', tt({ zh: `电子密度图就绪（${pdbId} 2Fo−Fc）：${result.reflnCount.toLocaleString(loc())} 条反射 · 网格 ${cropped ? `${dims.join('×')}（自 ${result.n}³ 裁剪）` : `${result.n}³`} · ${ms.toFixed(0)} ms · 默认 2σ 等值面`, en: `Electron density map ready (${pdbId} 2Fo−Fc): ${result.reflnCount.toLocaleString(loc())} reflections · grid ${cropped ? `${dims.join('×')} (cropped from ${result.n}³)` : `${result.n}³`} · ${ms.toFixed(0)} ms · default 2σ isosurface` }))
     }
     log('out', tt({ zh: `密度合成于 ${usedWorker ? 'Web Worker（主线程零阻塞）' : '主线程回退'} 完成`, en: `Density synthesis completed on ${usedWorker ? 'Web Worker (zero main-thread blocking)' : 'main-thread fallback'}` }))
     toast.success(kind === 'fofc' ? tt({ zh: 'Fo−Fc 差图已合成', en: 'Fo−Fc difference map synthesized' }) : tt({ zh: '电子密度图已合成', en: 'Electron density map synthesized' }), {
-      description: tt({ zh: `${pdbId} ${kindLabel} · ${result.reflnCount.toLocaleString()} 反射 · ${result.n}³ 网格 · ${ms.toFixed(0)} ms${usedWorker ? ' · Worker' : ' · 主线程'}`, en: `${pdbId} ${kindLabel} · ${result.reflnCount.toLocaleString()} reflections · ${result.n}³ grid · ${ms.toFixed(0)} ms${usedWorker ? ' · Worker' : ' · main thread'}` }),
+      description: tt({ zh: `${pdbId} ${kindLabel} · ${result.reflnCount.toLocaleString(loc())} 反射 · ${result.n}³ 网格 · ${ms.toFixed(0)} ms${usedWorker ? ' · Worker' : ' · 主线程'}`, en: `${pdbId} ${kindLabel} · ${result.reflnCount.toLocaleString(loc())} reflections · ${result.n}³ grid · ${ms.toFixed(0)} ms${usedWorker ? ' · Worker' : ' · main thread'}` }),
     })
     // 视角不强制改动（用户可能在检查局部）；不 fitView
   } catch (e) {

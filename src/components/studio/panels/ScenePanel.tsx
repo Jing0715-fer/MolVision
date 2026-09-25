@@ -82,6 +82,7 @@ export function ScenePanel() {
             </div>
             <Slider
               value={[settings.fogStrength]} min={0.05} max={1} step={0.05}
+              aria-label={t({ zh: '雾强度', en: 'Fog strength' })}
               onValueChange={v => updateSettings({ fogStrength: v[0] })}
             />
           </div>
@@ -101,6 +102,7 @@ export function ScenePanel() {
           </div>
           <Slider
             value={[settings.fov]} min={10} max={90} step={1}
+            aria-label={t({ zh: '视场角', en: 'Field of view' })}
             onValueChange={v => updateSettings({ fov: v[0] })}
           />
         </div>
@@ -160,6 +162,7 @@ export function ScenePanel() {
             </div>
             <Slider
               value={[settings.spinSpeed]} min={0.5} max={12} step={0.5}
+              aria-label={t({ zh: '旋转速度', en: 'Rotation speed' })}
               onValueChange={v => updateSettings({ spinSpeed: v[0] })}
             />
           </div>
@@ -220,6 +223,7 @@ export function ScenePanel() {
           </div>
           <Slider
             value={[settings.lightAmbient]} min={0} max={2} step={0.05}
+            aria-label={t({ zh: '环境光强度', en: 'Ambient light intensity' })}
             onValueChange={v => updateSettings({ lightAmbient: v[0] })}
           />
         </div>
@@ -230,6 +234,7 @@ export function ScenePanel() {
           </div>
           <Slider
             value={[settings.lightKey]} min={0} max={3} step={0.05}
+            aria-label={t({ zh: '主光强度', en: 'Key light intensity' })}
             onValueChange={v => updateSettings({ lightKey: v[0] })}
           />
         </div>
@@ -240,6 +245,7 @@ export function ScenePanel() {
           </div>
           <Slider
             value={[settings.lightFill]} min={0} max={2} step={0.05}
+            aria-label={t({ zh: '补光强度', en: 'Fill light intensity' })}
             onValueChange={v => updateSettings({ lightFill: v[0] })}
           />
         </div>
@@ -281,6 +287,7 @@ export function ScenePanel() {
               </div>
               <Slider
                 value={[settings.slabThickness]} min={2} max={80} step={1}
+                aria-label={t({ zh: '切层厚度', en: 'Slab thickness' })}
                 onValueChange={v => updateSettings({ slabThickness: v[0] })}
               />
             </div>
@@ -301,6 +308,7 @@ export function ScenePanel() {
               </div>
               <Slider
                 value={[settings.slabOffset]} min={-60} max={60} step={1}
+                aria-label={t({ zh: '切层位置（沿视线）', en: 'Slab position (along view axis)' })}
                 onValueChange={v => updateSettings({ slabOffset: v[0] })}
               />
             </div>
@@ -377,6 +385,7 @@ export function ScenePanel() {
               </div>
               <Slider
                 value={[settings.hbondMaxDist]} min={2.5} max={5} step={0.1}
+                aria-label={t({ zh: '氢键重原子距离上限', en: 'H-bond heavy-atom distance limit' })}
                 onValueChange={v => updateSettings({ hbondMaxDist: v[0] })}
               />
             </div>
@@ -408,6 +417,7 @@ export function ScenePanel() {
               </div>
               <Slider
                 value={[settings.ssaoIntensity]} min={0.2} max={2} step={0.1}
+                aria-label={t({ zh: '遮蔽强度', en: 'Occlusion strength' })}
                 onValueChange={v => updateSettings({ ssaoIntensity: v[0] })}
               />
             </div>
@@ -418,6 +428,7 @@ export function ScenePanel() {
               </div>
               <Slider
                 value={[settings.ssaoRadius]} min={1} max={8} step={0.5}
+                aria-label={t({ zh: '采样半径', en: 'Sampling radius' })}
                 onValueChange={v => updateSettings({ ssaoRadius: v[0] })}
               />
             </div>
@@ -445,6 +456,7 @@ export function ScenePanel() {
               </div>
               <Slider
                 value={[settings.outlineStrength]} min={0.2} max={3} step={0.1}
+                aria-label={t({ zh: '线条强度', en: 'Line strength' })}
                 onValueChange={v => updateSettings({ outlineStrength: v[0] })}
               />
             </div>
@@ -455,6 +467,7 @@ export function ScenePanel() {
               </div>
               <Slider
                 value={[settings.outlineThickness]} min={1} max={4} step={0.5}
+                aria-label={t({ zh: '线条粗细', en: 'Line thickness' })}
                 onValueChange={v => updateSettings({ outlineThickness: v[0] })}
               />
             </div>
