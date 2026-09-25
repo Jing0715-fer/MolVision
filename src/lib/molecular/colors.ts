@@ -219,17 +219,22 @@ export function computeAtomColors(
   }
 
   if (scheme === 'residue') {
+    // r63-fix-c #4：hetero（配体）分支逐原子按元素着色（按元素缓存），不进 resName 级缓存——
+    // 旧版首原子（如 HEM 的 FE）元素色以 resName 缓存后污染整残基内全部原子；
+    // standard/水残基颜色只依赖 resName，保持按 resName 缓存的收益
     const cache = new Map<string, THREE.Color>()
+    const hetCache = new Map<string, THREE.Color>()
     for (let i = 0; i < n; i++) {
       const rn = atoms.resNames[i]
-      let c = cache.get(rn)
-      if (!c) {
-        c = naBaseColor(rn) ?? residueClassColor(rn)
-        if (atoms.hetero[i] && !residueClass(rn).match(/water/)) {
-          // 配体保持元素感
-          c = new THREE.Color(elementInfo(atoms.elements[i]).color)
-        }
-        cache.set(rn, c)
+      let c: THREE.Color | undefined
+      if (atoms.hetero[i] && !residueClass(rn).match(/water/)) {
+        // 配体保持元素感
+        const el = atoms.elements[i]
+        c = hetCache.get(el)
+        if (!c) { c = new THREE.Color(elementInfo(el).color); hetCache.set(el, c) }
+      } else {
+        c = cache.get(rn)
+        if (!c) { c = naBaseColor(rn) ?? residueClassColor(rn); cache.set(rn, c) }
       }
       out[i * 3] = c.r; out[i * 3 + 1] = c.g; out[i * 3 + 2] = c.b
     }

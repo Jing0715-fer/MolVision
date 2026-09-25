@@ -412,7 +412,9 @@ export const useMolStore = create<MolState>()((set, get) => ({
     return hidden.length ? hidden : null
   },
 
-  setActive: (id) => set(s => ({ activeId: id })),
+  // r63-fix-c #3：活动结构切换时 bump visualRev——引擎视觉中随 activeId 的部分（晶胞盒 show cell）
+  // 需要重新 sync 才会跟随（MolViewer 的 sync effect 仅依赖 visualRev）；同 id 重复调用不 bump
+  setActive: (id) => set(s => s.activeId === id ? {} : { activeId: id, visualRev: s.visualRev + 1 }),
 
   addRep: (structureId, rep) => {
     set(s => ({

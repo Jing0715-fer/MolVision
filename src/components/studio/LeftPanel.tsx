@@ -96,14 +96,18 @@ export function LeftPanel() {
 
   const activePanelLabel = PANELS.find(p => p.key === ui.panel)?.label
 
-  const content = (
+  const content = (inSheet: boolean) => (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <span className="mol-micro text-foreground/75">
           {activePanelLabel ? t(activePanelLabel) : null}
         </span>
         <button
-          onClick={() => setUi({ panelOpen: false })}
+          onClick={() => {
+            setUi({ panelOpen: false })
+            // 抽屉内折叠：同时关 Sheet（否则抽屉悬浮在屏幕上）
+            if (inSheet) setMobileOpen(false)
+          }}
           aria-label={t({ zh: '折叠面板（点击左侧图标恢复）', en: 'Collapse the panel (click a left icon to reopen)' })}
           title={t({ zh: '折叠面板', en: 'Collapse panel' })}
           className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent hover:text-foreground"
@@ -167,7 +171,7 @@ export function LeftPanel() {
         {/* 面板内容（宽度可拖拽） */}
         {ui.panelOpen && (
           <div className="relative shrink-0 border-r border-border bg-background" style={{ width: panelW }}>
-            {content}
+            {content(false)}
             {/* 拖拽把手：悬停/拖拽时高亮 */}
             <div
               role="separator"
@@ -188,18 +192,18 @@ export function LeftPanel() {
         )}
       </aside>
 
-      {/* 移动端抽屉 */}
+      {/* 移动端抽屉入口 FAB：右下角 44px 触达标准（避让左上角 REC 录制徽章） */}
         <button
           onClick={() => setMobileOpen(true)}
           aria-label={t({ zh: '打开控制面板', en: 'Open the control panel' })}
-          className="absolute left-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card mol-elevate transition md:hidden"
+          className="absolute bottom-24 right-4 z-20 flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-card mol-elevate transition md:hidden"
         >
-          <Boxes className="h-4 w-4" />
+          <Boxes className="h-5 w-5" />
         </button>
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-[300px] p-0">
           <SheetTitle className="sr-only">{t({ zh: '控制面板', en: 'Control panel' })}</SheetTitle>
-          {content}
+          {content(true)}
         </SheetContent>
       </Sheet>
     </>

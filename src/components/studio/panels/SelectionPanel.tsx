@@ -7,7 +7,6 @@ import { toast } from 'sonner'
 import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
 import { maskToIndices, evaluateSelection, PRESET_SELECTIONS } from '@/lib/molecular/selection'
 import { buildNamedMasks } from '@/lib/molecular/store'
-import { cn } from '@/lib/utils'
 import { useI18n, tt, type DualText } from '@/i18n'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Input } from '@/components/ui/input'
@@ -31,7 +30,6 @@ export function SelectionPanel() {
   const [name, setName] = useState('')
   const selection = useMolStore(s => s.selection)
   const activeId = useMolStore(s => s.activeId)
-  const structures = useMolStore(s => s.structures)
   const selectFromExpr = useMolStore(s => s.selectFromExpr)
   const namedSelections = useMolStore(s => s.namedSelections)
   const saveNamedSelection = useMolStore(s => s.saveNamedSelection)
@@ -40,7 +38,6 @@ export function SelectionPanel() {
   const addLabelsForSelection = useMolStore(s => s.addLabelsForSelection)
   const setSelection = useMolStore(s => s.setSelection)
 
-  const st = structures.find(x => x.id === activeId)
   const data = activeId ? dataRegistry.get(activeId) : null
 
   const stats = (() => {
@@ -211,7 +208,6 @@ export function SelectionPanel() {
       <PanelHint>
         {t({ zh: '语法：', en: 'Syntax:' })} <code className="text-[10px]">chain A</code> · <code className="text-[10px]">resi 1-60</code> · <code className="text-[10px]">resn HEM</code> · <code className="text-[10px]">name CA</code> · <code className="text-[10px]">elem Fe</code> · <code className="text-[10px]">within 5 of (…)</code> · <code className="text-[10px]">byres(…)</code>{t({ zh: '，可用 and / or / not。', en: ' — combine with and / or / not.' })}
       </PanelHint>
-      <div className={cn('hidden', st ? '' : '')} />
     </div>
   )
 }

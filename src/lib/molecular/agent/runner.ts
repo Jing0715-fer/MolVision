@@ -38,6 +38,8 @@ const AUTO_PREFIXES = new Set([
   'map', 'save', 'png', 'ray', 'svg',
   // 信息
   'help', 'history', 'perf',
+  // PyMOL 数据动词（r60 移植：iterate 只读遍历；alter 限 b/q/name 属性白名单；cell 同 show cell）
+  'iterate', 'alter', 'cell', 'spectrum', 'enable', 'disable', 'set_name',
 ])
 
 /** 破坏性/高影响命令：需用户在面板上确认后才执行 */

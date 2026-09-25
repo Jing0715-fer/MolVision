@@ -6,7 +6,7 @@
 // - 目录按 category 分组（builtin/global/cn/aggregator/local/custom），每家带品牌色与官网
 // - discoveredModels：输入 Key 后经 /models 探测到的真实可用模型（存 config，前端合并展示）
 
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { cookies, headers } from 'next/headers'
 import { LOCALE_COOKIE, type DualText, type Locale } from '@/i18n/locales'
@@ -738,6 +738,8 @@ function loadStore(): StoreShape {
 function saveStore(next: StoreShape): void {
   try {
     if (!existsSync(STORE_DIR)) mkdirSync(STORE_DIR, { recursive: true, mode: 0o700 })
+    // 已存在的旧文件权限可能过宽（mode 仅首次创建生效）——每写前强制收欀 600
+    try { if (existsSync(STORE_FILE)) chmodSync(STORE_FILE, 0o600) } catch { /* 最佳努力 */ }
     writeFileSync(STORE_FILE, JSON.stringify(next, null, 2), { encoding: 'utf-8', mode: 0o600 })
     cache = next
     cacheMtime = statSync(STORE_FILE).mtimeMs
@@ -1011,11 +1013,11 @@ async function prepareRequest(providerId: string): Promise<{ baseURL: string; ap
   const profile = getProviderProfile(providerId)
   if (!profile) throw new Error(bt(locale, `未知供应商：${providerId}`, `Unknown provider: ${providerId}`))
   const baseURL = resolveBaseURL(providerId)
-  if (!baseURL) throw new Error(bt(locale, `Provider ${profile.displayNameEn ?? profile.displayName} has no Base URL configured`, `Provider ${profile.displayName} has no Base URL configured`))
+  if (!baseURL) throw new Error(bt(locale, `供应商 ${profile.displayName} 未配置 Base URL`, `Provider ${profile.displayNameEn ?? profile.displayName} has no Base URL configured`))
   const apiKey = resolveApiKey(providerId)
-  if (!apiKey) throw new Error(bt(locale, `Provider ${profile.displayNameEn ?? profile.displayName} has no API Key configured (settings page or env var ${profile.apiKeyEnv})`, `Provider ${profile.displayName} has no API Key configured (settings page or env var ${profile.apiKeyEnv})`))
+  if (!apiKey) throw new Error(bt(locale, `供应商 ${profile.displayName} 未配置 API Key（设置页或环境变量 ${profile.apiKeyEnv}）`, `Provider ${profile.displayNameEn ?? profile.displayName} has no API Key configured (settings page or env var ${profile.apiKeyEnv})`))
   const model = resolveModel(providerId)
-  if (!model) throw new Error(bt(locale, `Provider ${profile.displayNameEn ?? profile.displayName} has no model configured`, `Provider ${profile.displayName} has no model configured`))
+  if (!model) throw new Error(bt(locale, `供应商 ${profile.displayName} 未配置模型`, `Provider ${profile.displayNameEn ?? profile.displayName} has no model configured`))
   const headers: Record<string, string> = {
     [profile.authHeader ?? 'Authorization']: `${profile.authPrefix ?? 'Bearer '}${apiKey}`,
     ...(profile.extraHeaders ?? {}),

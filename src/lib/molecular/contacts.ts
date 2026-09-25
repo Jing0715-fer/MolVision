@@ -59,9 +59,12 @@ export function detectContacts(
     bonded.add(b1 * n + a1)
   }
 
-  // 重原子索引列表
+  // 重原子索引列表（排除 H/D——与跨结构版 detectContactsCross 口径一致，r63-fix-c #5：
+  // 旧版单结构路径无氢过滤，氢键长距离接触（H···O ~2.8Å）大量涌入结果）
   const listA: number[] = [], listB: number[] = []
   for (let i = 0; i < n; i++) {
+    const e = atoms.elements[i]
+    if (e === 'H' || e === 'D') continue
     if (aMask[i]) listA.push(i)
     if (bMask[i]) listB.push(i)
   }
@@ -77,6 +80,8 @@ export function detectContacts(
     const resA = data.atomResidue[a]
     for (const b of cand) {
       if (!bMask[b]) continue
+      const e = atoms.elements[b]
+      if (e === 'H' || e === 'D') continue // 重原子接触（对齐跨结构版）
       const resB = data.atomResidue[b]
       if (resA === resB) continue
       if (bonded.has(a * n + b)) continue

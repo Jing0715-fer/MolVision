@@ -188,7 +188,7 @@ export function SequenceBar() {
       if (d.moved && dragTipRef.current) {
         dragTipRef.current.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`
       }
-      // 边缘检测：进入触发区记录方向（rAF 循环负责持续滚动）；
+      // 边缘检测：进入触发区记录方向并点火 rAF 循环（rAF 空转修复：空闲期不安排帧）；
       // 横向滚动容器 = 拖拽链行自身的 FadeEdge（非外层纵向 body）
       const body = d.scroller
       if (d.moved && body) {
@@ -196,24 +196,24 @@ export function SequenceBar() {
         if (e.clientX < r.left + EDGE) autoDir = -1
         else if (e.clientX > r.right - EDGE) autoDir = 1
         else autoDir = 0
+        if (autoDir !== 0 && raf === 0) raf = requestAnimationFrame(step)
       }
     }
+    // 仅拖拽进行中且指针处于边缘触发区时滚动+续帧；空闲（未拖/离开边缘/已结束）即停转，
+    // 不再永续自旋（重入边缘时由 move 重新点火）
     const step = () => {
       const d = dragRef.current
-      if (d && d.moved && autoDir !== 0) {
-        const body = d.scroller
-        if (body) {
-          const r = body.getBoundingClientRect()
-          const px = lastPtRef.current.x
-          // 侵入越深滚越快（线性渐变，最低保底 2px/帧）
-          const depth = autoDir < 0 ? Math.min(1, (r.left + EDGE - px) / EDGE) : Math.min(1, (px - (r.right - EDGE)) / EDGE)
-          body.scrollLeft += autoDir * Math.max(2, MAX_SPEED * Math.max(0, depth))
-          applyCellAt(px, lastPtRef.current.y)
-        }
-      }
+      if (!d || !d.moved || autoDir === 0) { raf = 0; return }
+      const body = d.scroller
+      if (!body) { raf = 0; return }
+      const r = body.getBoundingClientRect()
+      const px = lastPtRef.current.x
+      // 侵入越深滚越快（线性渐变，最低保底 2px/帧）
+      const depth = autoDir < 0 ? Math.min(1, (r.left + EDGE - px) / EDGE) : Math.min(1, (px - (r.right - EDGE)) / EDGE)
+      body.scrollLeft += autoDir * Math.max(2, MAX_SPEED * Math.max(0, depth))
+      applyCellAt(px, lastPtRef.current.y)
       raf = requestAnimationFrame(step)
     }
-    raf = requestAnimationFrame(step)
     const finish = (commit: boolean) => {
       const d = dragRef.current
       if (!d) return
@@ -493,7 +493,11 @@ export function SequenceBar() {
                     <input
                       value={libName}
                       onChange={e => setLibName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') doSaveLib() }}
+                      onKeyDown={e => {
+                        // IME 组合中（中文输入法候选确认的 Enter）不触发保存
+                        if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                        if (e.key === 'Enter') doSaveLib()
+                      }}
                       placeholder={t({ zh: `命名保存当前选择（${selection.indices.length.toLocaleString()} 原子）…`, en: `Name and save current selection (${selection.indices.length.toLocaleString()} atoms)…` })}
                       className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[11px] outline-none transition focus:border-foreground/30"
                       aria-label={t({ zh: '命名保存当前选择', en: 'Name and save current selection' })}
@@ -572,7 +576,11 @@ export function SequenceBar() {
                 <input
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') doSearch() }}
+                  onKeyDown={e => {
+                    // IME 组合中（中文输入法候选确认的 Enter）不触发定位
+                    if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                    if (e.key === 'Enter') doSearch()
+                  }}
                   placeholder="57 · A57 · HEM…"
                   autoFocus
                   aria-label={t({ zh: '残基搜索词', en: 'Residue search term' })}
@@ -626,7 +634,11 @@ export function SequenceBar() {
               <input
                 value={saveName}
                 onChange={e => setSaveName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') doSaveBar() }}
+                onKeyDown={e => {
+                  // IME 组合中（中文输入法候选确认的 Enter）不触发保存
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                  if (e.key === 'Enter') doSaveBar()
+                }}
                 placeholder={t({ zh: '命名保存（如 active_site）…', en: 'Save as name (e.g. active_site)…' })}
                 className="h-6.5 min-w-28 flex-1 rounded-md border border-border bg-background px-2 text-[11px] outline-none transition focus:border-foreground/30"
                 aria-label={t({ zh: '框选范围命名', en: 'Name the boxed range' })}

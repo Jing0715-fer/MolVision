@@ -4,7 +4,7 @@
 // · Enter 直接执行（示例命令，面板内可见将执行的内容——无意外）
 // · Tab 填入控制台输入行继续编辑（带补全）
 // · 快速动作（帮助/加载结构/历史面板）与结构切换入口
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import {
   Boxes, Bot, ChevronRight, Command as CommandIcon, HelpCircle,
@@ -20,6 +20,9 @@ import {
 import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
 } from '@/components/ui/command'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useI18n, tt, type TranslateInput } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -96,6 +99,8 @@ export function CommandPalette() {
   // 历史/置顶：localStorage 外部存储（写入方失效缓存 + notify）——避免 effect 内 setState（React Compiler 约束）
   const history = useSyncExternalStore(subscribeCmdHistory, cmdHistorySnapshot, emptyCmdSnapshot)
   const pinned = useSyncExternalStore(subscribeCmdHistory, pinnedCmdsSnapshot, emptyCmdSnapshot)
+
+  const [confirmNewSession, setConfirmNewSession] = useState(false)
 
   // Ctrl/Cmd+K 全局开关（输入框聚焦时同样生效——浏览器标准快捷键语义）
   useEffect(() => {
@@ -242,10 +247,10 @@ export function CommandPalette() {
       return
     }
     if (item.id === 'qa-session-new') {
-      requestAnimationFrame(() => {
-        if (structures.length) { newSession(); toast.success(tt({ zh: '已新建会话', en: 'New session created' })) }
-        else toast.info(tt({ zh: '当前就是空会话', en: 'Already an empty session' }))
-      })
+      // 有结构时先确认（防误触清空——与 Toolbar 新建会话同款 AlertDialog）；
+      // palette 先关，确认框延迟一帧弹出（避免两个弹层叠在一起）
+      if (structures.length) requestAnimationFrame(() => setConfirmNewSession(true))
+      else requestAnimationFrame(() => toast.info(tt({ zh: '当前就是空会话', en: 'Already an empty session' })))
       return
     }
     if (!item.run) return
@@ -296,57 +301,99 @@ export function CommandPalette() {
   }
 
   return (
-    <CommandDialog
-      open={open}
-      onOpenChange={setOpen}
-      title={t({ zh: '命令面板', en: 'Command palette' })}
-      description={t({ zh: '搜索并执行命令，或填入命令行编辑', en: 'Search and run commands, or fill into the command line to edit' })}
-      className="mol-elevate-lg sm:max-w-xl"
-    >
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-xs font-semibold">{t({ zh: '命令面板', en: 'Command palette' })}</span>
-        <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">Ctrl+K</kbd>
-        <span className="mol-micro ml-auto mr-9 text-muted-foreground">COMMAND PALETTE</span>
-      </div>
-      <CommandInput
-        placeholder={t({ zh: '搜索命令、最近使用或结构…（Enter 执行 · Tab 填入编辑）', en: 'Search commands, recent items, or structures… (Enter to run · Tab to edit)' })}
-        onKeyDown={onInputKeyDown}
-        className="font-mono text-[13px]"
-      />
-      <CommandList className="mol-scroll max-h-[380px]">
-        <CommandEmpty className="py-6 text-center text-xs text-muted-foreground">{t({ zh: '没有匹配的命令', en: 'No matching commands' })}</CommandEmpty>
-        {pinnedItems.length > 0 && (
-          <CommandGroup heading={t({ zh: '置顶（常用工作流）', en: 'Pinned (common workflows)' })}>
-            {pinnedItems.map(renderItem)}
+    <>
+      <CommandDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={t({ zh: '命令面板', en: 'Command palette' })}
+        description={t({ zh: '搜索并执行命令，或填入命令行编辑', en: 'Search and run commands, or fill into the command line to edit' })}
+        className="mol-elevate-lg sm:max-w-xl"
+      >
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+          <span className="text-xs font-semibold">{t({ zh: '命令面板', en: 'Command palette' })}</span>
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">Ctrl+K</kbd>
+          <span className="mol-micro ml-auto mr-9 text-muted-foreground">COMMAND PALETTE</span>
+        </div>
+        <CommandInput
+          placeholder={t({ zh: '搜索命令、最近使用或结构…（Enter 执行 · Tab 填入编辑）', en: 'Search commands, recent items, or structures… (Enter to run · Tab to edit)' })}
+          onKeyDown={onInputKeyDown}
+          className="font-mono text-[13px]"
+        />
+        <CommandList className="mol-scroll max-h-[380px]">
+          <CommandEmpty className="py-6 text-center text-xs text-muted-foreground">{t({ zh: '没有匹配的命令', en: 'No matching commands' })}</CommandEmpty>
+          {pinnedItems.length > 0 && (
+            <CommandGroup heading={t({ zh: '置顶（常用工作流）', en: 'Pinned (common workflows)' })}>
+              {pinnedItems.map(renderItem)}
+            </CommandGroup>
+          )}
+          {recentItems.length > 0 && (
+            <CommandGroup heading={t({ zh: '最近使用', en: 'Recent' })}>
+              {recentItems.map(renderItem)}
+            </CommandGroup>
+          )}
+          {structureItems.length > 0 && (
+            <CommandGroup heading={t({ zh: '结构切换', en: 'Switch structure' })}>
+              {structureItems.map(renderItem)}
+            </CommandGroup>
+          )}
+          <CommandSeparator />
+          <CommandGroup heading={t({ zh: '全部命令（Enter 执行示例 · Tab 进命令行带补全编辑）', en: 'All commands (Enter runs the example · Tab opens in the command line with completion)' })}>
+            {allItems.map(renderItem)}
           </CommandGroup>
-        )}
-        {recentItems.length > 0 && (
-          <CommandGroup heading={t({ zh: '最近使用', en: 'Recent' })}>
-            {recentItems.map(renderItem)}
-          </CommandGroup>
-        )}
-        {structureItems.length > 0 && (
-          <CommandGroup heading={t({ zh: '结构切换', en: 'Switch structure' })}>
-            {structureItems.map(renderItem)}
-          </CommandGroup>
-        )}
-        <CommandSeparator />
-        <CommandGroup heading={t({ zh: '全部命令（Enter 执行示例 · Tab 进命令行带补全编辑）', en: 'All commands (Enter runs the example · Tab opens in the command line with completion)' })}>
-          {allItems.map(renderItem)}
-        </CommandGroup>
-      </CommandList>
-      <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[10px] text-muted-foreground/70">
-        <span className="flex min-w-0 items-center gap-1 truncate">
-          <Star className="h-3 w-3 shrink-0 text-amber-500/70" />
-          {t({ zh: '在命令历史面板可置顶常用命令（命令行 `` 或 history）', en: 'Pin frequently used commands in the history panel (`` or history in the command line)' })}
-        </span>
-        <span className="flex shrink-0 items-center gap-1">
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↑↓</kbd>{t({ zh: '导航', en: 'navigate' })}
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↵</kbd>{t({ zh: '执行', en: 'run' })}
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Tab</kbd>{t({ zh: '编辑', en: 'edit' })}
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Esc</kbd>{t({ zh: '关闭', en: 'close' })}
-        </span>
-      </div>
-    </CommandDialog>
+        </CommandList>
+        <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[10px] text-muted-foreground/70">
+          <span className="flex min-w-0 items-center gap-1 truncate">
+            <Star className="h-3 w-3 shrink-0 text-amber-500/70" />
+            {t({ zh: '在命令历史面板可置顶常用命令（命令行 `` 或 history）', en: 'Pin frequently used commands in the history panel (`` or history in the command line)' })}
+          </span>
+          <span className="flex shrink-0 items-center gap-1">
+            <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↑↓</kbd>{t({ zh: '导航', en: 'navigate' })}
+            <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">↵</kbd>{t({ zh: '执行', en: 'run' })}
+            <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Tab</kbd>{t({ zh: '编辑', en: 'edit' })}
+            <kbd className="rounded border border-border bg-muted px-1 font-mono text-[9px]">Esc</kbd>{t({ zh: '关闭', en: 'close' })}
+          </span>
+        </div>
+      </CommandDialog>
+
+      {/* 新建会话确认（有结构时二次确认，防误触——文案与 Toolbar 同源） */}
+      <AlertDialog open={confirmNewSession} onOpenChange={setConfirmNewSession}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {structures.length > 0
+                ? t({ zh: `新建会话并关闭 ${structures.length} 个结构？`, en: `Start a new session and close ${structures.length} structure${structures.length > 1 ? 's' : ''}?` })
+                : t({ zh: '新建会话？', en: 'Start a new session?' })}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p>
+                  {t({ zh: '将清空全部结构、表示法、选择、测量、标签、命名选择、视角书签、movie 时间轴与电子密度图；本地自动存档同步清除。', en: 'This clears all structures, representations, selections, measurements, labels, named selections, view bookmarks, the movie timeline and electron-density maps; the local autosave is cleared as well.' })}
+                </p>
+                <p className="mt-1.5 text-muted-foreground">
+                  {t({ zh: '此操作不可撤销。如需保留当前场景，可先「保存会话文件」导出 .molvision 留档。', en: 'This action cannot be undone. To keep the current scene, use "Save session file…" to export a .molvision first.' })}
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t({ zh: '取消', en: 'Cancel' })}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmNewSession(false)
+                const closed = newSession()
+                toast.success(tt(closed > 0
+                  ? { zh: `已新建会话（关闭 ${closed} 个结构）`, en: `New session started (${closed} structures closed)` }
+                  : { zh: '已新建会话', en: 'New session started' }), {
+                  description: tt({ zh: '结构 / 书签 / 时间轴 / 密度图已清空 · 可随时「保存会话文件」留档分享', en: 'Structures / bookmarks / timeline / maps cleared · use "Save session file…" anytime to archive and share' }),
+                })
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t({ zh: '新建会话', en: 'New session' })}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }

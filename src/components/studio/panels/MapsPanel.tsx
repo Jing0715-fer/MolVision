@@ -92,6 +92,8 @@ export function MapsPanel() {
             <button
               key={k.key}
               onClick={() => {
+                // 已激活类型重跑 no-op（避免同类型重复触发合成）
+                if (kind === k.key) return
                 setKind(k.key)
                 // 已有图时切换类型 → 直接用当前/输入 ID 重算
                 if (idInput || activePdbId) doFetch(idInput || activePdbId || '', k.key)
@@ -115,7 +117,11 @@ export function MapsPanel() {
           <input
             value={idInput}
             onChange={e => setIdInput(e.target.value.toUpperCase())}
-            onKeyDown={e => { if (e.key === 'Enter') doFetch(idInput, kind) }}
+            onKeyDown={e => {
+              // IME 组合中（中文输入法候选确认的 Enter）不触发合成
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
+              if (e.key === 'Enter') doFetch(idInput, kind)
+            }}
             placeholder={t({ zh: 'PDB 编号（如 3EKJ）', en: 'PDB ID (e.g. 3EKJ)' })}
             className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 font-mono text-xs uppercase tracking-wider outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
             aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}

@@ -92,11 +92,21 @@ class Evaluator {
   parseAnd(): Uint8Array | { error: string } {
     let left = this.parseUnary()
     if (left && 'error' in left) return left
-    while (this.isWord('and') || (this.peek()?.t === 'punct' && (this.peek() as { v: string }).v === '&')) {
+    for (;;) {
+      const p = this.peek()
+      const isAnd = this.isWord('and') || (p?.t === 'punct' && (p as { v: string }).v === '&')
+      // PyMOL 二元扩展操作符：A in B / A like B（与 and 同优先级，左结合）
+      const isIn = this.isWord('in')
+      const isLike = this.isWord('like')
+      if (!isAnd && !isIn && !isLike) break
       this.next()
       const right = this.parseUnary()
       if (right && 'error' in right) return right
-      for (let i = 0; i < left.length; i++) left[i] = left[i] && right[i] ? 1 : 0
+      if (isIn || isLike) {
+        left = matchByResidue(this.ctx, left, right, isLike)
+      } else {
+        for (let i = 0; i < left.length; i++) left[i] = left[i] && right[i] ? 1 : 0
+      }
     }
     return left
   }
@@ -160,6 +170,25 @@ class Evaluator {
       const val = this.next()
       if (!val || val.t !== 'num') return { error: tt({ zh: 'bfactor 需要数值', en: 'bfactor requires a numeric value' }) }
       return bfactorCmp(this.ctx, op.v, val.v)
+    }
+    // PyMOL q：占据率比较（q > 0.3 / q < 1）
+    if (kw === 'q' || kw === 'occupancy') {
+      this.next()
+      const op = this.next()
+      if (!op || op.t !== 'punct' || !['<', '>', '='].includes(op.v)) return { error: tt({ zh: 'q 需要比较符 < > =', en: 'q requires a comparison operator < > =' }) }
+      const val = this.next()
+      if (!val || val.t !== 'num') return { error: tt({ zh: 'q 需要数值', en: 'q requires a numeric value' }) }
+      return occupancyCmp(this.ctx, op.v, val.v)
+    }
+    // PyMOL byobject：扩展到选择所含原子所在的整个对象（单结构 = 单对象：命中任一原子则全选）
+    if (kw === 'byobject') {
+      this.next()
+      const inner = this.parsePrimary()
+      if (inner && 'error' in inner) return inner
+      for (let i = 0; i < inner.length; i++) {
+        if (inner[i]) { inner.fill(1); return inner }
+      }
+      return inner
     }
     // 单参数谓词
     const one = onePredicates[kw]

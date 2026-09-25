@@ -281,6 +281,8 @@ function SessionListPopover({
                     autoFocus
                     onChange={e => setDraft(e.target.value)}
                     onKeyDown={e => {
+                      // IME 组合中（候选确认的 Enter）不触发重命名提交
+                      if (e.nativeEvent.isComposing || e.keyCode === 229) return
                       if (e.key === 'Enter') commitRename()
                       if (e.key === 'Escape') setEditingId(null)
                       e.stopPropagation()
@@ -393,9 +395,17 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
   // 持久化已迁至 chat-store 模块级订阅（独立于组件生命周期）：面板卸载/重挂不再丢失写入时机
 
-  // 自动滚底（每个增量都跟随）
+  // 自动滚底：仅当用户已在底部附近（距底 < 80px）或 busy 刚开始（用户刚发出消息）时跟随——
+  // 上翻阅读历史时不被新内容拽回底部
+  const nearBottomRef = useRef(true)
+  const prevBusyRef = useRef(false)
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+    const el = scrollRef.current
+    if (!el) return
+    if (nearBottomRef.current || (!prevBusyRef.current && busy)) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    }
+    prevBusyRef.current = busy
   }, [msgs, busy])
 
   // 打开时聚焦输入框
@@ -604,8 +614,9 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     }
   }, [msgs, busy, runTurn, buildApiHistory, buildMemoryDigest, visualOn])
 
-  /** confirm 卡片的「执行 / 跳过」与「重跑」 */
+  /** confirm 卡片的「执行 / 跳过」与「重跑」（生成中禁止——并发执行会打架） */
   const act = useCallback(async (msgId: string, idx: number, mode: 'confirm-run' | 'confirm-skip' | 'rerun') => {
+    if (busy) return
     const msg = msgs.find(x => x.id === msgId)
     if (!msg?.commands?.[idx]) return
     if (mode === 'confirm-skip') {
@@ -616,7 +627,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     patchCmds(msgId, next)
     const r = await execAgentCmd(next[idx].cmd)
     patchCmds(msgId, next.map((c, i) => (i === idx ? r : c)))
-  }, [msgs, patchCmds])
+  }, [msgs, patchCmds, busy])
 
   const clearChat = useCallback(() => {
     useAgentChatStore.getState().clearMsgs()
@@ -735,7 +746,15 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       </div>
 
       {/* 消息区 */}
-      <div ref={scrollRef} className="mol-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+      <div
+        ref={scrollRef}
+        onScroll={() => {
+          const el = scrollRef.current
+          if (!el) return
+          nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+        }}
+        className="mol-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
+      >
         {msgs.length === 0 && !busy && (
           <div className="space-y-3.5 pt-2">
             <div className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-3.5 text-center">
@@ -894,6 +913,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
             onChange={e => setInput(e.target.value)}
             onInput={onTaInput}
             onKeyDown={e => {
+              // IME 组合中（中文输入法候选确认的 Enter）不发送
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 void send(input)

@@ -199,6 +199,15 @@ export function ConsoleBar() {
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // IME 组合中（中文输入法候选确认的 Enter）不触发命令执行/历史搜索
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return
+    // ` / ~ 关闭命令行（帮助文档宣称的开关；打开方向由 MolViewer 全局键位处理——
+    // 其 INPUT 早退分支会跳过聚焦态，故关闭路径必须在输入行这里实现）
+    if (e.key === '`' || e.key === '~') {
+      e.preventDefault()
+      setUi({ consoleOpen: false })
+      return
+    }
     // Ctrl+R 反向历史搜索：进入 / 循环下一个更早的匹配
     if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
       e.preventDefault()

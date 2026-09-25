@@ -873,16 +873,20 @@ export function runCommand(raw: string): void {
     if (scheme === 'uniform') return err(tt({ zh: '属性错误', en: 'Invalid property' }))
     const s = useMolStore.getState()
     if (!s.activeId) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
-    // 可选自定义起终点色（PyMOL spectrum b, rainbow, blue red）
+    // 可选自定义起终点色（PyMOL spectrum b, rainbow, blue red / spectrum b rainbow blue red）
     const tailWords = tail.split(/\s+/).filter(Boolean)
     let note = ''
+    const colorWords: string[] = []
     if (tailWords.length >= 2) {
       const c1 = parseCssColor(tailWords[tailWords.length - 2])
       const c2 = parseCssColor(tailWords[tailWords.length - 1])
-      if (c1 && c2) note = tt({ zh: `（自定义起终点 ${c1}→${c2} 需「color ${scheme}」配合色板编辑，暂用内置渐变）`, en: ` (custom endpoints ${c1}→${c2} need "color ${scheme}" plus palette editing — using the built-in gradient for now)` })
+      if (c1 && c2) {
+        colorWords.push(tailWords[tailWords.length - 2].toLowerCase(), tailWords[tailWords.length - 1].toLowerCase())
+        note = tt({ zh: `（自定义起终点 ${c1}→${c2} 需「color ${scheme}」配合色板编辑，暂用内置渐变）`, en: ` (custom endpoints ${c1}→${c2} need "color ${scheme}" plus palette editing — using the built-in gradient for now)` })
+      }
     }
-    // 选择范围（可选）：spectrum b, rainbow, chain A —— 排除属性/配色词后的剩余
-    const selWords = tailWords.filter(w => !['rainbow', 'count', 'b', 'bfactor', 'factor'].includes(w.toLowerCase()))
+    // 选择范围（可选）：spectrum b, rainbow, chain A —— 排除属性/配色/颜色词后的剩余
+    const selWords = tailWords.filter(w => !['rainbow', 'count', 'b', 'bfactor', 'factor', ...colorWords].includes(w.toLowerCase()))
     const selExpr = selWords.join(' ')
     if (selExpr) {
       const res = s.selectFromExpr(selExpr)
@@ -947,9 +951,11 @@ export function runCommand(raw: string): void {
     const idx = maskToIndices(r.mask)
     if (!idx.length) return err(tt({ zh: `选择 "${expr}" 命中 0 个原子`, en: `Selection "${expr}" matched 0 atoms` }))
     if (!['b', 'q', 'name'].includes(field)) return err(tt({ zh: `alter 暂支持 b / q / name（当前 "${field}"）——改坐标在本工具无意义（叠合/变换有专用命令）`, en: `alter currently supports b / q / name (got "${field}") — editing coordinates is meaningless here (superpose/transform have dedicated commands)` }))
-    // 数值表达式：仅允许数值/简单算术（安全边界，不 eval 任意代码）
+    // 数值表达式：数字/简单算术 + b/q 原值引用（先替换再校验，防 b=b+10 被字符集否决）
     if (field !== 'name') {
-      if (!/^[\d.+\-*/()\s]+$/.test(valExpr)) return err(tt({ zh: `数值表达式非法 "${valExpr}"（仅数字与 + - * / 括号）`, en: `Invalid numeric expression "${valExpr}" (digits and + - * / parentheses only)` }))
+      const probe = valExpr.replace(/\bb\b/g, '1').replace(/\bq\b/g, '1')
+      if (!/^[\d.+\-*/()\s]+$/.test(probe)) return err(tt({ zh: `数值表达式非法 "${valExpr}"（仅数字、+ - * / 括号与 b/q 原值引用）`, en: `Invalid numeric expression "${valExpr}" (digits, + - * / parentheses, and b/q self-reference only)` }))
+      try { new Function(`return (${probe})`)() } catch { return err(tt({ zh: `数值表达式无法求值 "${valExpr}"`, en: `Numeric expression cannot be evaluated "${valExpr}"` })) }
     }
     let n = 0
     for (const i of idx) {
@@ -2482,9 +2488,11 @@ export function runCommand(raw: string): void {
       const r = evaluateSelection(g, { structure: dataMeas, named: namedMeas })
       if (r.error) return err(tt({ zh: `选择错误: ${r.error}（"${g}"）`, en: `Selection error: ${r.error} ("${g}")` }))
       if (!r.count) return err(tt({ zh: `选择 "${g}" 命中 0 个原子`, en: `Selection "${g}" matched 0 atoms` }))
-      idxPerGroup.push(...maskToIndices(r.mask))
+      // r63-fix-c #6：40000 护栏先于展开转换（>10 万原子时 push(...arr) 触发 RangeError 栈溢出）；
+      // 累计口径不变——旧版 push 后查 idxPerGroup.length，等价于转换前的「已累计 + 本组 r.count」
+      if (idxPerGroup.length + r.count > 40000) return err(tt({ zh: '选择过大（>4万原子），请缩小范围后测量', en: 'Selection too large (>40k atoms) — narrow the scope before measuring' }))
+      for (const i of maskToIndices(r.mask)) idxPerGroup.push(i)
       countPerGroup.push(r.count)
-      if (idxPerGroup.length > 40000) return err(tt({ zh: '选择过大（>4万原子），请缩小范围后测量', en: 'Selection too large (>40k atoms) — narrow the scope before measuring' }))
     }
     // 每组代表原子：单原子直接用；多原子取质心最近原子（距离模式取两组间最近原子对）
     const centroidNearest = (from: number, to: number): number => {

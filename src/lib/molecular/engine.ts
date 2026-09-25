@@ -491,20 +491,30 @@ export class MolEngine {
     this.pickablesCache = null
   }
 
+  /** 正交 frustum 尺寸更新（纯几何职责）：半高按正交相机自身到 target 的距离换算
+   *  （正交激活后 OrbitControls 直接驱动 orthoCamera，透视相机位姿已陈旧）。
+   *  r63-fix-c #2：不触碰 zoom 与位姿——resize/设置变更不再重置用户滚轮缩放，
+   *  也不再把陈旧的透视机位覆盖到正交相机上；位姿同步只在激活瞬间做（applySettings）。 */
   private updateOrthoFrustum() {
     const w = this.container.clientWidth || 1
     const h = this.container.clientHeight || 1
-    const dist = Math.max(this.camera.position.distanceTo(this.controls.target), 1)
+    const dist = Math.max(this.orthoCamera.position.distanceTo(this.controls.target), 1)
     const halfH = dist * Math.tan((this.camera.fov * Math.PI) / 360)
     const halfW = (halfH * w) / h
     this.orthoCamera.top = halfH
     this.orthoCamera.bottom = -halfH
     this.orthoCamera.left = -halfW
     this.orthoCamera.right = halfW
-    this.orthoCamera.zoom = 1
+    this.orthoCamera.updateProjectionMatrix()
+  }
+
+  /** 正交相机逐帧跟随透视相机位姿（camAnim/camPath 飞行期间透视相机是被动画驱动的权威，
+   *  正交相机必须镜像其位姿否则飞行视口不动）；zoom 归 1 = 视角书签/适配的取景重置语义 */
+  private syncOrthoPose() {
     this.orthoCamera.position.copy(this.camera.position)
     this.orthoCamera.quaternion.copy(this.camera.quaternion)
-    this.orthoCamera.updateProjectionMatrix()
+    this.orthoCamera.zoom = 1
+    this.updateOrthoFrustum()
   }
 
   private tick = () => {
@@ -547,7 +557,8 @@ export class MolEngine {
         this.camera.up.copy(a.up0).applyQuaternion(TMP_Q_SLERP).normalize()
       }
       this.camera.lookAt(this.controls.target)
-      if (this.activeCamera === this.orthoCamera) this.updateOrthoFrustum()
+      // 正交激活时飞行位姿镜像到 orthoCamera（透视相机是动画驱动权威）
+      if (this.activeCamera === this.orthoCamera) this.syncOrthoPose()
       if (k >= 1) {
         // 落位：up 精确归位（slerp(1) 已到位，此处兜底浮点误差）+ controls 同步球坐标
         this.camera.up.copy(a.up1)
@@ -594,7 +605,8 @@ export class MolEngine {
         this.camera.up.copy(k0.up)
       }
       this.camera.lookAt(this.controls.target)
-      if (this.activeCamera === this.orthoCamera) this.updateOrthoFrustum()
+      // 正交激活时巡航位姿镜像到 orthoCamera（同 camAnim）
+      if (this.activeCamera === this.orthoCamera) this.syncOrthoPose()
       if (s >= 1) {
         const last = a.keys[a.keys.length - 1]
         this.camera.position.copy(last.p)
@@ -1424,6 +1436,9 @@ export class MolEngine {
     for (const [id, view] of this.views) {
       if (!view.group.visible) continue
       for (const rv of view.reps.values()) {
+        // r63-fix-c #1：rep 级可见性参与拾取——three Raycaster.intersect 不检查 visible，
+        // 隐藏 rep 的网格若留在列表中仍可 hover/点选/框选（与 rayRender markShadowCasters 的写法对齐）
+        if (!rv.build.group.visible) continue
         for (const p of rv.build.pickables) {
           if (p.mesh.visible !== false) out.push({ obj: p.mesh, pick: p, structureId: id })
         }
@@ -1576,6 +1591,7 @@ export class MolEngine {
 
   sync(state: {
     structures: StructureEntry[]
+    activeId: string | null
     selection: { structureId: string | null; indices: number[]; rev: number }
     labels: AtomLabel[]
     measurements: Measurement[]
@@ -2303,9 +2319,11 @@ export class MolEngine {
 
   /** 晶胞盒（show cell）：CRYST1 单胞平行六面体线框——a 红 / b 绿 / c 蓝（PyMOL cell 惯例）。
    *  盒原点取晶格原点对齐包围盒（orthoMatrix 的格矢即笛卡尔方向），结构通常落在 [0,1)^3 分数坐标内。 */
-  private updateCellBox(state: { structures: StructureEntry[]; settings: Settings }) {
+  private updateCellBox(state: { structures: StructureEntry[]; activeId: string | null; settings: Settings }) {
     const on = !!state.settings.showCell
-    const active = state.structures.find(s => s.visible)
+    // r63-fix-c #3：晶胞盒跟随活动结构（与 commands.ts show cell 消息口径对齐，按 st.activeId）；
+    // 无活动结构时回退首可见
+    const active = state.structures.find(s => s.id === state.activeId) ?? state.structures.find(s => s.visible)
     const crystal = active ? dataRegistry.get(active.id)?.crystal : undefined
     const key = on && crystal ? `${active!.id}|${crystal.a.toFixed(3)}|${crystal.b.toFixed(3)}|${crystal.c.toFixed(3)}|${crystal.alpha.toFixed(2)}|${crystal.beta.toFixed(2)}|${crystal.gamma.toFixed(2)}` : ''
     if (key === this.cellKey) return
@@ -3479,14 +3497,20 @@ export class MolEngine {
     this.camera.updateProjectionMatrix()
     const wantOrtho = settings.ortho
     if (wantOrtho && this.activeCamera !== this.orthoCamera) {
+      // r63-fix-c #2：激活瞬间一次性位姿同步（透视 → 正交）+ zoom 重置；
+      // 此后 resize/设置变更只走 updateOrthoFrustum 的纯 frustum 更新，不再覆盖用户位姿与缩放
+      this.orthoCamera.position.copy(this.camera.position)
+      this.orthoCamera.quaternion.copy(this.camera.quaternion)
+      this.orthoCamera.up.copy(this.camera.up)
+      this.orthoCamera.zoom = 1
       this.updateOrthoFrustum()
       this.activeCamera = this.orthoCamera
       this.controls.object = this.orthoCamera
-      this.orthoCamera.zoom = 1
     } else if (!wantOrtho && this.activeCamera !== this.camera) {
       this.activeCamera = this.camera
       this.controls.object = this.camera
     } else if (wantOrtho) {
+      // 已在正交：设置变更（fov 等）只重算 frustum 尺寸——zoom/位姿不碰
       this.updateOrthoFrustum()
     }
     // 旋转
@@ -3647,11 +3671,12 @@ export class MolEngine {
     this.controls.target.copy(center)
     this.activeCamera.position.copy(dest)
     if (this.activeCamera === this.orthoCamera) {
+      // r63-fix-c #2：正交取景——zoom 重置（取景语义）+ frustum 按新距离重建；
+      // 位姿已写入 orthoCamera（frustum 距离以其为准），旧版此处会被透视机位覆盖回去
+      this.orthoCamera.zoom = 1
       this.updateOrthoFrustum()
-      this.orthoCamera.position.copy(this.activeCamera.position)
-    } else {
-      this.camera.position.copy(this.activeCamera.position)
     }
+    this.syncCameraPeer()
     this.controls.update()
   }
 
@@ -3804,6 +3829,11 @@ export class MolEngine {
     }
     this.updateOrbitClampDynamic()
     this.controls.update()
+    if (this.activeCamera === this.orthoCamera) {
+      // r63-fix-c #2：正交位姿直写后 frustum 需按新距离重算（zoom 保持用户值），并镜像透视 peer
+      this.syncCameraPeer()
+      this.updateOrthoFrustum()
+    }
     if (typeof s.ortho === 'boolean' && this.settings && s.ortho !== this.settings.ortho) {
       useMolStore.getState().updateSettings({ ortho: s.ortho })
     }
@@ -3895,7 +3925,10 @@ export class MolEngine {
       useMolStore.getState().updateSettings({ ortho: s.ortho })
     }
     const fov1 = typeof s.fov === 'number' && s.fov > 5 && s.fov < 120 ? s.fov : this.camera.fov
-    const up0 = this.camera.up.clone().normalize()
+    // r63-fix-c #2：起飞位姿取自当前活动相机（正交模式下 OrbitControls 驱动的是 orthoCamera，
+    // 透视相机位姿已陈旧——旧版 p0 取透视机位导致正交模式触发书签/适配时开场跳变）
+    const startCam = this.activeCamera
+    const up0 = startCam.up.clone().normalize()
     const up1 = Array.isArray(s.up) && s.up.length === 3
       ? new THREE.Vector3().fromArray(s.up).normalize()
       : up0.clone()
@@ -3912,7 +3945,7 @@ export class MolEngine {
     this.camAnim = {
       t0: performance.now(),
       dur: Math.max(120, d),
-      p0: this.camera.position.clone(),
+      p0: startCam.position.clone(),
       p1: new THREE.Vector3().fromArray(s.pos as number[]),
       g0: this.controls.target.clone(),
       g1: new THREE.Vector3().fromArray(s.target as number[]),
@@ -3934,9 +3967,9 @@ export class MolEngine {
     for (const p of poses) {
       if (!Array.isArray(p.pos) || p.pos.length !== 3 || !Array.isArray(p.target) || p.target.length !== 3) return false
     }
-    // 首帧自动前置当前位姿：起飞无缝，poses 全部关键帧都会被途经
+    // 首帧自动前置当前位姿（活动相机，正交模式同理）：起飞无缝，poses 全部关键帧都会被途经
     const keys = [
-      { p: this.camera.position.clone(), g: this.controls.target.clone(), up: this.camera.up.clone().normalize(), fov: this.camera.fov },
+      { p: this.activeCamera.position.clone(), g: this.controls.target.clone(), up: this.activeCamera.up.clone().normalize(), fov: this.camera.fov },
       ...poses.map(p => ({
         p: new THREE.Vector3().fromArray(p.pos),
         g: new THREE.Vector3().fromArray(p.target),

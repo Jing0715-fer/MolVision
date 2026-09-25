@@ -18,7 +18,6 @@ export function SceneBar() {
   const structures = useMolStore(s => s.structures)
   const scenes = useSceneStore(s => s.scenes)
   const activeSceneId = useSceneStore(s => s.activeSceneId)
-  const rev = useSceneStore(s => s.rev)
   const hydrate = useSceneStore(s => s.hydrate)
   const saveScene = useSceneStore(s => s.saveScene)
   const recallScene = useSceneStore(s => s.recallScene)
@@ -92,7 +91,7 @@ export function SceneBar() {
         <div className="mol-scroll flex max-w-full items-center gap-1.5 overflow-x-auto">
           {scenes.map(sc => (
             <SceneCard
-              key={sc.id + '#' + rev}
+              key={sc.id}
               sc={sc}
               cardW={cardW}
               active={activeSceneId === sc.id}
@@ -185,6 +184,8 @@ function SceneCard({
             onChange={e => setDraft(e.target.value)}
             onBlur={() => onRenameCommit(draft)}
             onKeyDown={e => {
+              // IME 组合中（中文输入法候选确认的 Enter）不触发重命名提交
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
               if (e.key === 'Enter') onRenameCommit(draft)
               else if (e.key === 'Escape') onRenameCommit(sc.name)
               e.stopPropagation()

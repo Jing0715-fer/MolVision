@@ -190,11 +190,15 @@ export function ProviderSettingsDialog({ open, onOpenChange }: Props) {
   const selected = providers.find(p => p.id === selectedId)
 
   const setDefault = async (id: string) => {
-    await fetch('/api/agent/providers', {
+    const res = await fetch('/api/agent/providers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ providerId: id, setDefault: true }),
     })
+    if (!res.ok) {
+      toast.error(tt({ zh: `切换默认供应商失败（HTTP ${res.status}）`, en: `Failed to switch the default provider (HTTP ${res.status})` }))
+      return
+    }
     const p = providers.find(x => x.id === id)
     const pn = p ? providerNameText(p) : id
     toast.success(tt({ zh: `默认供应商已切换为 ${tt(pn)}`, en: `Default provider switched to ${tt(pn)}` }))
@@ -482,7 +486,7 @@ function ProviderDetail({
   const save = async () => {
     setSaving(true)
     try {
-      await fetch('/api/agent/providers', {
+      const res = await fetch('/api/agent/providers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -493,6 +497,10 @@ function ProviderDetail({
           ...(probe.status === 'ok' && probe.models.length > 0 ? { discoveredModels: probe.models } : {}),
         }),
       })
+      if (!res.ok) {
+        toast.error(tt({ zh: `保存失败（HTTP ${res.status}）`, en: `Save failed (HTTP ${res.status})` }))
+        return
+      }
       setApiKey('')
       toast.success(tt({ zh: `已保存 ${tt(providerNameText(p))} 配置`, en: `Saved ${tt(providerNameText(p))} configuration` }), {
         description: p.isDefault
@@ -500,6 +508,8 @@ function ProviderDetail({
           : tt({ zh: '在顶栏徽章处可切换默认供应商', en: 'You can switch the default provider via the top-bar badge' }),
       })
       onChanged()
+    } catch {
+      toast.error(tt({ zh: '网络异常——保存失败', en: 'Network error — save failed' }))
     } finally {
       setSaving(false)
     }
@@ -508,13 +518,19 @@ function ProviderDetail({
   const remove = async () => {
     setDeleting(true)
     try {
-      await fetch(`/api/agent/providers?providerId=${p.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/agent/providers?providerId=${p.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        toast.error(tt({ zh: `删除失败（HTTP ${res.status}）`, en: `Delete failed (HTTP ${res.status})` }))
+        return
+      }
       toast.success(tt({ zh: `已删除 ${tt(providerNameText(p))} 配置`, en: `Deleted ${tt(providerNameText(p))} configuration` }))
       setApiKey('')
       setModel(p.defaultModel || '')
       setProbe({ status: 'idle', models: [], total: 0 })
       lastProbedRef.current = ''
       onChanged()
+    } catch {
+      toast.error(tt({ zh: '网络异常——删除失败', en: 'Network error — delete failed' }))
     } finally {
       setDeleting(false)
     }
@@ -597,8 +613,19 @@ function ProviderDetail({
                 const k = apiKey.trim()
                 if (k.length >= 8) void runProbe({ reason: 'auto' })
               }}
-              onPaste={() => { setTimeout(() => { if (apiKey.trim().length >= 8) void runProbe({ reason: 'auto' }) }, 500) }}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void runProbe({ reason: 'enter' }) } }}
+              onPaste={() => {
+                setTimeout(() => {
+                  // 闭包过期修复：本闭包捕获的是粘贴前的旧 state——改读 DOM 当前值判断，
+                  // 并经 runProbeRef 取最新闭包（粘贴 onChange 落地后的 apiKey）探测
+                  const v = document.querySelector<HTMLInputElement>(`#key-${p.id}`)?.value ?? ''
+                  if (v.trim().length >= 8) void runProbeRef.current({ reason: 'auto' })
+                }, 500)
+              }}
+              onKeyDown={e => {
+                // IME 组合中（中文输入法候选确认的 Enter）不触发探测
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return
+                if (e.key === 'Enter') { e.preventDefault(); void runProbe({ reason: 'enter' }) }
+              }}
               placeholder={p.id === 'zai' ? t({ zh: '内置通道，无需 API Key', en: 'Built-in channel — no API Key needed' }) : p.hasApiKey ? t({ zh: '留空保留现有 Key', en: 'Leave empty to keep the existing Key' }) : isLocal ? t({ zh: '本地服务可填任意值（如 none）', en: 'For local services, fill in any value (e.g. none)' }) : t({ zh: `粘贴 ${p.label} 的 Key 后自动检测模型…`, en: `Paste your ${p.label} Key to auto-detect models…` })}
               autoComplete="off"
               spellCheck={false}

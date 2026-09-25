@@ -158,6 +158,8 @@ export function HistoryDialog() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => {
+                // IME 组合中（中文输入法候选确认的 Enter）不执行搜索命中项
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return
                 if (e.key === 'Escape') setQuery('')
                 if (e.key === 'Enter' && (pinned[0] ?? rest[0])) run(pinned[0] ?? rest[0])
               }}

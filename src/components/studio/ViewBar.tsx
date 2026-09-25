@@ -149,10 +149,10 @@ function BookmarkCard({
   onRenameStart: () => void
   onRenameCommit: (name: string) => void
 }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [draft, setDraft] = useState(b.name)
 
-  const time = new Date(b.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  const time = new Date(b.createdAt).toLocaleTimeString(locale === 'en' ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' })
 
   return (
     <div
@@ -200,6 +200,8 @@ function BookmarkCard({
             onChange={e => setDraft(e.target.value)}
             onBlur={() => onRenameCommit(draft)}
             onKeyDown={e => {
+              // IME 组合中（中文输入法候选确认的 Enter）不触发重命名提交
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return
               if (e.key === 'Enter') onRenameCommit(draft)
               else if (e.key === 'Escape') onRenameCommit(b.name)
               e.stopPropagation()

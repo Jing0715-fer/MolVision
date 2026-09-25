@@ -368,6 +368,10 @@ export default function MolViewer() {
           store.setUi({ consoleOpen: !store.ui.consoleOpen })
           break
         case 'Escape':
+          // 弹窗打开时 Esc 交给 Radix 关闭（defaultPrevented 主判据 + DOM 兜底——
+          // radix document 层同步重渲染会击穿 data-state 单判据），不穿透到测量退出/选择清空
+          if (e.defaultPrevented) break
+          if (document.querySelector('[role="dialog"], [role="alertdialog"], [data-state="open"][role]')) break
           if (ctxMenu) setCtxMenu(null)
           else if (store.measureMode !== 'off') { store.setMeasureMode('off'); store.clearMeasurePicks() }
           else if (store.selection.indices.length) store.setSelection(null, [])
@@ -719,7 +723,7 @@ function EmptyHint() {
           <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">`</kbd> {t({ zh: '命令行', en: 'command line' })}
         </span>
         <span className="flex items-center gap-1">
-          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">8</kbd> {t({ zh: '表示法预设', en: 'representation presets' })}
+          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">9</kbd> {t({ zh: '表示法预设', en: 'representation presets' })}
         </span>
         <span className="flex items-center gap-1">{t({ zh: '右键 · 原子级操作', en: 'Right-click · atom-level actions' })}</span>
       </div>
@@ -748,7 +752,7 @@ function QuickPresets() {
         <DropdownMenuTrigger asChild>
           <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-popover/95 px-2.5 text-xs font-medium shadow-sm backdrop-blur transition hover:bg-popover hover:border-border">
             {t({ zh: '快速风格', en: 'Quick styles' })}
-            <span className="text-[10px] text-muted-foreground">1-8</span>
+            <span className="text-[10px] text-muted-foreground">1-9</span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" side="top">

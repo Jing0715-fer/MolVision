@@ -215,6 +215,8 @@ const KNOWN_CMD_HEADS = new Set([
   'map', 'save', 'png', 'ray', 'svg',
   'help', 'history', 'perf', 'session', 'tour', 'demo',
   'close', 'clear', 'reset', 'delete',
+  'iterate', 'alter', 'cell', 'spectrum', 'enable', 'disable', 'set_name',
+  'isolate', 'chains', 'deselect', 'desel',
 ])
 
 /** commands 字段兼容：数组或字符串（"set a 1; set b 2" 形式——实测 LLM 偶发用字符串） */
@@ -395,12 +397,12 @@ export async function POST(req: Request) {
             await new Promise(r => setTimeout(r, isRate ? 2500 : 700))
           }
         } catch (e) {
-          lastErr = e instanceof Error ? e.message : 'LLM 调用异常'
+          lastErr = e instanceof Error ? e.message : errText(locale, 'LLM 调用异常', 'LLM call failed')
         }
         if (decision) send({ t: 'end', decision })
         else {
           const isRate = /429|too many|rate.?limit/i.test(lastErr)
-          send({ t: 'err', error: isRate ? '服务限流中，请稍候片刻再试' : `${lastErr}，请重试或换个说法` })
+          send({ t: 'err', error: isRate ? errText(locale, '服务限流中，请稍候片刻再试', 'The service is rate-limited — please retry in a moment') : `${lastErr}${errText(locale, '，请重试或换个说法', ' — please retry or rephrase')}` })
         }
         try { controller.close() } catch { /* 客户端已断开 */ }
       },
@@ -428,17 +430,17 @@ export async function POST(req: Request) {
           }
           break
         }
-        lastErr = 'AI 返回为空'
+        lastErr = errText(locale, 'AI 返回为空', 'AI returned an empty response')
       } catch (e) {
-        lastErr = e instanceof Error ? e.message : 'LLM 调用异常'
+        lastErr = e instanceof Error ? e.message : errText(locale, 'LLM 调用异常', 'LLM call failed')
       }
     }
     if (!decision) {
-      return NextResponse.json({ ok: false, error: `${lastErr}，请重试或换个说法` }, { status: 502 })
+      return NextResponse.json({ ok: false, error: `${lastErr}${errText(locale, '，请重试或换个说法', ' — please retry or rephrase')}` }, { status: 502 })
     }
     return NextResponse.json({ ok: true, decision })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'LLM 服务异常'
+    const msg = e instanceof Error ? e.message : errText(locale, 'LLM 服务异常', 'LLM service error')
     return NextResponse.json({ ok: false, error: msg }, { status: 502 })
   }
 }

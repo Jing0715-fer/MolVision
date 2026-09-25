@@ -18,6 +18,8 @@ export function EnsembleBar() {
   const playing = useEnsembleStore(s => s.playing)
   const frame = useEnsembleStore(s => s.frame)
   const total = useEnsembleStore(s => s.total)
+  // 订阅 structureId（渲染期裸读 getState 会错过切换重渲染时机）
+  const ensSid = useEnsembleStore(s => s.structureId)
   const fps = useEnsembleStore(s => s.fps)
   const interp = useEnsembleStore(s => s.interp)
   const loop = useEnsembleStore(s => s.loop)
@@ -56,9 +58,9 @@ export function EnsembleBar() {
     }
   }, [structures, activeId, setTarget])
 
-  if (!structures.length || total < 2 || !useEnsembleStore.getState().structureId) return null
+  if (!structures.length || total < 2 || !ensSid) return null
 
-  const sid = useEnsembleStore.getState().structureId!
+  const sid = ensSid
   const entry = structures.find(s => s.id === sid)
   const ensData = entry ? dataRegistry.get(entry.id) : undefined
   const ensKind = ensData?.ensembleKind
@@ -81,6 +83,8 @@ export function EnsembleBar() {
   const commitFrame = (v: number) => {
     setDragging(false)
     engineRef.current?.setEnsembleFrame(sid, v)
+    // 拖帧前在播 → 落帧后恢复播放（setEnsembleFrame 会清 playing，从落点帧续播）
+    if (prevPlaying.current) engineRef.current?.playEnsemble(sid)
   }
 
   return (

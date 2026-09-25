@@ -2476,3 +2476,86 @@ Stage Summary:
 - 架构资产：src/i18n/locales.ts（服务端安全纯模块）+ src/i18n/index.tsx（store/tt/useI18n/Provider）+ provider-display.ts（server-only 模块拆分范式）
 - 遗留与风险：①worker 内字符串仅 map 链路线程化（hbond/sasa worker 无中文）②agent context.ts 场景信息保持中文提示词（有意决策，LLM 回复语言已由指令控制）③ccp4/sffourier/marching-cubes selftest 诊断输出未译（死代码，零 UI 消费）④hover 提示为事件时快照——切语言后需再次悬停才更新（tt 语义，符合预期）
 - 下阶段建议：①翻译质量终审（VLM 截图审英文排版/溢出，尤其长按钮文案宽度）②日期数字 locale 格式化深化（现有 toLocaleString 已随浏览器）③更多语言扩展只需 DualText 加字段（架构已就绪）
+
+---
+Task ID: r63-fix-c
+Agent: general-purpose
+Task: 引擎层 P2 五项修复（rep 拾取/ortho 相机/晶胞活动结构/residue 配色/contacts 氢过滤/measure 防崩）
+
+Work Log:
+- 【#1 rep 级可见性参与拾取】engine.ts:1429 collectPickables 遍历加 `if (!rv.build.group.visible) continue`（对齐 rayRender markShadowCasters :4186 的写法）。three Raycaster.intersect 不检查 visible，旧版隐藏 rep 的网格留在拾取列表中仍可 hover/点选/框选。偏差说明：审查快照称「rep visible 切换不无效化 pickablesCache」——实测切换处（engine.ts:1650-1655 fast path）已有置空逻辑（r59-a1 #7 遗产），真正缺口是 collectPickables 重建时不过滤隐藏 rep（缓存重建后隐藏 rep 依然入选），本修复补上该过滤即闭环
+- 【#2 ortho zoom/位姿与 frustum 解耦】engine.ts updateOrthoFrustum 拆职责：只算 frustum 半高/aspect（半高距离改按 orthoCamera 自身到 target 距离求值——正交激活后 OrbitControls 直接驱动 orthoCamera，透视机位已陈旧；且 pan 后透视距离失真）；删除函数内的 zoom=1 与 position/quaternion 拷贝。新增 syncOrthoPose()（camAnim/camPath 帧驱动镜像 + zoom 归 1 的取景重置语义）。位姿同步收口到四个明确点位：①applySettings 激活分支一次性拷 position/quaternion/up + zoom=1（:3499-3509）；②camAnim/camPath 每帧镜像（:561/:609）；③fitView 非动画正交路径 zoom 重置 + frustum 按新距离 + syncCameraPeer 镜像（:3670-3677，替换旧版两处 no-op 拷贝）；④setCameraState 直写后 frustum 重算 + peer 镜像（:3829-3833）。附带修复：animateCameraTo p0/up0 与 animateCameraPath 首关键帧改取活动相机位姿（旧版取陈旧透视机位 → 正交模式触发书签/适配开场跳变）
+- 【#3 晶胞盒跟随活动结构】engine.ts:2326 `find(s => s.id === state.activeId) ?? find(s => s.visible)`（无活动回退首可见）；sync() state 类型与 updateCellBox 参数补 activeId: string | null（MolViewer 传完整 store state 结构兼容）。补丁：store.ts:417 setActive 在 id 真变化时 bump visualRev（同 id 不 bump）——MolViewer sync effect 仅依赖 visualRev，不 bump 则切活动结构后晶胞盒不动
+- 【#4 residue 配色 hetero 污染】colors.ts:221-242 hetero（配体非水）分支逐原子按元素着色并按元素缓存（hetCache），不再进 resName 级缓存；standard/水残基保持 resName 缓存收益。旧版首原子（如 HEM 的 FE）元素色以 resName 缓存污染整残基
+- 【#5 contacts 氢过滤】contacts.ts detectContacts 单结构路径：listA/listB 构建循环加 `e === 'H' || e === 'D' continue`，cand 内层循环同款过滤——与 detectContactsCross 口径对齐（模块头注释本就声明「排除氢/氘」）。atomsA/atomsB 随之变为重原子计数（「参与检测的原子数」语义更真实）
+- 【#6 measure 大选择防崩】commands.ts:2485-2489 40000 护栏挪到 maskToIndices 展开之前（`idxPerGroup.length + r.count > 40000`，与旧版 push 后累计检查等价），push 改 for-of 循环（>10 万原子时 `push(...arr)` 栈溢出 RangeError）；r.error / r.count===0 提前返回保持原语义
+- 验证：bunx tsc --noEmit → src/ 零输出；bun run lint → 0 errors 0 warnings；dev server 持续 ✓ Compiled、页面 HTTP 200
+- 纯函数层运行时验证（bun 脚本）：#4 伪 HEM（FE/N/C）逐原子元素色 190,34,8 / 8,20,239 / 71,71,71 互不污染，GLY 走 resName 缓存；#5 伪双残基+贴脸氢——atomsA/atomsB=1/1、接触 count=1（旧行为氢对涌入 count=2 且 minDist 取氢距离）
+- E2E（agent-browser + window.__molEngine 断言）：#1 rep 眼睛开关 2→1→0→1→2 拾取数实时联动；#2 ortho 激活 zoom=1/位姿同步 → 模拟滚轮 2.3 + 平移 → set fog 变更与 resize 后 zoom=2.3 且位姿逐分量不变 → 关/开重激活 zoom 恰好重置一次；#3 双结构（1CRN+4HHB）show cell 后点 4HHB 卡片 cellKey 即刻切换 `…|63.150|83.590|53.800|90.00|99.34|90.00`；#6 measure dist (resn HEM)(within 5…) 回归通过（1.98 Å FE—NE2）；contacts chain A | chain B 5.0 回归通过（102 对）；浏览器 console/errors 零输出
+
+Stage Summary:
+- 6 项 P2 全部修复（engine.ts ×3 + store.ts 1 行补丁 + colors.ts + contacts.ts + commands.ts）；tsc/lint 双绿；纯函数 + E2E 双层运行时验证通过
+- 架构语义固化：正交相机为激活态位姿权威（frustum 半高随其自身距离），透视相机为动画驱动权威（camAnim/camPath 每帧镜像到正交），zoom 仅在「激活瞬间/取景动作」重置——resize 与设置变更不再触碰
+- 偏差与超出范围说明：①#1 的缓存失效在现行代码已存在，实际补的是 collectPickables 过滤（见 Work Log）；②#2 附带修了 animateCameraTo/Path 起飞位姿取活动相机（同一缺陷的必要收口，否则正交下触发动画开场跳变）；③#3 需要 store.setActive bump visualRev 才能让引擎即时跟随（1 行，已在 Work Log 说明）；均无 i18n 新文案
+
+---
+Task ID: r63-fix-b
+Agent: general-purpose
+Task: r60 回归重放——13 项 UI 修复重新落地
+
+Work Log:
+- 读 r62-core i18n 规范（tt()/useI18n().t()/DualText：渲染期 t()、事件时 tt()）与 r60 修复清单；通读 14 个目标文件现状定位回归点
+- 【IME Enter 守卫 ×12 处】AgentPanel.tsx:283（会话重命名）/ :907（发送消息 textarea）、ConsoleBar.tsx:202（命令执行，onKeyDown 最前）、HistoryDialog.tsx:161（搜索执行）、SceneBar.tsx:187（场景重命名）、ViewBar.tsx:204（书签重命名）、ProviderSettingsDialog.tsx:625（Key 探测）、MapsPanel.tsx:119（密度图合成）、SequenceBar.tsx:497/580/638（选择库保存/搜索定位/框选保存）——全部加 `if (e.nativeEvent.isComposing || e.keyCode === 229) return` 守卫（React KeyboardEvent）
+- 【CommandPalette 新建会话二次确认】qa-session-new 有 structures 时不再直接 newSession：palette 关闭后 requestAnimationFrame 延迟弹受控 AlertDialog（state confirmNewSession）；标题/描述/取消/确认全部双语（t() 渲染期 + 确认回调 tt() toast，文案与 Toolbar 同源：警告清空结构/书签/时间轴/密度图/本地自动存档、不可撤销）；确认执行 newSession + 关闭数 toast，取消不动
+- 【EnsembleBar 拖帧恢复播放】commitFrame 落帧后激活死 ref：`if (prevPlaying.current) engineRef.current?.playEnsemble(sid)`（pointerdown 已记录并 pause，setEnsembleFrame 清 playing 后从落点续播；API 实为 engine.playEnsemble/pauseEnsemble，非 store 的 setPlaying）；P2-8 顺手修：渲染期裸读 `useEnsembleStore.getState().structureId` → 订阅 `const ensSid = useEnsembleStore(s => s.structureId)`（守卫与 sid 同源）
+- 【MolViewer Escape 跨层穿透】switch Escape 分支开头加双守卫：`if (e.defaultPrevented) break` + DOM 兜底 `document.querySelector('[role="dialog"], [role="alertdialog"], [data-state="open"][role]')` 命中即 break（让 Radix 关弹窗，不再穿透清空选择/退出测量）；键位提示两处 "1-8" → "1-9"（:726 速查行 kbd、:755 QuickPresets 徽标——实际 Digit1-9 共 9 个预设，PRESETS 9 键已核实）
+- 【ProviderSettingsDialog fetch 错误处理】setDefault/save/remove 三处 fetch 后加 `if (!res.ok)` → toast.error 双语含 HTTP 状态码且不弹成功 toast；save/remove try/finally 补 catch（网络异常 toast.error 双语）；onPaste 闭包过期修复：setTimeout 内改读 DOM `document.querySelector('#key-${p.id}').value` 判断长度，并经 runProbeRef.current 取粘贴 onChange 落地后的最新闭包探测（单纯修值判断仍会以旧 apiKey 空 key 探测——ref 是让修复真正生效的必要一环，与 r60 方案的偏差已在报告注明）
+- 【AgentPanel 流式滚动】无条件滚底 → nearBottomRef（onScroll 记录距底 < 80px）+ prevBusyRef（busy 刚开始即用户刚发送时强制跟随）；上翻阅读历史不再被增量拽回底部，回到底部自动恢复跟随
+- 【SequenceBar rAF 空转】step 永续自旋 → 仅「拖拽进行中且指针在边缘触发区」时滚动+续帧（空闲/离开边缘/拖拽结束即 raf=0 停转）；move 进入边缘触发区时 `raf === 0` 才点火；拖拽边缘自动滚动功能不回退（重入边缘由 move 重新点火）
+- 【FAB 与 REC 徽章重叠】LeftPanel 移动端 FAB 从 `absolute left-3 top-3 z-20 h-9 w-9` 移到 `bottom-24 right-4 h-11 w-11`（44px 触达标准，图标 h-5 w-5）；md:hidden 桌面态零影响；390×844 实测 box x=330 y=526 44×44，控制台关闭时 VLM 复核无遮挡、不压序列条（控制台打开时被 z-30 控制台覆盖——与 QuickPresets 等视口底部控件同层规则，非布局破损）
+- 【MapsPanel 已激活类型重跑】图类型切换 onClick 加 `if (kind === k.key) return` no-op 守卫
+- 【SceneBar key 去 rev】`key={sc.id + '#' + rev}` → `key={sc.id}`（scene-store 缩略图回填是不可更 map + rev bump，rev 不再 remount；rev 订阅行随之移除，scenes 数组身份变化驱动重渲已核实）
+- 【LeftPanel 移动端抽屉折叠】content 参数化 `(inSheet: boolean)`：折叠按钮 onClick 在 Sheet 内时同时 `setMobileOpen(false)`（桌面 content(false) 行为不变）
+- 【AgentPanel act() busy 守卫】confirm 卡执行/跳过/重跑入口加 `if (busy) return`（deps 补 busy）
+- 【SelectionPanel 死代码】`<div className={cn('hidden', st ? '' : '')} />` 整行删除 + 连带孤儿清理（cn import、st、structures 订阅）
+- 【ConsoleBar 反引号开关】onKeyDown 补 `` ` `` / `~` 分支 → setUi({ consoleOpen: false })（HelpDialog 宣称 "` / ~ 打开/关闭命令行"；打开方向由 MolViewer 全局键位处理，但其 INPUT 早退分支跳过聚焦态——关闭路径必须在输入行实现，此为 r60 修复的真正缺口）
+
+Stage Summary:
+- 13 项（14 个清单条目）全部重新落地，横跨 14 文件：AgentPanel/CommandPalette/ConsoleBar/EnsembleBar/HistoryDialog/LeftPanel/MolViewer/ProviderSettingsDialog/SceneBar/SequenceBar/Toolbar 参照/ViewBar/MapsPanel/SelectionPanel
+- 验证：bunx tsc --noEmit src 零错误（grep -cE "^src/" = 0）；bun run lint 退出码 0 零输出；dev server 持续编译无错、GET / 200
+- 浏览器实测（agent-browser + VLM 截图复核，英文界面）：①命令面板「New session」→ AlertDialog 双语弹出、取消不清空 ②` 全局开命令行 / 输入行聚焦时 ` 关命令行 ③IME 组合 Enter（keyCode 229 + isComposing）不提交、普通 Enter 提交（bg black 执行有回显）④HelpDialog 打开时 Esc 关弹窗且 327 原子选择保留、无弹窗时 Esc 选择清空 ⑤390×844 FAB 44×44 右下角无遮挡
+- 偏差说明：ProviderSettings onPaste 采用「DOM 读值 + runProbeRef 最新闭包」而非任务书 r60 原方案（仅拼新值判断）——只修判断会让探测以旧空 key 静默失败，ref 组合是修复生效的最小必要改动；EnsembleBar pointerdown 的记录+暂停半截在 r62 改写中幸存，仅补 resume；setDefault 按任务书只加 res.ok 未加 catch（沿用 r60 边界）
+- 环境注记：测试中观察到共享浏览器 profile 有他轮次遗留/并发的 localStorage 写入（cmd-history 出现非本会话命令）与一次 Turbopack 全页 reload + 浏览器 daemon 重启，均与本次修复无关，关键行为均在其后用全新会话复验
+
+---
+Task ID: r63-main
+Agent: main
+Task: 拉取最新代码 + 全面代码审查 + 全功能 E2E 测试 + 关键缺陷修复 + 后续改进方案（用户需求）
+
+Work Log:
+- 【拉取代码】git fetch：本地与 origin/main 零差距（f2ebaa1 r62 即最新）；本地未提交改动仅为权限位/PID 运行时工件
+- 【基线】lint 0/0 · tsc src 0 错 · dev server 200
+- 【三路并行深度审查】（18+39+13 文件，~29,400 行）
+  · r63-review-a 核心引擎（18 文件 14,750 行）：P1×2 + P2×8 + P3×15 + 架构观察 5
+  · r63-review-b UI+i18n（39 文件 ~12,200 行）：P1×3 + P2×8 + P3×16——头号发现「r62 i18n 并行改写系统性回滚 r60 修复 13/16 项」（isComposing 全仓零命中实锤）
+  · r63-review-c Agent+API（~4,600 行）：P1×2 + P2×6 + P3×10——凭据入库管道 + server-only 边界验证通过
+- 【E2E 审查发现实锤】q>0.3→Unknown command；name CA in protein→Unparseable trailing "in"；alter b=b+10→Invalid numeric expression；spectrum blue red→Unrecognized "blue"；isComposing 零命中；palette newSession 无确认（源码 244-249 行）
+- 【主线程 P1 修复】
+  · selection.ts：parsePrimary 接线 q/occupancy（occupancyCmp 死代码激活）+ byobject 谓词（单对象语义：命中任一原子→全对象）；parseAnd 循环重构接入 in/like 二元操作符（与 and 同优先级左结合，调 matchByResidue）
+  · commands.ts alter：校验改「b/q 替换为 1 后探测」（b=b+10 先替换再校验纯数值——修 P1-2 官方示例报错）+ new Function 预演 try/catch
+  · commands.ts spectrum：检测到的自定义起终点颜色词从选择词过滤排除（修 P2-6 "blue red" 被当选择表达式）
+  · CommandPalette newSession：受控 AlertDialog 二次确认（双语，rAF 延迟弹）
+- 【杂项修复】.gitignore 加 .molvision/ + git rm --cached 凭据文件 + chmod 700/600（封堵 P1-c1 入库管道）；providers.ts saveStore 写前 chmodSync 强制 600（mode 仅首建生效的坑）；providers.ts prepareRequest bt() 三处 zh/en 参数方向颠倒修正；agent/route.ts 5 处错误消息双语化（流式/非流式/VLM）；pdb/[id] 路由补 detectLocale+errText 双语；runner AUTO_PREFIXES + route KNOWN_CMD_HEADS 补 iterate/alter/cell/spectrum/enable/disable/set_name/isolate/chains/deselect（白名单与 LLM 提示词对齐）；ViewBar 书签时间 toLocaleTimeString 接 locale
+- 【子代理修复】r63-fix-b：r60 回归重放 14/14 项（IME 守卫 11 处/palette 确认/EnsembleBar 续播+订阅化/Escape 双守卫/键位提示 1-9/ProviderDialog 三处 res.ok+catch+onPaste DOM 读值/AgentPanel 智能滚动/SequenceBar rAF 停转/FAB 44px 移位/MapsPanel no-op/SceneBar key/LeftPanel 抽屉参数化/act busy 守卫/死代码清理/反引号开关）；r63-fix-c：引擎 6 项（rep 拾取过滤/ortho 相机四点位收口+syncOrthoPose/晶胞盒跟活动结构+setActive bump/residue hetero 逐原子着色/contacts 氢过滤对齐/measure 防崩先行护栏）
+- 【修复后 E2E 回归】q>0.3→4,779 全中（4HHB 全 q=1.0 语义正确）· q<0.5→0 · name CA in chain A→141（A 链残基数精确命中）· byobject (resn HEM)→4,779 全对象 · alter b=b+10→"Modified b on 340 atoms" · spectrum blue red→"custom endpoints #4a7fd4→#e04545" 正常执行 · palette New session→英文 AlertDialog 弹出+取消保留结构 · i18n 双向切换正常 · console 零错误 · canvas 渲染正常
+
+Stage Summary:
+- 交付：三路深度审查（P1×7/P2×22/P3×41 实锤清单）+ E2E 全功能走查 + 27 项修复落地（主线程 P1×4+杂项×9，子代理 14+6）
+- 验证：lint 0/0 · tsc 0 · E2E 回归全绿（选择谓词 5 项精确断言 + palette 确认 + i18n + 零 console 错误）
+- 后续改进方案（按优先级）：
+  1. 【高】SSR 首屏真直出：useI18n 的 zustand v5 SSR 快照恒 zh（英文用户慢网首屏中文正文）——改 Context 直传 initialLocale 或请求级 store 工厂
+  2. 【高】回归测试防线：为 IME/Escape/palette 确认等历史修复补 grep 级 CI 检查（如 isComposing 必须存在），防再次静默回滚
+  3. 【中】agent 流式超时/取消传播：服务端 ReadableStream 无 cancel() 回调、req.signal 未用（客户端停止后服务器继续烧 token）
+  4. 【中】mock-llm 补 SSE 分支（当前只覆盖 /models 探测，主对话路径联调不了）
+  5. 【中】ensemble/morph 播放后 SpatialGrid/pocketField/sasa 缓存不失效（大形变下 within 选区/口袋渐变错位）
+  6. 【低】color/spectrum 副作用改写当前选择（PyMOL 不改）应文档化；Parser occupancy=0 被改 1；CONECT 80 列越界；短 Key 掩码还原
