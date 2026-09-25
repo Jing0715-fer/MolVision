@@ -68,8 +68,31 @@ check "超时档透出"                "effectiveTimeoutMs"              "src/li
 check "ConsoleBar 稳定 seq key"   "l\.seq \?\?"                     "src/components/studio/ConsoleBar.tsx"   1
 check "HistoryDialog Row 外提"    "function HistoryRow"             "src/components/studio/HistoryDialog.tsx" 1
 
+# ---- r66-b：VLM 视觉自查离线回归（mock 模板 + route 供应商分派） ----
+check "mock-llm 视觉模型"        "mock-vision-pro"                 "mini-services/mock-llm/index.ts"       1
+check "mock-llm image_url 处理"  "image_url"                       "mini-services/mock-llm/index.ts"       2
+check "route.ts 视觉分派"        "visionWithProvider"              "src/app/api/agent/route.ts"            1
+
+# ---- r66-a：响应头安全硬化 + headless 冒烟门禁 ----
+check "响应头 nosniff"             "X-Content-Type-Options"        "next.config.ts"                        1
+check "响应头 Permissions-Policy"  "Permissions-Policy"            "next.config.ts"                        1
+check "响应头 CSP"                 "Content-Security-Policy"       "next.config.ts"                        1
+if [ -f scripts/smoke.sh ] && rg -q --no-messages '"smoke"' package.json 2>/dev/null; then
+  echo "PASS  冒烟脚本入 package.json     命中  1（要求 ≥1）"
+else
+  echo "FAIL  冒烟脚本入 package.json     命中  0（要求 ≥1）—— scripts/smoke.sh 缺失或 package.json 无 \"smoke\" script"
+  FAILS=$((FAILS + 1))
+fi
+
+# ---- r66-main：大结构内存防护（r65 OOM 事故实锤） ----
+check "loader 原子硬上限"        "MAX_ATOMS"                       "src/lib/molecular/loader.ts"           3
+check "loader 原子预扫描"        "countAtomRecords"                "src/lib/molecular/loader.ts"           2
+check "loader 体积护栏"          "MAX_STRUCTURE_MB|MAX_MAP_MB"     "src/lib/molecular/loader.ts"           4
+check "pdb 路由 413 体积护栏"    "oversize|content-length"         "src/app/api/pdb/"                     3
+check "sf 路由 413 体积护栏"     "oversize|content-length"         "src/app/api/sf/"                      3
+
 # ---- 汇总 ----
-TOTAL=18
+TOTAL=30
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

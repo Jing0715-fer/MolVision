@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 import { cookies, headers } from 'next/headers'
 import ZAI from 'z-ai-web-dev-sdk'
 import type { AgentRequestBody, AgentDecision } from '@/lib/molecular/agent/protocol'
-import { chatCompletionOnce, chatCompletionStream, getDefaultProviderId, type ChatMessage } from '@/lib/molecular/agent/providers'
+import { chatCompletionOnce, chatCompletionStream, getDefaultProviderId, visionWithProvider, type ChatMessage, type ContentPart, type VisionMessage } from '@/lib/molecular/agent/providers'
 import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
 
 /** 请求级语言检测（与 layout 同规则）：cookie > Accept-Language —— 与界面语言保持一致 */
@@ -295,29 +295,45 @@ export async function POST(req: Request) {
   // ---------- 视觉自查分支（VLM 看截图，可选前后对比） ----------
   if (body.image && body.goal) {
     try {
-      const zai = await ZAI.create()
+      // 视觉消息组装（provider 直连与 ZAI SDK 兜底共用同一份）：assistant 位评审提示词 +
+      // user 位多模态内容片（场景/目标文本在前，可选 imageBefore 在中，当前截图在后）
+      const imageParts: ContentPart[] = [
+        {
+          type: 'text',
+          text: `用户目标：${body.goal.slice(0, 500)}\n\n【自动注入的当前场景信息】\n${sceneWithMemory(body.scene, body.memory).slice(0, 3600)}`,
+        },
+      ]
+      if (body.imageBefore) imageParts.push({ type: 'image_url', image_url: { url: body.imageBefore } })
+      imageParts.push({ type: 'image_url', image_url: { url: body.image } })
+      const vlmMessages: VisionMessage[] = [
+        { role: 'assistant', content: REVIEW_PROMPT + langDirective(locale) },
+        { role: 'user', content: imageParts },
+      ]
       let decision: AgentDecision | null = null
       let lastErr = ''
       for (let attempt = 0; attempt < 2 && !decision; attempt++) {
+        // 本轮 provider 直连失败信息（回退 ZAI 仍未成功时并入 lastErr 供 502 文案展示）
+        let providerErr = ''
         try {
-          type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
-          const imageParts: ContentPart[] = [
-            {
-              type: 'text',
-              text: `用户目标：${body.goal.slice(0, 500)}\n\n【自动注入的当前场景信息】\n${sceneWithMemory(body.scene, body.memory).slice(0, 3600)}`,
-            },
-          ]
-          if (body.imageBefore) imageParts.push({ type: 'image_url', image_url: { url: body.imageBefore } })
-          imageParts.push({ type: 'image_url', image_url: { url: body.image } })
-          const completion = await zai.chat.completions.createVision({
-            model: 'glm-4.6v',
-            messages: [
-              { role: 'assistant', content: REVIEW_PROMPT + langDirective(locale) },
-              { role: 'user', content: imageParts },
-            ],
-            thinking: { type: 'disabled' },
-          })
-          const text = completion.choices[0]?.message?.content ?? ''
+          // provider 视觉分派优先，ZAI 兜底：默认供应商模型具备视觉能力（visionWithProvider
+          // 判定）时走 OpenAI 兼容直连多模态补全；null = 无可用视觉 provider（zai 内置 /
+          // 模型非视觉）→ 原生 ZAI SDK 视觉通道；throw（直连失败）→ 记入 providerErr 后
+          // 同样回退 ZAI——两条路产出统一走 sanitizeDecision 协议解析与降级打捞
+          let text: string | null = null
+          try {
+            text = await visionWithProvider(vlmMessages, { signal: req.signal })
+          } catch (e) {
+            providerErr = e instanceof Error ? e.message : errText(locale, '视觉供应商调用异常', 'vision provider call failed')
+          }
+          if (text === null) {
+            const zai = await ZAI.create()
+            const completion = await zai.chat.completions.createVision({
+              model: 'glm-4.6v',
+              messages: vlmMessages,
+              thinking: { type: 'disabled' },
+            })
+            text = String(completion.choices[0]?.message?.content ?? '')
+          }
           decision = sanitizeDecision(extractJson(text))
           if (decision) break
           const plain = text.trim()
@@ -331,7 +347,11 @@ export async function POST(req: Request) {
           }
           lastErr = 'AI 返回为空'
         } catch (e) {
-          lastErr = e instanceof Error ? e.message : 'VLM 调用异常'
+          const msg = e instanceof Error ? e.message : 'VLM 调用异常'
+          // provider 直连曾失败时并列展示（两条通道都倒了才会到这）
+          lastErr = providerErr
+            ? errText(locale, `视觉供应商直连失败：${providerErr}；ZAI 兜底失败：${msg}`, `Vision provider failed: ${providerErr}; ZAI fallback failed: ${msg}`)
+            : msg
         }
       }
       if (!decision) {

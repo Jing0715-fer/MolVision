@@ -9,9 +9,13 @@
 // 回复语言自适应：最后一条 user 消息含 CJK 字符 → 中文 reply，否则英文 reply。
 // 模板匹配顺序「具体优先于宽泛」：彩虹先于色词（彩虹色不能被颜色类吞掉）、bg 先于染色（背景色
 // 含「色」）、sasa/ss 先于颜色、hide 先于 show（「不显示」不可被显示模板吞掉）。
+// r66-b VLM 支持：user content 为多模态数组（含 image_url 段，AgentPanel 截图自查请求）时按
+// 视觉自查模板处理——默认「通过」；归一化文本含「失败演练 / fail drill」→ 演练未达标路径
+// （下发修正命令）。数组 content 先归一化为纯文本再走模板（直toLowerCase 会 TypeError 500）。
 const models = {
   object: 'list',
   data: [
+    { id: 'mock-vision-pro', owned_by: 'mock-labs' },
     { id: 'mock-ultra-128k', owned_by: 'mock-labs', context_length: 131072 },
     { id: 'mock-pro', owned_by: 'mock-labs', context_length: 64000 },
     { id: 'mock-mini', owned_by: 'mock-labs', context_length: 32000 },
@@ -21,9 +25,28 @@ const models = {
   ],
 }
 
-interface MockMessage { role?: string; content?: string }
+/** OpenAI 多模态内容片（VLM 视觉自查请求）：text 段参与模板匹配，image_url 段仅作视觉分支判定标志 */
+interface MockContentPart { type?: string; text?: string; image_url?: unknown }
+
+interface MockMessage { role?: string; content?: string | MockContentPart[] }
 
 // ---------- 语言与参数提取助手 ----------
+
+/** content 归一化：字符串原样；数组 → 拼接全部 type:'text' 段（图片段忽略）——
+ *  多模态请求的关键词模板匹配与 CJK 判定都基于归一化文本 */
+function normalizeContent(content: string | MockContentPart[] | undefined): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((p): p is { type: 'text'; text: string } => !!p && typeof p === 'object' && p.type === 'text' && typeof p.text === 'string')
+    .map(p => p.text)
+    .join('\n')
+}
+
+/** 视觉自查请求判定：content 为数组且含 image_url 段（AgentPanel 截图自查的特征） */
+function hasImagePart(content: string | MockContentPart[] | undefined): boolean {
+  return Array.isArray(content) && content.some(p => !!p && typeof p === 'object' && p.type === 'image_url')
+}
 
 /** CJK 判定（含扩展 A 区）：最后一条 user 消息命中 → 中文 reply，否则英文 reply */
 const CJK_RE = /[\u3400-\u4dbf\u4e00-\u9fff]/
@@ -102,9 +125,26 @@ function dec(zh: boolean, zhReply: string, enReply: string, commands: string[]):
 
 /** 关键词 → AgentDecision 协议模板（commands 覆盖全命令面；顺序具体优先于宽泛） */
 function buildDecision(messages: MockMessage[]): { reply: string; commands: string[] } {
-  const lastUser = [...messages].reverse().find(m => m?.role === 'user')?.content ?? ''
+  // 多模态兼容：content 可能是 OpenAI 视觉格式的数组——归一化为纯文本再走模板
+  const lastUserMsg = [...messages].reverse().find(m => m?.role === 'user')
+  const lastUser = normalizeContent(lastUserMsg?.content)
   const t = lastUser.toLowerCase()
   const zh = CJK_RE.test(lastUser)
+
+  // 0. VLM 视觉自查（最前：含 image_url 的多模态请求按视觉分支处理，文本模板不受影响）。
+  //    默认「通过」；归一化文本含「失败演练 / fail drill」→ 演练未达标路径（修正命令透传回前端执行）
+  if (hasImagePart(lastUserMsg?.content)) {
+    if (/失败演练|fail drill/i.test(lastUser)) {
+      return dec(zh,
+        '视觉自查未达标：目标颜色未生效，已自动下发修正命令。',
+        'Visual check failed: target color not applied — corrective commands issued.',
+        ['select chain A', 'color red, chain A'])
+    }
+    return dec(zh,
+      '视觉自查通过：渲染结果与用户目标一致，无需修正。',
+      'Visual check passed: the render matches the goal — no corrections needed.',
+      [])
+  }
 
   // 1. 彩虹渐变（先于颜色类：「彩虹色/渐变」不能被色词匹配吞掉）
   //    真实语法：spectrum count|b, rainbow [选择]（PyMOL 兼容）
@@ -325,4 +365,4 @@ const server = Bun.serve({
 })
 console.log(`mock-llm listening on ${server.url}`)
 
-// hot-reload nudge r65-b
+// hot-reload nudge r66-b

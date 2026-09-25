@@ -2726,3 +2726,75 @@ Stage Summary:
   3. 【中】guards 18 条为 grep 级；可补最小 headless 断言（agent-browser 冒烟脚本入 package.json scripts，与 lint 并列跑）
   4. 【中】mock-llm 协议模板可再加 VLM 路径（图片理解关键词→screenshot+VLM 决策），让 Agent 视觉链路可离线回归
   5. 【低】「Loaded 4HHB: 4779 atoms」加载日志无千分位（loader 的 tt 字面量未接 loc()）；SSR 首屏 HTML 内 console 引导日志语言随 worker locale 已正确
+---
+Task ID: r66-a
+Agent: general-purpose
+Task: 响应头安全硬化（r65-main 建议②）+ agent-browser 冒烟脚本入 package.json（建议③）+ guards 18→22
+
+Work Log:
+- 【任务 1 · next.config.ts 响应头硬化】新增 async headers()，source '/:path*' 全路由返回 4 类安全头：
+  · X-Content-Type-Options: nosniff
+  · Referrer-Policy: strict-origin-when-cross-origin
+  · Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  · Content-Security-Policy 务实版（dev HMR 需 'unsafe-eval'；three.js blob: worker 与 data:/blob: 纹理；内联样式）：
+    default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: data:; worker-src 'self' blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'
+  · ⚠️ 有意不设 X-Frame-Options / CSP frame-ancestors——本沙箱 Preview Panel 以 iframe 内嵌应用，限制性 framing 会弄坏用户预览；代码注释已注明此原因
+  · 保留 output: "standalone" / typescript.ignoreBuildErrors / reactStrictMode 原配置零改动
+- 【验证 · 响应头】next.config 变更触发 Next dev 自动重启（dev.log 实录「Found a change in next.config.ts. Restarting…✓ Ready in 1190ms」，无 fatal/报错）；curl -sI http://localhost:3000/ 与 /api/pdb/1CRN 双路由确认 4 类头全在（页面+API 都覆盖）
+- 【验证 · CSP 零破坏】agent-browser 独立会话全链路：首页渲染正常（heading MolVision/PDB 输入框/示例结构按钮/中文-EN 语言钮全在）→ 点击加载 1CRN（327 atoms/46 residues/1 chain，canvas 存在 true）→ 命令行执行 color sasa（blob: Web Worker 路径）→ 全程 console 零错误、零 CSP violation
+- 【任务 2 · 冒烟脚本】先通读 `agent-browser skills get core --full`（open/wait --load/errors/eval/close + 固定 session 隔离约定）；写 scripts/smoke.sh（chmod +x）：
+  · 前置：curl BASE_URL 200 否则打印 HTTP 状态码 exit 1（实测 BASE_URL=http://localhost:3999 → 「FAIL dev server 未就绪：HTTP 404」exit 1）
+  · 固定会话 AGENT_BROWSER_SESSION=molvision-smoke（不碰其他代理浏览器）；起始 close 清旧会话保错误缓冲干净，收尾 close 释放
+  · 4 断言：①console 错误为零（agent-browser errors 空）②应用标志（title/正文含 MolVision）③语言切换入口（中文/EN 按钮正则 + 按钮总数>0）④主体 UI 骨架（正文含 structure/结构/MOLECULAR STUDIO）
+  · 坑①：eval 返回字符串会被 JSON 引号包裹转义（"{\"hasLang\":true}" 无法 rg 匹配）——改用两个独立 eval 分别返回 boolean/number 直判
+  · 坑②：close→open 偶发 daemon 重启竞态，新浏览器停在 about:blank（断言全 false、按钮 0、零错误的假阳性组合）——加 sleep 1 收尾等待 + get url 兜底校验不符则重开一次；修后 8 次连跑 8 PASS 零抖动
+  · package.json scripts 仅加一行 "smoke": "bash scripts/smoke.sh"
+- 【任务 3 · guards 18→22】regression-guards.sh 追加 4 条（沿用 check 函数与 PASS/FAIL 输出约定）：响应头 nosniff（X-Content-Type-Options ≥1）/ 响应头 Permissions-Policy ≥1 / 响应头 CSP（Content-Security-Policy ≥1）/ 冒烟脚本入 package.json（复合守卫：scripts/smoke.sh 存在 且 package.json 含 "smoke"，仿 git check-ignore 的 if/else 写法）；TOTAL 18→22
+- 【门禁】bun run lint 零输出 exit 0；bunx tsc --noEmit：src/ 0 错、next.config.ts 0 错（tsconfig include **/*.ts 已覆盖；全部 5 条残留均在 examples//mini-services//skills/ 非本任务范围且为存量）；bun run guards 22/22 PASS；bash scripts/smoke.sh exit 0
+
+Stage Summary:
+- 交付：全路由 4 类安全响应头（CSP 务实版含 framing 禁设注释）+ scripts/smoke.sh headless 冒烟门禁（bun run smoke，4 断言：零 console 错/MolVision 标志/语言切换入口/UI 骨架）+ guards 22 条（+4：3 条响应头守卫 + 1 条冒烟脚本存在性复合守卫）
+- 验证证据：
+  · curl -sI http://localhost:3000/ → X-Content-Type-Options: nosniff / Referrer-Policy: strict-origin-when-cross-origin / Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=() / Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; …（完整串）—— /api/pdb/1CRN 同样 4 头全在
+  · smoke.sh 输出：PASS dev server 存活（HTTP 200）/ PASS console 错误为零 / PASS 应用标志在（MolVision）/ PASS 语言切换入口在（中文/EN 按钮，页面按钮 12 个）/ PASS 主体 UI 骨架在（structure/结构 工作台标志）→ 「== 结果：PASS（4/4 冒烟断言全部通过） ==」exit 0（含 bun run smoke 入口）；失败路径实测 BASE_URL 指向死端口 exit 1
+  · guards 22/22 PASS（响应头 nosniff/Permissions-Policy/CSP 各命中 1，冒烟脚本入 package.json 命中 1）
+  · CSP 零破坏实证：1CRN 加载 + canvas 渲染 + color sasa blob worker 全链路 console 零错误零 violation
+- 遇到的坑：①agent-browser eval 字符串结果带 JSON 引号转义，解析需改用 boolean/number 返回值直判；②close→close 后立即 open 的 daemon 重启竞态会产生 about:blank 假阳性（零错误+断言全 false），以 sleep 1 + URL 兜底重开双保险解决；③next.config 改动会使 dev server 自动重启并全量重编译（首次 GET / 6.9s），冒烟前需留足编译时间（脚本内 wait --load load + sleep 3 已覆盖）
+---
+Task ID: r66-b
+Agent: general-purpose
+Task: Agent 视觉自查（VLM）链路可离线回归（r65-main 建议④：provider 视觉分派 + mock-llm VLM 模板）
+
+Work Log:
+- 【providers.ts · visionWithProvider】新增视觉分派助手（与 chatCompletionOnce 同风格）：导出 ContentPart / VisionMessage 类型 + providerSupportsVision(providerId) + visionWithProvider(messages, {signal})；视觉能力正则 `/(^|[^a-z0-9])(vl|vlm|vision|4\.[0-9]v|glm-?4v|gpt-4o|gpt-4\.1|omni|gemini|claude|llava|qwen-?vl|internvl|mock-vision)(?![a-z0-9])/i`（前后词边界防子串误伤：glm-4.6 不被 4.6v 吞、mock-pro 不被 vl 吞）；zai 内置通道恒 false（视觉走 SDK createVision 专用通道，不经直连分派）；直连复用 prepareRequest（baseURL/key/超时分档 + SSRF 卡点）POST `{model, messages, stream:false, temperature:0.3}`，多模态 content 数组原样透传，仅首位 assistant 转 system 位（与文本直连同款约定——SDK 习惯 assistant 位，直连端点要求 system 位）；TimeoutError/AbortError 语义区分与超时定时器/监听器清理完全对齐 chatCompletionOnce；fetch 异常/非 2xx → throw（调用方决定回退），无 provider 或模型非视觉 → null；zai 目录 note 同步改写为「视觉自查的兜底通道（视觉供应商优先直连）」
+- 【route.ts · 视觉分支】imageParts/vlmMessages 组装提到循环外（provider 直连与 ZAI SDK 兜底共用同一份，REVIEW_PROMPT+langDirective assistant 位照旧）；重试循环内先 visionWithProvider(vlmMessages, {signal: req.signal})——null（zai 内置/模型非视觉）→ 原生 ZAI createVision 路径原样保留；throw → providerErr 记录后同 attempt 内回退 ZAI（不浪费重试轮次）；两条路产出统一走 sanitizeDecision + 纯文本降级打捞 + 两次重试 + 502 语义全部不变；双通道都倒时 lastErr 并列展示「视觉供应商直连失败：X；ZAI 兜底失败：Y」；ZAI.create() 移入兜底分支（无 provider 场景不再无条件初始化）；SDK createVision 直接收 vlmMessages（结构兼容 SDK VisionMessage 类型，tsc 验证）；修一个 TS 窄化坑：completion 为 any，赋值后 text 不收窄，用 String() 包裹
+- 【mock-llm/index.ts · 修崩 + VLM 模板】①buildDecision 开头 content 归一化：数组 → 拼接 type:'text' 段 text（图片段忽略）、字符串原样（新增 normalizeContent/hasImagePart 助手 + MockContentPart 类型）——数组直 toLowerCase 的 TypeError 500 隐患关闭，流式/非流式两分支共用 buildDecision 均不再崩；②VLM 评审模板置匹配最前：最后一条 user 含 image_url 段 → 默认「视觉自查通过：渲染结果与用户目标一致，无需修正。」commands:[]；归一化文本含「失败演练 / fail drill」（大小写不敏感）→「视觉自查未达标：目标颜色未生效，已自动下发修正命令。」commands:['select chain A','color red, chain A']；zh 由归一化文本 CJK 判定（双语）；③/v1/models 增 mock-vision-pro；④文件头注释补 VLM 支持说明
+- 【验证 · mock 层 curl】/v1/models rg mock-vision ✓；①数组 content 含 image_url → 视觉自查通过决策（中文）；②失败演练 → 修正命令两连发；③stream:true 数组 content → 6 个 data: 帧 + data: [DONE]，SSE delta 拼接还原合法协议 JSON（bun 脚本断言）+ 英文 fail drill → 英文 reply；④纯文本回归：彩虹着色 → spectrum count, rainbow、染红 A 链 → select/color 两连发；r65-b 模板套件 58/58 全 PASS（重构零回归）
+- 【验证 · route 层 curl】POST /api/agent/providers 两步配置（先存 custom+test-key-12345+http://localhost:3999/v1+mock-vision-pro，再 setDefault——API 的 setDefault 分支早返回不落 config，须分开调）→ POST /api/agent body {scene,messages:[],goal:"把A链染红",image:"data:image/jpeg;base64,/9j/4AAQ"} → `{"ok":true,"decision":{"reply":"视觉自查通过：渲染结果与用户目标一致，无需修正。","commands":[]}}`（provider 视觉分派生效实证）；失败演练 goal（含 imageBefore 双图变体）→ 修正命令透传 ['select chain A','color red, chain A']；死端口 3998 演练 provider 失败 → 回退 ZAI 实调（假 JPEG 被 ZAI 拒 400 code1210 → 502 文案并列「视觉供应商直连失败：fetch failed；ZAI 兜底失败：图片输入格式/解析错误」，dev.log 栈帧指向 route.ts:330 兜底分支）；PIL 生成真 64×64 JPEG → 死 provider 下 ZAI 兜底成功「已确认：A 链已成功染为红色，目标达成。」；恢复现场 DELETE custom → store 回 `{"configs":{},"default":"zai"}`；对话分支回归（zai 默认「用球棍表示法显示配体」→ show ballstick, ligand）；dev.log 无预期外 fatal
+- 【guards】追加 3 条：mock-llm 视觉模型 mock-vision-pro ≥1（实测 1）/ mock-llm image_url 处理 ≥2（实测 6）/ route.ts 视觉分派 visionWithProvider ≥1（实测 3）；与并行代理 r66-a 的守卫（响应头×3 + 冒烟脚本）合流——其 TOTAL=22 基线未含本轮 3 条，已校正 TOTAL=25；bash scripts/regression-guards.sh 25/25 全 PASS
+- 【门禁】bunx tsc --noEmit src 0 错；bun run lint 零输出退出码 0；dev server 持续 200；mock-llm bun --hot 热重载全程无重启
+
+Stage Summary:
+- 交付：VLM 视觉自查链路三层分派（provider 视觉直连优先 → null 走 ZAI SDK 原生通道 → throw 记 providerErr 后回退 ZAI）+ mock-llm 多模态防崩归一化与 VLM 通过/失败演练双模板 + mock-vision-pro 模型 + guards 18→25 条（含 r66-a 合流）
+- 离线回归能力：AgentPanel 截图自查全链路（前端→/api/agent→visionWithProvider→mock:3999）无外网依赖可回归，通过/未达标两态均可确定性演练（「失败演练」关键词触发修正命令透传）
+- 坑：①/api/agent/providers 的 setDefault 分支早返回——配置与设默认须两次 POST；②SDK createVision 返回 any 导致 let text 赋值后不收窄（String() 包裹解）；③并行代理同时在改 regression-guards.sh（TOTAL 两次变更，最终 25 为双方之和）；④ZAI 视觉兜底对截断假 data URL 会 400（code 1210），真图验证用 PIL 生成
+- 遗留说明：视觉能力判定为命名正则启发式（未见名新模型需手动扩 VISION_MODEL_RE）；直连视觉不支持流式（视觉自查为整段响应语义，无此需求）；mock VLM 不做真实图像理解，通过/失败由关键词控制（离线回归语义足够）
+
+---
+Task ID: r66-main
+Agent: main
+Task: r66 轮主编排 + r65 建议①【高】大结构内存防护（PDB/SF 服务端体积护栏 + 客户端原子预扫描）+ 全链路 E2E
+
+Work Log:
+- 【编排】并行分派 r66-a（响应头硬化+冒烟脚本）与 r66-b（mock VLM 路径+视觉分派），主线程同步落地内存防护，三方文件零冲突
+- 【客户端护栏】loader.ts：countAtomRecords 行跳扫描（PDB 固定列/mmCIF atom_site 通用，50MB 毫秒级）；MAX_ATOMS=300,000 硬上限拒绝（双语 toast+描述+loading 复位）；WARN_ATOMS=100,000 软阈值告警放行；MAX_STRUCTURE_MB=120/MAX_MAP_MB=256 文件体积护栏（FileReader 读取前拦截）；fetchPdbId !res.ok 透传服务端 JSON 错误文案（413 提示直达用户）
+- 【服务端护栏】api/pdb/[id]/route.ts（48MB）与 api/sf/[id]/route.ts（64MB）：content-length 预检命中即 413 双语拒绝（不读 body、res.body.cancel() 释放连接）；无头时读完再验
+- 【千分位】appendLog 加载日志接 loc()（r65 低优先级残留清零）
+- 【guards】追加 5 条内存防护守卫（loader 硬上限/预扫描/体积 + pdb/sf 路由 413），25→30 条全 PASS
+- 【E2E】4HHB 加载（4,779 atoms·801 res·12 ch）→ select chain A「1,168 atoms selected」千分位 ✅ → 语言双向切换（中文「结构 4HHB 4,779 原子·801 残基·12 链」↔ EN，htmlLang 随动）→ 硬上限拒绝（合成 300,100 原子 drop 注入：拒绝 toast+结构数不变+零副作用）→ 告警路径（100,200 原子：告警 toast 触发；Bun 直跑 parse OK）→ VLM 视觉链路 UI 端到端（provider 配 mock-vision-pro →「把A链染红」→ 流式回复「已将 A 链染为红色」+ 命令执行 Colored #e04545 chain A + 视觉自查徽章「视觉自查通过」→ 现场恢复 zai）→ bun run smoke 4/4 PASS → 全程 console 零错误 → dev.log 全 200
+- 【诊断实锤】合成文件坐标列错位 6 列 → 乱坐标键推断爆炸：浏览器侧「Set maximum size exceeded」优雅报错（不挂页面）；Bun 侧 OOM kill——列对齐修正后 100K 原子解析 OK
+
+Stage Summary:
+- 交付：r65 建议①②③④全部闭环（内存防护/响应头/冒烟脚本/VLM 离线回归）+ guards 18→30 + 千分位扫尾
+- 门禁：guards 30/30 · lint 0 · tsc src 0 错 · E2E 全绿（加载/命令/语言/大结构拒绝/VLM 链路/smoke）· dev server 持续 200
+- 遗留发现（下轮候选）：① 病态文件（乱坐标/非连续 resSeq 致 10 万残基）可把主线程卡死（SequenceBar 10 万按钮渲染爆炸）——需残基数上限/序列条虚拟化；② parser 键推断无 bond 数上限（乱坐标 n² 爆炸，浏览器侧幸有 V8 Set 上限兜底成优雅报错）——可加 bond 数 sanity cap；③ 冒烟脚本与 guards 已可入 CI 常规轮转

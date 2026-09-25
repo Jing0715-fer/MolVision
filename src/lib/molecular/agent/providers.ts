@@ -94,7 +94,7 @@ export const PROVIDER_CATALOG: ProviderProfile[] = [
     ],
     docsUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
     website: 'https://z.ai',
-    note: { zh: '沙箱内置 SDK 直连，无需 API Key；视觉自查始终走此通道', en: 'Built-in sandbox SDK direct connection — no API Key needed; visual self-review always goes through this channel' },
+    note: { zh: '沙箱内置 SDK 直连，无需 API Key；视觉自查的兜底通道（视觉供应商优先直连）', en: 'Built-in sandbox SDK direct connection — no API Key needed; fallback channel for visual self-review (vision-capable providers take priority)' },
   },
   // ———— 国际平台 ————
   {
@@ -1064,6 +1064,72 @@ export async function chatCompletionStream(
     throw e
   }
   return full
+}
+
+// ———— 视觉自查（VLM）供应商分派：多模态 OpenAI 兼容直连（zai 内置 SDK 通道由调用方兜底） ————
+
+/** 多模态内容片（OpenAI 兼容视觉格式：文本段或图片 data URL 段；与 z-ai SDK VisionMessage 内容同构） */
+export type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+
+/** 视觉消息：content 纯文本或多模态内容片数组 */
+export interface VisionMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string | ContentPart[]
+}
+
+/** 视觉能力模型判定（大小写不敏感；前后词边界防子串误伤——glm-4.6 不可被 4.6v 吞、mock-pro 不可被 vl 吞）：
+ *  vl / vlm / vision / 4.6v / glm-4v / gpt-4o / gpt-4.1 / omni / gemini / claude / llava / qwen-vl /
+ *  internvl / mock-vision 等视觉线命名惯例命中即认为可接受 image_url 多模态输入 */
+const VISION_MODEL_RE = /(^|[^a-z0-9])(vl|vlm|vision|4\.[0-9]v|glm-?4v|gpt-4o|gpt-4\.1|omni|gemini|claude|llava|qwen-?vl|internvl|mock-vision)(?![a-z0-9])/i
+
+/** 当前供应商是否具备视觉（多模态）能力。zai 内置通道恒 false——其视觉自查走专用
+ *  SDK createVision（由 route 层兜底调用），不经 OpenAI 兼容直连分派 */
+export function providerSupportsVision(providerId: string): boolean {
+  if (providerId === 'zai') return false
+  const model = resolveModel(providerId)
+  return !!model && VISION_MODEL_RE.test(model)
+}
+
+/** 视觉自查（VLM）供应商分派：默认供应商模型具备视觉能力时走 OpenAI 兼容直连
+ *  （多模态 content 数组原样透传；SDK 习惯的 assistant 首位消息转 system 位——与文本直连同款约定）。
+ *  返回补全文本；fetch 异常 / 非 2xx → throw（调用方决定回退 ZAI 兜底）。
+ *  无供应商 / 模型非视觉（含 zai 内置）→ 返回 null（调用方回退 ZAI SDK 视觉通道）。 */
+export async function visionWithProvider(
+  messages: VisionMessage[],
+  opts: { timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<string | null> {
+  const providerId = getDefaultProviderId()
+  if (!providerSupportsVision(providerId)) return null
+  const { baseURL, headers, model, locale, defaultTimeout } = await prepareRequest(providerId)
+  // 超时/取消语义与 chatCompletionOnce 对齐：TimeoutError（上游故障，调用方可回退重试）
+  // 与 AbortError（客户端取消）区分
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError')), opts.timeoutMs ?? defaultTimeout)
+  const onAbort = () => controller.abort()
+  opts.signal?.addEventListener('abort', onAbort)
+  try {
+    const res = await fetch(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        // 直连端点约定 system 位承载提示词（SDK 习惯 assistant 位）——仅转首位，多轮 assistant 历史不动
+        messages: messages.map((m, i) => (i === 0 && m.role === 'assistant' ? { ...m, role: 'system' as const } : m)),
+        stream: false,
+        temperature: 0.3,
+      }),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(bt(locale, `${providerId} HTTP ${res.status}：${body.slice(0, 300)}`, `${providerId} HTTP ${res.status}: ${body.slice(0, 300)}`))
+    }
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
+    return data.choices?.[0]?.message?.content ?? ''
+  } finally {
+    clearTimeout(timer)
+    opts.signal?.removeEventListener('abort', onAbort)
+  }
 }
 
 /** 组装认证请求头 + 校验配置完备（async：错误文案需请求级 locale） */
