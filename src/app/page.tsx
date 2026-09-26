@@ -11,6 +11,7 @@ import { StatusBar } from '@/components/studio/StatusBar'
 import { WelcomeScreen } from '@/components/studio/WelcomeScreen'
 import { LoadDialog } from '@/components/studio/LoadDialog'
 import { HelpDialog } from '@/components/studio/HelpDialog'
+import { FigureTemplatesDialog } from '@/components/studio/FigureTemplatesDialog'
 import { HistoryDialog } from '@/components/studio/HistoryDialog'
 import { CommandPalette } from '@/components/studio/CommandPalette'
 import { AgentPanel } from '@/components/studio/AgentPanel'
@@ -78,6 +79,7 @@ export default function Home() {
       {/* 全局弹窗（欢迎页亦挂载：Ctrl+K 面板及其快速动作全程可用） */}
       <LoadDialog />
       <HelpDialog />
+      <FigureTemplatesDialog />
       <HistoryDialog />
       <CommandPalette />
     </div>

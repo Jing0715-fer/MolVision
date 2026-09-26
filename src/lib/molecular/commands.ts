@@ -1,6 +1,7 @@
 // PyMOL 风格命令行：select / show / hide / color / bg / zoom / spin / slab / label / create / map / symmetry / stereo ...
 import { PRESETS, useMolStore, engineRef, dataRegistry, buildNamedMasks } from './store'
 import { SCENE_PRESETS } from './scenes'
+import { FIGURE_TEMPLATES, runTemplateCommands } from './figure-templates'
 import { saveSession, clearSession, sessionInfo, exportSessionFile, newSession } from './session'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
@@ -173,6 +174,7 @@ export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; exampl
   { cmd: 'delete <名>', cmdEn: 'delete <name>', desc: { zh: '删除命名选择', en: 'Delete a named selection' }, example: 'delete site' },
   { cmd: 'close [名|all]', cmdEn: 'close [name|all]', desc: { zh: '关闭结构（默认活动结构）', en: 'Close structures (active by default)' }, example: 'close · close all · close 4HHB' },
   { cmd: 'clear', desc: { zh: '移除所有结构（同 close all）', en: 'Remove all structures (same as close all)' }, example: 'clear' },
+  { cmd: 'figure [id] | templates', desc: { zh: '论文图复现模板库（CNS 图式一键应用；figure rainbow 直接应用）', en: 'Paper-figure template library (CNS styles; figure rainbow applies directly)' }, example: 'figure · templates · figure rainbow' },
   { cmd: 'help', desc: { zh: '显示帮助', en: 'Show help' }, example: 'help' },
 ]
 
@@ -493,6 +495,25 @@ export function runCommand(raw: string): void {
   }
   parts = input.split(/\s+/)
   lower = input.toLowerCase()
+
+  // ── 论文图复现模板（r71）：figure / templates 开库；figure <id> 直接应用 ──
+  if (cmd === 'figure' || cmd === 'templates') {
+    useMolStore.getState().setUi({ templateOpen: true })
+    return ok(tt({ zh: '论文图复现模板库已打开（近 5 年 CNS 图式）', en: 'Paper-figure template library opened (recent CNS styles)' }))
+  }
+  if (cmd.startsWith('figure ')) {
+    const id = (parts[1] ?? '').toLowerCase()
+    const tpl = FIGURE_TEMPLATES.find(x => x.id === id)
+    if (!tpl) {
+      return err(tt({ zh: `未知模板 "${id}"。可用: ${FIGURE_TEMPLATES.map(x => x.id).join(', ')}`, en: `Unknown template "${id}". Available: ${FIGURE_TEMPLATES.map(x => x.id).join(', ')}` }))
+    }
+    const s = useMolStore.getState()
+    if (!s.structures.length) {
+      return err(tt({ zh: '当前没有结构——先 load 一个（如 load 4hhb），或用 templates 面板里的「演示」按钮', en: 'No structure loaded — load one first (e.g. load 4hhb) or use the "Demo" button in the templates panel' }))
+    }
+    runTemplateCommands(tpl.commands)
+    return ok(tt({ zh: `已应用「${tt(tpl.name)}」：${tpl.commands.length} 条命令`, en: `Applied "${tt(tpl.name)}": ${tpl.commands.length} commands` }))
+  }
 
   if (cmd === 'help' || cmd === '?') {
     ok(tt({ zh: '可用命令：', en: 'Available commands:' }))

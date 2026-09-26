@@ -9,7 +9,7 @@ import {
   Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
   FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot, Sparkles,
-  Award, Target, Minimize2, MoreHorizontal, ExternalLink,
+  Award, Target, Minimize2, MoreHorizontal, ExternalLink, LayoutTemplate, BookOpenText,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt, loc, type DualText } from '@/i18n'
@@ -591,6 +591,19 @@ export function Toolbar() {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              onClick={() => setUi({ templateOpen: true })}
+              aria-label={t({ zh: '论文图模板（CNS 图式复现）', en: 'Paper-figure templates (CNS styles)' })}
+              className="tool-btn hidden! shrink-0 sm:flex!"
+            >
+              <LayoutTemplate className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{t({ zh: '论文图复现模板：近 5 年 CNS 图式一键应用到当前结构', en: 'Paper-figure templates: recent CNS styles applied to your structure in one click' })}</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
               onClick={() => setUi({ paletteOpen: true })}
               aria-label={t({ zh: '命令面板（Ctrl+K）', en: 'Command palette (Ctrl+K)' })}
               className="tool-btn shrink-0 gap-1.5 !px-2"
@@ -634,6 +647,11 @@ export function Toolbar() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onSelect={() => setUi({ templateOpen: true })} className="gap-2.5">
+              <BookOpenText className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs">{t({ zh: '论文图模板', en: 'Paper-figure templates' })}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
               className="gap-2.5"

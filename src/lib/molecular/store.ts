@@ -57,6 +57,8 @@ export interface MolState {
     paletteOpen: boolean
     /** AI 助手面板（自然语言 → 命令） */
     agentOpen: boolean
+    /** 论文图复现模板库（r71：CNS 图式一键应用） */
+    templateOpen: boolean
   }
   consoleLog: { type: 'in' | 'out' | 'err'; text: string; time: string; seq?: number }[]
   /** 本次页面生命周期内是否加载过结构（防止恢复失败后被空自动保存抹掉存档） */
@@ -330,6 +332,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
     historyOpen: false,
     paletteOpen: false,
     agentOpen: false,
+    templateOpen: false,
   },
   consoleLog: [{ type: 'out', text: tt(BOOT_LOG), time: '' }],
   everHadStructures: false,

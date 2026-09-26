@@ -115,8 +115,16 @@ check "溢出收纳菜单触发钮"       "MoreHorizontal"                  "src
 check "溢出收纳菜单三入口"       "GitHub 仓库"                     "src/components/studio/Toolbar.tsx" 2
 check "锁定脉冲合成器时序"       "650ms ease-out 300ms"            "src/app/globals.css"              1
 
+# ---- r71：论文图复现模板（CNS 图式一键应用） ----
+check "论文图模板库数据"         "FIGURE_TEMPLATES|FigureTemplate"  "src/lib/molecular/figure-templates.ts" 3
+check "论文图模板卡片对话框"     "FigureTemplatesDialog|TemplateCard" "src/components/studio/FigureTemplatesDialog.tsx" 3
+check "论文图模板库开库命令"     "templateOpen: true"              "src/lib/molecular/commands.ts"    1
+check "论文图模板工具栏入口"     "templateOpen: true"              "src/components/studio/Toolbar.tsx" 2
+check "论文图模板弹窗挂载"       "FigureTemplatesDialog"           "src/app/page.tsx"                 2
+check "论文图模板文献溯源"       "10\.1038|10\.1126"              "src/lib/molecular/figure-templates.ts" 3
+
 # ---- 汇总 ----
-TOTAL=46
+TOTAL=52
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

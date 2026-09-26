@@ -2924,3 +2924,29 @@ Stage Summary:
   2. 【中】中段滑动区 74px 仍偏窄（AI/命令面板/命令行是 scroll 区外固定直出子元素占 108px+）：可把三者也纳入 <sm 收纳（⋯ 菜单加「命令面板」「命令行」两项，active 态用菜单项高亮表达）
   3. 【中】375px 下品牌区 + Load 后仅 74px 滑动窗口：可评估 <sm 时把测量组/媒体组先行入 ⋯（分组保留视觉锚点），把滑动窗口让给高频组
   4. 【低】sm:hidden!/hidden! 的双 ! 组合可抽成 TW4 @utility 或常量字符串（TOOLBAR_RESPONSIVE_HIDE）消除四处重复
+
+---
+Task ID: r71
+Agent: main
+Task: 论文图复现模板库（用户特性需求）——近 5 年 CNS 结构文章图式固化为命令序列模板，一键应用到用户结构快速复现 paper 级作图 + 引擎真实渲染缩略图管线 + guards 46→52 + E2E 全绿
+
+Work Log:
+- 【需求解析与架构】「从 CNS 找图→复现→模板→应用到用户结构」落为三层：①模板 = 图式视觉配方（表示法+配色+视角+灯光+轮廓的命令序列，全部走既有 runCommand——preset/spectrum/util/interface/symmetry/map/ray/outline 均已被 guards 与 E2E 验证过）②citation = 真实文献溯源（web-search 核实：Jin Nature 582:289 2020 Mpro / FLVCR2 Nature 629:704 2024 / Wrapp Science 367:1260 2020 spike / Huang Science 377:458 2022 NPC / Luo Nature 2026 Mpro next-gen / Hall Nature 2025 核小体 NHEJ）③版权诚实定位：不存论文原图，还原图式配方；缩略图 = MolVision 引擎对代表结构真实渲染（「100% 还原」指配方在本引擎下的复现）
+- 【figure-templates.ts】FigureTemplate 类型（name/tagline/purpose/tags/citation{journal,year,title,doi}/demo/commands/accent 十色系）+ 10 模板：rainbow-overview(4HHB 彩虹全景)/chain-assembly(4HHB 亚基分色)/ss-motif(1AKI 二级结构)/ligand-pocket(6LU7 Mpro 口袋特写——与 Jin 2020 原文同结构对题)/sasa-surface(4HHB 表面渐变)/density-map(3EKJ 密度叠加)/interface-contacts(6LU7 界面网络)/symmetry-assembly(1CRN 对称伙伴)/ensemble-dynamics(1D3Z NMR 系综)/publication-ready(4HHB 出版静帧)；runTemplateCommands（120ms 微间隔）+ demoThenApply（fetchPdbId + 600ms + 命令）；ESM 循环 import（commands↔figure-templates）运行时安全（双方均函数期引用）
+- 【FigureTemplatesDialog】max-w-3xl 网格卡片（2 列 sm+）：aspect-[16/10] 缩略图（/templates/{id}.png 缺图渐变占位+BookOpenText 图标，文件生成后自动浮现）+ 序号角标 01-10（仪器惯例）+ hover 演示按钮（Play 图标，sm 悬停浮现触屏恒显）+ 标签 chips + purpose + 文献参考行（期刊年份 + DOI 外链 ExternalLink）；点击卡主体 = 应用（无结构时引导 toast：演示或先加载）；页脚诚实版权说明（图式配方非原图）；ACCENT 十色映射表
+- 【入口三路】①Toolbar LayoutTemplate 图标钮（≥sm 直出 hidden!+sm:flex!，<sm 收纳进 ⋯ 菜单首项 BookOpenText）②命令 figure|templates 开面板（setUi templateOpen）③figure <id> 直接应用（无结构 err 引导；未知 id 报可用清单）——COMMAND_HELP 自动进命令面板（Ctrl+K 搜索实测命中）
+- 【E2E】加载 4HHB → 工具栏钮开面板（10 卡 + 6 DOI 链 + title "Paper-figure templates"）→ 卡片应用：rainbow 作用于 4HHB 像素实证（bg 白 255,255,255 + VLM 确认「沿链渐变彩虹 + 白底 + 血红蛋白四聚体」）→ 命令面板 Ctrl+K 搜 figure 执行 example 开面板 → console 全程零错误
+- 【缩略图管线 scripts/gen-template-thumbs.sh】欢迎页加载 demo 结构 → 收起序列条（canvas 311→471px）→ 开面板 → 点卡片应用 → 等待（density 16s/map fetch + publication 16s/ray 渲染分档）→ screenshot → PIL 裁剪 canvas rect(336,44,944,471) → 640×320 LANCZOS → public/templates/{id}.png；10/10 产出
+- 【管线踩坑三连（已固化脚本注释）】①按 demo id / 名称 textContent 匹配卡片不可靠——跨卡文本拼接错中相邻卡（4HHB 出现在 4 张卡 find 恒中第一张，v1 管线 chain/sasa/publication 三张拍成 rainbow 同图 0% 差异实锤）→ 改 grid.children[序号] 定位 + 像素互验（四图 6-53% 差异 + VLM 复核：表面渐变/轮廓卡通/按链色 全对）②合成 click() 对 Radix Dialog 内按钮有效（对 DropdownMenu 无效——r70 经验）③缩略图序列条 194px 压 canvas——收起后拍
+- 【其他】JSX 注释 text-*/border-* 中的 */ 提前终止块注释（TS1131 连环语法错）；「命令行」aria-label 大小写敏感（"PyMOL-style command line" vs "Command line" 选择器失配）；dev server next-server 崩溃端口失监听（bun run dev 父进程残留）杀 1186 重启 setsid 拉起恢复
+- 【门禁】lint 0 · tsc src 0 错 · guards 52/52（+6：模板库数据/卡片对话框/开库命令/工具栏入口/弹窗挂载/文献溯源 DOI）· smoke 4/4 · dev server 200
+
+Stage Summary:
+- 交付：论文图复现模板库新模式——10 个 CNS 图式模板（真实文献溯源 + 双语卡片 + 十色系）× 三入口（工具栏/⋯ 菜单/命令行 figure）× 引擎真实渲染缩略图 10 张 × 可靠生成管线脚本
+- 用户价值闭环：加载自己的结构 → 开模板库 → 点卡片 → CNS 级图式一秒复现；命令序列透明可改可重放（历史面板）；「演示」按钮完整还原缩略图取材路径
+- 架构资产：模板=命令序列（零新渲染路径，天然可重放/可组合）；demoThenApply 演示协议；缩略图管线脚本（序号定位 + 像素互验方法论）
+- 下一轮建议（按优先级）：
+  1. 【高】模板参数化适配：用户结构无对应 chain A/配体时 commands 部分失效（如 ligand-pocket 无配体仅弹 warning）——可做应用前结构特征探测（有无 hetero/链数）+ 智能降级提示或链重映射
+  2. 【中】模板扩容第二梯队（+8）：DNA-蛋白复合物（需核酸 rep 支持确认）/domain 着色分段/盐桥网络/膜平面示意/两态构象对比(superpose+morph)/表面静电(apbs 离线简化)/mutation 高亮/多结构 superpose 叠加图
+  3. 【中】模板缩略图点击直接「应用」当前 hover 高亮差异（已应用模板卡片打勾标记）；「应用到所有结构」选项
+  4. 【低】模板收藏/自定义保存（用户调好一张图 → 「存为模板」按钮，写 localStorage——闭环 UGC）
