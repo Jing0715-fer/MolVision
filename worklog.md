@@ -2864,3 +2864,32 @@ Stage Summary:
   2. 【中】StatusBar 工作台入口（status 变体）仍是旧分段形态——可将 OrbitTrack instrument tone 下沉为 status 变体同款，实现全应用语言控件形态统一（注意窄屏 h-6 适配）
   3. 【低】右下 AI 胶囊与右上语言胶囊的 hover 浮起/-translate-y-0.5 参数已一致，可抽 welcome-float-chip 工具类进 globals.css 消除重复
   4. 【低】键盘拨杆在 OrbitTrack 上无视觉焦点指示（group 本身不聚焦，仅按钮 ring）——若需 group 级焦点样式可加 tabindex=-1 + focus-visible ring
+
+---
+Task ID: r69
+Agent: main
+Task: 语言控件全应用形态统一（r68 建议①落地）——Toolbar/StatusBar 下沉 OrbitTrack 滑轨 + 滑块锁定 LED 脉冲（建议①②）+ 浮动胶囊工具类（建议③）+ 移动端溢出回归修复 + guards 38→43 + E2E/VLM 全链路
+
+Work Log:
+- 【OrbitTrack 强化】tone 收敛为 plain/instrument 双色系 + size md/sm/xs 三档 + widthClass/abbrevZh 两覆写 prop；toolbar 变体 = muted 外框胶囊（border-border bg-muted/40）+ Languages 图标（<sm 隐藏）+ plain 滑轨；status 变体 = instrument 紧凑 xs（h-6 w-[88px]，与欢迎页页脚同款仪表语义）；旧分段控件代码全量删除（四入口均为轨道滑块形态）
+- 【滑块锁定脉冲】translate 过渡结束（onTransitionEnd，过滤 propertyName ≠ translate/transform 的按钮颜色过渡冒泡）挂 .lang-lock 700ms；globals.css 新增 lang-lock-pulse keyframes（::after 做 LED 光环扩散 0→9px，不改滑块本体阴影）；reduced-motion 全退化；卸载清 timer
+- 【过渡属性坑修复】SLIDE 常量显式 transition-[transform,translate]——TW4 translate-x-full 走原生 translate 属性，r68 用 transition-transform 恰因 v4 把 translate 纳入其 transform 过渡清单才生效；显式双属性后跨版本稳态。E2E 中间帧采样实证平滑（t120=2.3%）
+- 【welcome-float-chip 工具类】globals.css 收敛右上语言/右下 AI 双胶囊「悬浮+毛玻璃+悬停浮起+按压回落」行为核；浮起用 translate 属性——welcome-in 入场动画 fill-mode:both 永久占用 transform，transform 声明会被其覆盖（CSS 级联：填充动画 > 常规声明含 :hover）；AI 胶囊保留 active:scale-[0.97]（TW4 scale 属性与 translate 属性独立叠加）
+- 【移动端溢出回归（本轮引入→当轮修复）】375px 实测 header scrollW 397 > 375：git stash 对比基线实锤 r68 版 scrollW=375 零冗余（旧控件 69px，新 111px = +42px 即溢出量来源）；修复：toolbar 轨道 <sm 收紧 w-[60px] + 中文缩写「中」（双 span sm:hidden/hidden sm:inline）+ 外框 pl-1，总宽 69px 与旧版持平；修复后 header/footer 双 scrollW=375=clientW 清零
+- 【E2E（agent-browser r69-lang 会话）】
+  · 欢迎页：双滑轨在位（浮动胶囊 + 页脚）；切换中间帧 t120=2.3%（平滑实证）；锁定脉冲生命周期 t400/t850 locked=true → t1450 摘除；cookie/lang/UI 三随动
+  · 工作台：4HHB 加载后 2 组滑轨（header toolbar + footer status）；滑块中心与活动按钮中心 δ=0（几何严格重合）；instrument 边框盒计算吻合（滑块 16px = 24-2×1-2×3）
+  · 双入口切换 + 键盘 ArrowRight 拨杆 + 双轨经 LocaleCtx 同步全通过；工作台锁定脉冲 t500 实证（全局重渲致 transitionend 派发延迟 100-200ms，视觉不受影响，为语义正确性保留事件驱动而非定时器）
+  · 桌面 1280：轨道恢复 w-[100px] + 中文全名；VLM 三态评审（工作台深色「优秀/无瑕疵」/浅色「清晰对齐无缺陷」/移动端「完整无裁切」）全过
+  · console 全程零错误；smoke 4/4；guards 43/43；lint 0；tsc src 0 错；dev.log 全 200
+- 【guards 38→43】+5：全形态滑轨化（OrbitTrack tone= ×4）/ 锁定脉冲组件接线 / 锁定脉冲样式 / 浮动胶囊工具类定义 / 浮动胶囊工具类接线；坑：注释缺 lang-lock 字面量致守卫差一命中——补文档性字面量（守卫即文档）
+
+Stage Summary:
+- 交付：全应用语言控件形态统一（四入口一形态：welcome 玻璃胶囊 / default+status 墨底仪表 / toolbar 浅底胶囊，旧分段控件清零）+ 滑块到位 LED 锁定脉冲（仪器语义）+ welcome-float-chip 行为收敛 + 移动端溢出当轮闭环
+- 设计资产：OrbitTrack widthClass/abbrevZh 覆写体系（紧凑场景复用）；「填充动画覆盖 transform」与「TW4 translate 属性过渡」两条 CSS 级联陷阱入注释与 worklog
+- 坑：①agent-browser close→open 守护进程竞态再现（about:blank 假阳性，sleep+get url 兜底识别）；②375px 工具栏零冗余——任何加宽即溢出，移动端控件宽度须与被替换元素严格等宽（stash 基线对比法定位回归来源高效）；③textContent 连接双断点 span（「中中文」）——视觉正常，断言须知
+- 下一轮建议（按优先级）：
+  1. 【高】工作台工具栏移动端整体响应式欠账：r69 实测 375px 零冗余靠逐像素挤压，标签隐藏策略到极限——可做溢出收纳（更多菜单）或工具栏双行布局
+  2. 【中】锁定脉冲在重渲阻塞下延迟 100-200ms：可在 locale 切换时用 rAF+performance.now() 预测到位时点提前挂类（或 transitionrun 事件），让脉冲与视觉到位同步
+  3. 【中】OrbitTrack 可推广为通用双位开关（如 卡通/线框、开/关 类设置项）——泛化后 statusbar 的轮廓/FPS 等开关可复用同形态
+  4. 【低】欢迎页 footer default 滑轨与 StatusBar status 滑轨已是同款 instrument，可抽组件级常量（尺寸表）进 LanguageToggle 导出供未来开关复用

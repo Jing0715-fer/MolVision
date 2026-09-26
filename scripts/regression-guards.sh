@@ -103,8 +103,15 @@ check "截断提示双语"             "仅渲染前.*more residues are hidden" 
 check "语言轨道开关滑块探针"     "data-slide"                      "src/components/studio/LanguageToggle.tsx" 2
 check "欢迎页浮动语言入口"       "variant=\"welcome\""              "src/components/studio/WelcomeScreen.tsx" 1
 
+# ---- r69：语言控件全应用形态统一（OrbitTrack 四变体）+ 滑块锁定脉冲 + 浮动胶囊工具类 ----
+check "语言控件全形态滑轨化"     "OrbitTrack tone="                "src/components/studio/LanguageToggle.tsx" 4
+check "滑块锁定脉冲组件接线"     "lang-lock"                       "src/components/studio/LanguageToggle.tsx" 2
+check "滑块锁定脉冲样式"         "lang-lock-pulse"                 "src/app/globals.css"              2
+check "浮动胶囊工具类定义"       "welcome-float-chip"              "src/app/globals.css"              2
+check "浮动胶囊工具类接线"       "welcome-float-chip"              "src/components/studio/WelcomeScreen.tsx" 2
+
 # ---- 汇总 ----
-TOTAL=38
+TOTAL=43
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

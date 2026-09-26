@@ -623,3 +623,46 @@ canvas {
 .status-val {
   font-size: 10.5px;
 }
+
+/* ============================================================
+   r69：语言控件形态统一（轨道驻留开关全应用化）配套资产
+   ============================================================ */
+
+/* —— 欢迎页浮动胶囊（右上语言 / 右下 AI 助手对角双胶囊共享行为核心）：
+      几何定位 / 配色 / 阴影由各胶囊 Tailwind 类自定，此处只收敛
+      「悬浮 + 毛玻璃 + 悬停浮起 + 按压回落」的行为一致性。
+      注意：浮起用 translate 属性而非 transform —— welcome-in 入场动画
+      以 fill-mode:both 持续占用 transform，transform 声明会被其覆盖。 */
+.welcome-float-chip {
+  position: absolute;
+  z-index: 20;
+  border-radius: 9999px;
+  border-width: 1px;
+  border-style: solid;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: translate 200ms, box-shadow 200ms, border-color 200ms;
+}
+.welcome-float-chip:hover { translate: 0 -2px; }
+.welcome-float-chip:active { translate: 0 0; }
+
+/* —— 语言滑块到位「锁定」LED 脉冲（仪器到位反馈，一次性 650ms）：
+      滑块 transform/translate 过渡结束由组件挂 .lang-lock，
+      ::after 做 LED 光环扩散（不改滑块本体阴影）。 */
+@keyframes lang-lock-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 55%, transparent); }
+  100% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--primary) 0%, transparent); }
+}
+.lang-lock::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: lang-lock-pulse 650ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-float-chip { transition: none; }
+  .welcome-float-chip:hover, .welcome-float-chip:active { translate: none; }
+  .lang-lock::after { animation: none; }
+}

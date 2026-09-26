@@ -255,15 +255,15 @@ export function WelcomeScreen() {
         </div>
         </div>
 
-        {/* 语言切换（r68 重设计主入口：右上角浮动「轨道驻留开关」玻璃胶囊，
-            与右下 AI 助手胶囊对角呼应；AgentPanel 悬浮面板 inset-y-16 不会遮挡） */}
+        {/* 语言切换（r68 主入口；r69 行为收敛至 welcome-float-chip 工具类：
+            悬浮+毛玻璃+悬停浮起与右下 AI 胶囊间构） */}
         <LanguageToggle variant="welcome" />
 
         {/* AI 助手悬浮入口（仪器胶囊：LED 待机 + ⌘J 快捷键；面板打开时让位隐藏） */}
         {!agentOpen && (
           <button
             onClick={() => setUi({ agentOpen: true })}
-            className="welcome-in group absolute bottom-5 right-5 z-20 flex h-10 select-none items-center gap-2.5 rounded-full border border-primary/30 bg-card/92 pl-3 pr-3.5 shadow-[0_2px_14px_color-mix(in_oklab,var(--primary)_22%,transparent)] backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/55 hover:shadow-[0_5px_20px_color-mix(in_oklab,var(--primary)_36%,transparent)] active:translate-y-0 active:scale-[0.97]"
+            className="welcome-in welcome-float-chip group bottom-5 right-5 flex h-10 select-none items-center gap-2.5 border-primary/30 bg-card/92 pl-3 pr-3.5 shadow-[0_2px_14px_color-mix(in_oklab,var(--primary)_22%,transparent)] hover:border-primary/55 hover:shadow-[0_5px_20px_color-mix(in_oklab,var(--primary)_36%,transparent)] active:scale-[0.97]"
             style={{ animationDelay: '460ms' }}
             aria-keyshortcuts="Control+J"
           >
