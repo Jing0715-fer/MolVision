@@ -99,8 +99,12 @@ check "序列条渲染封顶"           "SEQ_CELL_HARD"                   "src/c
 check "大链折叠行双语"           "大链已折叠.*Large chain collapsed" "src/components/studio/SequenceBar.tsx" 1
 check "截断提示双语"             "仅渲染前.*more residues are hidden" "src/components/studio/SequenceBar.tsx" 1
 
+# ---- r68：欢迎页语言切换重设计（轨道驻留开关） ----
+check "语言轨道开关滑块探针"     "data-slide"                      "src/components/studio/LanguageToggle.tsx" 2
+check "欢迎页浮动语言入口"       "variant=\"welcome\""              "src/components/studio/WelcomeScreen.tsx" 1
+
 # ---- 汇总 ----
-TOTAL=36
+TOTAL=38
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

@@ -255,6 +255,10 @@ export function WelcomeScreen() {
         </div>
         </div>
 
+        {/* 语言切换（r68 重设计主入口：右上角浮动「轨道驻留开关」玻璃胶囊，
+            与右下 AI 助手胶囊对角呼应；AgentPanel 悬浮面板 inset-y-16 不会遮挡） */}
+        <LanguageToggle variant="welcome" />
+
         {/* AI 助手悬浮入口（仪器胶囊：LED 待机 + ⌘J 快捷键；面板打开时让位隐藏） */}
         {!agentOpen && (
           <button
@@ -302,7 +306,8 @@ export function WelcomeScreen() {
           {t({ zh: '拖放 PDB / CIF / .molvision 文件即可加载 · ⌘K 命令面板 · ⌘J AI 助手', en: 'Drop PDB / CIF / .molvision files to load · ⌘K command palette · ⌘J AI assistant' })}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
-          <LanguageToggle />
+          {/* r68 重设计次入口：墨色仪表滑轨（与主题/GitHub 图标钮同族） */}
+          <LanguageToggle variant="default" />
           <button
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
             suppressHydrationWarning

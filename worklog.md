@@ -2828,3 +2828,39 @@ Stage Summary:
 - 架构资产：病态文件防护三层纵深（loader 体积/原子预扫描 → parser 残基/键数上限 → SequenceBar 折叠封顶），错误管道复用既有双语 toast 通道零新增 UI
 - 遗留（下轮候选）：① 大链真虚拟化（展开后 ≤10K 格全量渲染，2 万格链首帧 ~300ms，可做滚动窗口/content-visibility）② 拒绝 toast 可附修复指引 description（「用 PyMOL 重新导出」）③ subsetStructure/create 命令产物未接上限（当前仅 parse 入口防护）④ 性能预算冒烟断言（大链加载时间上限）
 
+
+---
+Task ID: r68
+Agent: main
+Task: 欢迎页语言切换按钮重设计（用户直接指令）——「轨道驻留开关」落地 + 全链路 E2E + guards 36→38 + 推送
+
+Work Log:
+- 【基线确认】git 核实本地=origin/main=347a947（r67 三层防护已推送），工作区干净；现版欢迎页语言入口仅为 footer 内通用分段控件（default 变体 border-border bg-muted/50 h-8），视觉权重低、与欢迎页「精密仪器」设计语言（原子轨道/六角徽章/墨色仪表条）匹配度不足——重设计动因
+- 【设计概念】「轨道驻留开关（Orbit Dwell Switch）」：呼应欢迎页原子轨道视觉主题——两个「轨道位」（中文/EN，母语名惯例），一枚「电子滑块」驻留当前语言位；切换时滑块沿轨道滑向另一位（probe-pop 同族回弹缓动 cubic-bezier(0.34,1.35,0.64,1) 300ms），其上位标签反色高亮
+- 【LanguageToggle.tsx 全量重构】形态矩阵四变体：
+  · welcome（新增）：右上角浮动玻璃胶囊（absolute top-5 right-5 z-20 自带定位 + welcome-in 错峰入场 500ms）——bg-card/85 backdrop-blur-sm + Languages 主色图标 + 轨道区 w-[120px]；与右下 AI 助手胶囊对角呼应，hover 浮起 -0.5px
+  · default（重设计）：欢迎页页脚 instrument-bar 墨色仪表滑轨——恒深底上亮白滑块（oklch(0.92) + 顶部内高光/微投影）+ 深色活动字，与页脚主题/GitHub 图标钮同族气质
+  · toolbar / status：工作台两入口原样保留（分段形态零回归，代码逐字不动）
+  · OrbitTrack 抽象（glass/instrument 双 tone 共用核心）：几何严格对称——容器 p-[3px] + 滑块 left-[3px] w-[calc(50%-3px)] + en 时 translate-x-full（验算：两位按钮中心与滑块两驻留位中心严格重合）；键盘 ←/→ 拨杆（仪表拨杆语义，preventDefault）；滑块 data-slide 属性作 E2E 探针；motion-reduce:duration-0 尊重运动偏好；位按钮 focus-visible ring
+- 【WelcomeScreen.tsx 接入】右上角浮动主入口（AI 胶囊同层同 z-20，源码序在其前）+ footer 显式 variant="default" 次入口；AgentPanel float 面板 inset-y-16（top=64px）与开关（top-5..60px）几何错开不遮挡
+- 【E2E · agent-browser r68-lang 会话】
+  · 双入口结构：欢迎页 [role=group]×2（右上 120×40@top20/right25 + footer 滑轨）、各 1 个 aria-pressed=true、data-slide×2
+  · 滑块几何：zh→translate:none / en→translate:100%（Tailwind v4 用原生 translate 属性，transform 恒 none——首查踩坑）
+  · 右上开关点击 zh：lang=zh-CN + slide=zh + cookie=molvision-locale=zh + 正文「加载结构/经典示例」中文 ✓；键盘 ArrowRight 拨回 en ✓
+  · footer 次入口独立切换 en→zh：cookie 随动 + 双滑块经 LocaleCtx 全局同步（右上滑块同拍 zh）
+  · 工作台零回归：UI 加载 4HHB（__molData.size=1）→ Toolbar/StatusBar 两入口切换正常（lang/cookie 随动，中文 footer「结构4HHB 4,779 原子 · 801 残基 · 12 链」）+ 欢迎页滑块卸载干净（data-slide=0）
+  · AI 面板遮挡实测：panelTop=64 / toggleBottom=60 → overlap=false 开关完整可达
+  · VLM 视觉评审三态：深色（玻璃胶囊层次感/滑块高对比/无缺陷）+ 浅色（滑块边界清晰/玻璃感成立/图标协调/页脚对齐严谨）+ 移动端 375px（安全距离/无挤压裁切/无溢出）均通过
+  · console 全程零错误；smoke 4/4 PASS
+- 【guards 36→38】新增 2 条：语言轨道开关滑块探针（data-slide ≥2）/ 欢迎页浮动语言入口（variant="welcome" 接入 ≥1）；38/38 全 PASS
+- 【门禁】bun run lint 零输出 exit 0；bunx tsc --noEmit src 0 错；dev server 持续 200（dev.log 无 fatal）
+
+Stage Summary:
+- 交付：欢迎页语言切换重设计——「轨道驻留开关」双入口（右上浮动玻璃胶囊主入口 + 页脚墨色仪表滑轨次入口），滑块回弹动画/键盘拨杆/双主题/移动端全适配，工作台 toolbar/status 入口零回归
+- 设计资产：OrbitTrack 可复用双 tone 轨道滑块核心（几何对称验算公式入注释）；data-slide 语义探针约定
+- 坑：①无头浏览器 system 偏好 dark——「浅色截图」实为深色，需像素采样甄别（topleft RGB 近白/近黑判定）再谈主题；②textContent 无空格拼接，「结构 4HHB」带空格 includes 断言误报，改双词独立判定；③Tailwind v4 translate-x-full 走原生 translate 属性非 transform，滑块位移验证须查 getComputedStyle().translate
+- 下一轮建议（按优先级）：
+  1. 【中】滑块形态可再精进一步：活动位加当前语言母语问候微动画（如「中文」位滑入时位内文字轻微 letter-spacing 收拢），或滑块到住时 LED 微光脉冲一次（仪器语义「锁定」反馈）
+  2. 【中】StatusBar 工作台入口（status 变体）仍是旧分段形态——可将 OrbitTrack instrument tone 下沉为 status 变体同款，实现全应用语言控件形态统一（注意窄屏 h-6 适配）
+  3. 【低】右下 AI 胶囊与右上语言胶囊的 hover 浮起/-translate-y-0.5 参数已一致，可抽 welcome-float-chip 工具类进 globals.css 消除重复
+  4. 【低】键盘拨杆在 OrbitTrack 上无视觉焦点指示（group 本身不聚焦，仅按钮 ring）——若需 group 级焦点样式可加 tabindex=-1 + focus-visible ring
