@@ -9,7 +9,7 @@ import {
   Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
   FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot, Sparkles,
-  Award, Target, Minimize2,
+  Award, Target, Minimize2, MoreHorizontal, ExternalLink,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt, loc, type DualText } from '@/i18n'
@@ -621,13 +621,48 @@ export function Toolbar() {
         {/* 语言切换：主入口（与主题切换并列，任何视口可见） */}
         <LanguageToggle variant="toolbar" />
 
+        {/* 移动端溢出收纳（r70）：<sm 时主题/帮助/GitHub 折叠进「⋯」菜单——
+            右翼固定簇 125px→97px，中段滑动区多出 ~60px；GitHub 首次移动端可达；
+            ≥sm 恢复原三钮直出（与中段标签展开节奏一致） */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              aria-label={t({ zh: '更多（主题 / 帮助 / GitHub）', en: 'More (theme / help / GitHub)' })}
+              className="tool-btn shrink-0 sm:hidden!"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              onSelect={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+              className="gap-2.5"
+            >
+              {resolvedTheme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+              <span className="text-xs">{t({ zh: '切换深浅主题', en: 'Toggle light/dark theme' })}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setUi({ helpOpen: true })} className="gap-2.5">
+              <HelpCircle className="h-3.5 w-3.5" />
+              <span className="text-xs">{t({ zh: '帮助与快捷键', en: 'Help & shortcuts' })}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <a href="https://github.com/Jing0715-fer/MolVision" target="_blank" rel="noreferrer" className="gap-2.5">
+                <Github className="h-3.5 w-3.5" />
+                <span className="flex-1 text-xs">{t({ zh: 'GitHub 仓库', en: 'GitHub repository' })}</span>
+                <ExternalLink className="h-3 w-3 text-muted-foreground" />
+              </a>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
               suppressHydrationWarning
               aria-label={t({ zh: '切换深浅主题', en: 'Toggle light/dark theme' })}
-              className="tool-btn shrink-0"
+              className="tool-btn hidden! shrink-0 sm:flex!"
             >
               <Sun className="h-4 w-4 hidden dark:block" />
               <Moon className="h-4 w-4 dark:hidden" />
@@ -641,7 +676,7 @@ export function Toolbar() {
             <button
               onClick={() => setUi({ helpOpen: true })}
               aria-label={t({ zh: '帮助与快捷键', en: 'Help & shortcuts' })}
-              className="tool-btn shrink-0"
+              className="tool-btn hidden! shrink-0 sm:flex!"
             >
               <HelpCircle className="h-4 w-4" />
             </button>
@@ -653,7 +688,7 @@ export function Toolbar() {
           href="https://github.com/Jing0715-fer/MolVision"
           target="_blank"
           rel="noreferrer"
-          className="tool-btn hidden shrink-0 sm:flex"
+          className="tool-btn hidden! shrink-0 sm:flex!"
           title={t({ zh: 'GitHub 仓库', en: 'GitHub repository' })}
           aria-label={t({ zh: 'GitHub 仓库（新窗口打开）', en: 'GitHub repository (opens in a new window)' })}
         >

@@ -20,7 +20,7 @@
 //  · 键盘：Tab 逐位聚焦（原生 button）；位上 ←/→ 在两位间拨动（仪表拨杆语义）
 //  · 切换即写 cookie（molvision-locale），下次首屏 SSR 直读该 cookie，零闪烁
 //  · prefers-reduced-motion 下滑块过渡与锁定脉冲均退化为瞬时
-import { useEffect, useRef, useState, type KeyboardEvent, type TransitionEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Languages } from 'lucide-react'
 import { useI18n, type Locale } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -52,24 +52,27 @@ function OrbitTrack({ tone, size, widthClass, abbrevZh }: { tone: Tone; size: Si
   const { locale, setLocale, t } = useI18n()
   const en = locale === 'en'
 
-  // r69：滑块到位「锁定」LED 脉冲（translate 过渡结束挂 .lang-lock，650ms 后摘除）
+  // r70：锁定脉冲改点击驱动 + CSS animation-delay——类在点击同步添加，::after
+  // 动画带 300ms 延迟（= 滑移时长）在合成器时间线启动，与滑块视觉到位严格同步，
+  // 免疫主线程重渲阻塞（r69 实测 transitionend 在全局重渲下延迟 100-200ms）；
+  // 且仅被操作的轨道脉冲（旧实现任意入口切换时全轨道皆脉冲）。
   const [locked, setLocked] = useState(false)
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (lockTimer.current) clearTimeout(lockTimer.current) }, [])
 
+  const switchTo = (key: Locale) => {
+    if (key === locale) return
+    setLocale(key)
+    setLocked(true)
+    if (lockTimer.current) clearTimeout(lockTimer.current)
+    lockTimer.current = setTimeout(() => setLocked(false), 1000)
+  }
+
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault()
-      setLocale(e.key === 'ArrowLeft' ? 'zh' : 'en')
+      switchTo(e.key === 'ArrowLeft' ? 'zh' : 'en')
     }
-  }
-
-  const onSlideSettled = (e: TransitionEvent<HTMLSpanElement>) => {
-    // 只认滑块自身的位移过渡（过滤按钮 transition-colors 的冒泡 end 事件）
-    if (e.propertyName !== 'translate' && e.propertyName !== 'transform') return
-    setLocked(true)
-    if (lockTimer.current) clearTimeout(lockTimer.current)
-    lockTimer.current = setTimeout(() => setLocked(false), 700)
   }
 
   return (
@@ -87,11 +90,11 @@ function OrbitTrack({ tone, size, widthClass, abbrevZh }: { tone: Tone; size: Si
         tone === 'instrument' && 'border border-white/10 bg-white/5',
       )}
     >
-      {/* 电子滑块：驻留当前语言位 */}
+      {/* 电子滑块：驻留当前语言位；lang-lock 由点击同步挂上（::after 动画
+          带 300ms delay 在合成器时间线与滑块到位同步起闪，见 globals.css） */}
       <span
         aria-hidden
         data-slide={en ? 'en' : 'zh'}
-        onTransitionEnd={onSlideSettled}
         className={cn(
           'pointer-events-none absolute top-[3px] bottom-[3px] left-[3px] w-[calc(50%-3px)] rounded-full',
           SLIDE,
@@ -106,7 +109,7 @@ function OrbitTrack({ tone, size, widthClass, abbrevZh }: { tone: Tone; size: Si
         <button
           key={it.key}
           type="button"
-          onClick={() => setLocale(it.key)}
+          onClick={() => switchTo(it.key)}
           aria-pressed={locale === it.key}
           title={it.title}
           className={cn(

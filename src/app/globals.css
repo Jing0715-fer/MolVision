@@ -457,7 +457,10 @@ canvas {
   background: var(--primary);
 }
 
-/* 工具栏图标按钮统一规格 */
+/* 工具栏图标按钮统一规格
+   ⚠️ r70 实测：Turbopack 管线会把用户 @layer 块展平（编译产物中自定义 CSS
+   恒在 Tailwind utilities 之后且未分层，级联压过工具类）——对 tool-btn 做
+   响应式显隐必须在调用处用尾随 `!` 提权（hidden! / sm:flex! / sm:hidden!） */
 .tool-btn {
   display: flex;
   align-items: center;
@@ -646,9 +649,10 @@ canvas {
 .welcome-float-chip:hover { translate: 0 -2px; }
 .welcome-float-chip:active { translate: 0 0; }
 
-/* —— 语言滑块到位「锁定」LED 脉冲（仪器到位反馈，一次性 650ms）：
-      滑块 transform/translate 过渡结束由组件挂 .lang-lock，
-      ::after 做 LED 光环扩散（不改滑块本体阴影）。 */
+/* —— 语言滑块到位「锁定」LED 脉冲（仪器到位反馈，一次性）：
+      r70 时序——.lang-lock 由点击同步挂上（不依赖 transitionend，免疫主线程
+      重渲阻塞），::after 动画带 300ms delay（= 滑移时长）在合成器时间线与
+      滑块视觉到位同拍起闪；组件 1000ms 后摘类。 */
 @keyframes lang-lock-pulse {
   0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 55%, transparent); }
   100% { box-shadow: 0 0 0 9px color-mix(in oklab, var(--primary) 0%, transparent); }
@@ -658,7 +662,7 @@ canvas {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  animation: lang-lock-pulse 650ms ease-out;
+  animation: lang-lock-pulse 650ms ease-out 300ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

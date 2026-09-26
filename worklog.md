@@ -2893,3 +2893,34 @@ Stage Summary:
   2. 【中】锁定脉冲在重渲阻塞下延迟 100-200ms：可在 locale 切换时用 rAF+performance.now() 预测到位时点提前挂类（或 transitionrun 事件），让脉冲与视觉到位同步
   3. 【中】OrbitTrack 可推广为通用双位开关（如 卡通/线框、开/关 类设置项）——泛化后 statusbar 的轮廓/FPS 等开关可复用同形态
   4. 【低】欢迎页 footer default 滑轨与 StatusBar status 滑轨已是同款 instrument，可抽组件级常量（尺寸表）进 LanguageToggle 导出供未来开关复用
+
+---
+Task ID: r70
+Agent: main
+Task: 工具栏移动端溢出收纳「⋯」菜单（r69 建议①）+ 锁定脉冲点击驱动时序（建议②）+ 重大潜伏 bug 揭发修复（tool-btn 响应式显隐失效）+ guards 43→46 + E2E/VLM 全链路
+
+Work Log:
+- 【溢出收纳菜单】Toolbar 右翼 <sm 时主题/帮助/GitHub 三钮折叠进「⋯」DropdownMenu（MoreHorizontal 触发钮 28px + align="end" w-52 + 三菜单项带图标双语 + GitHub 项 asChild 外链锚点带 ExternalLink 尾图标）；≥sm 恢复原三钮直出（sm 断点与中段标签展开节奏一致）
+- 【锁定脉冲时序重造】r69 transitionend 方案废弃（全局重渲阻塞主线程时事件延迟 100-200ms）→ r70 点击驱动：switchTo() 内同步 setLocked(true)（1000ms 后摘），CSS .lang-lock::after animation 带 300ms delay（= 滑移时长）在合成器时间线与滑块视觉到位同拍起闪，免疫主线程阻塞；且仅被操作的轨道脉冲（旧实现任意入口切换时全轨道皆脉冲）；移除 TransitionEvent 处理器（组件更简）
+- 【重大潜伏 bug 揭发：tool-btn 响应式显隐从未生效】E2E 实测 375px 直出三钮不隐藏 → 根因链深挖：
+  · 第一层：.tool-btn 在 globals.css 未分层定义 display:flex，级联压过 Tailwind @layer utilities 的 hidden/sm:flex（r68 起 GitHub 钮 hidden sm:flex 从未真正隐藏——r69 测量中 a(28) 即其始终可见，当时误判为已隐藏）
+  · 第二层尝试 @layer components 包裹 .tool-btn → 编译产物实测被 Turbopack 管线展平（产物中 @layer components; 为空声明、.tool-btn 仍裸输出在 utilities 之后）——用户 layer 块在此管线不可依赖（globals.css 既有注释「未分层压过 utilities」为同源认知）
+  · 终修：尾随 ! 提权（编译产物实证 .border-destructive/60\! → !important 形态有效）：⋯ 触发钮 sm:hidden!、主题/帮助/GitHub hidden! + sm:flex!（两个 important 同特异性时按 utilities 内源序，variant 规则恒后置 → sm:flex! 胜出）；.tool-btn 定义回滚原样 + ⚠️ 注释警示后续响应式显隐必须尾随 ! 提权
+  · 影响面审计：tool-btn 全仓仅 4 处与 display 工具类混用（本轮新增 3 + GitHub 存量 1，全部期望工具类胜出）；bg-*/!text-* 混用与 :hover 特异度关系经推演前后行为一致（零回归）
+- 【E2E（agent-browser r70-qa 会话）】
+  · 375px：header scrollW=375=clientW 溢出清零（修复前 387）；⋯ 可见 28px；主题/帮助/GitHub 三钮 offsetParent=null 正确隐藏；中段滑动区 0→74px（Load 等工具恢复可达）
+  · ⋯ 菜单三项功能：主题切换 dark→light 实测翻转；帮助项打开 dialog（Help/Shortcuts 内容实证）；GitHub 项 href/target=_blank 齐全；Radix 菜单须 agent-browser 原生 click（eval 合成 click() 无 pointerdown 不触发）——坑入档
+  · 640px (sm)：⋯ 隐藏 + 三钮直出 + scrollW=640 无溢出；1280 桌面：moreHidden + headerOK + 双滑轨在位（零回归）
+  · 脉冲时序：t100 已挂 .lang-lock（旧 transitionend 实现此时尚处 300ms 滑移中）+ t1200 摘除 + lang 随动；同拍断言不可行（React 离散事件批处理，类更新在同帧 flush 而非同步执行栈内）——以 100ms 采样为「立即」判据；单轨道语义实证（点击 header 轨道时 footer 轨道零脉冲）
+  · VLM 双审：初次「菜单已展开」提问被预设诱导（点击选择器因语言切中文失配、菜单实际未开仍答"已展开"）——改中文选择器真开菜单 + eval 探针确认 [role=menu] 存在 + 中立提问客观重审：右对齐/三项图标齐全/外链图标在位/无重叠裁切溢出
+  · console 全程零错误；guards 46/46；smoke 4/4；lint 0；tsc src 0 错；dev.log 全 200
+- 【guards 43→46】+3：溢出收纳菜单触发钮（MoreHorizontal ≥2）/ 溢出收纳菜单三入口（GitHub 仓库 ≥2，双语同词命中 3）/ 锁定脉冲合成器时序（650ms ease-out 300ms 产物形态）
+
+Stage Summary:
+- 交付：工具栏移动端「⋯」溢出收纳（三钮折叠 + GitHub 首次移动端可达 + 中段滑动区 0→74px）+ 锁定脉冲合成器时序同步（点击驱动 + CSS delay，免疫主线程阻塞，单轨道语义）+ 潜伏两轮的 tool-btn 显隐失效根因修复（尾随 ! 提权体系）
+- 关键认知资产：①Turbopack 管线展平用户 @layer 块（编译产物实证）——自定义类与 utilities 的响应式显隐冲突只能靠尾随 ! 提权；②Radix DropdownMenu 合成 click() 不可触发（无 pointerdown），须原生点击；③VLM 评审提问严禁预设「已展开/已生效」类状态（会被诱导确认）——先探针后中立问
+- 下一轮建议（按优先级）：
+  1. 【高】globals.css 全量未分层自定义类与 Tailwind 显隐类混用排查：本轮只修 tool-btn 一族（4 处），其余自定义类（mol-btn-primary/panel-card/tape-well 等）若有 hidden/md:block 组合同样失效——可写一条 guard 扫「自定义 display 类 + 裸 hidden」组合防再犯
+  2. 【中】中段滑动区 74px 仍偏窄（AI/命令面板/命令行是 scroll 区外固定直出子元素占 108px+）：可把三者也纳入 <sm 收纳（⋯ 菜单加「命令面板」「命令行」两项，active 态用菜单项高亮表达）
+  3. 【中】375px 下品牌区 + Load 后仅 74px 滑动窗口：可评估 <sm 时把测量组/媒体组先行入 ⋯（分组保留视觉锚点），把滑动窗口让给高频组
+  4. 【低】sm:hidden!/hidden! 的双 ! 组合可抽成 TW4 @utility 或常量字符串（TOOLBAR_RESPONSIVE_HIDE）消除四处重复

@@ -110,8 +110,13 @@ check "滑块锁定脉冲样式"         "lang-lock-pulse"                 "src/
 check "浮动胶囊工具类定义"       "welcome-float-chip"              "src/app/globals.css"              2
 check "浮动胶囊工具类接线"       "welcome-float-chip"              "src/components/studio/WelcomeScreen.tsx" 2
 
+# ---- r70：工具栏移动端溢出收纳（⋯ 菜单）+ 锁定脉冲点击驱动时序 ----
+check "溢出收纳菜单触发钮"       "MoreHorizontal"                  "src/components/studio/Toolbar.tsx" 2
+check "溢出收纳菜单三入口"       "GitHub 仓库"                     "src/components/studio/Toolbar.tsx" 2
+check "锁定脉冲合成器时序"       "650ms ease-out 300ms"            "src/app/globals.css"              1
+
 # ---- 汇总 ----
-TOTAL=43
+TOTAL=46
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0
