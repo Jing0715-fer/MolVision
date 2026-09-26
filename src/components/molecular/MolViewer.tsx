@@ -21,6 +21,7 @@ import { EnsembleBar } from '@/components/studio/EnsembleBar'
 import { RecordBadge } from '@/components/studio/RecordBadge'
 import { ColorLegend } from '@/components/studio/ColorLegend'
 import { MapLegend } from '@/components/studio/MapLegend'
+import { PoreProfile } from '@/components/studio/PoreProfile'
 import { ViewBar } from '@/components/studio/ViewBar'
 import { SceneBar } from '@/components/studio/SceneBar'
 import { TourOverlay } from '@/components/studio/TourOverlay'
@@ -606,6 +607,9 @@ export default function MolViewer() {
 
       {/* 快捷预设浮层（右下角） */}
       <QuickPresets />
+
+      {/* 孔道剖面分析卡（右上，pore 命令产出；轴指示器左侧） */}
+      <PoreProfile />
 
       {/* 引导演示卡片（顶部居中，演示激活时显示） */}
       <TourOverlay />

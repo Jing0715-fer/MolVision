@@ -2950,3 +2950,35 @@ Stage Summary:
   2. 【中】模板扩容第二梯队（+8）：DNA-蛋白复合物（需核酸 rep 支持确认）/domain 着色分段/盐桥网络/膜平面示意/两态构象对比(superpose+morph)/表面静电(apbs 离线简化)/mutation 高亮/多结构 superpose 叠加图
   3. 【中】模板缩略图点击直接「应用」当前 hover 高亮差异（已应用模板卡片打勾标记）；「应用到所有结构」选项
   4. 【低】模板收藏/自定义保存（用户调好一张图 → 「存为模板」按钮，写 localStorage——闭环 UGC）
+
+---
+Task ID: r72
+Agent: main
+Task: 论文图模板库打磨（用户三点指令）——轮廓线减细 + 12 模板差异化配方 + 离子通道孔道分析（HOLE 式计算）与脂双层板两大分析能力 + 剖面图卡 + 模板分类过滤 + 两个潜伏 bug 揭发修复（figure 直达死分支/r71 缩略图管线选择器坑）+ 缩略图全量重生成 + guards 52→66 + E2E/VLM 全链路
+
+Work Log:
+- 【孔道分析（r72 旗舰，用户点名「离子通道的孔道分析」）】
+  · pore.ts：HOLE 式球拟合——通道轴=聚合物原子主方差轴（3×3 协方差 Jacobi 特征分解，独立副本防循环依赖）；R(t)=min_i(|a_i−p(t)|−vdw_i) 封顶 maxR；原子按 t 排序+二分窗口剪枝（60K 原子毫秒级）；计入聚合物原子（水/配体/离子不计——通道内离子会把剖面压死在轴上）；HOLE 三分区阈值 1.15/2.3 Å 与红绿蓝惯例色
+  · pore-store.ts 轻量 store（contacts-store 同模式，避开 visualRev 循环）；engine.updatePore()：全部采样环合并单 LineSegments 顶点色（一次 draw call）+ 轴向虚线 + 收缩点 Torus 标记；depthTest 保持开——环带嵌在孔内的真实遮挡感
+  · PoreProfile.tsx 视口叠加剖面卡（right-[104px] 避开 84px 轴指示器与右缘书签条）：SVG 分区着色面积带 + 收缩点虚线标注 + 双轴刻度 + HOLE 图例 + 关键统计；眼睛=环带显隐 / 折叠 / X=pore off；非模态与 3D 同屏共阅
+  · 命令：pore [封顶Å] [采样数] | off | hide/show（alias hole）——KcsA 1BL8 实测收缩点 0.65 Å @ -9.6 Å、孔长 58 Å、2820 原子 14ms；4HHB 非通道蛋白诚实输出（无孔剖面）；结构移除自动清环带（sync 移除分支）
+- 【脂双层板】membrane [厚度Å]|off 命令：VMD 惯例橙头基双板（#e0913c op .42）+ 灰疏水核心薄雾 + 头基描边；沿活动结构主轴定向、蛋白投影包围盒+8Å 贴合；Settings.showMembrane/membraneThickness（20-60Å 默认 34）+ 引擎键控重建（settings/activeId/rev 变化才重建，晶胞盒同模式）
+- 【用户指令①轮廓减细】全体描边模板 outline on 2 2.5 → 1.3 1.2（发丝级）；负向守卫 check0（粗线配方回归即 FAIL）
+- 【用户指令②模板差异化】每模板独立配方维度（差异点入注释）：纯白/冷灰 #f5f7fa/暖象牙 #fbf8f1/冷雾 #eef1f5/墨底夜色 #14171c 四档底色 + view front/top + turn y ±20° + cartoon_width 1.5×/0.5× + ambient 1.15 平光 + 描边取舍；弹窗加 FIGURE_CATEGORIES 过滤 chips（全部 12/通用 10/膜蛋白·通道 2）+ 每模板专属 lucide 图标（Palette/Boxes/Waves/Target/…/Cylinder/Layers）+ 「特定类型」徽章
+- 【用户指令③特定蛋白类型模板】pore-analysis（1BL8 KcsA，Doyle 1998 Science DOI 10.1126/science.280.5360.69 经 wwPDB+doi.org 双核实）：membrane 34 + pore + orient + turn z 90 竖排环带视角；membrane-embed（1FX8 GlpF 水通道，Fu 2002 Science DOI 10.1126/science.1072457 doi.org 302 核实）：SASA 渐变表面 + 膜板侧视
+- 【潜伏 bug 揭发①：figure 直达应用自 r71 起是死代码】E2E 实测 figure pore-analysis 不应用只开弹窗 → cmd=parts[0] 永不含空格，旧代码第二分支 cmd.startsWith('figure ') 恒假（r71 的「figure rainbow 直接应用」从未生效过——分支遮蔽+恒假双重原因）；修：合并为 cmd==='figure' 分支内取 parts[1] 判 id
+- 【潜伏 bug 揭发②：r71 缩略图管线选择器坑（严重）】shadcn DialogContent 自带 grid 类 → 旧管线 `.grid > div` 把滚动容器也匹配（含全部 12 卡文本）→ find 恒中容器 → querySelector 恒取首卡 apply 钮 → 全部模板点了 rainbow！像素互验实锤：r71 存量缩略图 21 对差异 <2%（几乎全同款）；根治：选择器收窄 `[role=dialog] .mol-scroll .grid` + grid.children[序号] 定位 + demo 号交叉验证（applied:ok 12/12）+ canvas rect 实测裁剪（agent-browser eval 输出带引号壳需剥壳后再 json.load——管线两处坑均入脚本注释）
+- 【缩略图全量重生成 12/12】r72 管线产出 + 像素互验：66 对中位数差异 18.1%（r71 存量几乎全同款）；density-map 首拍无网格（SF+FFT+38 万三角等值面超 16s）→ 22s 时序上调 + 补拍（VLM 确认蓝色网格在位）；唯一 <2% 对（chain vs interface）VLM 判「差异较大」——浅底占比过高的度量盲区，非内容雷同
+- 【引擎加固】turnCamera/moveCamera 现先取消进行中相机动画（camAnim/camPath）——模板序列 orient(520ms 飞行) 后 120ms 接 turn 会被动画帧覆盖回目标位（KcsA 竖排视角依赖此修复）
+- 【E2E 全链路（agent-browser r72-* 会话群）】1BL8 加载 → pore 命令（环带 3 对象 + 剖面卡 + 收缩读数）→ membrane 34（5 对象）→ 模板弹窗（chips 12/10/2 + 12 卡 + 专属图标）→ 卡片序号应用（pore:3 membrane:5 card:true）→ figure pore-analysis 直达（修复后不再开弹窗且全应用）→ pore off 清除干净 → VLM 三审：孔道视图（环带沿轴堆叠/橙板横穿/描边细）/模板缩略图 A（环+板+卡）/B（渐变表面+板）/density 网格确认；console 全程零错误；4HHB 非通道蛋白 pore 不崩（诚实窄剖面）；smoke 4/4；lint 0；tsc src 0 错；guards 66/66；dev.log 全 200
+
+Stage Summary:
+- 交付：论文图模板库三点打磨全闭环——①轮廓线发丝级减细（1.3/1.2 全模板）②12 模板四档底色×视角×卡通宽度×灯光差异化配方 + 分类过滤 + 专属图标 ③特定蛋白类型分析图：HOLE 式孔道剖面（pore 命令 + 3D 红绿蓝环带 + 视口剖面卡 + 收缩点读数）与脂双层板（membrane 命令）两大分析能力 + 两个特定模板（KcsA 孔道分析/GlpF 膜语境）
+- 揭发修复：figure <id> 直达应用恒假死分支（r71 起从未生效）+ r71 缩略图管线 DialogContent grid 类选择器坑（21 对 <2% 差异实锤）——两条都被本轮 E2E 逮到并根治，缩略图全量重生成（中位差异 18.1%）
+- 架构资产：pore.ts 窗口剪枝球拟合（纯计算零 worker 依赖）；「模板=命令序列」扩展到「分析命令模板」（pore/membrane 入列，天然可重放）；负向守卫 check0 先例（粗线回归即 FAIL）
+- 坑：①agent-browser eval 输出带 shell 引号壳（'"{...}"'）——json.load 前必须剥壳；②DialogContent 有 grid 类——弹窗内网格选择必须 .mol-scroll 作用域收窄；③density 等值面 38 万三角 marching cubes >16s，管线等待要按重计算分档；④agent-browser 会话堆积致 EAGAIN/渲染进程假死（pkill 清理恢复）；⑤VLM「背景纯黑」误报重现——像素采样（canvas 区 255,255,255）才是主题判据；⑥主方差轴对四聚通道=孔轴（KcsA 实证），但对球形蛋白是任意轴——pore 输出「无孔」是诚实行为
+- 下一轮建议（按优先级）：
+  1. 【高】模板参数化适配（r71 建议①仍未做）：用户结构无对应链/配体时命令部分失效——应用前结构特征探测（链数/有无 hetero）+ 智能降级或链重映射提示
+  2. 【中】membrane-embed 视角优化：膜板正交视角下呈「斜插」观感（VLM 反馈）——可改 view 为主轴正交预设或 turn 微调让板面正对读者；脂板透明度可再降（VLM 反馈「颜色过于鲜艳竞争注意力」）
+  3. 【中】pore 分析精化：轴向手动覆写（pore axis z，对主轴≠孔轴的结构如倾斜结晶取向）；收缩点残基归属标注（最近原子→残基名标 3D label）
+  4. 【低】模板第二梯队（r71 建议②）：DNA-蛋白复合物/两态构象对比/表面静电/mutation 高亮——pore/membrane 已铺好「分析命令入模板」的路

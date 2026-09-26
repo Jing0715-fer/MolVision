@@ -8,6 +8,8 @@ import { REP_LABELS, type RepType } from './types'
 import { useEnsembleStore } from './ensemble-store'
 import { useRecordStore } from './record-store'
 import { runContactAnalysis, runBuriedSasa, runCrossContactAnalysis, runCrossBuriedSasa } from './contacts'
+import { runPore, clearPore, HOLE_NARROW, HOLE_MAX_GREEN } from './pore'
+import { usePoreStore } from './pore-store'
 import { useContactStore } from './contacts-store'
 import { useSasaStore } from './sasa-store'
 import { subsetStructure } from './parser'
@@ -175,6 +177,8 @@ export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; exampl
   { cmd: 'close [名|all]', cmdEn: 'close [name|all]', desc: { zh: '关闭结构（默认活动结构）', en: 'Close structures (active by default)' }, example: 'close · close all · close 4HHB' },
   { cmd: 'clear', desc: { zh: '移除所有结构（同 close all）', en: 'Remove all structures (same as close all)' }, example: 'clear' },
   { cmd: 'figure [id] | templates', desc: { zh: '论文图复现模板库（CNS 图式一键应用；figure rainbow 直接应用）', en: 'Paper-figure template library (CNS styles; figure rainbow applies directly)' }, example: 'figure · templates · figure rainbow' },
+  { cmd: 'pore [封顶Å] [采样数] | off', cmdEn: 'pore [cap Å] [samples] | off', desc: { zh: '离子通道孔道剖面（HOLE 式球拟合：红/绿/蓝环带 + 收缩点半径；配 membrane 膜语境）', en: 'Ion-channel pore profile (HOLE-style sphere fitting: red/green/blue rings + constriction radius; pair with membrane)' }, example: 'pore · pore 8 200 · pore off' },
+  { cmd: 'membrane [厚度Å]|off', cmdEn: 'membrane [thickness Å]|off', desc: { zh: '脂双层示意板（橙头基+灰疏水核心，沿主轴定向；膜蛋白作图语境）', en: 'Lipid-bilayer slab (orange headgroups + gray hydrophobic core, aligned to the principal axis; membrane-protein context)' }, example: 'membrane · membrane 34 · membrane off' },
   { cmd: 'help', desc: { zh: '显示帮助', en: 'Show help' }, example: 'help' },
 ]
 
@@ -497,22 +501,24 @@ export function runCommand(raw: string): void {
   lower = input.toLowerCase()
 
   // ── 论文图复现模板（r71）：figure / templates 开库；figure <id> 直接应用 ──
+  // 注意：cmd 是 parts[0]，永不含空格——「figure pore」的 id 在 parts[1]；
+  // r72 揭发修复：旧代码 cmd.startsWith('figure ') 恒假，直达应用自 r71 起是死代码
   if (cmd === 'figure' || cmd === 'templates') {
-    useMolStore.getState().setUi({ templateOpen: true })
-    return ok(tt({ zh: '论文图复现模板库已打开（近 5 年 CNS 图式）', en: 'Paper-figure template library opened (recent CNS styles)' }))
-  }
-  if (cmd.startsWith('figure ')) {
     const id = (parts[1] ?? '').toLowerCase()
-    const tpl = FIGURE_TEMPLATES.find(x => x.id === id)
-    if (!tpl) {
+    const tpl = id ? FIGURE_TEMPLATES.find(x => x.id === id) : undefined
+    if (id && !tpl) {
       return err(tt({ zh: `未知模板 "${id}"。可用: ${FIGURE_TEMPLATES.map(x => x.id).join(', ')}`, en: `Unknown template "${id}". Available: ${FIGURE_TEMPLATES.map(x => x.id).join(', ')}` }))
     }
-    const s = useMolStore.getState()
-    if (!s.structures.length) {
-      return err(tt({ zh: '当前没有结构——先 load 一个（如 load 4hhb），或用 templates 面板里的「演示」按钮', en: 'No structure loaded — load one first (e.g. load 4hhb) or use the "Demo" button in the templates panel' }))
+    if (tpl) {
+      const s = useMolStore.getState()
+      if (!s.structures.length) {
+        return err(tt({ zh: '当前没有结构——先 load 一个（如 load 4hhb），或用 templates 面板里的「演示」按钮', en: 'No structure loaded — load one first (e.g. load 4hhb) or use the "Demo" button in the templates panel' }))
+      }
+      runTemplateCommands(tpl.commands)
+      return ok(tt({ zh: `已应用「${tt(tpl.name)}」：${tpl.commands.length} 条命令`, en: `Applied "${tt(tpl.name)}": ${tpl.commands.length} commands` }))
     }
-    runTemplateCommands(tpl.commands)
-    return ok(tt({ zh: `已应用「${tt(tpl.name)}」：${tpl.commands.length} 条命令`, en: `Applied "${tt(tpl.name)}": ${tpl.commands.length} commands` }))
+    useMolStore.getState().setUi({ templateOpen: true })
+    return ok(tt({ zh: '论文图复现模板库已打开（CNS 图式 + 特定蛋白类型分析图）', en: 'Paper-figure template library opened (CNS styles + type-specific analysis figures)' }))
   }
 
   if (cmd === 'help' || cmd === '?') {
@@ -1680,6 +1686,51 @@ export function runCommand(raw: string): void {
     if (!on) return ok(tt({ zh: '轮廓线已关闭', en: 'Outlines off' }))
     const cur = useMolStore.getState().settings
     return ok(tt({ zh: `轮廓线开启（强度 ${cur.outlineStrength.toFixed(1)} · 粗细 ${cur.outlineThickness.toFixed(1)}px）——出版级描边：Sobel 深度+亮度双信号，ray 静帧同样生效`, en: `Outlines on (strength ${cur.outlineStrength.toFixed(1)} · thickness ${cur.outlineThickness.toFixed(1)}px) — publication-grade edges: Sobel depth+brightness dual signal, applies to ray stills too` }))
+  }
+
+  if (cmd === 'pore' || cmd === 'hole') {
+    // pore [maxR] [samples] | pore off | pore hide/show（HOLE 式孔道剖面；alias hole）
+    const rest = parts.slice(1)
+    const arg = (rest[0] ?? '').toLowerCase()
+    if (arg === 'off' || arg === '0' || arg === 'clear') {
+      clearPore()
+      return ok(tt({ zh: '孔道剖面已清除（环带与剖面卡一并移除）', en: 'Pore profile cleared (rings and the profile card removed)' }))
+    }
+    if (arg === 'hide' || arg === 'show') {
+      const ps = usePoreStore.getState()
+      if (!ps.result) return err(tt({ zh: '尚无剖面——先运行 pore（如 pore 8 160）', en: 'No profile yet — run pore first (e.g. pore 8 160)' }))
+      const v = arg === 'show'
+      ps.setVisible(v)
+      engineRef.current?.updatePore()
+      return ok(tt({ zh: v ? '孔道环带已显示' : '孔道环带已隐藏（剖面卡仍在，pore show 恢复）', en: v ? 'Pore rings shown' : 'Pore rings hidden (profile card kept; pore show restores)' }))
+    }
+    const maxR = !isNaN(parseFloat(rest[0])) ? parseFloat(rest[0]) : 8
+    const samples = !isNaN(parseFloat(rest[1])) ? parseFloat(rest[1]) : 160
+    const r = runPore({ maxR, samples })
+    if (!r.ok) return err(r.message)
+    const { result } = r
+    const nNarrow = result.samples.filter(x => x.r < HOLE_NARROW).length
+    const nMid = result.samples.filter(x => x.r >= HOLE_NARROW && x.r < HOLE_MAX_GREEN).length
+    const nWide = result.samples.filter(x => x.r >= HOLE_MAX_GREEN).length
+    ok(tt({ zh: `孔道剖面完成：主轴跨度 ${result.span.toFixed(1)} Å · ${result.nAtoms.toLocaleString(loc())} 原子 · ${result.ms.toFixed(0)} ms`, en: `Pore profile done: principal-axis span ${result.span.toFixed(1)} Å · ${result.nAtoms.toLocaleString(loc())} atoms · ${result.ms.toFixed(0)} ms` }))
+    ok(tt({ zh: `收缩点（最窄）半径 ${result.constriction.r.toFixed(2)} Å @ 轴向 ${result.constriction.t.toFixed(1)} Å——分区：红(过窄<${HOLE_NARROW}) ${nNarrow} 点 · 绿(可过) ${nMid} 点 · 蓝(宽敞>${HOLE_MAX_GREEN}) ${nWide} 点；视口右侧剖面卡可读图，pore off 清除`, en: `Constriction (narrowest) radius ${result.constriction.r.toFixed(2)} Å at axial ${result.constriction.t.toFixed(1)} Å — zones: red(narrow<${HOLE_NARROW}) ${nNarrow} pts · green(passable) ${nMid} pts · blue(wide>${HOLE_MAX_GREEN}) ${nWide} pts; read the chart in the viewport profile card; pore off clears` }))
+    ok(tt({ zh: '适合离子通道/膜蛋白（如 load 1bl8 KcsA / load 1fx8 GlpF）；叠合或 morph 后请重算；配 membrane 命令画脂双层语境', en: 'Best for ion channels / membrane proteins (e.g. load 1bl8 KcsA / load 1fx8 GlpF); recompute after superpose or morph; pair with the membrane command for the bilayer context' }))
+    return
+  }
+
+  if (cmd === 'membrane' || cmd === 'lipid' || cmd === 'bilayer') {
+    // membrane [厚度Å] | off（脂双层示意板；厚度 20-60，默认 34）
+    const rest = parts.slice(1)
+    const arg = (rest[0] ?? '').toLowerCase()
+    const s = useMolStore.getState()
+    if (arg === 'off' || arg === '0') {
+      s.updateSettings({ showMembrane: false })
+      return ok(tt({ zh: '脂双层板已关闭', en: 'Lipid bilayer slab off' }))
+    }
+    if (!s.activeId) return err(tt({ zh: '当前没有结构——先加载膜蛋白（如 load 1bl8 KcsA / load 1fx8 GlpF）', en: 'No structure loaded — load a membrane protein first (e.g. load 1bl8 KcsA / load 1fx8 GlpF)' }))
+    const th = !isNaN(parseFloat(rest[0])) ? clampNum(parseFloat(rest[0]), 20, 60, 34) : 34
+    s.updateSettings({ showMembrane: true, membraneThickness: th })
+    return ok(tt({ zh: `脂双层板已开启（厚度 ${th.toFixed(0)} Å：橙色磷脂头基双板 + 灰疏水核心，沿主轴定向贴合蛋白）——典型生物膜 ~30-40 Å；膜蛋白作图语境标配`, en: `Lipid bilayer on (thickness ${th.toFixed(0)} Å: orange headgroup slabs + gray hydrophobic core, aligned to the principal axis) — typical biomembranes ~30-40 Å; the standard context for membrane-protein figures` }))
   }
 
   if (cmd === 'symmetry' || cmd === 'symmates') {

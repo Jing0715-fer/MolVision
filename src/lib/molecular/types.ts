@@ -195,6 +195,10 @@ export interface Settings {
   outlineStrength: number
   /** 轮廓线粗细（1-4 px 采样步长） */
   outlineThickness: number
+  /** 脂双层示意板（membrane 命令：沿活动结构主轴定向的 VMD 惯例橙头基+灰核心） */
+  showMembrane: boolean
+  /** 脂膜厚度（Å，20-60；典型生物膜 ~30-40） */
+  membraneThickness: number
   /** 序列条展开高度档位（紧凑/标准/加高；随会话持久化） */
   sequenceHeight: 'compact' | 'normal' | 'tall'
   /** 序列条视口聚焦指示：当前相机视野内残基高亮（引擎按视锥+切层计算） */
@@ -245,6 +249,8 @@ export function defaultSettings(): Settings {
     outline: false,
     outlineStrength: 1,
     outlineThickness: 1.5,
+    showMembrane: false,
+    membraneThickness: 34,
     sequenceHeight: 'normal',
     seqFocus: true,
     consoleHeight: 'normal',

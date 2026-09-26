@@ -11,12 +11,15 @@
 // 缺图时以强调色渐变占位，文件生成后无需改码自动浮现。
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { BookOpenText, ExternalLink, Loader2, Play, Wand2 } from 'lucide-react'
+import {
+  BookOpenText, Boxes, Camera, CircleDot, ExternalLink, Film, Grid3x3, Hexagon,
+  Layers, Loader2, Network, Palette, Play, Target, Waves, Wand2, Cylinder, type LucideIcon,
+} from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt } from '@/i18n'
 import {
-  demoThenApply, FIGURE_TEMPLATES, runTemplateCommands,
-  type FigureTemplate,
+  demoThenApply, FIGURE_CATEGORIES, FIGURE_TEMPLATES, runTemplateCommands,
+  type FigureCategory, type FigureTemplate,
 } from '@/lib/molecular/figure-templates'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -35,6 +38,23 @@ const ACCENT: Record<FigureTemplate['accent'], { grad: string; border: string; t
   fuchsia: { grad: 'from-fuchsia-500/25 via-fuchsia-500/10 to-transparent', border: 'hover:border-fuchsia-500/50', text: 'text-fuchsia-500', chip: 'bg-fuchsia-500/12 text-fuchsia-600 dark:text-fuchsia-400' },
   cyan: { grad: 'from-cyan-500/25 via-cyan-500/10 to-transparent', border: 'hover:border-cyan-500/50', text: 'text-cyan-500', chip: 'bg-cyan-500/12 text-cyan-600 dark:text-cyan-400' },
   lime: { grad: 'from-lime-500/25 via-lime-500/10 to-transparent', border: 'hover:border-lime-500/50', text: 'text-lime-500', chip: 'bg-lime-500/12 text-lime-600 dark:text-lime-400' },
+  slate: { grad: 'from-slate-500/25 via-slate-500/10 to-transparent', border: 'hover:border-slate-500/50', text: 'text-slate-500', chip: 'bg-slate-500/12 text-slate-600 dark:text-slate-400' },
+}
+
+/** 每模板专属图标（卡片差异化第二层：配色之外再给一个可扫读的形状记号） */
+const TPL_ICONS: Record<string, LucideIcon> = {
+  'rainbow-overview': Palette,
+  'chain-assembly': Boxes,
+  'ss-motif': Waves,
+  'ligand-pocket': Target,
+  'sasa-surface': CircleDot,
+  'density-map': Grid3x3,
+  'interface-contacts': Network,
+  'symmetry-assembly': Hexagon,
+  'ensemble-dynamics': Film,
+  'publication-ready': Camera,
+  'pore-analysis': Cylinder,
+  'membrane-embed': Layers,
 }
 
 function TemplateCard({ tpl, index, onApply, onDemo, busy }: {
@@ -47,6 +67,7 @@ function TemplateCard({ tpl, index, onApply, onDemo, busy }: {
   const { t } = useI18n()
   const [imgOk, setImgOk] = useState(true)
   const a = ACCENT[tpl.accent]
+  const Icon = TPL_ICONS[tpl.id] ?? BookOpenText
   const doiUrl = tpl.citation.doi ? `https://doi.org/${tpl.citation.doi}` : null
 
   return (
@@ -104,6 +125,7 @@ function TemplateCard({ tpl, index, onApply, onDemo, busy }: {
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         <button type="button" onClick={onApply} disabled={busy} className="cursor-pointer text-left disabled:pointer-events-none">
           <span className="flex items-center gap-1.5">
+            <Icon className={cn('h-3.5 w-3.5 shrink-0', a.text)} aria-hidden />
             <span className="text-[13px] font-semibold leading-tight">{t(tpl.name)}</span>
             <span className="font-mono text-[9px] font-medium text-muted-foreground">{tpl.demo}</span>
           </span>
@@ -113,6 +135,9 @@ function TemplateCard({ tpl, index, onApply, onDemo, busy }: {
           {tpl.tags.map((tag, i) => (
             <span key={i} className={cn('rounded px-1.5 py-px text-[9.5px] font-semibold', a.chip)}>{t(tag)}</span>
           ))}
+          {tpl.category === 'membrane' && (
+            <span className="rounded bg-foreground/[0.06] px-1.5 py-px text-[9.5px] font-semibold text-foreground/70">{t({ zh: '特定类型', en: 'Type-specific' })}</span>
+          )}
           <span className="ml-auto text-[9.5px] text-muted-foreground">{t(tpl.purpose)}</span>
         </div>
       </div>
@@ -147,6 +172,8 @@ export function FigureTemplatesDialog() {
   const hasStructure = useMolStore(s => s.structures.length > 0)
   const activeName = useMolStore(s => s.structures.find(x => x.id === s.activeId)?.name)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<FigureCategory | 'all'>('all')
+  const shown = filter === 'all' ? FIGURE_TEMPLATES : FIGURE_TEMPLATES.filter(x => x.category === filter)
 
   const apply = (tpl: FigureTemplate) => {
     if (!hasStructure) {
@@ -185,19 +212,44 @@ export function FigureTemplatesDialog() {
           </DialogTitle>
           <DialogDescription>
             {t({
-              zh: '近 5 年 Cell / Nature / Science 结构文章的经典图式——一键应用到你的结构，命令序列透明可改',
-              en: 'Classic figure styles from recent Cell / Nature / Science structure papers — one click onto your structure; transparent, editable command recipes',
+              zh: 'Cell / Nature / Science 结构文章的经典图式 + 特定蛋白类型分析图（离子通道孔道等）——一键应用，命令序列透明可改',
+              en: 'Classic figure styles from Cell / Nature / Science structure papers + type-specific analysis figures (ion-channel pores etc.) — one click; transparent, editable recipes',
             })}
           </DialogDescription>
         </DialogHeader>
 
+        {/* 分类过滤 chips（通用图式 vs 膜蛋白·通道分析） */}
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t({ zh: '模板分类', en: 'Template categories' })}>
+          {FIGURE_CATEGORIES.map(c => {
+            const n = c.key === 'all' ? FIGURE_TEMPLATES.length : FIGURE_TEMPLATES.filter(x => x.category === c.key).length
+            const active = filter === c.key
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => setFilter(c.key)}
+                aria-pressed={active}
+                className={cn(
+                  'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer',
+                  active
+                    ? 'border-primary/60 bg-primary/10 text-primary'
+                    : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground',
+                )}
+              >
+                {t(c.label)}
+                <span className="ml-1 font-mono text-[9px] opacity-70">{n}</span>
+              </button>
+            )
+          })}
+        </div>
+
         <div className="mol-scroll -mx-1 max-h-[62vh] overflow-y-auto px-1">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {FIGURE_TEMPLATES.map((tpl, i) => (
+            {shown.map(tpl => (
               <TemplateCard
                 key={tpl.id}
                 tpl={tpl}
-                index={i}
+                index={FIGURE_TEMPLATES.indexOf(tpl)}
                 busy={busyId === tpl.id || loading}
                 onApply={() => apply(tpl)}
                 onDemo={() => void demo(tpl)}
@@ -209,8 +261,8 @@ export function FigureTemplatesDialog() {
         <p className="flex items-start gap-1.5 text-[10px] leading-relaxed text-muted-foreground">
           <Wand2 className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
           {t({
-            zh: '模板复现的是图式视觉配方（表示法·配色·视角·灯光·轮廓），不含论文原图；卡片缩略图由 MolVision 引擎对代表结构真实渲染。配体口袋等模板建议在含辅基的结构上使用。',
-            en: 'Templates reproduce figure-style recipes (representations · coloring · camera · lighting · outlines), not original artwork; card thumbnails are genuine engine renders of the showcase structures. Pocket-style templates work best on structures with cofactors.',
+            zh: '模板复现的是图式视觉配方（表示法·配色·视角·灯光·轮廓）与分析命令（孔道剖面/脂双层），不含论文原图；卡片缩略图由 MolVision 引擎对代表结构真实渲染。配体口袋等模板建议在含辅基的结构上使用；孔道/膜板适用于离子通道与膜蛋白。',
+            en: 'Templates reproduce figure-style recipes (representations · coloring · camera · lighting · outlines) and analysis commands (pore profiles / bilayers), not original artwork; card thumbnails are genuine engine renders. Pocket-style templates work best on structures with cofactors; pore / membrane templates suit ion channels and membrane proteins.',
           })}
         </p>
       </DialogContent>

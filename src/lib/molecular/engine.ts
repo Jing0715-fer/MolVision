@@ -23,6 +23,8 @@ import { evaluateSelection } from './selection'
 import { detectHBonds, type HBond } from './hbonds'
 import { contactColor } from './contacts'
 import { useContactStore } from './contacts-store'
+import { usePoreStore } from './pore-store'
+import { poreZoneColor, principalAxis } from './pore'
 import { superposeStructures, applyRigidTransform, recomputeBbox, type SuperposeResult } from './superpose'
 import {
   computeSasa, computeBuriedSasa, computeBuriedSasaArrays, sasaStats, compileRadii,
@@ -265,6 +267,11 @@ export class MolEngine {
   private cellKey = ''
   // 接触界面连线（分析面板触发计算，引擎仅负责渲染）
   private contactGroup = new THREE.Group()
+  // 孔道剖面环带（pore 命令：HOLE 式红/绿/蓝半径环 + 轴虚线 + 收缩环标记；分析计算在 pore.ts，引擎只渲染）
+  private poreGroup = new THREE.Group()
+  // 脂双层板（membrane 命令：橙头基双板 + 灰疏水核心；沿活动结构主轴定向，sync 键控重建）
+  private membraneGroup = new THREE.Group()
+  private membraneKey = ''
   // 氢键检测 Web Worker（大结构异步计算）
   private hbondWorker: Worker | null = null
   private hbondWorkerFailed = false
@@ -421,6 +428,8 @@ export class MolEngine {
     this.scene.add(this.pickMarkerGroup)
     this.scene.add(this.hbondGroup)
     this.scene.add(this.contactGroup)
+    this.scene.add(this.poreGroup)
+    this.scene.add(this.membraneGroup)
     this.scene.add(this.mapGroup)
 
     // 环境光照（亮度配平：RoomEnvironment 贡献≈0.45×，叠加主光后总照度≈1.3 —— 过高会经 ACES 把饱和色
@@ -1719,10 +1728,17 @@ export class MolEngine {
           cs.clear()
           this.updateContacts()
         }
+        // 孔道剖面归属结构被移除 → 清空环带与剖面卡
+        if (usePoreStore.getState().result?.structureId === id) {
+          usePoreStore.getState().clear()
+          this.updatePore()
+        }
       }
     }
     // 晶胞盒（show cell）
     this.updateCellBox(state)
+    // 脂双层板（membrane 命令：键控重建）
+    this.updateMembrane(state)
     // 标签
     const labelsKey = state.labels.map(l => l.id + l.atomIdx).join(',') + '#' + state.labels.length
     if (labelsKey !== this.lastLabelsKey) {
@@ -2035,6 +2051,159 @@ export class MolEngine {
     colorAttr.needsUpdate = true
     marker.renderOrder = 9
     this.contactGroup.add(marker)
+  }
+
+  // ---------- 孔道剖面环带 + 脂双层板（r72：计算在 pore.ts，引擎仅渲染） ----------
+
+  /** 清空组（几何/材质逐一释放，与 updateContacts 同模式） */
+  private clearGroupChildren(group: THREE.Group) {
+    for (const child of [...group.children]) {
+      group.remove(child)
+      const any = child as THREE.LineSegments & THREE.Mesh
+      any.geometry?.dispose()
+      const mat = any.material as THREE.Material | THREE.Material[] | undefined
+      if (mat) (Array.isArray(mat) ? mat : [mat]).forEach(m => m.dispose())
+    }
+  }
+
+  /**
+   * 孔道剖面环带（HOLE 式）：全部采样环合并为单 LineSegments（顶点色：红=过窄/
+   * 绿=可过/蓝=宽敞，一次 draw call）+ 轴向虚线 + 收缩点细环面（Torus 突出标记）。
+   * depthTest 保持开启——环带被蛋白前壁遮挡的半侧自然不可见，产生「嵌在孔内」的真实感。
+   */
+  updatePore() {
+    this.clearGroupChildren(this.poreGroup)
+    const ps = usePoreStore.getState()
+    if (!ps.result || !ps.visible) return
+    const { origin, dir, samples, maxR, constriction, tMin, tMax } = ps.result
+    // 正交标架：u ⟂ v ⟂ dir（环所在平面）
+    const d = new THREE.Vector3(dir[0], dir[1], dir[2])
+    const up = Math.abs(d.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
+    const u = new THREE.Vector3().crossVectors(d, up).normalize()
+    const v = new THREE.Vector3().crossVectors(d, u).normalize()
+    const SEG = 48
+    const verts: number[] = []
+    const cols: number[] = []
+    const tmp = new THREE.Color()
+    for (const s of samples) {
+      const rr = Math.max(0.05, Math.min(s.r, maxR))
+      tmp.set(poreZoneColor(s.r))
+      const cx = origin[0] + dir[0] * s.t
+      const cy = origin[1] + dir[1] * s.t
+      const cz = origin[2] + dir[2] * s.t
+      for (let k = 0; k < SEG; k++) {
+        const a0 = (k / SEG) * Math.PI * 2
+        const a1 = ((k + 1) / SEG) * Math.PI * 2
+        verts.push(
+          cx + (u.x * Math.cos(a0) + v.x * Math.sin(a0)) * rr,
+          cy + (u.y * Math.cos(a0) + v.y * Math.sin(a0)) * rr,
+          cz + (u.z * Math.cos(a0) + v.z * Math.sin(a0)) * rr,
+          cx + (u.x * Math.cos(a1) + v.x * Math.sin(a1)) * rr,
+          cy + (u.y * Math.cos(a1) + v.y * Math.sin(a1)) * rr,
+          cz + (u.z * Math.cos(a1) + v.z * Math.sin(a1)) * rr,
+        )
+        cols.push(tmp.r, tmp.g, tmp.b, tmp.r, tmp.g, tmp.b)
+      }
+    }
+    const ringGeo = new THREE.BufferGeometry()
+    ringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3))
+    ringGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cols), 3))
+    const ringMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false })
+    const rings = new THREE.LineSegments(ringGeo, ringMat)
+    rings.renderOrder = 8
+    this.poreGroup.add(rings)
+    // 通道主轴虚线（两端外延 6Å）
+    const axGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(origin[0] + dir[0] * (tMin - 6), origin[1] + dir[1] * (tMin - 6), origin[2] + dir[2] * (tMin - 6)),
+      new THREE.Vector3(origin[0] + dir[0] * (tMax + 6), origin[1] + dir[1] * (tMax + 6), origin[2] + dir[2] * (tMax + 6)),
+    ])
+    const axMat = new THREE.LineDashedMaterial({ color: 0x64748b, transparent: true, opacity: 0.6, dashSize: 1.2, gapSize: 0.8 })
+    const axis = new THREE.Line(axGeo, axMat)
+    axis.computeLineDistances()
+    axis.renderOrder = 8
+    this.poreGroup.add(axis)
+    // 收缩点细环面（Torus：半径过小时抬到 0.4 保可见；红色强调）
+    const rc = Math.max(constriction.r, 0.4)
+    const torGeo = new THREE.TorusGeometry(rc, 0.16, 10, 64)
+    const torMat = new THREE.MeshBasicMaterial({ color: 0xdc2626, side: THREE.DoubleSide, transparent: true, opacity: 0.95 })
+    const torus = new THREE.Mesh(torGeo, torMat)
+    torus.position.set(origin[0] + dir[0] * constriction.t, origin[1] + dir[1] * constriction.t, origin[2] + dir[2] * constriction.t)
+    torus.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d)
+    torus.renderOrder = 8
+    this.poreGroup.add(torus)
+  }
+
+  /**
+   * 脂双层示意板（membrane 命令）：VMD/ChimeraX 惯例——磷脂头基双橙板 + 疏水核心灰板，
+   * 沿活动结构主轴（通道轴）定向，中心取蛋白沿轴中点，平面尺寸贴合蛋白投影包围盒 +8Å。
+   * 键控重建（settings/活动结构/结构 rev 变化才重建），与晶胞盒同模式。
+   */
+  private updateMembrane(state: { structures: StructureEntry[]; activeId: string | null; settings: Settings }) {
+    const active = state.structures.find(x => x.id === state.activeId)
+    const key = state.settings.showMembrane && active
+      ? `on|${state.settings.membraneThickness}|${state.activeId}|${active.rev}`
+      : 'off'
+    if (key === this.membraneKey) return
+    this.membraneKey = key
+    this.clearGroupChildren(this.membraneGroup)
+    if (!state.settings.showMembrane || !active) return
+    const data = dataRegistry.get(state.activeId!)
+    if (!data) { this.membraneKey = 'off'; return }
+    const { origin, dir } = principalAxis(data)
+    const n = new THREE.Vector3(dir[0], dir[1], dir[2])
+    const up = Math.abs(n.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
+    const u = new THREE.Vector3().crossVectors(n, up).normalize()
+    const v = new THREE.Vector3().crossVectors(n, u).normalize()
+    // 聚合物原子在 (n, u, v) 标架下的范围（膜几何由蛋白壁决定）
+    const pos = data.atoms.positions
+    const residues = data.residues
+    let tLo = Infinity, tHi = -Infinity, uLo = Infinity, uHi = -Infinity, vLo = Infinity, vHi = -Infinity
+    for (let ri = 0; ri < residues.length; ri++) {
+      const r = residues[ri]
+      if (!r.polymer || r.water) continue
+      for (let i = r.start; i < r.end; i++) {
+        const dx = pos[i * 3] - origin[0], dy = pos[i * 3 + 1] - origin[1], dz = pos[i * 3 + 2] - origin[2]
+        const tn = dx * n.x + dy * n.y + dz * n.z
+        const tu = dx * u.x + dy * u.y + dz * u.z
+        const tv = dx * v.x + dy * v.y + dz * v.z
+        if (tn < tLo) tLo = tn
+        if (tn > tHi) tHi = tn
+        if (tu < uLo) uLo = tu
+        if (tu > uHi) uHi = tu
+        if (tv < vLo) vLo = tv
+        if (tv > vHi) vHi = tv
+      }
+    }
+    const pad = 8
+    const w = (uHi - uLo) + pad * 2
+    const h = (vHi - vLo) + pad * 2
+    const tc = (tLo + tHi) / 2
+    const T = state.settings.membraneThickness
+    const HEAD = 4
+    const center = new THREE.Vector3(origin[0] + n.x * tc, origin[1] + n.y * tc, origin[2] + n.z * tc)
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n)
+    const mk = (thickness: number, offset: number, color: string, opacity: number, order: number, edge?: string) => {
+      const geo = new THREE.BoxGeometry(w, h, thickness)
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide })
+      const mesh = new THREE.Mesh(geo, mat)
+      mesh.position.copy(center).addScaledVector(n, offset)
+      mesh.quaternion.copy(quat)
+      mesh.renderOrder = order
+      this.membraneGroup.add(mesh)
+      if (edge) {
+        const eg = new THREE.EdgesGeometry(geo)
+        const em = new THREE.LineBasicMaterial({ color: edge, transparent: true, opacity: 0.55 })
+        const wire = new THREE.LineSegments(eg, em)
+        wire.position.copy(mesh.position)
+        wire.quaternion.copy(quat)
+        wire.renderOrder = order
+        this.membraneGroup.add(wire)
+      }
+    }
+    // 疏水核心（灰蓝薄雾）+ 头基双板（橙，VMD 惯例）+ 头基描边
+    mk(T - HEAD * 2, 0, '#8b98a8', 0.13, 2)
+    mk(HEAD, +(T / 2 - HEAD / 2), '#e0913c', 0.42, 3, '#b4772f')
+    mk(HEAD, -(T / 2 - HEAD / 2), '#e0913c', 0.42, 3, '#b4772f')
   }
 
   // ---------- 氢键 Web Worker ----------
@@ -3901,6 +4070,11 @@ export class MolEngine {
 
   /** 对标 PyMOL turn：绕屏幕轴旋转相机（x=俯仰 y=水平方位 z=滚转），target 不动 */
   turnCamera(axis: 'x' | 'y' | 'z', deg: number) {
+    // 先取消进行中的相机动画（orient/view 飞行）：命令序列中 turn 紧跟 orient 时
+    // （模板 120ms 微间隔），不取消则动画后续帧会把本次旋转覆盖回 orient 目标位
+    if (this.camAnim || this.camPath) this.camAnimCancelCount++
+    this.camAnim = null
+    this.camPath = null
     const { dir, right, up } = this.cameraBasis()
     const worldAxis = axis === 'x' ? right : axis === 'y' ? up : dir
     const q = new THREE.Quaternion().setFromAxisAngle(worldAxis, (deg * Math.PI) / 180)
@@ -3914,6 +4088,10 @@ export class MolEngine {
 
   /** 对标 PyMOL move：沿屏幕轴平移相机与目标（x=右 y=上 z=推拉，正 z=远离主体） */
   moveCamera(axis: 'x' | 'y' | 'z', dist: number) {
+    // 与 turnCamera 同源：取消飞行中动画，命令序列的叠加平移不被覆盖回目标位
+    if (this.camAnim || this.camPath) this.camAnimCancelCount++
+    this.camAnim = null
+    this.camPath = null
     const { dir, right, up } = this.cameraBasis()
     const worldAxis = axis === 'x' ? right : axis === 'y' ? up : dir
     const delta = worldAxis.multiplyScalar(dist)
@@ -4358,6 +4536,8 @@ export class MolEngine {
     }
     this.views.clear()
     this.symmetryGroups.clear()
+    this.clearGroupChildren(this.poreGroup)
+    this.clearGroupChildren(this.membraneGroup)
     this.disposeMapGeometry()
     this.stereoEffect?.dispose()
     this.stereoEffect = null

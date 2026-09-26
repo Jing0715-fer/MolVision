@@ -29,6 +29,19 @@ check() {
   fi
 }
 
+# check0 <名称> <正则> <路径>：负向守卫（命中数必须为 0——出现即回归）
+check0() {
+  local name="$1" pattern="$2" path="$3"
+  local count
+  count=$(rg -c --no-messages -e "$pattern" -- "$path" 2>/dev/null | awk -F: '{s+=$NF} END {print s+0}')
+  if [ "${count:-0}" -eq 0 ]; then
+    printf 'PASS  %-34s 命中  0（要求 =0）\n' "$name"
+  else
+    printf 'FAIL  %-34s 命中 %2d（要求 =0）—— %s\n' "$name" "${count:-0}" "$path"
+    FAILS=$((FAILS + 1))
+  fi
+}
+
 echo "== MolVision 回归防线（r60 修复代码标志） =="
 
 # ---- 输入交互守卫（IME / Escape / 确认 / 滚动） ----
@@ -123,8 +136,24 @@ check "论文图模板工具栏入口"     "templateOpen: true"              "sr
 check "论文图模板弹窗挂载"       "FigureTemplatesDialog"           "src/app/page.tsx"                 2
 check "论文图模板文献溯源"       "10\.1038|10\.1126"              "src/lib/molecular/figure-templates.ts" 3
 
+# ---- r72：轮廓减细 + 模板差异化 + 孔道分析（HOLE 式）+ 脂双层板 ----
+check "孔道剖面计算模块"         "HOLE_NARROW|computePoreProfile"  "src/lib/molecular/pore.ts"         4
+check "孔道剖面轻量 store"       "usePoreStore"                    "src/lib/molecular"                 4
+check "孔道命令注册"             "pore \[封顶Å\]|cmd === 'pore'"   "src/lib/molecular/commands.ts"     2
+check "膜板命令注册"             "cmd === 'membrane'"              "src/lib/molecular/commands.ts"     1
+check "膜板设置项"               "showMembrane|membraneThickness"  "src/lib/molecular/types.ts"        4
+check "引擎孔道环带渲染"         "updatePore"                      "src/lib/molecular/engine.ts"       2
+check "引擎脂膜板渲染"           "updateMembrane"                  "src/lib/molecular/engine.ts"       2
+check "剖面卡挂载"               "PoreProfile"                     "src/components/molecular/MolViewer.tsx" 2
+check "剖面卡分区图例"           "poreZoneColor|HOLE_MAX_GREEN"    "src/components/studio/PoreProfile.tsx" 3
+check "模板分类过滤"             "FIGURE_CATEGORIES|category: 'membrane'" "src/lib/molecular/figure-templates.ts" 3
+check "模板专属图标"             "TPL_ICONS"                       "src/components/studio/FigureTemplatesDialog.tsx" 2
+check "模板差异化配方"           "set cartoon_width|view front|view top|turn y -20" "src/lib/molecular/figure-templates.ts" 4
+check0 "轮廓减细（负向：粗线回归即 FAIL）" "outline on 2 2\.5" "src/lib/molecular/figure-templates.ts"
+check "细描边配方在位"           "outline on 1\.3 1\.2"            "src/lib/molecular/figure-templates.ts" 4
+
 # ---- 汇总 ----
-TOTAL=52
+TOTAL=66
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0
