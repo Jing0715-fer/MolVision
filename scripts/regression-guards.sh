@@ -91,8 +91,16 @@ check "loader 体积护栏"          "MAX_STRUCTURE_MB|MAX_MAP_MB"     "src/lib/
 check "pdb 路由 413 体积护栏"    "oversize|content-length"         "src/app/api/pdb/"                     3
 check "sf 路由 413 体积护栏"     "oversize|content-length"         "src/app/api/sf/"                      3
 
+# ---- r67：病态结构防护（残基裂变 / 键爆炸 / 序列条渲染爆炸） ----
+check "parser 残基硬上限"        "MAX_RESIDUES"                    "src/lib/molecular/parser.ts"           2
+check "parser 键数硬上限"        "MAX_BONDS_PER_ATOM|bondCap"      "src/lib/molecular/parser.ts"           3
+check "序列条折叠阈值"           "SEQ_CELL_LIMIT"                  "src/components/studio/SequenceBar.tsx" 3
+check "序列条渲染封顶"           "SEQ_CELL_HARD"                   "src/components/studio/SequenceBar.tsx" 4
+check "大链折叠行双语"           "大链已折叠.*Large chain collapsed" "src/components/studio/SequenceBar.tsx" 1
+check "截断提示双语"             "仅渲染前.*more residues are hidden" "src/components/studio/SequenceBar.tsx" 1
+
 # ---- 汇总 ----
-TOTAL=30
+TOTAL=36
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

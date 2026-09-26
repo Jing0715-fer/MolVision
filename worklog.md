@@ -2798,3 +2798,33 @@ Stage Summary:
 - 交付：r65 建议①②③④全部闭环（内存防护/响应头/冒烟脚本/VLM 离线回归）+ guards 18→30 + 千分位扫尾
 - 门禁：guards 30/30 · lint 0 · tsc src 0 错 · E2E 全绿（加载/命令/语言/大结构拒绝/VLM 链路/smoke）· dev server 持续 200
 - 遗留发现（下轮候选）：① 病态文件（乱坐标/非连续 resSeq 致 10 万残基）可把主线程卡死（SequenceBar 10 万按钮渲染爆炸）——需残基数上限/序列条虚拟化；② parser 键推断无 bond 数上限（乱坐标 n² 爆炸，浏览器侧幸有 V8 Set 上限兜底成优雅报错）——可加 bond 数 sanity cap；③ 冒烟脚本与 guards 已可入 CI 常规轮转
+
+---
+Task ID: r67
+Agent: main
+Task: 病态结构三层防护（r66 遗留候选①②收口）+ guards 扩容 + 全链路 E2E + 推送
+
+Work Log:
+- 【环境同步实况】接手时本地 HEAD 停在 r62 分叉副本（r63-r66 四轮已在远端完成：语言三入口可发现性/SSR 真直出/agent 流式取消/内存防护/API 加固/VLM 离线回归），本地初步改动与远端 r64 重复 → git reset --hard origin/main 同步至 d7a4421；随后基线 E2E 复验全绿（4HHB 加载 4,779 原子 / select chain A「1,168 atoms selected」/ 顶栏语言切换器 visible+inViewport / zh↔EN 双向切换 lang+cookie 随动 / console 零错误）
+- 【parser.ts · 解析层双硬上限】
+  · MAX_RESIDUES=60,000：buildStructure 残基分组后、链分组前检查——resSeq 非连续损坏文件会每原子裂变独立残基（r66 实锤 10 万残基渲染冻结根因），超限抛双语错误
+  · MAX_BONDS_PER_ATOM=12：computeBonds.addBond 内 bondCap=n*12+1024 封顶（真实蛋白 ~1.3 键/原子），乱坐标原子挤在成键距离内时 n² 候选对快速失败（此前靠 V8 Set 上限兜底）
+  · 超限经四处调用方既有 try/catch（loader/session×2/registerStructure）→ toast 双语直达，页面零副作用
+- 【SequenceBar.tsx · 渲染层大链折叠】
+  · SEQ_CELL_LIMIT=2,000：超限链默认折叠——虚线摘要行（UnfoldHorizontal 图标 + 「大链已折叠 · N 残基 · 点击展开」双语 + title 说明阈值）
+  · SEQ_CELL_HARD=10,000：手动展开后渲染仍封顶 + 截断提示「仅渲染前 10,000 格 · 另有 N 个残基未显示（命令行/搜索仍可选取）」
+  · 选中滚动重试：目标格位于折叠链时 rAF 回调内展开再下一拍重试滚动（展开渲染受 HARD 封顶保护）
+  · 结构切换复位：React 官方「渲染期调整状态」模式（prevActive 比对），规避 react-hooks/set-state-in-effect 新规则——lint 2 错修复实录（复位 effect 改渲染期模式 + 展开回退移 rAF）
+- 【guards 30→36】6 条新守卫：parser 残基硬上限/键数硬上限、序列条折叠阈值/渲染封顶/折叠行双语/截断提示双语；坑：rg -c 按行计数，DualText zh/en 同行时「|」或写法只计 1 → 改「同行双词」正则（.* 连接双语言子串）
+- 【E2E 三病态用例（bun 生成合成文件 + agent-browser upload 注入）】
+  · Test A 残基裂变（26 链×2,500 原子各独立 resSeq，绕过 PDB resSeq 4 位列宽限制）：离线 bun 直跑 parser 102ms 拒绝；浏览器「Parse failed: Residue count exceeds the limit (65,000 > 60,000)…」toast + __molData.size=0 零副作用
+  · Test B 键爆炸（2,000 C 原子挤 2Å 立方同残基）：离线 12ms 拒绝；浏览器「Bond count exceeds the limit (≥25,024)…」toast + size 保持 0
+  · Test C 大链（单链 3,000 残基连续 resSeq 正常文件）：加载成功且默认折叠（[data-res]=0 格、折叠行「Large chain collapsed · 3,000 residues」）→ 点击展开渲染 3,000 格（< HARD 无截断提示）→ select chain A「3,000 atoms selected」
+  · 回归：load 4hhb 后 4HHB 574 聚合物残基格直接渲染（正常链 141 残基 << 2,000 不折叠）；全流程 console 零错误；smoke 4/4 PASS
+- 【门禁】bun run lint 零输出退出码 0；bunx tsc --noEmit src/ 0 错（唯一残留为 skills/ 存量非本域）；guards 36/36；dev server 持续 200
+
+Stage Summary:
+- 交付：r66 遗留候选①②全部闭环——解析层双硬上限（残基裂变/键爆炸快速失败，覆盖全部 4 个 parse 入口）+ 渲染层大链折叠封顶（折叠摘要行/展开封顶/截断提示/滚动重试）；guards 30→36；正常文件零回归
+- 架构资产：病态文件防护三层纵深（loader 体积/原子预扫描 → parser 残基/键数上限 → SequenceBar 折叠封顶），错误管道复用既有双语 toast 通道零新增 UI
+- 遗留（下轮候选）：① 大链真虚拟化（展开后 ≤10K 格全量渲染，2 万格链首帧 ~300ms，可做滚动窗口/content-visibility）② 拒绝 toast 可附修复指引 description（「用 PyMOL 重新导出」）③ subsetStructure/create 命令产物未接上限（当前仅 parse 入口防护）④ 性能预算冒烟断言（大链加载时间上限）
+

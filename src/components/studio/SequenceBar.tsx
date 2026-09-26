@@ -6,7 +6,7 @@
 // - 鼠标拖拽批量选取（Shift 追加 / Alt 移除）+ 跟随鼠标的浮动范围提示 + Esc 取消
 // - 框选完成浮出「保存选择」条（快照命名保存）；头部选择库 popover 召回/聚焦/删除命名选择
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Bookmark, BookmarkPlus, ChevronDown, ChevronUp, Dna, FlaskConical, ChevronsUpDown, Eye, EyeOff, Search, Trash2, X } from 'lucide-react'
+import { Bookmark, BookmarkPlus, ChevronDown, ChevronUp, Dna, FlaskConical, ChevronsUpDown, Eye, EyeOff, Search, Trash2, UnfoldHorizontal, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { dataRegistry, engineRef, useMolStore, buildNamedMasks } from '@/lib/molecular/store'
@@ -32,6 +32,13 @@ const SEQ_HEIGHT_LABEL: Record<string, DualText> = {
 
 /** 残基格宽（px）：19px 紧凑密度（原 26px），字母居中 */
 const CELL_W = 19
+
+// —— 大链渲染防护（r67）——
+// 超过 SEQ_CELL_LIMIT 格的链默认折叠（摘要行 + 展开按钮）；手动展开后渲染仍封顶
+// SEQ_CELL_HARD 格并附截断提示——病态结构（数万残基单链）不再冻结主线程，
+// 正常文件（最长天然链 ~35K 残基也远超 LIMIT，但几乎都 < HARD）功能不受影响。
+const SEQ_CELL_LIMIT = 2000
+const SEQ_CELL_HARD = 10000
 
 type DragMode = 'replace' | 'add' | 'remove'
 
@@ -95,6 +102,15 @@ export function SequenceBar() {
   const [libOpen, setLibOpen] = useState(false)
   const [libName, setLibName] = useState('')
 
+  // —— 大链折叠（渲染防护）：超 SEQ_CELL_LIMIT 格的链默认折叠，手动展开 ——
+  // 切换结构时复位（React 官方「渲染期调整」模式，避免 effect 内同步 setState）
+  const [expandedChains, setExpandedChains] = useState<Set<number>>(new Set())
+  const [prevActive, setPrevActive] = useState(activeId)
+  if (prevActive !== activeId) {
+    setPrevActive(activeId)
+    setExpandedChains(new Set())
+  }
+
   const st = structures.find(x => x.id === activeId)
   const data = activeId ? dataRegistry.get(activeId) : null
 
@@ -109,15 +125,39 @@ export function SequenceBar() {
   const visArr = seqFocus && vpStructureId === activeId ? vpVisible : null
   const inView = (ri: number) => (visArr ? visArr[ri] === 1 : true)
 
-  /** 选中变化 → 首个选中残基滚动居中（外部命令/序列条点击/搜索定位统一生效） */
+  /** 选中变化 → 首个选中残基滚动居中（外部命令/序列条点击/搜索定位统一生效）；
+ *  目标格所在链若默认折叠则先展开再重试（展开渲染仍受 SEQ_CELL_HARD 封顶保护） */
   const selRev = selection.rev
   useEffect(() => {
     if (!ui.sequenceOpen || !data || !selection.structureId || selection.structureId !== activeId) return
     const first = selection.indices[0]
     if (first === undefined) return
     const ri = data.atomResidue[first]
-    const el = bodyRef.current?.querySelector<HTMLElement>(`[data-res="${ri}"]`)
-    el?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+    const scroll = () => bodyRef.current?.querySelector<HTMLElement>(`[data-res="${ri}"]`)
+      ?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
+    scroll()
+    if (!bodyRef.current?.querySelector(`[data-res="${ri}"]`)) {
+      // 未命中：目标格可能位于默认折叠的大链——展开后下一拍重试
+      const bigIdx: number[] = []
+      let ci = 0
+      for (const c of data.chains) {
+        if (c.type === 'protein' || c.type === 'nucleic') {
+          if ((c.residueIdx?.length ?? 0) > SEQ_CELL_LIMIT) bigIdx.push(ci)
+          ci++
+        }
+      }
+      if (bigIdx.length) {
+        // rAF 回调内展开（异步，避免 effect 体内同步 setState 级联渲染）；再下一拍重试滚动
+        requestAnimationFrame(() => {
+          setExpandedChains(prev => {
+            const next = new Set(prev)
+            bigIdx.forEach(i => next.add(i))
+            return next
+          })
+          requestAnimationFrame(scroll)
+        })
+      }
+    }
   }, [selRev, ui.sequenceOpen, activeId, data, selection.structureId, selection.indices])
 
   /** 残基搜索定位：A57（链+号）/ 57（任意链同号）/ HEM（配体名） */
@@ -726,6 +766,13 @@ export function SequenceBar() {
               useMolStore.getState().setActive(activeId!)
               useMolStore.getState().selectFromExpr(`chainidx ${origIdx}`)
             }
+            // 大链渲染防护（r67）：超限链默认折叠；展开后渲染仍封顶 HARD 并附截断提示
+            const cells = chain.residueIdx || []
+            const isBig = cells.length > SEQ_CELL_LIMIT
+            const expanded = expandedChains.has(ci)
+            const showCells = !isBig || expanded
+            const shown = showCells ? (cells.length > SEQ_CELL_HARD ? cells.slice(0, SEQ_CELL_HARD) : cells) : cells
+            const truncated = showCells && cells.length > SEQ_CELL_HARD
             return (
               <div key={`${chain.id}-${ci}`} className="flex items-start gap-2 pb-1.5 pt-0.5">
                 <span className="sticky left-0 z-10 mt-3.5 flex shrink-0 items-center gap-1 border-r border-border/60 bg-background pr-1.5">
@@ -736,13 +783,24 @@ export function SequenceBar() {
                       engineRef.current?.fitView([{ structureId: activeId!, indices: useMolStore.getState().selection.indices }])
                     }}
                     className="group flex shrink-0 items-center gap-1 rounded px-0.5 py-0.5 transition hover:bg-accent"
-                    title={t({ zh: `点击选择链 ${chain.id.trim() || '—'}（${(chain.residueIdx || []).length} 残基）· 双击聚焦`, en: `Click to select chain ${chain.id.trim() || '—'} (${(chain.residueIdx || []).length} residues) · double-click to focus` })}
+                    title={t({ zh: `点击选择链 ${chain.id.trim() || '—'}（${cells.length} 残基）· 双击聚焦`, en: `Click to select chain ${chain.id.trim() || '—'} (${cells.length} residues) · double-click to focus` })}
                   >
                     <span className="h-3.5 w-1 rounded-full opacity-80 transition group-hover:h-4" style={{ background: color }} />
                     <span className="font-mono text-[11px] font-bold leading-none">{chain.id === ' ' ? '—' : chain.id}</span>
-                    <span className="font-mono text-[9px] tabular-nums leading-none text-muted-foreground/70">{(chain.residueIdx || []).length}</span>
+                    <span className="font-mono text-[9px] tabular-nums leading-none text-muted-foreground/70">{cells.length}</span>
                   </button>
                 </span>
+                {!showCells ? (
+                  /* 折叠摘要行：大链默认不渲染格子，点展开（渲染仍受 HARD 封顶保护） */
+                  <button
+                    onClick={() => setExpandedChains(prev => { const next = new Set(prev); next.add(ci); return next })}
+                    className="flex h-9 shrink-0 items-center gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3 text-[10px] font-medium text-muted-foreground transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                    title={t({ zh: `该链 ${cells.length.toLocaleString(locale)} 残基超出渲染阈值（${SEQ_CELL_LIMIT.toLocaleString(locale)}），已折叠保护性能；点击展开（最多渲染前 ${SEQ_CELL_HARD.toLocaleString(locale)} 格）`, en: `This chain has ${cells.length.toLocaleString(locale)} residues, above the render threshold (${SEQ_CELL_LIMIT.toLocaleString(locale)}) — collapsed to protect performance; click to expand (renders at most the first ${SEQ_CELL_HARD.toLocaleString(locale)} cells)` })}
+                  >
+                    <UnfoldHorizontal className="h-3 w-3" />
+                    {t({ zh: `大链已折叠 · ${cells.length.toLocaleString(locale)} 残基 · 点击展开`, en: `Large chain collapsed · ${cells.length.toLocaleString(locale)} residues · click to expand` })}
+                  </button>
+                ) : (
                 <FadeEdge className="pb-0">
                   <div
                     className="select-none"
@@ -752,13 +810,13 @@ export function SequenceBar() {
                   >
                     {/* 刻度行：每 10 位显示残基号（对齐该格中心），每 5 位小刻度 */}
                     <div className="flex">
-                      {(chain.residueIdx || []).map((ri, k) => (
+                      {shown.map((ri, k) => (
                         <RulerCell key={ri} position={k + 1} resSeq={data.residues[ri].resSeq} />
                       ))}
                     </div>
                     {/* 序列行：字母永远显示、居中 */}
                     <div className="flex">
-                      {(chain.residueIdx || []).map((ri, k) => {
+                      {shown.map((ri, k) => {
                         const r = data.residues[ri]
                         const isSel = selectedResidues.has(ri)
                         const cellInView = inView(ri)
@@ -787,8 +845,14 @@ export function SequenceBar() {
                         )
                       })}
                     </div>
+                    {truncated && (
+                      <p className="py-1 pl-1 text-[9px] font-medium text-muted-foreground/80">
+                        {t({ zh: `仅渲染前 ${SEQ_CELL_HARD.toLocaleString(locale)} 格 · 另有 ${(cells.length - SEQ_CELL_HARD).toLocaleString(locale)} 个残基未显示（命令行/搜索仍可选取）`, en: `Only the first ${SEQ_CELL_HARD.toLocaleString(locale)} cells are rendered · ${ (cells.length - SEQ_CELL_HARD).toLocaleString(locale)} more residues are hidden (still selectable via the command line / search)` })}
+                      </p>
+                    )}
                   </div>
                 </FadeEdge>
+                )}
               </div>
             )
           })}

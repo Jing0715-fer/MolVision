@@ -8,6 +8,17 @@ import { parseCryst1, type CrystalInfo } from './symmetry'
 
 export type SSType = 'H' | 'E' | 'L' // helix / sheet / loop
 
+// ---- 病态文件防护（r67）：解析层硬上限 ----
+// 背景：乱坐标/非连续 resSeq 的损坏文件可使键推断 n² 爆炸（Set/数组吃光内存）、
+// 或每原子裂变为独立残基（序列条渲染十万级按钮冻结主线程）。
+// 超限直接抛双语错误——四处调用方（loader/session×2/registerStructure）均有
+// try/catch 包裹，错误经既有 toast 管道直达用户，页面零副作用。
+/** 残基数硬上限：真实蛋白 ~1 残基/8 原子，300K 原子上限下正常文件 ≤ ~40K 残基；
+ *  超限即 resSeq 逐原子裂变（损坏文件签名） */
+export const MAX_RESIDUES = 60_000
+/** 化学键数上限 = 原子数 × 该因子（真实蛋白约 1.3 键/原子，12× 已极宽裕） */
+export const MAX_BONDS_PER_ATOM = 12
+
 export interface AtomData {
   count: number
   positions: Float32Array      // xyz * count
@@ -529,6 +540,14 @@ function buildStructure(raw: RawAtoms): StructureData {
     atomResidue[i] = residues.length - 1
   }
 
+  // ---- 病态防护：残基逐原子裂变检查（在下游 DSSP/键推断/渲染爆炸前拦截） ----
+  if (residues.length > MAX_RESIDUES) {
+    throw new Error(tt({
+      zh: `残基数量超出上限（${residues.length.toLocaleString()} > ${MAX_RESIDUES.toLocaleString()}）：文件疑似损坏（resSeq 非连续致每原子裂变为独立残基），已拒绝加载`,
+      en: `Residue count exceeds the limit (${residues.length.toLocaleString()} > ${MAX_RESIDUES.toLocaleString()}): the file looks corrupted (non-contiguous resSeq split every atom into its own residue) — loading rejected`,
+    }))
+  }
+
   // ---- 链分组（连续相同 chainId 的残基） ----
   const chains: Chain[] = []
   const atomChain = new Int32Array(count)
@@ -821,12 +840,22 @@ function computeBonds(
   const pairsA: number[] = []
   const pairsB: number[] = []
   const added = new Set<number>() // key = a*n+b (a<b)
+  // 病态防护（r67）：键数硬封顶——乱坐标（全部原子挤在近邻距离内）会让候选对
+  // 接近 n²，未封顶时 Set/数组先吃光内存再靠 V8 Set 上限报错。超限抛双语错误，
+  // 由调用方 catch 后经 toast 直达用户（真实蛋白约 1.3 键/原子，12× 因子极宽裕）。
+  const bondCap = n * MAX_BONDS_PER_ATOM + 1024
 
   const addBond = (a: number, b: number) => {
     if (a === b) return
     const lo = Math.min(a, b), hi = Math.max(a, b)
     const key = lo * n + hi
     if (added.has(key)) return
+    if (pairsA.length >= bondCap) {
+      throw new Error(tt({
+        zh: `化学键数超出上限（≥${bondCap.toLocaleString()}）：坐标异常（原子挤在成键距离内），已拒绝加载`,
+        en: `Bond count exceeds the limit (≥${bondCap.toLocaleString()}): coordinates are abnormal (atoms packed within bonding distance) — loading rejected`,
+      }))
+    }
     added.add(key)
     pairsA.push(lo); pairsB.push(hi)
   }
