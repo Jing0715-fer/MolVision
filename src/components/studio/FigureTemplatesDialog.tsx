@@ -19,6 +19,7 @@ import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt } from '@/i18n'
 import {
   demoThenApply, FIGURE_CATEGORIES, FIGURE_TEMPLATES, runTemplateCommands,
+  adaptTemplateCommands, logAdaptNotes,
   type FigureCategory, type FigureTemplate,
 } from '@/lib/molecular/figure-templates'
 import {
@@ -183,11 +184,14 @@ export function FigureTemplatesDialog() {
       }))
       return
     }
-    runTemplateCommands(tpl.commands)
+    // r73：应用前结构特征探测——链重映射/密度图来源切换/无配体降级/无晶胞跳过（诚实降级入日志）
+    const { commands, notes } = adaptTemplateCommands(tpl)
+    runTemplateCommands(commands)
+    logAdaptNotes(notes)
     toast.success(tt({ zh: `已应用「${t(tpl.name)}」`, en: `Applied "${t(tpl.name)}"` }), {
       description: tt({
-        zh: `${tpl.commands.length} 条命令已执行 · 主体 ${activeName ?? ''} · 可在历史面板重放`,
-        en: `${tpl.commands.length} commands executed on ${activeName ?? ''} — replayable from the history panel`,
+        zh: `${commands.length} 条命令已执行${notes.length ? ` · 智能适配 ${notes.length} 项` : ''} · 主体 ${activeName ?? ''} · 可在历史面板重放`,
+        en: `${commands.length} commands executed${notes.length ? ` · ${notes.length} smart adaptation${notes.length === 1 ? '' : 's'}` : ''} on ${activeName ?? ''} — replayable from the history panel`,
       }),
     })
   }

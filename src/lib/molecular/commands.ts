@@ -1,7 +1,7 @@
 // PyMOL 风格命令行：select / show / hide / color / bg / zoom / spin / slab / label / create / map / symmetry / stereo ...
 import { PRESETS, useMolStore, engineRef, dataRegistry, buildNamedMasks } from './store'
 import { SCENE_PRESETS } from './scenes'
-import { FIGURE_TEMPLATES, runTemplateCommands } from './figure-templates'
+import { FIGURE_TEMPLATES, runTemplateCommands, adaptTemplateCommands, logAdaptNotes } from './figure-templates'
 import { saveSession, clearSession, sessionInfo, exportSessionFile, newSession } from './session'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
@@ -514,8 +514,11 @@ export function runCommand(raw: string): void {
       if (!s.structures.length) {
         return err(tt({ zh: '当前没有结构——先 load 一个（如 load 4hhb），或用 templates 面板里的「演示」按钮', en: 'No structure loaded — load one first (e.g. load 4hhb) or use the "Demo" button in the templates panel' }))
       }
-      runTemplateCommands(tpl.commands)
-      return ok(tt({ zh: `已应用「${tt(tpl.name)}」：${tpl.commands.length} 条命令`, en: `Applied "${tt(tpl.name)}": ${tpl.commands.length} commands` }))
+      // r73：直达应用同样走结构特征适配（与弹窗卡片同路径）
+      const { commands, notes } = adaptTemplateCommands(tpl)
+      runTemplateCommands(commands)
+      logAdaptNotes(notes)
+      return ok(tt({ zh: `已应用「${tt(tpl.name)}」：${commands.length} 条命令${notes.length ? ` · 智能适配 ${notes.length} 项（详见日志）` : ''}`, en: `Applied "${tt(tpl.name)}": ${commands.length} commands${notes.length ? ` · ${notes.length} smart adaptation${notes.length === 1 ? '' : 's'} (see log)` : ''}` }))
     }
     useMolStore.getState().setUi({ templateOpen: true })
     return ok(tt({ zh: '论文图复现模板库已打开（CNS 图式 + 特定蛋白类型分析图）', en: 'Paper-figure template library opened (CNS styles + type-specific analysis figures)' }))

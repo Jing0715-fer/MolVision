@@ -27,6 +27,8 @@
 //  · 逐条执行间隔 120ms（preset 聚焦动画 / spectrum worker 着色平滑衔接）
 import { runCommand } from './commands'
 import { fetchPdbId } from './loader'
+import { dataRegistry, useMolStore } from './store'
+import { tt } from '@/i18n'
 import type { DualText } from '@/i18n'
 
 /** 图式来源文献（真实引用，经检索核实；doi 可省略——避免不确定引用伤害可信度） */
@@ -237,6 +239,94 @@ export function runTemplateCommands(commands: string[]): void {
   commands.forEach((cmd, i) => {
     setTimeout(() => runCommand(cmd), i * 120)
   })
+}
+
+// ── 模板参数化适配（r73：应用前结构特征探测 + 智能降级/重映射） ──────────────
+// adaptTemplateCommands：对当前活动结构逐条改写模板命令——历史问题：模板命令按演示结构特征硬编码（interface A B / map fetch 3ekj /
+// preset bindingsite / symmetry），用户结构特征不符时命令部分失效——弹 warning
+// 或干脆错配（密度图挂到别的结构上）。适配层在应用前逐条探测并改写：
+//  ① interface A B → 前两条非水链重映射；单链跳过
+//  ② map fetch <演示ID> → 活动结构 pdbId；本地文件（无编号）跳过
+//  ③ preset bindingsite → 无配体降级 preset cartoon
+//  ④ symmetry → 无晶胞（CRYST1）跳过
+// notes 携带每条降级说明（调用方 toast/appendLog 呈现）——「诚实降级」而非静默吞命令。
+// demoThenApply 不走此层：演示结构即模板取材结构，特征必然齐备。
+
+export interface AdaptedTemplate {
+  /** 适配后的命令序列（原样或改写/跳过后） */
+  commands: string[]
+  /** 降级/重映射说明（空 = 完美适配） */
+  notes: DualText[]
+}
+
+/** 对当前活动结构适配模板命令（无结构时原样返回——调用方负责引导先加载） */
+export function adaptTemplateCommands(tpl: FigureTemplate): AdaptedTemplate {
+  const s = useMolStore.getState()
+  const active = s.structures.find(x => x.id === s.activeId) ?? s.structures[0]
+  if (!active) return { commands: tpl.commands, notes: [] }
+  const data = dataRegistry.get(active.id)
+  if (!data) return { commands: tpl.commands, notes: [] }
+
+  const notes: DualText[] = []
+  const commands: string[] = []
+  for (const cmd of tpl.commands) {
+    // ① 界面接触：链重映射 / 单链跳过
+    if (/^interface\s/i.test(cmd)) {
+      const poly = data.chains.filter(c => c.type !== 'water')
+      if (poly.length < 2) {
+        notes.push({ zh: '单链结构——界面接触命令已跳过（需 ≥2 条链）', en: 'Single-chain structure — interface contacts skipped (needs ≥2 chains)' })
+        continue
+      }
+      const [a, b] = [poly[0].id.trim() || 'A', poly[1].id.trim() || 'B']
+      if (cmd !== `interface ${a} ${b}`) {
+        notes.push({ zh: `界面命令已重映射为链 ${a}/${b}（模板按演示结构的链命名）`, en: `Interface command remapped to chains ${a}/${b} (template assumes the demo structure's chains)` })
+      }
+      commands.push(`interface ${a} ${b}`)
+      continue
+    }
+    // ② 密度图：来源切到当前结构 / 无编号跳过
+    if (/^map fetch\s/i.test(cmd)) {
+      const demoId = cmd.replace(/^map fetch\s/i, '').trim()
+      const pdbId = active.meta.pdbId
+      if (!pdbId) {
+        notes.push({ zh: '当前结构无 PDB 编号（本地文件）——密度图命令已跳过（可手动 map fetch）', en: 'Current structure has no PDB ID (local file) — density map skipped (map fetch manually if needed)' })
+        continue
+      }
+      if (demoId.toLowerCase() !== pdbId.toLowerCase()) {
+        notes.push({ zh: `密度图来源已切换为当前结构 ${pdbId}（模板演示 ${demoId.toUpperCase()}）`, en: `Density map source switched to the current structure ${pdbId} (template demos ${demoId.toUpperCase()})` })
+        commands.push(`map fetch ${pdbId.toLowerCase()}`)
+        continue
+      }
+      commands.push(cmd)
+      continue
+    }
+    // ③ 口袋特写：无配体降级（summary 在 store 的结构条目上）
+    if (/^preset bindingsite/i.test(cmd)) {
+      if (!active.summary.ligandMolecules) {
+        commands.push('preset cartoon')
+        notes.push({ zh: '未检出配体——口袋特写已降级为卡通概览', en: 'No ligands detected — pocket close-up degraded to cartoon overview' })
+        continue
+      }
+      commands.push(cmd)
+      continue
+    }
+    // ④ 对称伙伴：无晶胞跳过
+    if (/^symmetry\s/i.test(cmd)) {
+      if (!data.crystal) {
+        notes.push({ zh: '无晶胞信息（CRYST1 缺失，常见于 NMR/预测模型）——对称伙伴命令已跳过', en: 'No crystal cell info (CRYST1 missing, common for NMR/predicted models) — symmetry mates skipped' })
+        continue
+      }
+      commands.push(cmd)
+      continue
+    }
+    commands.push(cmd)
+  }
+  return { commands, notes }
+}
+
+/** 适配说明入命令日志（应用方调用——诚实降级的可追溯通道） */
+export function logAdaptNotes(notes: DualText[]): void {
+  for (const n of notes) useMolStore.getState().appendLog('out', tt(n))
 }
 
 /** 加载演示结构并应用模板（「演示」按钮：100% 还原缩略图的取材路径） */

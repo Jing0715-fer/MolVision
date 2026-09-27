@@ -3020,3 +3020,25 @@ Stage Summary:
   2. 【中】欢迎页表单 E2E 探针路径（React 受控+批处理双坑）可固化进冒烟脚本（native setter + 分步 eval 模板已验证）
   3. 【中】autosave 触发面扩展：view save/scene save 后 900ms 防抖存档不含书签变化（当前靠 beforeunload 兜底）——可在两 store 的 persist 后调度一次轻量 saveSession
   4. 【低】membrane-embed 视角优化与 pore 轴向覆写（r72 建议②③顺延）
+
+---
+Task ID: r73-f
+Agent: main
+Task: r72 建议①落地——论文图模板参数化适配（用户结构与演示结构特征不符时命令部分失效的历史问题）+ 智能降级/重映射 + 诚实降级日志
+
+Work Log:
+- 【适配层 figure-templates.ts】新增 adaptTemplateCommands(tpl) → { commands, notes }：应用前对当前活动结构逐条探测改写——
+  · ① interface A B（硬编码链）→ 前两条非水链重映射（`interface X Y`）；单链结构跳过 + note
+  · ② map fetch <演示ID>（如 3ekj）→ 活动结构 meta.pdbId 替换（来源不再错配）；本地文件无编号跳过 + note
+  · ③ preset bindingsite → 无配体（summary.ligandMolecules=0）降级 preset cartoon + note
+  · ④ symmetry N → 无晶胞（CRYST1 缺失，NMR/预测模型常见）跳过 + note
+  · notes 双语说明入命令日志（logAdaptNotes）——「诚实降级」可追溯，非静默吞命令；demoThenApply 不走此层（演示结构即取材结构特征必然齐备）
+- 【双调用方接线】FigureTemplatesDialog.apply（卡片点击）与 commands.ts figure <id> 直达——两路同走 adaptTemplateCommands；toast description 附「智能适配 N 项」计数（en: N smart adaptations）
+- 【类型修正】summary 在 store 结构条目上（active.summary.ligandMolecules）非 parser StructureData；tt 需从 '@/i18n' 值导入（原仅 type DualText）
+- 【E2E（r73-qa 会话续）】1CRN（单链·无配体·有晶胞）→ figure interface-contacts：「智能适配 1 项」+「Single-chain structure — interface contacts skipped (needs ≥2 chains)」双断言 ✓；figure ligand-pocket：「No ligands detected — pocket close-up degraded to cartoon overview」+ 适配计数累计 2 ✓；console 零错误；门禁 tsc 0 / lint 0 / guards 77/77
+- 【坑（E2E 时序补充）】session new 后 consoleOpen 重置为默认关——命令行面板需重开且 sleep 2.5 后 input 才稳定挂载（sleep 1 偶发不足）
+
+Stage Summary:
+- 交付：模板参数化适配层——论文图模板对任意用户结构开箱即用（链重映射/密度图来源切换/无配体降级/无晶胞跳过），诚实降级全程入日志可追溯；r71 建议以来的「模板对用户结构部分失效」欠账结清
+- 架构资产：adaptTemplateCommands 纯函数适配层（模板命令 → 探测改写 → notes 通道）；新加载入口/新模板自动继承（demoThenApply 显式豁免）
+- 下一轮建议：①【中】membrane-embed 视角优化与 pore 轴向覆写（r72 建议②③顺延）②【中】autosave 触发面扩展（view/scene save 后调度轻量 saveSession，当前靠 beforeunload 兜底）③【低】模板第二梯队（DNA-蛋白复合物/两态构象对比/表面静电）
