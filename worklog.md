@@ -3042,3 +3042,41 @@ Stage Summary:
 - 交付：模板参数化适配层——论文图模板对任意用户结构开箱即用（链重映射/密度图来源切换/无配体降级/无晶胞跳过），诚实降级全程入日志可追溯；r71 建议以来的「模板对用户结构部分失效」欠账结清
 - 架构资产：adaptTemplateCommands 纯函数适配层（模板命令 → 探测改写 → notes 通道）；新加载入口/新模板自动继承（demoThenApply 显式豁免）
 - 下一轮建议：①【中】membrane-embed 视角优化与 pore 轴向覆写（r72 建议②③顺延）②【中】autosave 触发面扩展（view/scene save 后调度轻量 saveSession，当前靠 beforeunload 兜底）③【低】模板第二梯队（DNA-蛋白复合物/两态构象对比/表面静电）
+
+---
+Task ID: r74
+Agent: main
+Task: 用户点名——「首页也需要展示模板加载示例等，优化欢迎页面的美观度，做成类似 open design 那种风格」：欢迎页 Open-design 重设计（顶栏 + 左 hero/右模板画廊分栏 + 12 张引擎真实渲染缩略图作品橱窗 + 分类过滤 + 库弹窗入口）
+
+Work Log:
+- 【布局架构重设计】欢迎页从「居中 448px 窄列仪器待机」进化为 open-design 式分栏应用：
+  · 顶栏（h-14，data-welcome-topbar 探针）：品牌 monogram 缩影（22px 静态六角+双轨线）+ MolVision + v1.4 徽章 + lg+ tagline + 右侧动作组（语言轨道内联胶囊/主题/GitHub——主题与 GitHub 自 footer 上移去重）
+  · 主体：lg+ 左右分栏各自独立滚动（左 hero 加载舱 400/448px + border-r；右模板画廊 flex-1）；<lg 垂直堆叠整页滚动（外层 mol-scroll overflow-y-auto，两栏 overflow 可见）——分栏滚动用「外层 lg:overflow-hidden + 子栏 lg:overflow-y-auto」切换策略
+  · 仪器资产全保留：轨道电子巡航背景（深入两栏之下若隐若现）/ 径向晕影 / 四角刻度（锚点从根级移入主体区——顶栏存在时上两角不被压）/ hero 六角动画 / 晶体按键 CTA / instrument-bar 页脚遥测
+- 【模板画廊（r74 旗舰，用户点名「首页展示模板加载示例」）】
+  · 右栏作品橱窗：12 张模板卡（引擎真实渲染缩略图 /templates/{id}.png）网格（1 列 / min-420px 2 列 / xl 3 列），点击整卡 = demoThenApply 演示加载（欢迎页无结构语境下模板库的最短体验路径：加载代表结构 + 应用图式 → 工作台接管）
+  · 卡片三层信息：缩略图（hover 轻放大 1.03 + 序号角标 accent chip + 演示徽章 hover 浮现触屏恒显 + busy spinner 覆盖）→ 信息条（专属图标 + 名称 + demo ID mono + tagline 截断 + 期刊·年份溯源行 + membrane 徽章）
+  · sticky 毛玻璃区头（gallery-head-blur）：标题 + 计数徽章 + FIGURE_CATEGORIES 分类过滤 chips（全部 12/通用 10/膜蛋白·通道 2，过滤切换 key 变化重播 stagger 入场）+ 「在库中浏览」按钮（setUi templateOpen——全局弹窗欢迎页亦挂载 r71 已铺好）
+  · 诚实版权脚注（与模板库对话框同口径：图式配方非原图 + 缩略图引擎真实渲染）
+- 【LanguageToggle welcome 变体内联化】原右上浮动玻璃胶囊（absolute top-5 right-5 + welcome-float-chip）迁入顶栏流式槽位：h-9 + 玻璃质感 + Languages 图标 + OrbitTrack md 全保留，浮起改 translate 属性（不可用 welcome-float-chip——其 position:absolute 会破坏顶栏流式布局）；footer default 次入口保留（语言入口仍两处，主入口顶栏化）
+- 【FigureTemplatesDialog 资产导出】ACCENT 十二色系映射与 TPL_ICONS 专属图标导出（export const）——欢迎页画廊同源复用，消除跨组件色彩/图标漂移
+- 【画廊入场动画 gallery-card-in】纯 opacity 淡入（380ms + 25ms/卡错峰）——keyframes 刻意不含 transform（welcome-in fill-mode:both 永久占用 transform 的 r69 坑——纯 opacity 入场让卡片 hover:-translate-y-0.5 浮起自由生效）
+- 【E2E（agent-browser r74 会话）全绿】
+  · 顶栏渲染 + 画廊 12 卡 + 12 缩略图 src 正确；console 全程零错误
+  · 「Browse library」→ 模板库弹窗打开（12 卡 + 标题）+ Esc 关闭 ✓
+  · 画廊第一卡点击 → demoThenApply → 欢迎页卸载 → 工作台接管 → 4HHB + rainbow 应用（VLM 复核：蓝绿黄橙红 N→C 渐变 + 白底 + 无渲染缺陷；像素采样白底 321 + 光谱色痕与 r71 先例一致）
+  · 双主题切换（浅 248,246,243 / 深 9,8,7 像素实证）；移动端 375px 零横向溢出（scrollW=clientW=375）+ 垂直堆叠（galleryBelowHero）+ 顶栏 56px + 语言轨道可见
+  · 分类过滤（membrane→2 卡 ↔ all→12 卡）；顶栏语言轨道切换（data-slide en/zh + 画廊标题双语切换）
+  · VLM 布局评审：浅色 9/10「production-ready，网格一致、层级清晰、无重叠」；深色「一致深主题 + 白底缩略图对比佳 + 3 列网格对齐无缺陷」；移动端符合规范（整页滚动 + footer flex 底部固定非 overlay）
+- 【门禁】lint 0 · tsc src 0 错 · guards 77→86（+9：画廊数据/演示动作/缩略图/入场动画定义与接线/网格探针/顶栏探针/分类过滤/库弹窗入口；welcome-float-chip 接线守卫不变——注释+AI 胶囊仍 2 次）· smoke 4/4 · dev.log 全 200
+
+Stage Summary:
+- 交付：欢迎页 Open-design 重设计——顶栏导航 + 左 hero 加载舱/右模板画廊分栏（lg+ 双栏独立滚动，<lg 垂直堆叠整页滚动）+ 12 张引擎真实渲染缩略图作品橱窗（点击即演示加载全链路）+ 分类过滤 + 库弹窗直通入口；语言主入口顶栏内联化（玻璃胶囊形态保留）
+- 用户价值闭环：打开首页即见「论文图模板能做成什么样」——橱窗缩略图即真实渲染产物，点卡片一跳进工作台看真图；先看货再加载的 open-design 体验路径
+- 架构资产：ACCENT/TPL_ICONS 跨组件导出（模板视觉语言单源）；gallery-card-in 纯 opacity 入场（规避 fill-mode transform 占用坑的又一实践）；分栏滚动切换策略（lg:overflow-hidden + 子栏 lg:overflow-y-auto）
+- 坑（新入档）：①浮动元素（AI 胶囊/遮罩/AgentPanel）必须锚在根级非滚动层——嵌在滚动主体内会随内容滚走（本轮 E2E 前自查逮到）；②agent-browser eval 返回 JSON 字符串走 shell 引号壳时管道 json.loads 前须剥壳（r72 坑重现——直接返回对象更稳）；③mol-micro 类 text-transform:uppercase——「Load structure」渲染为「LOAD STRUCTURE」，大小写敏感正则失配假阴性（smoke 断言带 i 标志不受影响）
+- 下一轮建议（按优先级）：
+  1. 【中】画廊卡片 hover 展示完整 tagline/命令数（title 已有——可做 hover 卡片浮层显 purpose + 命令序列预览，增强「透明配方」叙事）
+  2. 【中】模板缩略图 CDN 化的懒加载骨架（loading=lazy 已有——可加 blur-up 占位渐变，缩略图 640×320 加载体感优化）
+  3. 【低】欢迎页画廊「最近使用」记忆（localStorage 记用户点过的模板置顶/标记）——个性化闭环
+  4. 【低】顶栏中段空档可放 ⌘K 快速搜索入口（当前 tagline 纯装饰——可做成可点击的命令面板触发条，open design 搜索惯例）

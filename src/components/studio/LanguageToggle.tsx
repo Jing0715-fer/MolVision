@@ -8,8 +8,8 @@
 // 到位反馈语义——滑块滑到驻留位 = 仪器旋钮到位锁定）。
 //
 // r69 形态统一——全应用四处入口均为轨道滑块形态（消除旧分段控件混搭）：
-//  · welcome  —— 欢迎页右上浮动玻璃胶囊（主入口；与右下 AI 胶囊对角呼应，
-//    自带 absolute top-5 right-5 z-20 定位 + welcome-in 错峰入场）
+//  · welcome  —— 欢迎页顶栏内联玻璃胶囊（r74 由右上浮动位迁入顶部导航栏，
+//    主入口；与右下 AI 胶囊对角呼应）
 //  · default  —— 欢迎页页脚 instrument-bar 墨色仪表滑轨（sm，紧凑次入口）
 //  · toolbar  —— 工作台顶栏常驻（neutral 浅底滑轨 + Languages 图标，
 //    外框沿用工具栏胶囊 border-border bg-muted/40，窄屏图标隐藏）
@@ -144,14 +144,19 @@ export function LanguageToggle({
 }: {
   variant?: 'status' | 'default' | 'toolbar' | 'welcome'
 }) {
-  // —— welcome：右上角浮动玻璃胶囊（welcome-float-chip 行为核心 + 图标 + 轨道） ——
+  // —— welcome：欢迎页顶栏内联玻璃胶囊（r74 欢迎页重设计——原右上浮动位退役，
+  //     迁入顶部导航栏流式槽位；保留玻璃质感 + 图标 + 轨道 md。
+  //     注意不可用 welcome-float-chip（其 position:absolute 会破坏顶栏流式布局），
+  //     浮起改走 translate 属性（顶栏无 fill-mode:both 动画占用，transform 亦可用）——
+  //     行为手感与浮动胶囊保持一致） ——
   if (variant === 'welcome') {
     return (
-      <div className="welcome-in absolute top-5 right-5 z-20" style={{ animationDelay: '500ms' }}>
-        <div className="welcome-float-chip flex h-10 items-center gap-1.5 border-foreground/[0.16] bg-card/85 pl-2.5 pr-1 shadow-[0_2px_12px_oklch(0.25_0.01_80/0.1)] hover:border-foreground/30 hover:shadow-[0_5px_18px_oklch(0.25_0.01_80/0.16)] dark:border-white/[0.15] dark:bg-white/[0.07] dark:shadow-[0_2px_14px_oklch(0_0_0/0.35)] dark:hover:border-white/30 dark:hover:shadow-[0_5px_18px_oklch(0_0_0/0.42)]">
-          <Languages aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary/85" />
-          <OrbitTrack tone="plain" size="md" />
-        </div>
+      <div
+        className="welcome-in flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-foreground/[0.16] bg-card/85 pl-2.5 pr-1 shadow-[0_2px_12px_oklch(0.25_0.01_80/0.1)] transition-[translate,box-shadow,border-color] duration-200 hover:translate-y-[-1px] hover:border-foreground/30 hover:shadow-[0_4px_16px_oklch(0.25_0.01_80/0.16)] dark:border-white/[0.15] dark:bg-white/[0.07] dark:shadow-[0_2px_14px_oklch(0_0_0/0.35)] dark:hover:border-white/30 dark:hover:shadow-[0_4px_16px_oklch(0_0_0/0.42)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+        style={{ animationDelay: '500ms' }}
+      >
+        <Languages aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary/85" />
+        <OrbitTrack tone="plain" size="md" />
       </div>
     )
   }

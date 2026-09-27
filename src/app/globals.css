@@ -628,6 +628,35 @@ canvas {
 }
 
 /* ============================================================
+   r74：欢迎页 Open-design 重设计——模板画廊配套
+   （布局：顶栏 + 左 hero / 右画廊分栏；画廊 = 引擎真实渲染
+     缩略图的「作品橱窗」，点击即演示加载）
+   ============================================================ */
+
+/* —— 画廊卡片入场：纯 opacity 淡入（无 transform 终态占用——卡片 hover
+      浮起 hover:-translate-y-0.5 因此可自由生效；welcome-in 的
+      fill-mode:both 永久占用 transform 的坑，r69 已入档）。
+      错峰由内联 animation-delay 递增 25ms/卡。 —— */
+@keyframes gallery-card-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.gallery-card-in {
+  animation: gallery-card-in 380ms ease-out both;
+}
+
+/* —— 画廊 sticky 区头：滚动时标题带常驻（毛玻璃 + 底缘发丝线） —— */
+.gallery-head-blur {
+  background: color-mix(in oklab, var(--background) 78%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-card-in { animation: none; }
+}
+
+/* ============================================================
    r69：语言控件形态统一（轨道驻留开关全应用化）配套资产
    ============================================================ */
 

@@ -27,8 +27,9 @@ import {
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
-/** 强调色 → Tailwind 装饰类映射（卡片占位渐变 / hover 边框 / 序号色） */
-const ACCENT: Record<FigureTemplate['accent'], { grad: string; border: string; text: string; chip: string }> = {
+/** 强调色 → Tailwind 装饰类映射（卡片占位渐变 / hover 边框 / 序号色）。
+ *  r74 导出：欢迎页模板画廊（WelcomeScreen）同源复用——十二色系一致 */
+export const ACCENT: Record<FigureTemplate['accent'], { grad: string; border: string; text: string; chip: string }> = {
   rose: { grad: 'from-rose-500/25 via-rose-500/10 to-transparent', border: 'hover:border-rose-500/50', text: 'text-rose-500', chip: 'bg-rose-500/12 text-rose-600 dark:text-rose-400' },
   emerald: { grad: 'from-emerald-500/25 via-emerald-500/10 to-transparent', border: 'hover:border-emerald-500/50', text: 'text-emerald-500', chip: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' },
   amber: { grad: 'from-amber-500/25 via-amber-500/10 to-transparent', border: 'hover:border-amber-500/50', text: 'text-amber-500', chip: 'bg-amber-500/12 text-amber-600 dark:text-amber-400' },
@@ -42,8 +43,9 @@ const ACCENT: Record<FigureTemplate['accent'], { grad: string; border: string; t
   slate: { grad: 'from-slate-500/25 via-slate-500/10 to-transparent', border: 'hover:border-slate-500/50', text: 'text-slate-500', chip: 'bg-slate-500/12 text-slate-600 dark:text-slate-400' },
 }
 
-/** 每模板专属图标（卡片差异化第二层：配色之外再给一个可扫读的形状记号） */
-const TPL_ICONS: Record<string, LucideIcon> = {
+/** 每模板专属图标（卡片差异化第二层：配色之外再给一个可扫读的形状记号）。
+ *  r74 导出：欢迎页模板画廊同源复用 */
+export const TPL_ICONS: Record<string, LucideIcon> = {
   'rainbow-overview': Palette,
   'chain-assembly': Boxes,
   'ss-motif': Waves,
