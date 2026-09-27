@@ -18,9 +18,10 @@ BASE=http://localhost:3000
 OUT=/home/z/my-project/public/templates
 mkdir -p "$OUT"
 
-# 模板id:等待秒数:demo结构:grid序号（FIGURE_TEMPLATES 顺序 0-11）
+# 模板id:等待秒数:demo结构:grid序号（FIGURE_TEMPLATES 顺序 0-16）
 # density-map 22s：SF 拉取 + Worker FFT + 38 万三角等值面 marching cubes 紧凑（r72 实测
 # 16s 截图会漏网格——密度缩略图无 mesh 实锤后补拍验证的教训）；publication 18s（ray 1920）
+# r75 新增五模板（12-16）：mutation 12s（12 条命令 × 120ms + 标签精灵 + 相机动画）
 SPECS=(
   rainbow-overview:10:4HHB:0
   chain-assembly:10:4HHB:1
@@ -34,7 +35,21 @@ SPECS=(
   publication-ready:18:4HHB:9
   pore-analysis:14:1BL8:10
   membrane-embed:15:1FX8:11
+  salt-bridge-network:11:1AKI:12
+  hbond-network:12:6LU7:13
+  dna-protein-complex:12:1LMB:14
+  domain-coloring:10:6LU7:15
+  mutation-hotspots:12:4HHB:16
 )
+
+# r75：可选增量模式——命令行传模板 id 列表则只生成指定项（缺省全量）
+if [ $# -gt 0 ]; then
+  SPECS=($(printf '%s\n' "${SPECS[@]}" | while IFS= read -r line; do
+    id="${line%%:*}"
+    for want in "$@"; do [ "$id" = "$want" ] && echo "$line"; done
+  done))
+  echo "== filtered mode: ${#SPECS[@]} templates =="
+fi
 
 gen_one() {
   local id="$1" wait="$2" demo="$3" idx="$4"

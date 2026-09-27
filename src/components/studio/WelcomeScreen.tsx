@@ -94,6 +94,18 @@ function GalleryCard({ tpl, index, busy, onDemo }: {
               <BookOpenText className={cn('h-8 w-8 opacity-60', a.text)} />
             </span>
           )}
+          {/* r75 hover 信息浮层（open-design 作品揭示惯例）：顶部渐变显用途 + 命令数
+              ——与底部演示徽章上下分置不冲突；触屏不依赖 hover（tap 即演示）。
+              DOM 序在序号角标之前——hover 时角标仍浮在浮层之上可读 */}
+          <span
+            data-welcome-tpl-purpose
+            className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 bg-gradient-to-b from-background/92 via-background/55 to-transparent px-3 pb-9 pt-2.5 opacity-0 transition-opacity duration-200 sm:group-hover:opacity-100"
+          >
+            <span className="mol-micro truncate text-foreground/80">{t(tpl.purpose)}</span>
+            <span className="ml-auto shrink-0 rounded-full border border-border bg-background/85 px-1.5 py-px font-mono text-[9px] font-semibold text-muted-foreground">
+              {tpl.commands.length} {t({ zh: '条命令', en: 'cmds' })}
+            </span>
+          </span>
           {/* 序号角标（仪器簇编号惯例，与模板库对话框同源） */}
           <span className={cn('absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em]', a.chip)}>
             {String(index + 1).padStart(2, '0')}

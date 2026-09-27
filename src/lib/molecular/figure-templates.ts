@@ -1,10 +1,18 @@
 'use client'
 
-// 论文图复现模板（r71 创立 · r72 差异化打磨 + 特定蛋白类型分析模板）
+// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比）
 // ─────────────────────────────────────────────────────────────────────────────
 // 定位：把 Cell / Nature / Science 等高影响力结构生物学文章中反复出现的「图式」
 // （figure style）——表示法组合 + 配色 + 视角 + 灯光 + 轮廓 + 相机——固化为命令
 // 序列模板。一键应用到用户当前结构，快速得到 CNS 级别作图。
+//
+// r75 扩容（用户指令：继续增加更多模板，涵盖互作分析等多种场景）：
+//  · 新分类 interaction（互作分析）：盐桥网络 / 配体氢键网络 / DNA-蛋白复合物
+//    （+既有 interface-contacts 重归类）——全部走 contacts/hbonds 真实分析命令
+//  · 新通用场景：结构域分区着色（Mpro 三域）+ 突变热点图（B 因子通道 + 标签）
+//  · figure 字段：原文图式参考（图版位置 + 原图展示内容）——模板弹窗「对比」
+//    视图的右栏数据；COMMAND_GLOSSARY 命令图鉴把命令序列翻成双语图式解剖
+//  · adapt 层新规则：⑤配体氢键退避主链 ⑥无核酸降级 ⑦域区间截断说明 ⑧链不匹配热点降级
 //
 // r72 打磨（用户反馈驱动）：
 //  · 轮廓线减细：全体描边模板从「on 2 2.5」降到「on 1.3 1.2」——发丝级细线
@@ -40,8 +48,8 @@ export interface FigureCitation {
   doi?: string
 }
 
-/** 模板分类：通用图式（任意蛋白）vs 特定蛋白类型（膜蛋白/离子通道分析） */
-export type FigureCategory = 'general' | 'membrane'
+/** 模板分类：通用图式（任意蛋白）vs 互作分析（接触/氢键/DNA）vs 特定蛋白类型（膜/通道） */
+export type FigureCategory = 'general' | 'interaction' | 'membrane'
 
 /** 论文图复现模板 */
 export interface FigureTemplate {
@@ -54,8 +62,10 @@ export interface FigureTemplate {
   purpose: DualText
   /** 标签 chips（≤3，双语） */
   tags: DualText[]
-  /** 分类（弹窗过滤 chips：通用 / 膜蛋白·通道） */
+  /** 分类（弹窗过滤 chips：通用 / 互作分析 / 膜蛋白·通道） */
   category: FigureCategory
+  /** 原文图式参考（「对比」视图右栏） */
+  figure?: FigureRef
   /** 图式参考来源 */
   citation: FigureCitation
   /** 代表结构（缩略图渲染用；「演示」按钮加载它再应用） */
@@ -66,12 +76,21 @@ export interface FigureTemplate {
   accent: 'rose' | 'emerald' | 'amber' | 'sky' | 'violet' | 'teal' | 'orange' | 'fuchsia' | 'lime' | 'cyan' | 'slate'
 }
 
-/** 分类元数据（弹窗过滤 chips） */
+/** 分类元数据（弹窗/欢迎页画廊过滤 chips） */
 export const FIGURE_CATEGORIES: { key: FigureCategory | 'all'; label: DualText }[] = [
   { key: 'all', label: { zh: '全部', en: 'All' } },
   { key: 'general', label: { zh: '通用图式', en: 'General styles' } },
+  { key: 'interaction', label: { zh: '互作分析', en: 'Interaction analysis' } },
   { key: 'membrane', label: { zh: '膜蛋白 · 通道', en: 'Membrane · channels' } },
 ]
+
+/** 原文图式参考（「对比」视图右栏：原图展示什么——诚实溯源，非存图） */
+export interface FigureRef {
+  /** 原文图版位置（宽松标注，如 "Fig. 1a"；不确定时省略——UI 退为期刊年份） */
+  ref?: string
+  /** 原图展示的内容（对比视图的「原文图式」描述） */
+  shows: DualText
+}
 
 export const FIGURE_TEMPLATES: FigureTemplate[] = [
   {
@@ -81,6 +100,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '整体概览 · 折叠走向 · 组装示意', en: 'Overall architecture · fold topology · assembly' },
     tags: [{ zh: '整体结构', en: 'Overview' }, { zh: '首图', en: 'Panel A' }],
     category: 'general',
+    figure: { ref: 'Fig. 1a', shows: { zh: '整体结构首图：全貌 + 折叠走向 + 结构域标注', en: 'Opening figure: overall architecture, fold topology and domain annotations' } },
     citation: { journal: 'Science', year: 2020, title: 'Cryo-EM structure of the 2019-nCoV spike in the prefusion conformation', doi: '10.1126/science.abb2507' },
     demo: '4HHB',
     // 差异点：纯白底 + 细描边 + PCA 主轴对齐（基线「经典款」，其余模板均偏离它）
@@ -94,6 +114,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '多亚基组装 · 化学计量 · 界面初判', en: 'Multi-subunit assembly · stoichiometry · interfaces' },
     tags: [{ zh: '寡聚体', en: 'Oligomer' }, { zh: '复合物', en: 'Complex' }],
     category: 'general',
+    figure: { ref: 'Fig. 1', shows: { zh: '组装层级图：亚基如何拼成复合物 + 化学计量标注', en: 'Assembly hierarchy: how subunits build the complex, with stoichiometry' } },
     citation: { journal: 'Science', year: 2022, title: 'Architecture of the linker-scaffold in the nuclear pore complex' },
     demo: '4HHB',
     // 差异点：冷灰蓝底（#f5f7fa）+ 无描边（色块自明）+ 卡通 1.5× 加宽（块面感）+ 正面视角
@@ -107,6 +128,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '折叠类型 · 基序识别 · 教学示意', en: 'Fold class · motif recognition · teaching' },
     tags: [{ zh: '拓扑', en: 'Topology' }, { zh: '基序', en: 'Motif' }],
     category: 'general',
+    figure: { ref: 'Fig. 1b', shows: { zh: '拓扑概览图：螺旋/折叠片布局 + 基序标注', en: 'Topology overview: helix/sheet layout with motif annotations' } },
     citation: { journal: 'Nature', year: 2024, title: 'Structural and molecular basis of choline uptake into the brain by FLVCR2', doi: '10.1038/s41586-024-57361-2' },
     demo: '1AKI',
     // 差异点：暖象牙底（#fbf8f1）+ 斜侧视角 turn y -20（基元交叠可辨）+ 细描边
@@ -120,6 +142,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '抑制剂设计 · 互作残基 · 靶点验证', en: 'Inhibitor design · contacting residues · target validation' },
     tags: [{ zh: '药物靶点', en: 'Drug target' }, { zh: '互作', en: 'Interactions' }],
     category: 'general',
+    figure: { ref: 'Fig. 2', shows: { zh: '抑制剂口袋特写：互作残基 + 氢键/疏水接触逐项标注', en: 'Inhibitor pocket close-up: contacting residues annotated bond by bond' } },
     citation: { journal: 'Nature', year: 2020, title: 'Structure of Mpro from SARS-CoV-2 and discovery of its inhibitors', doi: '10.1038/s41586-020-2223-y' },
     demo: '6LU7',
     // 差异点：白底特写（bindingsite 自动聚焦）+ 细描边——近景描边必须细，粗线会糊掉球棍
@@ -133,6 +156,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '表面性质 · 疏水 patch · 界面预测', en: 'Surface properties · hydrophobic patches · interface prediction' },
     tags: [{ zh: '表面', en: 'Surface' }, { zh: '疏水性', en: 'Hydrophobicity' }],
     category: 'general',
+    figure: { ref: 'Fig. 3', shows: { zh: '表面性质图：疏水/亲水 patch 分布与功能位点标注', en: 'Surface property map: hydrophobic/philic patches and functional sites' } },
     citation: { journal: 'Nature', year: 2024, title: 'Structural and molecular basis of choline uptake into the brain by FLVCR2', doi: '10.1038/s41586-024-57361-2' },
     demo: '4HHB',
     // 差异点：冷雾底（#eef1f5）+ 无轮廓（表面自带渐变边界，描边反而脏）
@@ -146,6 +170,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '模型质量 · 局部分辨率 · 投稿审稿', en: 'Model quality · local resolution · review-ready' },
     tags: [{ zh: 'cryo-EM', en: 'cryo-EM' }, { zh: '密度图', en: 'Maps' }],
     category: 'general',
+    figure: { ref: 'Fig. 1 / ED', shows: { zh: '模型-密度叠合图：局部质量与分辨率验证', en: 'Model-to-map overlay: local quality and resolution validation' } },
     citation: { journal: 'Science', year: 2020, title: 'Cryo-EM structure of the 2019-nCoV spike in the prefusion conformation', doi: '10.1126/science.abb2507' },
     demo: '3EKJ',
     // 差异点：白底 + 平光（ambient 1.15——密度网格需均匀照明，避免阴影吃掉网格线）
@@ -158,7 +183,8 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: '亚基分色 + 接触虚线 + 冷灰底正面：PPI 分析标准图', en: 'Chain coloring + contact dashes + cool-gray front view: standard PPI figure' },
     purpose: { zh: '界面残基 · 结合强度 · 突变设计', en: 'Interface residues · binding strength · mutagenesis design' },
     tags: [{ zh: 'PPI', en: 'PPI' }, { zh: '界面', en: 'Interface' }],
-    category: 'general',
+    category: 'interaction',
+    figure: { ref: 'Fig. 3', shows: { zh: 'PPI 界面网络图：界面残基 + 结合热点标注', en: 'PPI interface network: interface residues and binding hotspots' } },
     citation: { journal: 'Nature', year: 2026, title: 'Next-generation inhibitors of SARS-CoV-2 Mpro overcome Paxlovid deficiencies' },
     demo: '6LU7',
     // 差异点：冷灰底 + 正面视角（界面正对读者，接触线全程可见）+ 细描边
@@ -172,6 +198,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '生物组装判读 · 晶格核对', en: 'Biological assembly · lattice cross-check' },
     tags: [{ zh: '晶体学', en: 'Crystallography' }, { zh: '组装', en: 'Assembly' }],
     category: 'general',
+    figure: { ref: 'Fig. S1', shows: { zh: '晶格堆积图：晶体学组装 vs 生物组装判读', en: 'Lattice packing: crystallographic vs biological assembly' } },
     citation: { journal: 'Nature', year: 2020, title: 'Structure of Mpro from SARS-CoV-2 and discovery of its inhibitors', doi: '10.1038/s41586-020-2223-y' },
     demo: '1CRN',
     // 差异点：白底 + 俯视（view top——晶格平移在俯视下读得最清楚，装箱图惯例）
@@ -185,6 +212,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '构象变化 · 柔性区段 · NMR 验证', en: 'Conformational spread · flexible segments · NMR validation' },
     tags: [{ zh: 'NMR', en: 'NMR' }, { zh: '动力学', en: 'Dynamics' }],
     category: 'general',
+    figure: { ref: 'Fig. 4', shows: { zh: '构象系综图：柔性区段散布与功能构象采样', en: 'Conformational ensemble: flexible segment spread and functional sampling' } },
     citation: { journal: 'Cell', year: 2021, title: 'Structural and dynamic insights into the activation of the μ-opioid receptor' },
     demo: '1D3Z',
     // 差异点：墨底夜色（#14171c，封面/ graphical abstract 惯例）+ 细杆卡通（0.5×——
@@ -199,6 +227,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '投稿图 · 高分辨率 · 免修图', en: 'Submission figures · hi-res · no post-processing' },
     tags: [{ zh: '出稿', en: 'Figure out' }, { zh: 'Ray', en: 'Ray' }],
     category: 'general',
+    figure: { ref: 'Fig. 1', shows: { zh: '投稿主图：全貌 + 完整标注的出版静帧', en: 'Submission hero figure: fully annotated publication still' } },
     citation: { journal: 'Nature', year: 2026, title: 'Next-generation inhibitors of SARS-CoV-2 Mpro overcome Paxlovid deficiencies' },
     demo: '4HHB',
     // 差异点：纯白底 + Ray 1920 静帧（超采样 AA）+ 发丝描边 1.3 1.2（r72 减细主战场）
@@ -213,6 +242,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '收缩点半径 · 选择性滤波器 · 门控判读', en: 'Constriction radius · selectivity filter · gating readout' },
     tags: [{ zh: '离子通道', en: 'Ion channel' }, { zh: '孔道分析', en: 'Pore' }],
     category: 'membrane',
+    figure: { ref: 'HOLE 剖面图版', shows: { zh: '孔道剖面图：半径沿轴曲线 + 收缩点/选择性滤波器标注', en: 'Pore profile: radius-vs-axis curve with constriction / selectivity filter' } },
     citation: { journal: 'Science', year: 1998, title: 'The Structure of the Potassium Channel: Molecular Basis of K+ Conduction and Selectivity', doi: '10.1126/science.280.5360.69' },
     demo: '1BL8',
     // 差异点（分析模板）：membrane 34 脂双层 + pore 计算环带（红/绿/蓝）+ 主轴对齐竖排视角
@@ -226,13 +256,169 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     purpose: { zh: '跨膜深度 · 膜界面 patch · β-桶/螺旋束', en: 'TM span · interfacial patches · barrel vs helix bundle' },
     tags: [{ zh: '膜蛋白', en: 'Membrane' }, { zh: '水通道', en: 'Aquaporin' }],
     category: 'membrane',
+    figure: { ref: 'Fig. 1', shows: { zh: '膜语境图：跨膜深度 + 膜界面 patch 标注', en: 'Membrane context: transmembrane span and interfacial patches' } },
     citation: { journal: 'Science', year: 2002, title: 'Structure of a glycerol-conducting channel and the basis for its selectivity', doi: '10.1126/science.1072457' },
     demo: '1FX8',
     // 差异点：SASA 渐变表面 + 脂双层板（跨膜区灰表面嵌入橙头基之间）+ 正面侧视
     commands: ['preset surface', 'color sasa', 'bg #f5f7fa', 'membrane 32', 'view front'],
     accent: 'orange',
   },
+
+  // ── r75 互作分析扩容（用户指令：涵盖互作分析等多种场景）──
+  // 互作三模板全部走 contacts / hbonds 真实分析命令（非纯配色配方）：
+  // 盐桥 = 残基对接触的酸碱子集；配体氢键 = 范围烘焙 hbonds；DNA = protein|nucleic 零参接触
+  {
+    id: 'salt-bridge-network',
+    name: { zh: '盐桥网络', en: 'Salt-bridge network' },
+    tagline: { zh: '酸/碱残基红蓝双色 + 接触虚线 + 侧链棍状：静电互作网络图式', en: 'Acid/base two-tone + contact dashes + sidechain sticks: electrostatic interaction map' },
+    purpose: { zh: '稳定性 · pH 敏感性 · 别构机制', en: 'Stability · pH sensitivity · allostery' },
+    tags: [{ zh: '静电互作', en: 'Electrostatics' }, { zh: '盐桥', en: 'Salt bridge' }],
+    category: 'interaction',
+    figure: { ref: '机制图版', shows: { zh: '盐桥网络图：T/R 态转换中的静电键拆合（Perutz 经典手绘图式）', en: 'Salt-bridge scheme: electrostatic bonds broken/formed across T/R transitions (Perutz classic)' } },
+    citation: { journal: 'Nature', year: 1970, title: 'Stereochemistry of cooperative effects in haemoglobin: haem-haem interaction and the problem of allostery', doi: '10.1038/228726a0' },
+    demo: '1AKI',
+    // 差异点：红蓝语义色（酸 ASP/GLU 红 · 碱 LYS/ARG/HIS 蓝）+ 4.0Å 残基对虚线 +
+    // 侧链棍（带电残基加棍——虚线端点与残基类型视觉可互证）；1AKI 实测 4 对盐桥
+    commands: [
+      'preset cartoon', 'util cbc', 'bg white',
+      'contacts (resn ASP+GLU and sidechain) | (resn LYS+ARG+HIS and sidechain) 4.0',
+      'color red, resn ASP+GLU', 'color blue, resn LYS+ARG+HIS',
+      'show sticks, (resn ASP+GLU+LYS+ARG+HIS) and sidechain',
+      'view front', 'outline on 1.3 1.2',
+    ],
+    accent: 'rose',
+  },
+  {
+    id: 'hbond-network',
+    name: { zh: '配体氢键网络', en: 'Ligand H-bond network' },
+    tagline: { zh: '结合位点特写 + 范围氢键虚线：药物-靶点互作指纹图', en: 'Binding-site close-up + scoped H-bond dashes: the drug-target interaction fingerprint' },
+    purpose: { zh: '抑制剂优化 · 互作指纹 · SAR 解释', en: 'Inhibitor optimization · interaction fingerprint · SAR rationale' },
+    tags: [{ zh: '氢键', en: 'H-bonds' }, { zh: '药物设计', en: 'Drug design' }],
+    category: 'interaction',
+    figure: { ref: 'Fig. 2', shows: { zh: '配体互作图：口袋内氢键/疏水接触逐项标注', en: 'Ligand interaction diagram: pocket contacts annotated bond by bond' } },
+    citation: { journal: 'Nature', year: 2020, title: 'Structure of Mpro from SARS-CoV-2 and discovery of its inhibitors', doi: '10.1038/s41586-020-2223-y' },
+    demo: '6LU7',
+    // 差异点：hbonds 范围烘焙（配体 5Å 邻域 byres 展开，非全局）——互作虚线只在口袋内
+    // 出现；6LU7 N3 抑制剂实测 65 条氢键；无配体时 adapt 退避主链氢键网络
+    commands: ['preset bindingsite', 'bg white', 'hbonds on 3.4 in byres(within 5 of (ligand)) and not water', 'outline on 1.3 1.2'],
+    accent: 'emerald',
+  },
+  {
+    id: 'dna-protein-complex',
+    name: { zh: 'DNA-蛋白复合物', en: 'DNA-protein complex' },
+    tagline: { zh: '蛋白分链配色 + DNA 碱基五色棍状 + 接触虚线：识别界面一图判读', en: 'Per-chain protein + base-colored DNA sticks + contact dashes: recognition interface at a glance' },
+    purpose: { zh: '序列识别 · 大沟/小沟接触 · 转录调控', en: 'Sequence recognition · groove contacts · transcription control' },
+    tags: [{ zh: 'DNA 识别', en: 'DNA binding' }, { zh: '转录因子', en: 'Transcription factor' }],
+    category: 'interaction',
+    figure: { ref: 'Fig. 2', shows: { zh: '识别复合物图：螺旋-转入大沟 + 碱基特异接触标注', en: 'Recognition complex: helix-turn-in-groove with base-specific contacts' } },
+    // Jordan & Pabo 1988 Science 242:893——λ 阻遏蛋白-操纵子复合物（1LMB 取材原文）
+    citation: { journal: 'Science', year: 1988, title: 'Structure of the lambda complex at 2.5 Å resolution: details of the repressor-operator interactions', doi: '10.1126/science.3187530' },
+    demo: '1LMB',
+    // 差异点：核酸专属视觉（碱基五色棍 + 骨架管）+ protein|nucleic 零参接触——
+    // 链名无关（任意 DNA/RNA-蛋白复合物开箱即用）；界面聚焦 zoom（识别图惯例——
+    // 全景下接触虚线太稀，视图收到 DNA ± 8Å 接触面残基）；1LMB 实测 55 对接触
+    commands: ['preset cartoon', 'util cbc', 'color residue, nucleic', 'show sticks, nucleic', 'contacts protein | nucleic 4.0', 'bg white', 'view front', 'zoom byres(within 8 of (nucleic))', 'outline on 1.3 1.2'],
+    accent: 'violet',
+  },
+  {
+    id: 'domain-coloring',
+    name: { zh: '结构域分区着色', en: 'Domain partition coloring' },
+    tagline: { zh: '按域分段纯色 + 白底细描边：多域架构与域界一图说清', en: 'Solid color per domain + white hairlines: multi-domain architecture and boundaries at a glance' },
+    purpose: { zh: '多域架构 · 域界标注 · 嵌合设计', en: 'Multi-domain architecture · boundary mapping · chimera design' },
+    tags: [{ zh: '结构域', en: 'Domains' }, { zh: '架构', en: 'Architecture' }],
+    category: 'general',
+    figure: { ref: 'Fig. 1', shows: { zh: '结构域组织图：I/II/III 域分段 + 功能位点标注', en: 'Domain organization: I/II/III partition with functional site annotations' } },
+    citation: { journal: 'Nature', year: 2020, title: 'Structure of Mpro from SARS-CoV-2 and discovery of its inhibitors', doi: '10.1038/s41586-020-2223-y' },
+    demo: '6LU7',
+    // 差异点：三域四段纯色（I 1-99 teal · II 100-182 orange · linker 183-197 gray ·
+    // III 198-306 slate）——区间按 SARS-CoV-2 Mpro 域界（Alzyoud 2022 综述）；
+    // adapt 层对短结构给诚实截断说明
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'color teal, (resi 1-99)', 'color orange, (resi 100-182)', 'color gray, (resi 183-197)', 'color slate, (resi 198-306)', 'orient', 'outline on 1.3 1.2'],
+    accent: 'sky',
+  },
+  {
+    id: 'mutation-hotspots',
+    name: { zh: '突变热点图', en: 'Mutation hotspots' },
+    tagline: { zh: 'B 因子通道热点高亮 + 残基标签：变异位点与关键残基标注图式', en: 'B-factor channel hotspots + residue labels: variant and key-residue annotation' },
+    purpose: { zh: '疾病突变 · 催化残基 · 功能位点标注', en: 'Disease variants · catalytic residues · functional site annotation' },
+    tags: [{ zh: '突变', en: 'Variants' }, { zh: '标注', en: 'Annotation' }],
+    category: 'general',
+    figure: { ref: '机制图版', shows: { zh: '变异位点图：关键残基标注 + 生化后果注解', en: 'Variant map: key residues annotated with biochemical consequences' } },
+    citation: { journal: 'Nature', year: 1970, title: 'Stereochemistry of cooperative effects in haemoglobin: haem-haem interaction and the problem of allostery', doi: '10.1038/228726a0' },
+    demo: '4HHB',
+    // 差异点：alter B 因子通道改写（热点=100 其余=0）→ spectrum b 热图 + 热点整残基红球
+    // （可见性关键：18 个热点原子在全景下太小——球化后红色热点在蓝底上一眼可辨，
+    // r75 E2E 实证纯 spectrum b 路径 VLM 判「uniform blue」后补的设计）+ CA 标签；
+    // 演示位点为 Hb 经典（β6 镰刀位点 · α87/β92 近端组氨酸——血红素配位）；
+    // 链不匹配时 adapt 降级为天然 B 因子柔性热图
+    commands: [
+      'preset cartoon', 'bg white',
+      'alter (polymer), b=0',
+      'alter (resi 6 and chain B+D), b=100',
+      'alter (resi 87 and chain A+C), b=100',
+      'alter (resi 92 and chain B+D), b=100',
+      'spectrum b, rainbow',
+      'show spheres, ((resi 6 and chain B+D) or (resi 87 and chain A+C) or (resi 92 and chain B+D))',
+      'select (name CA) and ((resi 6 and chain B+D) or (resi 87 and chain A+C) or (resi 92 and chain B+D))',
+      'label on',
+      'orient', 'outline on 1.3 1.2',
+    ],
+    accent: 'fuchsia',
+  },
 ]
+
+/** 命令图鉴（r75：「对比」视图把命令序列翻成双语图式解剖；未命中退回原命令）。
+ *  规则序：具体在前（contacts (resn ASP… 先于 contacts；show sticks, nucleic 先于 show sticks） */
+export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
+  { re: /^preset cartoon\b/i, label: { zh: '卡通带表示', en: 'Cartoon ribbons' } },
+  { re: /^preset surface\b/i, label: { zh: '分子表面表示', en: 'Molecular surface' } },
+  { re: /^preset bindingsite\b/i, label: { zh: '结合位点特写（球棍）', en: 'Binding-site close-up (ball & stick)' } },
+  { re: /^preset publication\b/i, label: { zh: '出版级互作预设', en: 'Publication preset' } },
+  { re: /^spectrum count/i, label: { zh: 'N→C 彩虹渐变', en: 'N→C rainbow gradient' } },
+  { re: /^spectrum b\b/i, label: { zh: 'B 因子热图渐变', en: 'B-factor heatmap gradient' } },
+  { re: /^util cbc/i, label: { zh: '逐链配色', en: 'Per-chain coloring' } },
+  { re: /^util ss\b/i, label: { zh: '二级结构三色', en: 'Secondary-structure colors' } },
+  { re: /^color residue, nucleic/i, label: { zh: '核酸碱基五色', en: 'Nucleic base coloring' } },
+  { re: /^color sasa/i, label: { zh: 'SASA 可及性渐变', en: 'SASA gradient' } },
+  { re: /^color red, resn/i, label: { zh: '酸性残基红（ASP/GLU）', en: 'Acidic residues red (ASP/GLU)' } },
+  { re: /^color blue, resn/i, label: { zh: '碱性残基蓝（LYS/ARG/HIS）', en: 'Basic residues blue (LYS/ARG/HIS)' } },
+  { re: /^color (teal|orange|gray|slate|sky|amber)\b/i, label: { zh: '结构域分段纯色', en: 'Domain partition color' } },
+  { re: /^bg (white|#)/i, label: { zh: '期刊制版底色', en: 'Publication background' } },
+  { re: /^outline on/i, label: { zh: '发丝级描边', en: 'Hairline outlines' } },
+  { re: /^orient\b/i, label: { zh: '主轴对齐视角', en: 'Principal-axis view' } },
+  { re: /^view (front|top)/i, label: { zh: '正交预设视角', en: 'Orthographic preset view' } },
+  { re: /^turn [xyz]/i, label: { zh: '视角微调', en: 'Camera fine-turn' } },
+  { re: /^set cartoon_width/i, label: { zh: '卡通宽度调整', en: 'Cartoon width tuning' } },
+  { re: /^set ambient/i, label: { zh: '平光照明', en: 'Flat ambient light' } },
+  { re: /^ray \d+/i, label: { zh: 'Ray 超采样渲染', en: 'Ray supersampled render' } },
+  { re: /^map fetch/i, label: { zh: '电子密度网格叠加', en: 'Density mesh overlay' } },
+  { re: /^interface\s/i, label: { zh: '界面接触虚线', en: 'Interface contact dashes' } },
+  { re: /^contacts \(resn ASP/i, label: { zh: '盐桥残基对虚线', en: 'Salt-bridge pair dashes' } },
+  { re: /^contacts protein \| nucleic/i, label: { zh: '蛋白-核酸接触虚线', en: 'Protein–nucleic contact dashes' } },
+  { re: /^contacts/i, label: { zh: '残基对接触虚线', en: 'Residue-pair contact dashes' } },
+  { re: /^hbonds on .*within/i, label: { zh: '范围氢键虚线', en: 'Scoped H-bond dashes' } },
+  { re: /^hbonds on/i, label: { zh: '全局氢键虚线', en: 'Global H-bond dashes' } },
+  { re: /^symmetry \d+/i, label: { zh: '晶体对称伙伴', en: 'Symmetry mates' } },
+  { re: /^ensemble play/i, label: { zh: 'NMR 构象系综动画', en: 'NMR ensemble animation' } },
+  { re: /^membrane \d+/i, label: { zh: '脂双层板语境', en: 'Bilayer slab context' } },
+  { re: /^pore\b/i, label: { zh: 'HOLE 孔道剖面环带', en: 'HOLE pore rings' } },
+  { re: /^show sticks, nucleic/i, label: { zh: 'DNA 棍状表示', en: 'DNA sticks' } },
+  { re: /^show sticks/i, label: { zh: '侧链棍状表示', en: 'Sidechain sticks' } },
+  { re: /^show spheres/i, label: { zh: '热点位球状标记', en: 'Hotspot site spheres' } },
+  { re: /^zoom byres/i, label: { zh: '界面聚焦取景', en: 'Interface-focused framing' } },
+  { re: /^zoom/i, label: { zh: '聚焦取景', en: 'Focused framing' } },
+  { re: /^alter \(polymer\)/i, label: { zh: 'B 因子基线归零', en: 'B-factor baseline reset' } },
+  { re: /^alter .*b=100/i, label: { zh: '热点位 B 因子置顶', en: 'Hotspot B-factor maxed' } },
+  { re: /^alter/i, label: { zh: 'B 因子通道改写', en: 'B-factor channel edit' } },
+  { re: /^select/i, label: { zh: '热点位点选择', en: 'Hotspot site selection' } },
+  { re: /^label on/i, label: { zh: '残基标签', en: 'Residue labels' } },
+]
+
+/** 命令 → 双语图式解剖（未命中返回 null——调用方退回展示原命令） */
+export function explainCommand(cmd: string): DualText | null {
+  for (const g of COMMAND_GLOSSARY) if (g.re.test(cmd.trim())) return g.label
+  return null
+}
 
 /** 按命令序列逐条应用（120ms 微间隔衔接聚焦动画/worker 着色） */
 export function runTemplateCommands(commands: string[]): void {
@@ -241,7 +427,7 @@ export function runTemplateCommands(commands: string[]): void {
   })
 }
 
-// ── 模板参数化适配（r73：应用前结构特征探测 + 智能降级/重映射） ──────────────
+// ── 模板参数化适配（r73 创立 · r75 扩展四条）──────────────────────
 // adaptTemplateCommands：对当前活动结构逐条改写模板命令——历史问题：模板命令按演示结构特征硬编码（interface A B / map fetch 3ekj /
 // preset bindingsite / symmetry），用户结构特征不符时命令部分失效——弹 warning
 // 或干脆错配（密度图挂到别的结构上）。适配层在应用前逐条探测并改写：
@@ -249,6 +435,10 @@ export function runTemplateCommands(commands: string[]): void {
 //  ② map fetch <演示ID> → 活动结构 pdbId；本地文件（无编号）跳过
 //  ③ preset bindingsite → 无配体降级 preset cartoon
 //  ④ symmetry → 无晶胞（CRYST1）跳过
+//  ⑤（r75）hbonds … within 5 of (ligand) → 无配体退避主链氢键网络（backbone scaffold 视图仍是有用图）
+//  ⑥（r75）核酸三命令（color residue, nucleic / show sticks, nucleic / contacts protein|nucleic）→ 无核酸链逐条跳过
+//  ⑦（r75）结构域区间命令 → 聚合物短于域界时诚实截断说明（命令仍执行，超出区间自然 no-op）
+//  ⑧（r75）链特异热点（alter/select 引用 chain A-D）→ 链不匹配时退避天然 B 因子热图（跳过 alter/select/label）
 // notes 携带每条降级说明（调用方 toast/appendLog 呈现）——「诚实降级」而非静默吞命令。
 // demoThenApply 不走此层：演示结构即模板取材结构，特征必然齐备。
 
@@ -269,6 +459,26 @@ export function adaptTemplateCommands(tpl: FigureTemplate): AdaptedTemplate {
 
   const notes: DualText[] = []
   const commands: string[] = []
+  // r75 预探测（规则⑤⑥⑦⑧共用）：有无配体 / 有无核酸链 / 聚合物最大残基号 / 热点链拓扑匹配
+  const hasLigand = !!active.summary.ligandMolecules
+  const hasNucleic = data.chains.some(c => c.type === 'nucleic')
+  const polyChains = data.chains.filter(c => c.type === 'protein' || c.type === 'nucleic')
+  const chainIds = new Set(polyChains.map(c => c.id.trim().toUpperCase()))
+  let maxResi = 0
+  for (const ch of data.chains) {
+    if (ch.type === 'water') continue
+    for (const ri of ch.residueIdx) {
+      const r = data.residues[ri]
+      if (r && r.resSeq > maxResi) maxResi = r.resSeq
+    }
+  }
+  // ⑧ 预扫描：模板引用的演示链字母（chain A-D）任一缺失 → 热点体系不适用
+  //   （alter 基线+热点置顶+select+label 整组跳过，保留 spectrum b 展示天然 B 因子柔性热图；
+  //    若放过基线归零而热点置顶被跳过，会得到全蓝空图——预扫描的动机）
+  const tplChainRefs = new Set<string>()
+  for (const c of tpl.commands) for (const m of c.matchAll(/chain ([A-D])/gi)) tplChainRefs.add(m[1].toUpperCase())
+  const hotspotMismatch = tplChainRefs.size > 0 && [...tplChainRefs].some(c => !chainIds.has(c))
+  let domainNoted = false
   for (const cmd of tpl.commands) {
     // ① 界面接触：链重映射 / 单链跳过
     if (/^interface\s/i.test(cmd)) {
@@ -318,6 +528,51 @@ export function adaptTemplateCommands(tpl: FigureTemplate): AdaptedTemplate {
       }
       commands.push(cmd)
       continue
+    }
+    // ⑤（r75）配体氢键：无配体退避主链氢键网络（保留 preset 部分——③ 已降级特写）
+    if (/^hbonds on .*within \d+ of \(ligand\)/i.test(cmd)) {
+      if (!hasLigand) {
+        commands.push('hbonds on 3.2 in backbone')
+        notes.push({ zh: '未检出配体——配体氢键网络已退避为主链氢键网络（二级结构 scaffold 视图）', en: 'No ligands detected — ligand H-bond network fell back to backbone H-bonds (secondary-structure scaffold view)' })
+        continue
+      }
+      commands.push(cmd)
+      continue
+    }
+    // ⑥（r75）核酸四命令（color residue, nucleic / show sticks, nucleic / contacts protein|nucleic /
+    //    zoom …nucleic）：无核酸链逐条跳过（提示一次，避免刷屏）
+    if (/^color residue, nucleic/i.test(cmd) || /^show sticks, nucleic/i.test(cmd) || /^contacts protein \| nucleic/i.test(cmd) || /^zoom .*nucleic/i.test(cmd)) {
+      if (!hasNucleic) {
+        if (notes.every(n => !n.zh.includes('无核酸'))) {
+          notes.push({ zh: '当前结构无核酸链——DNA 相关命令已跳过（适用于蛋白-DNA/RNA 复合物）', en: 'No nucleic chains detected — DNA-specific commands skipped (meant for protein–DNA/RNA complexes)' })
+        }
+        continue
+      }
+      commands.push(cmd)
+      continue
+    }
+    // ⑦（r75）结构域区间：聚合物短于域界时诚实截断说明（命令仍执行——超出区间自然 no-op）
+    if (/^color (teal|orange|gray|slate)\b.*resi/i.test(cmd) && !domainNoted) {
+      if (maxResi > 0 && maxResi < 250) {
+        domainNoted = true
+        notes.push({ zh: `结构域区间按 SARS-CoV-2 Mpro 域界定义（至 306 号）——当前结构最长链 ${maxResi} 残基，超出部分自然不适用，可手动 color resi 自定义域界`, en: `Domain ranges follow the SARS-CoV-2 Mpro boundaries (up to residue 306) — the longest chain here is ${maxResi} residues; ranges beyond fold in naturally, or set custom ones via color resi` })
+      }
+      commands.push(cmd)
+      continue
+    }
+    // ⑧（r75）热点链拓扑不匹配：引用演示链字母（chain A-D）的命令 + alter 基线 + label 整组跳过
+    //    （基线归零也不能放——否则归零后无热点置顶 = 全蓝空图；球化/选择同理跳过）；
+    //    spectrum b 保留 → 天然 B 因子柔性热图降级
+    if (hotspotMismatch) {
+      const refsDemoChain = /chain [A-D]/i.test(cmd)
+      if (refsDemoChain || /^alter /i.test(cmd) || /^label on/i.test(cmd)) {
+        // 去重键 =「链不匹配」——与文案严格对齐（r75 E2E 揭发：曾用「链拓扑不匹配」
+        // 检文案致 7 条重复 note 刷屏）
+        if (notes.every(n => !n.zh.includes('链不匹配'))) {
+          notes.push({ zh: '热点位点按 Hb 演示结构（4HHB 的 α/β 链拓扑）——当前结构链不匹配，已改展示天然 B 因子柔性热图（可用 select + alter 标注自己的热点）', en: 'Hotspot sites follow the Hb demo (4HHB α/β chain topology) — chain mismatch detected; showing the native B-factor flexibility map instead (mark your own via select + alter)' })
+        }
+        continue
+      }
     }
     commands.push(cmd)
   }

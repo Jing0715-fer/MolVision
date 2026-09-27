@@ -176,8 +176,26 @@ check "欢迎页顶栏探针"           "data-welcome-topbar"             "src/c
 check "画廊分类过滤接线"         "FIGURE_CATEGORIES"              "src/components/studio/WelcomeScreen.tsx" 2
 check "画廊库弹窗入口"           "templateOpen"                    "src/components/studio/WelcomeScreen.tsx" 1
 
+# ---- r75：模板扩容（互作分析）+ 原文图式对比 + 画廊 hover 浮层 ----
+check "互作分析分类四模板"       "category: 'interaction'"         "src/lib/molecular/figure-templates.ts" 4
+check "五新模板入库"             "salt-bridge-network|hbond-network|dna-protein-complex|domain-coloring|mutation-hotspots" "src/lib/molecular/figure-templates.ts" 5
+check "原文图式参考字段"         "figure:"                         "src/lib/molecular/figure-templates.ts" 17
+check "命令图鉴表"               "COMMAND_GLOSSARY"                "src/lib/molecular/figure-templates.ts" 3
+check "命令图鉴导出"             "export function explainCommand"  "src/lib/molecular/figure-templates.ts" 1
+check "对比视图组件"             "ComparePanel"                    "src/components/studio/FigureTemplatesDialog.tsx" 2
+check "对比视图探针"             "data-template-compare"           "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "对比态管理接线"           "setCompareId"                    "src/components/studio/FigureTemplatesDialog.tsx" 4
+check "对比视图接线"             "compareId"                       "src/components/studio/FigureTemplatesDialog.tsx" 2
+check "新模板五图标"             "'salt-bridge-network': Zap"      "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "画廊 hover 浮层探针"     "data-welcome-tpl-purpose"        "src/components/studio/WelcomeScreen.tsx" 1
+check "无配体氢键退避主链"       "hbonds on 3.2 in backbone"       "src/lib/molecular/figure-templates.ts" 1
+check "无核酸降级"               "无核酸"                          "src/lib/molecular/figure-templates.ts" 2
+check "热点链不匹配降级"         "链不匹配"                        "src/lib/molecular/figure-templates.ts" 3
+check "域区间截断说明"           "结构域区间按"                    "src/lib/molecular/figure-templates.ts" 1
+check "缩略图管线增量模式"       "filtered mode"                   "scripts/gen-template-thumbs.sh"    1
+
 # ---- 汇总 ----
-TOTAL=86
+TOTAL=102
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

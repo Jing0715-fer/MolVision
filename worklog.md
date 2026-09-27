@@ -3080,3 +3080,37 @@ Stage Summary:
   2. 【中】模板缩略图 CDN 化的懒加载骨架（loading=lazy 已有——可加 blur-up 占位渐变，缩略图 640×320 加载体感优化）
   3. 【低】欢迎页画廊「最近使用」记忆（localStorage 记用户点过的模板置顶/标记）——个性化闭环
   4. 【低】顶栏中段空档可放 ⌘K 快速搜索入口（当前 tagline 纯装饰——可做成可点击的命令面板触发条，open design 搜索惯例）
+
+---
+Task ID: r75
+Agent: main
+Task: 用户三点指令——①打磨已有模板（增加和原论文图片对比）②打磨欢迎页 UI 和模板 UI 展示 ③继续增加更多模板（涵盖互作分析等多种场景）：interaction 分类三新模板（盐桥/配体氢键/DNA-蛋白）+ 通用两新模板（结构域着色/突变热点）+ 原文图式对比视图（左引擎渲染/右解剖卡+DOI）+ COMMAND_GLOSSARY 命令图鉴 + adapt 层四条新规则 + 画廊 hover 浮层 + 5 张新缩略图 + guards 86→102
+
+Work Log:
+- 【命令集探查先行】Explore 代理摸底 commands.ts 全命令表（~75 条）+ 选择语法边界——5 个候选模板全部给出真实语法命令序列；E2E 预验证关键语法（contacts 复合选择 1AKI 4 对盐桥 / 1LMB 55 对蛋白-DNA 接触 LYS3↔DG11 / hbonds 范围烘焙 6LU7 65 条 / alter+select+label 链语法「6 selected」）——写模板前把语法风险清零
+- 【文献核实（web-search 双轮）】Jordan & Pabo 1988 Science 242:893-899（1LMB λ 阻遏蛋白-操纵子，DOI 10.1126/science.3187530）；Perutz 1970 Nature 228:726-739（Hb 别构盐桥，DOI 10.1038/228726a0 经 nature.com 命中核实）；Mpro 域界 I 10-99 / II 100-182 / III 198-303（Alzyoud 2022 综述核实）
+- 【五新模板（互作分析为主——用户点名）】
+  · salt-bridge-network（1AKI）：contacts (resn ASP+GLU and sidechain) | (resn LYS+ARG+HIS and sidechain) 4.0 + 红/蓝语义色 + 侧链棍——VLM 确认红蓝残基+棍+虚线
+  · hbond-network（6LU7）：preset bindingsite + hbonds on 3.4 in byres(within 5 of (ligand)) and not water——VLM 确认绿色氢键虚线（65 条）
+  · dna-protein-complex（1LMB）：color residue, nucleic 碱基五色 + show sticks, nucleic + contacts protein | nucleic 4.0（零参谓词链名无关）+ view front + zoom byres(within 8 of (nucleic)) 界面聚焦——像素实证白底+碱基色+聚焦
+  · domain-coloring（6LU7）：三域四段纯色 teal/orange/gray/slate（Mpro 域界）——VLM 确认分域着色
+  · mutation-hotspots（4HHB）：alter B 因子通道（热点=100 其余=0）→ spectrum b 热图 + 热点整残基红球 + CA 标签——VLM 确认「球簇+渐变+专业突变图」（β6 镰刀位点 · α87/β92 近端组氨酸）
+- 【新分类 interaction】FIGURE_CATEGORIES 增「互作分析」chip；interface-contacts 重归类——计数 17/11/4/2（欢迎页画廊 + 弹窗双处动态计数实证）
+- 【原文图式对比（用户点名①——版权诚实架构）】ComparePanel：左 = 引擎真实渲染缩略图（ENGINE RENDER 徽章 + 演示/应用双动作 + 命令数），右 = 原文图式解剖卡（期刊年份标题 + figure.ref 图版位置 + 原图内容描述 + 配方逐步分解 + DOI 大按钮直达原图）+ 底部诚实差异说明（单视口近似/多面板排版不在配方内）；17 模板全配 figure 字段；对比入口 = 卡片右下「对比」钮（GitCompareArrows，与演示钮镜像）；弹窗关闭重置回图库（r75 E2E 揭发残留对比页 UX bug 当轮修）
+- 【COMMAND_GLOSSARY 命令图鉴】38 条前缀正则 → 双语图式解剖（具体在前防泛匹配吞特异——contacts (resn ASP 先于 contacts）；explainCommand 导出；未命中退回原命令 mono 展示）
+- 【adapt 层四新规则（诚实降级哲学延续）】⑤配体氢键无配体→退避主链氢键（backbone scaffold 仍是有用图；1CRN 实测 71 条）⑥核酸四命令无核酸→逐条跳过单次提示⑦域区间短结构→截断说明（命令仍跑）⑧热点链拓扑预扫描→整组跳过 alter/select/label/球化 保 spectrum b 展示天然 B 因子（预扫描动机：放过基线归零会得全蓝空图）；E2E 实证 1CRN 上「1 smart adaptation」toast（曾因去重键与文案不匹配 7 条重复——当轮揭发当轮修）
+- 【欢迎页/模板 UI 打磨】画廊卡片 hover 信息浮层（顶部渐变显 purpose + N 条命令 chip，data-welcome-tpl-purpose 探针；DOM 序在序号角标前——角标浮于浮层之上可读）；弹窗描述更新提及互作分析
+- 【缩略图管线】gen-template-thumbs.sh：SPECS 增 5 条（idx 12-16）+ 增量过滤模式（bash gen-template-thumbs.sh <ids...>）——5 张产出 + 像素互验（白底对最低 10.1 属度量盲区，VLM 互验确认内容各异：盐桥红蓝棍/DNA 双螺旋/域色/突变球簇全对号）
+- 【E2E 陷阱与揭发（当轮闭环）】①「uniform blue」假阴性：mutation 纯 spectrum b 路径 18 个热点原子全景下不可见——补热点整残基球化设计（VLM 复审通过）；②console 输出区虚拟化——alter/spectrum 执行痕迹查不到，iterate 读回 b=100 才是权威判据；③VLM「背景纯黑/cartoon only」误报重现（dna4 像素实证白底+碱基色全在位）——像素采样 > VLM 判据；④view front 与 zoom 120ms 序列竞态疑云——相机距离实测 78.1→137.8 证明 zoom 实际生效（VLM 的「无特写」是构图判断非命令失效）；⑤dev server next-server 崩溃再现（父进程残留）——kill+setsid 重启恢复（r71 坑档有效）
+- 【门禁】lint 0 · tsc src 0 错 · guards 86→102（+16：互作分类/五新模板/figure 字段 17/命令图鉴/对比组件与探针与接线/新图标/hover 浮层/三条降级/管线增量模式）· smoke 4/4 · dev.log 全 200 · E2E 全绿（17 卡/4 分类/对比视图往返/降级 toast/五模板 VLM+像素双证）
+
+Stage Summary:
+- 交付：模板库 12→17（互作分析分类四模板——盐桥网络/配体氢键网络/DNA-蛋白复合物/界面接触重归类 + 结构域着色 + 突变热点图）；原文图式对比视图（版权诚实架构：左引擎渲染/右解剖卡+DOI 直达原图，17 模板全配 figure 字段）；COMMAND_GLOSSARY 命令图鉴；adapt 层 4 条新规则（⑤-⑧）；画廊 hover 浮层；5 张新缩略图 + 管线增量模式
+- 用户价值闭环：加载结构 → 弹窗按「互作分析」过滤 → 一键得到盐桥/氢键/DNA 接触图；点「对比」拿图式解剖清单 → DOI 到原文逐项核对——「复现得有据可查」
+- 架构资产：「模板=命令序列」延伸到互作分析命令（contacts/hbonds/alter 通道）；figure 字段 + 命令图鉴 = 图式对比的数据层；adapt 预扫描模式（整组跳过防半执行空图）
+- 坑（新入档）：①grep -E 守卫里 { () 是元字符须避开（figure: { 计 0 命中）；②适配说明去重键必须与文案严格对齐（「链拓扑不匹配」≠「链不匹配」→ 7 条重复）；③B 因子通道改写后热点在全景下不可见——突变类模板必须配球化/放大视觉锚点；④iterate 读回属性值 > console 文本 > VLM 目测的证据强度序
+- 下一轮建议（按优先级）：
+  1. 【中】两态构象对比模板（superpose+morph 双结构 load 架构——runTemplateCommands 需 load 异步等待支持 + adapt 层结构名改写；worklog r72 起的长期欠账）
+  2. 【中】对比视图左栏「现场渲染」按钮（对比时不看缩略图管线旧图，而是对当前结构实时应用渲染——对比体验闭环）
+  3. 【中】模板缩略图 blur-up 占位 + 欢迎页画廊虚拟化（17 卡 img 全量加载，40+ 模板时需懒渲染）
+  4. 【低】模板收藏/自定义保存（用户调好存为模板写 localStorage——UGC 闭环）
