@@ -3383,3 +3383,40 @@ Stage Summary:
   2. 【中】会话分享链接（.molvision 会话转 URL 片段——无后端依赖）
   3. 【中】欢迎页「我的模板」卡片也加编辑入口（当前仅弹窗内可编辑——画廊卡直编的捷径）
   4. 【低】SessionResume 箭头居中微调 · 40+ 模板画廊虚拟化
+
+---
+Task ID: r83
+Agent: main
+Task: 用户指令「进行全面代码审查和 e2e 测试。提出下一阶段开发方向」——静态五路门禁 + r82 三新增面逐行深审（存储层/编辑视图/导入导出）+ 全仓六类扫描 + E2E 七程全旅程（审查中揭发两缺口当轮修）+ VLM 双图审（三误报 DOM 实测澄清）+ guards 207→210 + 下一阶段方向提案
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r82 `00c048f` 即最新已推送）；dev server 存活（GET / 200）
+- 【静态五路门禁】lint 0 错 · tsc src 0 错（examples/mini-services/skills 范围外 5 条历史预存）· guards 207/207 · dev.log 无 error/warn · console 生产残留 0 · TODO/FIXME/`as any` 全仓零命中
+- 【r82 三面逐行深审】
+  · 存储层 custom-templates.ts：updateCustomTemplate（命令重过闸/id·createdAt/缩略图保留 ✓）、export bundle 协议 ✓、import（双格式接受/逐张过存储防线/按 id 合并保留原 createdAt/LRU ✓）；记录一项设计内取舍——persist 配额降级去 thumb 后 cache（含 thumb）与磁盘（无 thumb）不一致窗口，刷新后缩略图丢但数据保全（韧性取舍非 bug）
+  · 编辑视图 UploadPanel：预填五字段/draft 合成/粘贴通道禁用/editMode || img 门控全部正确；**揭发缺口①**——save() catch 只分 INVALID_COMMANDS，updateCustomTemplate 的 NOT_FOUND（他端标签页并发删除）误报「本地存储写入失败」→ 当轮修：三分支归因（INVALID_COMMANDS / NOT_FOUND「模板已被删除（可能在其他窗口）——返回图库后可将其另存为新模板」/ 配额兜底）
+  · 导入导出 UI：Blob URL revokeObjectURL 正确调用 · 4MB 导入防御 · finally 重置 input.value（重复导入同名文件可用）· BAD_FILE 双语分岔 全部到位
+- 【全仓交叉复核】addEventListener 33 = removeEventListener 33（15 文件逐文件配对，含 r82 新增 paste 监听）；计时器成对清理复认
+- 【E2E 七程全旅程】
+  · ① PDB 加载：native setter + input 事件注入「4HHB」→ submit → 工作台就位（canvas + 29 工具钮）✓
+  · ② 模板库三入口：种子注入后开弹窗 → 从图片创建/导入/导出三钮全在位 ✓
+  · ③ 编辑闭环双段：开编辑（EDIT 徽记/name 预填 Test rainbow/Save changes/重解析隐藏 ✓）→ 改名+加命令 color red → 保存（toast「Saved changes to…」+ commands 5 条 + createdAt 1735689600000 保留 + citationYear 2025 ✓）→ 再编辑改「Rainbow v2」→ nameEn 落库 ✓
+  · ④ 导入导出：exportCustoms 点击 → agent-browser download 实捕 975B JSON（bundle 协议 + zh 原稿/en 编辑稿各自保留 ✓）；导入 1 新 + 1 脏（rm -rf /）→ lsCount=2、脏条目被存储防线拦截、toast「Import done: 1 new · 0 updated / 1 invalid entries skipped」统计精确 ✓
+  · ⑤ 会话恢复 + 命令面板：Resume last session → 6s 工作台就位 → 面板搜「color red」1 项 → 执行关闭 + history 落库 ✓
+  · ⑥ 命令行：PyMOL-style 入口 toggle → 注入「turn y 45」+ Enter → input 清空 + history 时序追加（末位）✓——历史结构为**时间升序追加**（head 是最旧），断言勿按 head 读最新
+  · ⑦ 移动端 375px：模板弹窗开启态 scrollW=375 零横向溢出 ✓（agent-browser 视口命令是 `set viewport <w> <h>`——resize/viewport 裸命令均不存在）
+- 【E2E 揭发缺口②（真实架构级）→ 当轮修】种子注入后弹窗不显示「My templates」chip 且遥测板 27（=27 内置+0 自定义）而 localStorage 明明有种子——根因链：dispatch custom-templates-changed 广播发生在「无订阅者窗口期」（欢迎页卸载后、弹窗开启前），模块级 cache 未失效；订阅者重新挂载时 readStore() 直读 stale cache。**真实产品路径同样暴露**：标签页 B 跨页创建模板（storage 事件）时标签页 A 恰在订阅者归零窗口 → A 弹窗打开读过期缓存。修复：subscribe() 挂载即 cache = null + fn()（订阅者重新挂载时强制重读 localStorage，消灭 stale 快照）——修复后 reload 实证遥测 28 + mine chip 出现双证
+- 【种子坑位】裸动词 `cartoon` 不在图式模板白名单 → 测试种子三条命令被 sanitizeStoredTemplate 整张丢弃（防线**工作正常**）；种子命令改用 color spectrum/bg white/turn y 20/zoom 120 全过闸。E2E 断言 store 状态前先用 bunx tsx 过一遍 validateTemplateCommand 验证种子合法性
+- 【VLM 双图审 + 三误报 DOM 实测澄清】编辑面板图：内容识别完整（表单/命令序列/分类 chips/Save changes 全可读）但缺陷导向 prompt 报「标题截断」——DOM 实测 scrollW=clientWidth=462、文本 range 右缘 748 ≪ 容器 951，**无裁剪误报**；描述/表单对比度为 shadcn muted-foreground 设计语言。移动端图：报「描述截断」——实测模板弹窗描述 10 行自然换行、右缘 350<375 **无溢出误报**（首测 descRight=444 实为命令面板隐藏残留 DOM 的 dialog-description——Radix portal 不可见残留不构成视觉缺陷）；触控 28px 为次级操作可接受（主操作是整卡点击）。**VLM 缺陷报告须 DOM 实测复核后才能定性——本轮三条全为误报**
+- 【收尾】测试种子清理（localStorage 还原）· viewport 恢复 1440×900 · guards 207→210（+3：订阅挂载失效/订阅失效重读 cache=null×3/保存 NOT_FOUND 归因）· smoke 4/4 · dev.log 无 error
+
+Stage Summary:
+- 交付：全面代码审查（静态五路 + r82 三面逐行 + 全仓六类扫描，技术债维持零）+ E2E 七程全绿 + 两缺口当轮修复（①保存 NOT_FOUND 三分支归因 ②订阅挂载失效——跨标签页 stale cache 架构缺口，E2E 实测揭发+修复后双证）+ VLM 双图审（三误报全经 DOM 实测澄清）
+- 用户指令全闭环：「全面代码审查」（五路门禁+三面深审+六类扫描+两缺口修复）·「E2E 测试」（加载/入口/编辑双段/导入导出/恢复/面板/命令行/移动端七程）·「下一阶段开发方向」（见下）
+- 坑（新入档）：①agent-browser 视口命令为 `set viewport <w> <h>`（resize/viewport 裸命令不存在）②input 与 textarea 的 native setter 原型不可混用（HTMLInputElement vs HTMLTextAreaElement）③命令历史为时间升序追加（head 最旧、末位最新——断言读末位）④裸动词 cartoon 不在图式模板白名单——E2E 种子命令先过 bunx tsx 验闸 ⑤VLM 缺陷报告须 DOM 实测定性（本轮三条全误报）⑥upload 的 selector 须 [role=dialog] 限定——欢迎页本地文件 input 的 accept 也含 .json 会被误命中（喂错 input 会触发结构解析错误 toast）
+- 下一阶段方向提案（按价值排序）：
+  1. 【高】解析结果「对照预览」分屏（r81 方向 2 仍有效——上传审核面板左原图/右引擎按当前命令实时小视口渲染，demoThenApply 相机门控管线复用；编辑模式同样受益——用户保存前即可看到「命令到底渲染成什么样」，信任感从「读命令」升级为「看效果」）
+  2. 【中】会话分享链接：.molvision 会话转 URL 片段/base64 短链（无后端依赖），传播成本从「发文件」降为「发链接」；可与导入导出入口同排复用交互语汇
+  3. 【中】欢迎页「我的模板」画廊卡直编入口（GalleryCard 加管理排 + open-template-edit 广播直达编辑视图——当前仅弹窗内可编辑）
+  4. 【低】命令面板隐藏 DOM 残留体检（closed Radix portal 的 dialog-description 仍在 DOM——无视觉影响，排查 DialogContent 卸载路径是否 forceMount）
+  5. 【低】SessionResume 箭头垂直居中微调 · 40+ 模板时画廊虚拟化 + blur-up

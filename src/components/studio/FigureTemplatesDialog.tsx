@@ -495,9 +495,13 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
       )
       onSaved(saved.id)
     } catch (e) {
-      const reason = e instanceof Error && e.message === 'INVALID_COMMANDS'
+      // r83：三分支归因（r82 遗漏 NOT_FOUND——他端标签页并发删除时误报「存储写入失败」）
+      const msg = e instanceof Error ? e.message : ''
+      const reason = msg === 'INVALID_COMMANDS'
         ? tt({ zh: '命令校验未通过（请修正表单中标红的行）', en: 'Command validation failed (fix the flagged lines)' })
-        : tt({ zh: '本地存储写入失败（可能配额不足）', en: 'Local storage write failed (quota may be full)' })
+        : msg === 'NOT_FOUND'
+          ? tt({ zh: '模板已被删除（可能在其他窗口）——返回图库后可将其另存为新模板', en: 'The template was deleted (perhaps in another window) — go back and save it as a new template' })
+          : tt({ zh: '本地存储写入失败（可能配额不足）', en: 'Local storage write failed (quota may be full)' })
       toast.error(reason)
     }
   }

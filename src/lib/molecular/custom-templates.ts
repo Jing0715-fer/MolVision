@@ -120,6 +120,11 @@ function persist(next: CustomTemplate[]): void {
 
 function subscribe(fn: () => void): () => void {
   listeners.add(fn)
+  // r83：挂载即失效——覆盖「无订阅者窗口期」的跨页写入（欢迎页卸载后、弹窗开启前，
+  // 其他标签页创建/导入的模板经由 storage 事件时本页无人监听，cache 停留在旧值；
+  // 订阅者重新挂载时强制重读 localStorage，消灭 stale 快照——r83 E2E 实测揭发）
+  cache = null
+  fn()
   const onStorage = (e: StorageEvent) => { if (e.key === KEY || e.key === null) { cache = null; fn() } }
   const onLocal = () => { cache = null; fn() }
   window.addEventListener('storage', onStorage)

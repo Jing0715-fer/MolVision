@@ -312,8 +312,13 @@ check "导入文件读取"             "f\.text\(\)"                    "src/com
 check "导出文件下载"             "URL\.createObjectURL"           "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "导入体积上限"             "4 \* 1024 \* 1024"              "src/components/studio/FigureTemplatesDialog.tsx" 1
 
+# ---- r83：审查修复（订阅挂载失效 + 保存 NOT_FOUND 归因） ----
+check "订阅挂载失效"             "挂载即失效"                     "src/lib/molecular/custom-templates.ts" 1
+check "订阅失效重读"             "cache = null"                  "src/lib/molecular/custom-templates.ts" 3
+check "保存NOT_FOUND归因"        "NOT_FOUND"                     "src/components/studio/FigureTemplatesDialog.tsx" 2
+
 # ---- 汇总 ----
-TOTAL=207
+TOTAL=210
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0
