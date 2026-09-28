@@ -97,10 +97,11 @@ function GalleryCard({ tpl, index, busy, onDemo }: {
           )}
           {/* r75 hover 信息浮层（open-design 作品揭示惯例）：顶部渐变显用途 + 命令数
               ——与底部演示徽章上下分置不冲突；触屏不依赖 hover（tap 即演示）。
-              DOM 序在序号角标之前——hover 时角标仍浮在浮层之上可读 */}
+              r77 重叠修复：浮层文字 pl-10 起排——为左上序号角标（右缘≈33px）清出
+              同排空间，标题与序号各居其位不再叠压（用户点名 hover 重叠问题） */}
           <span
             data-welcome-tpl-purpose
-            className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 bg-gradient-to-b from-background/92 via-background/55 to-transparent px-3 pb-9 pt-2.5 opacity-0 transition-opacity duration-200 sm:group-hover:opacity-100"
+            className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 bg-gradient-to-b from-background/92 via-background/55 to-transparent pl-10 pr-3 pb-9 pt-2.5 opacity-0 transition-opacity duration-200 sm:group-hover:opacity-100"
           >
             <span className="mol-micro truncate text-foreground/80">{t(tpl.purpose)}</span>
             <span className="ml-auto shrink-0 rounded-full border border-border bg-background/85 px-1.5 py-px font-mono text-[9px] font-semibold text-muted-foreground">

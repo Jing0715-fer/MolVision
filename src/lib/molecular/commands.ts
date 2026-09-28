@@ -208,6 +208,15 @@ function evalActiveSelection(expr: string): { indices: number[]; error?: string 
   return { indices: maskToIndices(r.mask) }
 }
 
+/** r77 选择泄漏修复：把命令临时建立的选择恢复为先前的用户选择（null = 恢复到无选择）。
+ *  动机：color/spectrum 的内联表达式走 selectFromExpr 落全局选择后，琥珀色选择光晕
+ *  恰好罩住刚上色的残基（盐桥模板蓝色被掩蔽不显的根因）；命令参数表达式不应
+ *  扰动用户选择——与 r59-a2 #6 zoom 的非突变语义对齐 */
+function restoreSelection(prev: { structureId: string | null; indices: number[] } | null): void {
+  if (!prev) return // 无临时选择则无恢复（命令未带表达式）
+  useMolStore.getState().setSelection(prev.structureId, prev.indices)
+}
+
 /** 原子索引 → 覆盖链组集合（链隔离判定用） */
 function chainGroupsOf(data: StructureData, indices: number[]): Set<number> {
   const groups = new Set<number>()
@@ -686,6 +695,11 @@ export function runCommand(raw: string): void {
     if (!scheme && !css) return err(tt({ zh: `未知颜色 "${headWords[0]}"。可用方案: ${Object.keys(SCHEME_ALIASES).join(', ')} 或 #hex / 颜色名`, en: `Unknown color "${headWords[0]}". Available schemes: ${Object.keys(SCHEME_ALIASES).join(', ')} or #hex / color names` }))
     const s = useMolStore.getState()
     if (!s.activeId) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
+    // r77 选择泄漏修复：color <色>, <表达式> 的表达式是命令参数而非用户选择意图——
+    // 旧版走 selectFromExpr 落全局选择，琥珀色选择光晕恰好罩住刚上色的残基
+    // （盐桥模板蓝色被掩蔽不显的根因）；改为「保存→临时选择→上色→恢复」——
+    // 与 r59-a2 #6 zoom 的非突变语义对齐（PyMOL：命令内表达式不扰动 (sele)）
+    const prevSel = selExpr ? { structureId: s.selection.structureId, indices: s.selection.indices } : null
     if (selExpr) {
       const res = s.selectFromExpr(selExpr)
       if (res.error) return err(tt({ zh: `选择错误: ${res.error}`, en: `Selection error: ${res.error}` }))
@@ -699,11 +713,13 @@ export function runCommand(raw: string): void {
         if (!r?.done) {
           // r59-a2 #2 修复：命令路径也要登记烘焙回调（旧版漏掉——worker 完成后从不自动上色）
           eng?.queueSasaBake(s.activeId)
+          restoreSelection(prevSel)
           return ok(tt({ zh: 'SASA 后台计算中（Web Worker）——完成后将自动按暴露度着色（埋藏蓝紫 → 暴露橙红）', en: 'SASA computing in background (Web Worker) — will auto-color by exposure when done (buried blue-violet → exposed orange-red)' }))
         }
       }
     }
     s.applyColor(scheme ?? css!)
+    restoreSelection(prevSel)
     ok(tt({ zh: `已上色: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}`, en: `Colored: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}` }))
     return
   }
@@ -918,11 +934,14 @@ export function runCommand(raw: string): void {
     // 选择范围（可选）：spectrum b, rainbow, chain A —— 排除属性/配色/颜色词后的剩余
     const selWords = tailWords.filter(w => !['rainbow', 'count', 'b', 'bfactor', 'factor', ...colorWords].includes(w.toLowerCase()))
     const selExpr = selWords.join(' ')
+    // r77 选择泄漏修复（同 color 命令）：范围表达式不落全局选择（琥珀光晕掩蔽渐变结果）
+    const prevSel = selExpr ? { structureId: s.selection.structureId, indices: s.selection.indices } : null
     if (selExpr) {
       const res = s.selectFromExpr(selExpr)
       if (res.error) return err(tt({ zh: `选择错误: ${res.error}`, en: `Selection error: ${res.error}` }))
     }
     s.applyColor(scheme)
+    restoreSelection(prevSel)
     return ok(tt({
       zh: `已按${scheme === 'bfactor' ? ' B 因子（低蓝 → 高红连续渐变）' : '链序（多链连续渐变）'}上色${note}${selExpr ? `（范围: ${selExpr}）` : ''}——PyMOL spectrum 兼容`,
       en: `Colored by ${scheme === 'bfactor' ? 'B-factor (low blue → high red continuous gradient)' : 'chain order (continuous gradient across chains)'}${note}${selExpr ? ` (scope: ${selExpr})` : ''} — PyMOL spectrum compatible`,

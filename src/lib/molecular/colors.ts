@@ -261,15 +261,36 @@ export function computeAtomColors(
   }
 
   if (scheme === 'bfactor') {
-    let min = Infinity, max = -Infinity
+    // r77 离群值鲁棒归一：旧版全原子 min-max 会被 HETATM/晶体水的高 B 拉爆跨度
+    // （实测 3INS 锌位点 B≈110，聚合物中位数被压到 t≈0.14——整图退化单边蓝，
+    // 「热图」不成热图）；改为聚合物原子 2-98 百分位裁剪（B 因子柔性图惯例：
+    // 展示聚合物动力学，杂原子/水按端点色钳制）。alter 全零+热点置顶的特殊分布
+    // （mutation-hotspots 配方）在百分位下仍正确：p2=p98=0 → span 回退 1 →
+    // 零位 t=0 蓝 · 热点 t→1 红，行为与旧版一致
+    const polyB: number[] = []
     for (let i = 0; i < n; i++) {
-      const b = atoms.bfactors[i]
-      if (b < min) min = b
-      if (b > max) max = b
+      const r = structure.residues[structure.atomResidue[i]]
+      if (r && r.polymer) polyB.push(atoms.bfactors[i])
+    }
+    let min = 0, max = 0
+    if (polyB.length >= 20) {
+      polyB.sort((a, b) => a - b)
+      min = polyB[Math.floor(polyB.length * 0.02)]
+      max = polyB[Math.floor(polyB.length * 0.98)]
+      if (max <= min) { min = polyB[0]; max = polyB[polyB.length - 1] } // 全同值防退化
+    } else {
+      // 聚合物太少（纯配体/离子的极端情况）：退回全原子 min-max
+      min = Infinity; max = -Infinity
+      for (let i = 0; i < n; i++) {
+        const b = atoms.bfactors[i]
+        if (b < min) min = b
+        if (b > max) max = b
+      }
     }
     const span = max - min || 1
     for (let i = 0; i < n; i++) {
-      const c = bfactorColor((atoms.bfactors[i] - min) / span)
+      const t = Math.max(0, Math.min(1, (atoms.bfactors[i] - min) / span))
+      const c = bfactorColor(t)
       out[i * 3] = c.r; out[i * 3 + 1] = c.g; out[i * 3 + 2] = c.b
     }
     return out

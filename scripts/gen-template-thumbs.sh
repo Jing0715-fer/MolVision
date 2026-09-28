@@ -26,11 +26,13 @@ BASE=http://localhost:3000
 OUT=/home/z/my-project/public/templates
 mkdir -p "$OUT"
 
-# 模板id:等待秒数:demo结构:grid序号（FIGURE_TEMPLATES 顺序 0-18）
+# 模板id:等待秒数:demo结构:grid序号（FIGURE_TEMPLATES 顺序 0-22）
 # density-map 22s：SF 拉取 + Worker FFT + 38 万三角等值面 marching cubes 紧凑（r72 实测
 # 16s 截图会漏网格——密度缩略图无 mesh 实锤后补拍验证的教训）；publication 18s（ray 1920）
 # r75 新增五模板（12-16）：mutation 12s（12 条命令 × 120ms + 标签精灵 + 相机动画）
 # r76 新增两模板（17-18）：disulfide 11s（黄棍 + orient）；metal 12s（球/棍 + 聚焦动画）
+# r77 新增四模板（19-22）：cpk 10s（hide all→spheres 空间填充）；mobility 10s（spectrum b）；
+# heme 12s（棍 + 聚焦动画）；cation-pi 11s（contacts + 侧链棍）
 SPECS=(
   rainbow-overview:10:4HHB:0
   chain-assembly:10:4HHB:1
@@ -51,6 +53,10 @@ SPECS=(
   mutation-hotspots:12:4HHB:16
   disulfide-bonds:11:3INS:17
   metal-center:12:2CBA:18
+  cpk-spacefill:10:1CRN:19
+  mobility-bfactor:10:3INS:20
+  heme-pocket:12:1MBO:21
+  cation-pi:11:1AKI:22
 )
 
 # r75：可选增量模式——命令行传模板 id 列表则只生成指定项（缺省全量）

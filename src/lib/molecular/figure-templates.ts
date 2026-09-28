@@ -1,10 +1,19 @@
 'use client'
 
-// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化）
+// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化 · r77 表示法经典与辅因子位扩容）
 // ─────────────────────────────────────────────────────────────────────────────
 // 定位：把 Cell / Nature / Science 等高影响力结构生物学文章中反复出现的「图式」
 // （figure style）——表示法组合 + 配色 + 视角 + 灯光 + 轮廓 + 相机——固化为命令
 // 序列模板。一键应用到用户当前结构，快速得到 CNS 级别作图。
+//
+// r77 扩容（用户指令：继续加入更多模板——表示法经典 + 动力学 + 辅因子位点 + 互作第四式）：
+//  · CPK 空间填充（Corey-Pauling 1953 模型图式源流，hide everything + show spheres +
+//    color element 三命令零依赖全结构适用）；B 因子柔性热图（天然 b 通道非改写——
+//    与 mutation-hotspots 热点改写式互补；Frauenfelder 1979 温度因子图式源流）
+//  · 血红素口袋特写（元素色棍 + 4Å 邻域 + 8Å 聚焦；Phillips 1980 1MBO 取材原文）；
+//    adapt ⑪辅因子重映射（HEM→FAD/NAD/CLA…十二+种或整组退避）
+//  · 阳离子-π 网络（PHE/TYR/TRP 紫 + LYS/ARG/HIS 青 + 4.0Å 接触；Gallivan &
+//    Dougherty 1999 图式源流；1AKI 实测 11 对）；adapt ⑫全零 B 因子诚实跳过
 //
 // r76 打磨（用户反馈驱动）：
 //  · 分类细化：general 11 拆为基础图式/表面与全局/位点特写三类——过滤 chips 从
@@ -53,7 +62,9 @@ import type { DualText } from '@/i18n'
 
 /** 图式来源文献（真实引用，经检索核实；doi 可省略——避免不确定引用伤害可信度） */
 export interface FigureCitation {
-  journal: 'Nature' | 'Science' | 'Cell'
+  // r77 拓宽：期刊为展示标签（CPK 源流 Rev. Sci. Instrum. / 1MBO 取材 J. Mol. Biol. /
+  // 阳离子-π PNAS 入库——图式源流不必限于 CNS 三刊）
+  journal: string
   year: number
   /** 论文短标题（截取主短语） */
   title: string
@@ -416,6 +427,78 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     commands: ['preset cartoon', 'spectrum count, rainbow', 'bg white', 'show spheres, resn ZN', 'color orange, resn ZN', 'show sticks, byres(within 3.2 of (resn ZN))', 'zoom byres(within 8 of (resn ZN))', 'outline on 1.1 1.0'],
     accent: 'cyan',
   },
+
+  // ── r77 扩容：表示法经典 + 动力学 + 辅因子位点 + 互作第四式 ──
+  // 命令语法全部 E2E 预验证：1MBO 实测 resn HEM 43 原子（元素色棍/4Å 邻域/8Å
+  // 聚焦全链生效）；spectrum b 渐变正常；hide everything→show spheres→color
+  // element 空间填充三命令零依赖；cation-pi 接触 1AKI 11 对 / 4HHB 42 对 / 1MBO 9 对
+  {
+    id: 'cpk-spacefill',
+    name: { zh: 'CPK 空间填充', en: 'CPK space-filling' },
+    tagline: { zh: '全原子球体 + 元素配色 + 白底主轴视角：物理填充模型经典图式', en: 'All-atom spheres + element colors + white principal-axis view: the physical-packing classic' },
+    purpose: { zh: '原子堆积 · 空间位阻 · 表面形状', en: 'Atomic packing · steric clash · surface shape' },
+    tags: [{ zh: 'CPK 模型', en: 'CPK model' }, { zh: '全原子', en: 'All-atom' }],
+    category: 'basic',
+    figure: { ref: '模型图版', shows: { zh: '实体分子模型版式：原子按 van der Waals 半径的空间填充外观', en: 'Physical model plates: van der Waals space-filled appearances' } },
+    citation: { journal: 'Rev. Sci. Instrum.', year: 1953, title: 'Molecular models of amino acids, peptides, and proteins', doi: '10.1063/1.1770803' },
+    demo: '1CRN',
+    // 差异点：全原子球（唯一无卡通模板——与 rainbow 的「带状抽象」构成表示法两极）；
+    // 1CRN 0.58Å 高分辨率文首蛋白——每个原子清晰可辨的空间填充教科书案例
+    commands: ['preset cartoon', 'hide everything', 'hide waters', 'show spheres', 'color element', 'bg white', 'orient'],
+    accent: 'slate',
+  },
+  {
+    id: 'mobility-bfactor',
+    name: { zh: 'B 因子柔性热图', en: 'B-factor mobility map' },
+    tagline: { zh: '天然 B 因子蓝→红渐变 + 冷雾底无描边：柔性环区与刚性核心一图判读', en: 'Native B-factor blue→red gradient on cool mist: flexible loops vs rigid core at a glance' },
+    purpose: { zh: '局部柔性 · 环区定位 · 动力学解读', en: 'Local flexibility · loop mapping · dynamics reading' },
+    tags: [{ zh: 'B 因子', en: 'B-factor' }, { zh: '动力学', en: 'Dynamics' }],
+    category: 'surface',
+    figure: { ref: 'Fig. 1', shows: { zh: '温度因子图：不同温度下原子位移参数的分布与变化', en: 'Temperature-factor plates: displacement parameters across temperatures' } },
+    citation: { journal: 'Nature', year: 1979, title: 'Temperature-dependent X-ray diffraction as a probe of protein structural dynamics', doi: '10.1038/280558a0' },
+    demo: '3INS',
+    // 差异点：读天然 B 因子（与 mutation-hotspots 的「改写 b 表达热点」互补——那支
+    // 标注人工位点，这支表达实测柔性）；冷雾底 + 无描边（渐变面自明）；图式源流
+    // Frauenfelder/Petsko/Tsernoglou 温度依赖精修（DOI 经 crossref 双核实）；
+    // 演示取材 3INS 胰岛素（B 链末端柔性实测拉开梯度——1MBO 试拍单边蓝的教训：
+    // 1MBO 晶体过于有序，min-max 归一后蓝青占 99%，视觉上不成「热图」）；
+    // adapt ⑫：全零 B 因子（NMR/预测模型）诚实跳过
+    commands: ['preset cartoon', 'spectrum b, rainbow', 'bg #eef1f5', 'orient'],
+    accent: 'cyan',
+  },
+  {
+    id: 'heme-pocket',
+    name: { zh: '血红素口袋特写', en: 'Heme pocket close-up' },
+    tagline: { zh: '血红素元素色棍 + 4Å 邻域残基棍 + 位点聚焦：辅因子结合几何一图判读', en: 'Element-colored heme sticks + 4Å neighborhood + site zoom: cofactor geometry at a glance' },
+    purpose: { zh: '辅因子结合 · 近端/远端组氨酸 · 催化机制', en: 'Cofactor binding · proximal/distal histidines · catalysis' },
+    tags: [{ zh: '血红素', en: 'Heme' }, { zh: '辅因子', en: 'Cofactor' }],
+    category: 'site',
+    figure: { shows: { zh: '血红素环境图：Fe 配位 + 近端组氨酸 + 口袋残基全景', en: 'Heme environment: Fe ligation, proximal histidine and pocket residues' } },
+    citation: { journal: 'J. Mol. Biol.', year: 1980, title: 'Structure and refinement of oxymyoglobin at 1.6 Å resolution', doi: '10.1016/0022-2836(80)90262-4' },
+    demo: '1MBO',
+    // 差异点：血红素元素色棍（Fe 橙/N 蓝/O 红——配位几何可读）+ 4Å 邻域棍（近端
+    // HIS93/远端 HIS64 同框）+ 8Å 聚焦；Phillips 1980 氧合肌红蛋白原文取材（DOI
+    // 经 RCSB/PDBj/ScienceDirect 三源核实）；adapt ⑪：无 HEM 时重映射结构内其它
+    // 辅因子（FAD/NAD/CLA…）或整组退避
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'show sticks, resn HEM', 'color element, resn HEM', 'show sticks, byres(within 4 of (resn HEM))', 'zoom byres(within 8 of (resn HEM))', 'outline on 1.1 1.0'],
+    accent: 'rose',
+  },
+  {
+    id: 'cation-pi',
+    name: { zh: '阳离子-π 网络', en: 'Cation–π network' },
+    tagline: { zh: '芳香紫 + 阳离子青 + 接触虚线 + 侧链棍：π 电子互作网络图式', en: 'Aromatic purple + cationic cyan + contact dashes + sidechain sticks: the π-electron interaction map' },
+    purpose: { zh: '酶底物定位 · 芳香笼 · 结合能解析', en: 'Substrate positioning · aromatic cages · binding energetics' },
+    tags: [{ zh: '阳离子-π', en: 'Cation–π' }, { zh: '芳香残基', en: 'Aromatics' }],
+    category: 'interaction',
+    figure: { ref: 'Fig. 1', shows: { zh: '阳离子-π 几何统计图：结构库互作频率与距离/角度分布', en: 'Cation–π census: interaction frequency and distance/angle geometry across the structural database' } },
+    citation: { journal: 'PNAS', year: 1999, title: 'Cation-pi interactions in structural biology', doi: '10.1073/pnas.96.17.9459' },
+    demo: '1AKI',
+    // 差异点：芳香/阳离子语义双色（PHE/TYR/TRP 紫 · LYS/ARG/HIS 青——与盐桥模板
+    // 红蓝酸碱形成视觉亲缘但语义有别）+ 4.0Å 接触虚线 + 侧链棍；1AKI 实测 11 对
+    // （最近 PHE34↔ARG114 3.40Å——溶菌酶芳香簇经典位点）
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'contacts (resn PHE+TYR+TRP and sidechain) | (resn LYS+ARG+HIS and sidechain) 4.0', 'color purple, resn PHE+TYR+TRP', 'color cyan, resn LYS+ARG+HIS', 'show sticks, (resn PHE+TYR+TRP+LYS+ARG+HIS) and sidechain', 'view front', 'outline on 1.1 1.0'],
+    accent: 'violet',
+  },
 ]
 
 /** 命令图鉴（r75：「对比」视图把命令序列翻成双语图式解剖；未命中退回原命令）。
@@ -435,6 +518,10 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^color blue, resn/i, label: { zh: '碱性残基蓝（LYS/ARG/HIS）', en: 'Basic residues blue (LYS/ARG/HIS)' } },
   { re: /^color yellow, resn/i, label: { zh: '半胱氨酸黄（二硫键）', en: 'Cysteines yellow (disulfides)' } },
   { re: /^color orange, resn/i, label: { zh: '金属离子橙', en: 'Metal ion orange' } },
+  { re: /^color element, resn/i, label: { zh: '辅因子元素色棍（Fe 橙/N 蓝/O 红）', en: 'Cofactor element colors (Fe orange / N blue / O red)' } },
+  { re: /^color element$/i, label: { zh: '全原子元素配色（CPK）', en: 'Element coloring (CPK)' } },
+  { re: /^color purple, resn/i, label: { zh: '芳香残基紫（PHE/TYR/TRP）', en: 'Aromatics purple (PHE/TYR/TRP)' } },
+  { re: /^color cyan, resn/i, label: { zh: '阳离子残基青（LYS/ARG/HIS）', en: 'Cationic residues cyan (LYS/ARG/HIS)' } },
   { re: /^color (teal|orange|gray|slate|sky|amber)\b/i, label: { zh: '结构域分段纯色', en: 'Domain partition color' } },
   { re: /^bg (white|#)/i, label: { zh: '期刊制版底色', en: 'Publication background' } },
   { re: /^outline on/i, label: { zh: '发丝级描边', en: 'Hairline outlines' } },
@@ -447,6 +534,7 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^map fetch/i, label: { zh: '电子密度网格叠加', en: 'Density mesh overlay' } },
   { re: /^interface\s/i, label: { zh: '界面接触虚线', en: 'Interface contact dashes' } },
   { re: /^contacts \(resn ASP/i, label: { zh: '盐桥残基对虚线', en: 'Salt-bridge pair dashes' } },
+  { re: /^contacts \(resn PHE/i, label: { zh: '阳离子-π 接触虚线', en: 'Cation–π contact dashes' } },
   { re: /^contacts protein \| nucleic/i, label: { zh: '蛋白-核酸接触虚线', en: 'Protein–nucleic contact dashes' } },
   { re: /^contacts/i, label: { zh: '残基对接触虚线', en: 'Residue-pair contact dashes' } },
   { re: /^hbonds on .*within/i, label: { zh: '范围氢键虚线', en: 'Scoped H-bond dashes' } },
@@ -456,10 +544,14 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^membrane \d+/i, label: { zh: '脂双层板语境', en: 'Bilayer slab context' } },
   { re: /^pore\b/i, label: { zh: 'HOLE 孔道剖面环带', en: 'HOLE pore rings' } },
   { re: /^show sticks, nucleic/i, label: { zh: 'DNA 棍状表示', en: 'DNA sticks' } },
+  { re: /^show sticks, resn HEM/i, label: { zh: '血红素棍状表示', en: 'Heme sticks' } },
   { re: /^show sticks, byres/i, label: { zh: '配位残基棍（金属邻域）', en: 'Coordinating residues (metal neighborhood)' } },
   { re: /^show sticks/i, label: { zh: '侧链棍状表示', en: 'Sidechain sticks' } },
   { re: /^show spheres, resn/i, label: { zh: '金属离子球状标记', en: 'Metal ion spheres' } },
+  { re: /^show spheres$/i, label: { zh: '全原子空间填充球（CPK）', en: 'All-atom spacefill spheres (CPK)' } },
   { re: /^show spheres/i, label: { zh: '热点位球状标记', en: 'Hotspot site spheres' } },
+  { re: /^hide everything/i, label: { zh: '清空全部表示法', en: 'Clear all representations' } },
+  { re: /^hide waters/i, label: { zh: '隐藏结晶水', en: 'Hide crystal waters' } },
   { re: /^zoom byres/i, label: { zh: '界面聚焦取景', en: 'Interface-focused framing' } },
   { re: /^zoom/i, label: { zh: '聚焦取景', en: 'Focused framing' } },
   { re: /^alter \(polymer\)/i, label: { zh: 'B 因子基线归零', en: 'B-factor baseline reset' } },
@@ -503,7 +595,10 @@ async function waitForStructureInStore(pdbId: string, maxMs: number): Promise<bo
 }
 
 /** 按命令序列逐条应用（120ms 微间隔衔接聚焦动画/worker 着色；r76：相机命令
- *  先等在飞相机动画落地再执行——非相机命令不受影响，节奏不变） */
+ *  先等在飞相机动画落地再执行——非相机命令不受影响，节奏不变）。
+ *  r77 收尾清选择：模板成品不应携带选择光晕（mutation 类模板的 select+label 流
+ *  会把琥珀色 halo 留在终帧上——罩住刚渲染的视觉锚点；命令级 color/spectrum
+ *  泄漏已在 commands.ts 根治，此处兜底所有 select 型模板） */
 export function runTemplateCommands(commands: string[]): void {
   commands.forEach((cmd, i) => {
     setTimeout(() => {
@@ -514,6 +609,11 @@ export function runTemplateCommands(commands: string[]): void {
       }
     }, i * 120)
   })
+  // 兜底清选择：最坏链路（末条为相机命令）= 末条触发 + 1800ms 飞行等待，取 2800ms 余量
+  setTimeout(() => {
+    const s = useMolStore.getState()
+    if (s.selection.indices.length) s.setSelection(null, [])
+  }, commands.length * 120 + 2800)
 }
 
 // ── 模板参数化适配（r73 创立 · r75 扩展四条）──────────────────────
@@ -532,6 +632,10 @@ export function runTemplateCommands(commands: string[]): void {
 //          无任何金属时整组跳过（球化空选择会得到无球金属酶图——诚实跳过）
 //  ⑩（r76）二硫键网络（resn CYS 两命令）→ 无半胱氨酸时诚实说明（命令仍跑、
 //          选择自然 no-op——与⑦同哲学：可空转但要说清楚）
+//  ⑪（r77）血红素口袋（resn HEM 四命令）→ 重映射结构内实际辅因子（FAD/NAD/CLA…
+//          二十五种常见辅因子合集）；无任何辅因子时整组跳过（与⑨同构）
+//  ⑫（r77）B 因子柔性热图（spectrum b）→ 全零 B 因子（NMR/预测模型）时跳过 +
+//          诚实说明（全零渐变=单色图，空转要说清楚）
 // notes 携带每条降级说明（调用方 toast/appendLog 呈现）——「诚实降级」而非静默吞命令。
 // demoThenApply 不走此层：演示结构即模板取材结构，特征必然齐备。
 
@@ -589,6 +693,17 @@ export function adaptTemplateCommands(tpl: FigureTemplate): AdaptedTemplate {
     if (hasCys) break
   }
   const tplDisulfide = /resn CYS\b/i.test(tpl.commands.join('\n'))
+  // ⑪（r77）预探测：辅因子（血红素口袋模板按演示结构 HEM 硬编码——用户结构
+  //     可能是 FAD/NAD/CLA…或无辅因子）；卟啉/黄素/核苷酸/叶酸等常见辅因子合集
+  const COFACTOR_RESNS = ['HEM', 'HEC', 'BIL', 'HBL', 'CLA', 'CHL', 'FAD', 'FMN', 'NAD', 'NDP', 'NAP', 'PLP', 'SAM', 'ATP', 'ADP', 'AMP', 'GTP', 'GDP', 'ANP', 'MEN', 'COF', 'BH4', 'H4B', 'TPP', 'PQQ', 'MTE']
+  const cofactorsPresent = active.ligands.map(l => l.resName.trim().toUpperCase()).filter(r => COFACTOR_RESNS.includes(r))
+  const hasHem = cofactorsPresent.includes('HEM')
+  const altCofactor = cofactorsPresent.find(c => c !== 'HEM')
+  const tplCofactor = /resn HEM\b/i.test(tpl.commands.join('\n'))
+  // ⑫（r77）预探测：全零 B 因子（NMR/预测模型常见——柔性热图会退化单色）
+  let allZeroB = false
+  const bf = data.atoms.bfactors
+  if (bf && bf.length > 0 && !bf.some(v => v > 0)) allZeroB = true
   let domainNoted = false
   for (const cmd of tpl.commands) {
     // ① 界面接触：链重映射 / 单链跳过
@@ -713,6 +828,34 @@ export function adaptTemplateCommands(tpl: FigureTemplate): AdaptedTemplate {
         notes.push({ zh: '当前结构无半胱氨酸（CYS）——二硫键棍为空选择自然不显示（适用于含 CYS 的结构）', en: 'No cysteines (CYS) in this structure — disulfide sticks select nothing (meant for CYS-containing structures)' })
       }
       commands.push(cmd)
+      continue
+    }
+    // ⑪（r77）血红素口袋：模板按演示结构 HEM 硬编码——重映射结构内实际辅因子
+    //     （resn HEM → resn FAD/NAD/CLA…）；无任何辅因子时四命令整组跳过（一次提示——
+    //     与⑨金属重映射同构；去重键与文案严格对齐）
+    if (tplCofactor && /resn HEM\b/i.test(cmd)) {
+      if (!hasHem && !altCofactor) {
+        if (notes.every(n => !n.zh.includes('未检出辅因子'))) {
+          notes.push({ zh: '未检出辅因子（血红素/黄素/核苷酸等）——口袋特写命令组已跳过（适用于含辅因子的结构）', en: 'No cofactors detected (heme / flavin / nucleotide etc.) — pocket close-up commands skipped (meant for cofactor-containing structures)' })
+        }
+        continue
+      }
+      if (!hasHem && altCofactor) {
+        commands.push(cmd.replace(/resn HEM\b/gi, `resn ${altCofactor}`))
+        if (notes.every(n => !n.zh.includes('辅因子已重映射'))) {
+          notes.push({ zh: `辅因子已重映射为结构内的 ${altCofactor}（模板演示 HEM 血红素）`, en: `Cofactor remapped to the structure's ${altCofactor} (template demos HEM heme)` })
+        }
+        continue
+      }
+      commands.push(cmd)
+      continue
+    }
+    // ⑫（r77）B 因子柔性：全零 B 因子（NMR/预测模型常见）时 spectrum b 跳过 +
+    //     诚实说明（全零渐变 = 单色图——空转要说清楚；晶体/电镜结构不受影响）
+    if (/^spectrum b\b/i.test(cmd) && allZeroB) {
+      if (notes.every(n => !n.zh.includes('B 因子全为零'))) {
+        notes.push({ zh: 'B 因子全为零（NMR/预测模型常见）——柔性热图已跳过（适用于晶体/电镜结构）', en: 'All B-factors are zero (common for NMR/predicted models) — mobility map skipped (meant for crystal/EM structures)' })
+      }
       continue
     }
     commands.push(cmd)

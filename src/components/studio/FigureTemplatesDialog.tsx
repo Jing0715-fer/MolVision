@@ -16,8 +16,8 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Dna, ExternalLink, Film,
-  GitCompareArrows, Grid3x3, Hexagon, Layers, Link2, Loader2, Magnet, MapPin, Network, Palette,
-  Play, Target, Waves, Wand2, Cylinder, Zap, type LucideIcon,
+  Gauge, Gem, GitCompareArrows, Grid3x3, Hexagon, Layers, Link2, Loader2, Magnet, MapPin, Network, Palette,
+  Play, Shapes, Sparkles, Target, Waves, Wand2, Cylinder, Zap, type LucideIcon,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt } from '@/i18n'
@@ -72,6 +72,11 @@ export const TPL_ICONS: Record<string, LucideIcon> = {
   // r76 位点特写两新模板：Link2（共价交联）/ Atom（金属离子）
   'disulfide-bonds': Link2,
   'metal-center': Atom,
+  // r77 四新模板：Shapes（全原子球堆积）/ Gauge（B 因子仪表）/ Gem（辅因子宝石）/ Sparkles（π 电子云）
+  'cpk-spacefill': Shapes,
+  'mobility-bfactor': Gauge,
+  'heme-pocket': Gem,
+  'cation-pi': Sparkles,
 }
 
 function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
@@ -411,8 +416,8 @@ export function FigureTemplatesDialog() {
           </DialogTitle>
           <DialogDescription>
             {t({
-              zh: 'Cell / Nature / Science 结构文章的经典图式 + 互作分析（盐桥/氢键/DNA）+ 特定类型分析图（离子通道孔道等）——一键应用，命令透明可改，可对照原文图式',
-              en: 'Classic figure styles from Cell / Nature / Science papers + interaction analysis (salt bridges / H-bonds / DNA) + type-specific figures (ion-channel pores etc.) — one click; transparent recipes, comparable against the originals',
+              zh: 'Cell / Nature / Science 结构文章的经典图式 + 互作分析（盐桥/氢键/DNA/阳离子-π）+ 位点特写（辅因子/金属/二硫键）+ 特定类型分析图（离子通道孔道等）——一键应用，命令透明可改，可对照原文图式',
+              en: 'Classic figure styles from Cell / Nature / Science papers + interaction analysis (salt bridges / H-bonds / DNA / cation–π) + site close-ups (cofactors / metals / disulfides) + type-specific figures (ion-channel pores etc.) — one click; transparent recipes, comparable against the originals',
             })}
           </DialogDescription>
         </DialogHeader>

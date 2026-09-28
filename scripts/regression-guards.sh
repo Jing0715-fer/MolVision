@@ -206,8 +206,27 @@ check "无半胱氨酸说明"           "无半胱氨酸"                      "
 check "管线清洁视口两遍"         "hidden:"                         "scripts/gen-template-thumbs.sh"    2
 check "全局默认描边减细"         "outlineThickness: 1\.2"          "src/lib/molecular/types.ts"        1
 
+# ---- r77：hover 重叠修复 + 四新模板 + 选择泄漏根治 + B 因子百分位 ----
+check "hover 浮层序号避让（pl-10）" "pl-10 pr-3 pb-9 pt-2.5"    "src/components/studio/WelcomeScreen.tsx" 1
+check "四新模板入库"               "cpk-spacefill|mobility-bfactor|heme-pocket|cation-pi" "src/lib/molecular/figure-templates.ts" 5
+check "四新模板图标"               "'cpk-spacefill': Shapes"   "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "CPK 空间填充命令"           "hide everything"            "src/lib/molecular/figure-templates.ts" 1
+check "B 因子热图命令"             "spectrum b, rainbow"        "src/lib/molecular/figure-templates.ts" 2
+check "血红素口袋命令"             "resn HEM"                   "src/lib/molecular/figure-templates.ts" 5
+check "阳离子-π 接触命令"          "resn PHE\+TYR\+TRP"         "src/lib/molecular/figure-templates.ts" 1
+check "辅因子重映射降级"           "辅因子已重映射"              "src/lib/molecular/figure-templates.ts" 1
+check "全零 B 因子跳过"            "B 因子全为零"                "src/lib/molecular/figure-templates.ts" 1
+check "选择泄漏修复（恢复器）"     "function restoreSelection"  "src/lib/molecular/commands.ts" 1
+check "color 命令恢复选择"         "restoreSelection\(prevSel\)" "src/lib/molecular/commands.ts" 3
+check "模板收尾清选择"             "s\.setSelection\(null, \[\]\)" "src/lib/molecular/figure-templates.ts" 1
+check "B 因子百分位归一"           "polyB\.sort\(\(a, b\) => a - b\)" "src/lib/molecular/colors.ts" 1
+check "图鉴新词条（阳离子-π/CPK）" "阳离子-π 接触虚线|全原子空间填充球" "src/lib/molecular/figure-templates.ts" 2
+check "期刊类型拓宽"               "journal: string"            "src/lib/molecular/figure-templates.ts" 1
+check "管线四新缩略图"             "cpk-spacefill:10:1CRN:19"   "scripts/gen-template-thumbs.sh" 1
+check "mobility 演示换 3INS"       "mobility-bfactor:10:3INS:20" "scripts/gen-template-thumbs.sh" 1
+
 # ---- 汇总 ----
-TOTAL=112
+TOTAL=129
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

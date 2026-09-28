@@ -3144,3 +3144,38 @@ Stage Summary:
   2. 【中】对比视图左栏「现场渲染」按钮（实时对当前结构应用渲染 vs 看管线旧图——对比体验闭环）
   3. 【中】pore 收缩点残基归属标注（最近原子 → 残基名 3D label；r72 建议③）
   4. 【低】模板收藏/自定义保存（localStorage UGC 闭环）；40+ 模板时画廊虚拟化 + blur-up
+
+---
+Task ID: r77
+Agent: main
+Task: 用户指令「悬停到模板上显示的标题和序号有重叠，继续打磨所有模板，看看是否都是正常的，继续加入更多模板」+ 全模板逐一体检中连环揭发两个深层渲染 bug（选择泄漏光晕掩蔽 / B 因子离群归一）——hover 重叠修复 + 四新模板（CPK 空间填充 / B 因子柔性热图 / 血红素口袋 / 阳离子-π 网络，19→23）+ color/spectrum 选择泄漏根治 + B 因子聚合物百分位归一 + 11 张受影响缩略图重生成 + adapt ⑪辅因子重映射⑫全零 B 跳过 + guards 112→129 + E2E 全绿（23 模板全量体检 + 像素级色相取证）
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r76 即最新）——直接开工
+- 【用户主诉① hover 重叠】根因：r75 hover 信息浮层文字 px-3 起排，与 left-2 top-2 序号角标（右缘≈33px）同区叠压。修复：浮层改 pl-10 pr-3（角标右缘清出 7px 间隙）；几何断言 badgeRight 510 < textLeft 517 + VLM 复审「紧密相邻并未重叠」双证
+- 【四新模板（用户点名③继续加）】命令语法全部活体预验证后入库：
+  · cpk-spacefill（basic，1CRN）：hide everything + hide waters + show spheres + color element——Corey & Pauling 1953 Rev Sci Instrum 24:621（CPK 模型图式源流，DOI 10.1063/1.1770803 经 Wikipedia/CPK 页核实）；全结构零依赖
+  · mobility-bfactor（surface，3INS）：preset cartoon + spectrum b, rainbow——Frauenfelder/Petsko/Tsernoglou 1979 Nature 280:558（温度依赖精修，DOI 10.1038/280558a0 经 crossref 作者双核实；⚠️ 10.1038/280563a0 是 Artymiuk 溶菌酶论文——检索揭发的张冠李戴陷阱）；演示初选 1MBO 试拍「单边蓝」失败后换 3INS
+  · heme-pocket（site，1MBO）：show sticks, resn HEM + color element, resn HEM + byres(4Å) 邻域棍 + 8Å 聚焦——Phillips 1980 J Mol Biol 142:531（1MBO 取材原文，DOI 10.1016/0022-2836(80)90262-4 经 RCSB/PDBj/ScienceDirect 三源核实）；实测 resn HEM 43 原子
+  · cation-pi（interaction，1AKI）：contacts (resn PHE+TYR+TRP and sidechain) | (resn LYS+ARG+HIS and sidechain) 4.0 + 紫青语义双色 + 侧链棍——Gallivan & Dougherty 1999 PNAS 96:9459（DOI 10.1073/pnas.96.17.9459 经 PubMed 核实）；接触计数三对照 1AKI 11 对（最佳演示密度）/4HHB 42 对/1MBO 9 对
+  · FigureCitation.journal 类型 Nature|Science|Cell → string（图式源流不必限于 CNS——CPK 的 RSI/肌红蛋白的 JMB/阳离子-π 的 PNAS 入库）；命令图鉴 +9 词条（阳离子-π 接触/全原子空间填充球/辅因子元素色棍/芳香紫/阳离子青/血红素棍/hide everything/hide waters/color element——具体锚定先于泛匹配）；TPL_ICONS +4（Shapes/Gauge/Gem/Sparkles）
+- 【用户主诉②全模板体检——连环揭发两个深层 bug】
+  · 【揭发 A：选择泄漏光晕掩蔽（影响所有 color <色>, <表达式> 命令）】缩略图像素取证：salt-bridge 蓝 0 像素（红 782 正常）——活体交叉测试（red-on-LYS ✓ / blue-on-LYS ✗）锁定「颜色名无关、最后一条带表达式命令的选择被泄漏」；场景网格色缓冲取证 + updateHighlight 源码定位根因：color/spectrum 的内联表达式走 selectFromExpr 落全局选择 → 琥珀色选择光晕（renderOrder 6 半透明 InstancedMesh）恰好罩住刚上色的残基——盐桥蓝/cation-pi 青/域色 slate/二硫黄全部被掩蔽不显（r75 E2E 的 VLM「红蓝确认」是左面板链色指示器与序列条带的 UI 蓝假阳性）；zoom 已有 r59-a2 #6 非突变先例（evalActiveSelection）。修复：① commands.ts 新增 restoreSelection 恢复器——color/spectrum 改「保存→临时选择→上色→恢复」（PyMOL 语义：命令内表达式不扰动 (sele)）② runTemplateCommands 收尾兜底清选择（mutation 类 select+label 流的终帧光晕）③ 11 张受影响缩略图重生成（salt-bridge 蓝 0→297 / cation-pi 青 0→56 / dna/domain/mutation/heme/metal/disulfide 全部色语义回归，暗右缘全 0%）
+  · 【揭发 B：B 因子全原子 min-max 被 HETATM 高 B 离群拉爆】mobility 1MBO 试拍全谱仅蓝青（暖色 0 像素）；3INS 换结构后仍单边——PDB 文件直算揭发：3INS 锌位点 HETATM B≈110.9 而聚合物 max 38.8，全原子归一使中位数压到 t≈0.14「热图不成热图」。修复：colors.ts bfactor 分支改聚合物 2-98 百分位裁剪（B 因子柔性图领域惯例；alter 全零+热点置顶的特殊分布在百分位下行为不变——p2=p98=0 时 span 回退处理）；mobility/mutation 重生成——暖色像素 0→727（红53/橙652/黄58/绿17/青555/蓝751 全谱展开），VLM 终审「蓝→黄→红渐变清晰、柔性区段可见」
+  · 【伪问题排除：审计暗画布】6 张审计截图画布近全黑——30 秒长窗时间轴追踪实锤：无头低帧率（3fps perf 降分辨率）下引擎 11s 才挂载、命令链 17s 完成，审计脚本 9s 等待不足截到命令前帧；bgPinned 翻转为条件的复验 6/6 全过（PINNED:#ffffff/#14171c 各归其位）——非应用 bug，真浏览器 60fps 下 4-6s 完成
+- 【23 模板全量体检（用户点名②）】逐张「欢迎页画廊点击 → demoThenApply」全链路：23/23 LOADED + 零页面错误 + 画布像素内容占比全检出（2%-100% 无空帧）+ 6 分类计数 23/5/5/6/5/2 + 23 缩略图零破图（lazy 滚入后）
+- 【缩略图管线】SPECS 19→23（idx 19-22 追加不漂移既有索引）+ 管线重启后全量跑通（含 r76 清洁视口双遍隐藏与万向轮关闭——暗右缘 0% 复验）
+- 【运维】dev server 重度 E2E 后僵死 → r71 坑档确认「bash setsid/nohup 跨调用必被清理」→ Python double-fork 守护启动恢复（跨工具调用存活实证）+ agent-browser 会话挂死两次（pkill 全清重启）
+- 【E2E 陷阱与揭发（当轮闭环）】①VLM 全页截图分析会把 UI 部件色误判为分子色（蓝像素计数须限定 canvas 裁剪区）②VLM 一次跑偏成「生成 HTML 页」——提示词须显式「只分析不要生成代码」③grep 守卫命中数按行计——同数组多命令只算 1 行（量词按行数定）④缩略图暗画布 = 无头低帧率时序假象（等待条件用状态翻转而非固定秒数）⑤agent-browser type 会追加不清空——命令循环一律用 fill
+- 【门禁】lint 0 · tsc src 0 错 · guards 112→129（+17：hover 避让/四新模板/四图标/命令序列/⑪⑫降级/restoreSelection/收尾清选择/百分位归一/图鉴新词条/期刊拓宽/管线 SPECS）· smoke 4/4 · dev.log 全 200
+
+Stage Summary:
+- 交付：hover 标题/序号重叠修复（pl-10 避让 + 几何/双证）+ 模板库 19→23（CPK 空间填充 / B 因子柔性热图 / 血红素口袋特写 / 阳离子-π 网络——表示法经典 + 动力学 + 辅因子位点 + 互作第四式，DOI 四路核实含一次张冠李戴揭发）+ 两个深层渲染 bug 根治（选择泄漏光晕掩蔽——restoreSelection + 收尾清选择；B 因子 HETATM 离群——聚合物 2-98 百分位）+ 11 张受影响缩略图重生成 + 23 模板全量体检通过
+- 用户三点指令全闭环：重叠（修复+双证）· 全模板正常（23/23 体检 + 两 bug 连环揭发当轮根治——「看看是否都是正常的」恰是挖出深层 bug 的触点）· 更多模板（+4 入库全链路）
+- 架构资产：restoreSelection 非突变语义（对齐 zoom 的 r59-a2 先例——命令参数表达式不扰动用户选择）；B 因子百分位归一（alter 特殊分布兼容性验证）；审计脚本状态翻转等待法（bgPinned 替代固定秒数——无头时序鲁棒）
+- 坑（新入档）：①VLM 全页色计数须裁剪 canvas 区（UI 色假阳性）②VLM 提示须锁「只分析」③守卫命中数=行数④暗画布=无头低帧率时序假象（状态翻转等待）⑤agent-browser type 追加不清空——用 fill⑥dev server 重启须 Python double-fork（setsid/nohup 均被工具收尾杀）
+- 下一轮建议（按优先级）：
+  1. 【中】两态构象对比模板（superpose+morph 双结构 load 架构——runTemplateCommands 需 load 异步支持；r72 起长期欠账，如今 23 模板后更显缺口）
+  2. 【中】对比视图左栏「现场渲染」按钮（实时对当前结构应用渲染 vs 管线旧图）
+  3. 【中】选择光晕视觉降权（大选择集 opacity 0.3 仍偏重——0.15/边缘线框化可让「选择中微调颜色」的工作流更顺）
+  4. 【低】模板收藏/自定义保存（localStorage UGC）；40+ 模板时画廊虚拟化 + blur-up
