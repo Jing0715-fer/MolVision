@@ -177,3 +177,82 @@ export function addCustomTemplate(input: CustomTemplateInput): CustomTemplate {
 export function removeCustomTemplate(id: string): void {
   persist(readStore().filter(x => x.id !== id))
 }
+
+/** 更新（r82 编辑闭环）：命令重过闸（用户手改后仍须全绿）；保留 id/createdAt 与
+ *  原缩略图（未提供新 thumb 时）——citation 年份随原创建时间。返回更新后实例。 */
+export function updateCustomTemplate(id: string, input: CustomTemplateInput): CustomTemplate {
+  const { commands, dropped } = sanitizeTemplateCommands(input.commands)
+  if (commands.length < 2 || dropped.length) {
+    throw new Error('INVALID_COMMANDS')
+  }
+  const list = readStore()
+  const i = list.findIndex(x => x.id === id)
+  if (i < 0) throw new Error('NOT_FOUND')
+  const prev = list[i]
+  const tpl: CustomTemplate = {
+    ...prev,
+    name: input.name,
+    tagline: input.tagline,
+    purpose: input.purpose,
+    tags: input.tags.slice(0, 3),
+    category: input.category,
+    demo: input.demo,
+    accent: input.accent,
+    commands,
+    thumb: input.thumb ?? prev.thumb,
+  }
+  const next = [...list]
+  next[i] = tpl
+  persist(next)
+  return tpl
+}
+
+/** 导出（r82）：全部自定义模板 → JSON 文本（bundle 协议：app/kind/version/
+ *  exportedAt/templates——导出即存储条目原样序列化，导入侧逐张过存储防线）。
+ *  命令序列天然可移植——跨设备迁移与团队共享的交换格式 */
+export function exportCustomTemplates(): string {
+  return JSON.stringify({
+    app: 'molvision',
+    kind: 'custom-templates',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    templates: readStore(),
+  }, null, 2)
+}
+
+/** 导入（r82）：JSON 文本（bundle 或裸数组均接受）→ 逐张过 sanitizeStoredTemplate
+ *  存储侧防线（命令重过闸/枚举校验——手改的导出文件脏条目不入库）→ 与现有按
+ *  id 合并（同 id = 更新覆盖但保留原 createdAt，新 id = 追加）；超上限 LRU 裁剪。
+ *  返回导入统计；文件不可解析抛 BAD_FILE */
+export function importCustomTemplates(json: string): { imported: number; updated: number; skipped: number } {
+  let arr: unknown[] | null = null
+  try {
+    const parsed = JSON.parse(json) as unknown
+    if (Array.isArray(parsed)) arr = parsed
+    else if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { templates?: unknown }).templates)) {
+      arr = (parsed as { templates: unknown[] }).templates
+    }
+  } catch {
+    arr = null
+  }
+  if (!arr) throw new Error('BAD_FILE')
+  const byId = new Map(readStore().map(x => [x.id, x]))
+  let imported = 0
+  let updated = 0
+  let skipped = 0
+  for (const raw of arr) {
+    const tpl = sanitizeStoredTemplate(raw)
+    if (!tpl || !tpl.id) { skipped++; continue }
+    const prev = byId.get(tpl.id)
+    if (prev) {
+      byId.set(tpl.id, { ...tpl, createdAt: prev.createdAt }) // 同 id：覆盖字段、保留原创建序
+      updated++
+    } else {
+      byId.set(tpl.id, tpl)
+      imported++
+    }
+  }
+  const merged = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
+  persist(merged.length > MAX_CUSTOM ? merged.slice(merged.length - MAX_CUSTOM) : merged)
+  return { imported, updated, skipped }
+}

@@ -3340,3 +3340,46 @@ Stage Summary:
   3. 【中】自定义模板导入导出 JSON：跨设备迁移 + 团队共享（命令序列天然可移植；导出即 localStorage 序列化+文件下载，导入即过闸入库）
   4. 【中】会话分享链接：.molvision 会话转 URL 片段/base64 短链（无后端依赖），传播成本从「发文件」降为「发链接」
   5. 【低】SessionResume 箭头垂直居中微调（VLM 点名微瑕）· 40+ 模板画廊虚拟化 + blur-up
+
+---
+Task ID: r82
+Agent: main
+Task: 用户指令「继续下一阶段开发，完成后进行 QA 测试」——按 r81 提案交付 UGC 三件套补齐「编辑」闭环 + 导入导出 JSON 两项：custom-templates 层 updateCustomTemplate（命令重过闸/id·createdAt·缩略图保留）与 exportCustomTemplates/importCustomTemplates（bundle 协议/逐张过存储防线/按 id 合并/LRU 裁剪）+ FigureTemplatesDialog 编辑视图（卡片编辑钮→审核表单预填复用）与导入导出 UI（一等公民入口排）+ guards 192→207 + QA 八证全链路
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r81 即最新）；dev server 存活
+- 【r82-1 存储层扩展】custom-templates.ts 三函数：
+  · updateCustomTemplate(id, input)：命令重过闸（用户手改后仍须全绿——INVALID_COMMANDS 抛出）+ 保留 id/createdAt/原缩略图（未提供新 thumb 时）——citation 年份随原创建时间
+  · exportCustomTemplates()：bundle 协议 JSON（app/kind/version/exportedAt/templates——存储条目原样序列化，命令序列天然可移植）
+  · importCustomTemplates(json)：bundle 或裸数组双格式接受 → 逐张过 sanitizeStoredTemplate 存储侧防线（手改编出的脏条目不入库）→ 按 id 合并（同 id 更新覆盖但保留原 createdAt、新 id 追加）→ 超 20 张 LRU 裁剪 → 返回 {imported, updated, skipped} 统计
+- 【r82-2 编辑视图】UploadPanel 复用而非复制（审核表单全部现成）：
+  · editTarget prop：非空即编辑模式——phase 直落 review、五字段预填（name/tagline/category/demo/commands）、draft 由 templateToDraft 合成（analysis 换编辑说明文案）
+  · 编辑模式差异面：头文案「编辑自定义模板」+EDIT 紫徽记 · 保存按钮「保存修改」（Pencil 图标）· 隐藏「重新解析/换一张图」（无原图高分辨版本）· 粘贴通道不注册（粘贴新图会打断编辑流）· 左栏无缩略图退紫系占位（THUMB 徽记）
+  · save 分派：editTarget 有值走 updateCustomTemplate，否则 addCustomTemplate；toast 文案分岔（「已保存对「X」的修改」vs「已入库」）
+  · TemplateCard 管理排重构：onDelete 孤钮 → flex 容器 [编辑(紫)][删除(红)] 双钮（均 hover 浮现，触屏恒显）
+- 【r82-3 导入导出 UI】库 chips 行一等公民入口排「从图片创建(主色)｜导入｜导出」：
+  · 导入：hidden file input（.json）→ f.text() → importCustomTemplates → toast 统计（新增 X · 更新 Y · 跳过 Z 原因）→ 自动切「我的模板」过滤；4MB 体积上限（非导出常态防御）
+  · 导出：Blob + URL.createObjectURL + a[download] 点击下载（文件名 molvision-templates-YYYY-MM-DD.json）；无模板时置灰；错误路径 BAD_FILE 双语提示
+- 【QA 八证】agent-browser 全链路（种子注入 localStorage）：
+  ① 入口在位：编辑/导入/导出三钮 + CUSTOM 徽记 ✓
+  ② 编辑面板预填：name「Test rainbow」/commands 三行/保存可用标签「Save changes」/重解析隐藏 ✓
+  ③ 编辑保存：改名+加命令 turn y 20 → localStorage 更新（4 命令）且 id/createdAt/accent 全保留 ✓
+  ④ 非法命令拦截：textarea 混入 rm -rf / → 警示显示+保存禁用+存储不变 ✓
+  ⑤ 导入合并：2 有效+1 脏（save /etc/passwd 注入）JSON 上传 → total 3、脏条目跳过、编辑成果保留、命令过闸 ✓
+  ⑥ 导出下载：agent-browser download 实捕文件 → bundle 协议+双语字段各自保留（en 改过 zh 原稿）✓
+  ⑦ 往返迁移：清空→重导入导出文件 → 3 张全量回库（编辑名/新命令存活/顺序保留）✓
+  ⑧ 坏文件：非 JSON 垃圾上传 → 错误 toast+存储不变 ✓
+  · VLM 双图审：编辑面板「布局整齐/标签辨识度极高」· 网格「三按钮间距适中无拥挤/编辑删除钮可辨」✓
+  · 移动端 375px：弹窗开启态 scrollW=375 零溢出 ✓
+  · 测试数据清理（localStorage 还原用户状态）· smoke 4/4 · console 错误零
+- 【门禁】lint 0 · tsc src 0 · guards 192→207（+15：存储层三函数/命令重过闸/bundle 协议/脏条目跳过/编辑入口/预填/保存文案/禁粘贴/视图接线/导入导出按钮/文件读取/下载/体积上限——4 条守卫口径当轮校准：单文件命中数与引号形态）· dev.log 无 error（404 为无缩略图降级路径预期）
+
+Stage Summary:
+- 交付：UGC 三件套补齐（建 r79 ✓/删 r79 ✓/编辑 r82 ✓）+ 模板导入导出 JSON（跨设备迁移/团队共享）；编辑零重复代码（审核表单全复用）；导入三防线（存储侧 sanitize/白名单闸/LRU）
+- 用户指令全闭环：「继续下一阶段开发」（r81 提案方向 1+3 落地）·「完成后进行 QA 测试」（八证全链路+VLM 双图审+移动端+smoke）
+- 坑（新入档）：①守卫正则引号形态——代码用单引号字符串时 pattern 不能带双引号字面量 ②agent-browser download 对程序化 a[download] 点击有效（Blob URL 下载实捕）③测试种子注入后必须 dispatch custom-templates-changed 广播否则弹窗快照不刷新
+- 下一轮建议（按优先级）：
+  1. 【高】解析结果「对照预览」分屏（r81 方向 2 仍有效——左原图/右引擎按当前命令实时小视口渲染，保存前看效果）
+  2. 【中】会话分享链接（.molvision 会话转 URL 片段——无后端依赖）
+  3. 【中】欢迎页「我的模板」卡片也加编辑入口（当前仅弹窗内可编辑——画廊卡直编的捷径）
+  4. 【低】SessionResume 箭头居中微调 · 40+ 模板画廊虚拟化

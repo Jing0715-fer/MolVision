@@ -10,14 +10,16 @@
 //    右 = 原文图式解剖卡（图版位置 + 原图内容 + 配方逐步分解 + DOI 直达原图）
 //    ——版权诚实：不存原图，对比的是「图式配方」；DOI 链到出版社原文对照
 // 无结构时应用动作给引导 toast（或直接走演示）。
+// r82：UGC 三件套补齐「编辑」（卡片编辑钮 → 复用审核表单预填 → 保存即更新，
+// 命令重过闸）+ 导入导出 JSON（跨设备迁移/团队共享——命令序列天然可移植）。
 // 缩略图管线：public/templates/{id}.png 由引擎渲染生成（r71/r72 E2E 批量管线）；
 // 缺图时以强调色渐变占位，文件生成后无需改码自动浮现。
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Dna, ExternalLink, Film,
+  ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Dna, Download, ExternalLink, Film,
   Gauge, Gem, Ghost, GitCompareArrows, Grid3x3, Hexagon, ImagePlus, Layers, Link2, Loader2, Magnet, MapPin, Network, Orbit, Palette,
-  Play, Ruler, Shapes, Sparkles, Target, Trash2, Waves, Wand2, Cylinder, Zap, type LucideIcon,
+  Pencil, Play, Ruler, Shapes, Sparkles, Target, Trash2, Upload, Waves, Wand2, Cylinder, Zap, type LucideIcon,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -26,7 +28,10 @@ import {
   adaptTemplateCommands, logAdaptNotes,
   type FigureCategory, type FigureTemplate,
 } from '@/lib/molecular/figure-templates'
-import { addCustomTemplate, removeCustomTemplate, useCustomTemplates, type CustomTemplate } from '@/lib/molecular/custom-templates'
+import {
+  addCustomTemplate, exportCustomTemplates, importCustomTemplates, removeCustomTemplate,
+  updateCustomTemplate, useCustomTemplates, type CustomTemplate,
+} from '@/lib/molecular/custom-templates'
 import { validateTemplateCommand, type TemplateDraft } from '@/lib/molecular/template-command-guard'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -86,7 +91,7 @@ export const TPL_ICONS: Record<string, LucideIcon> = {
   'catalytic-residues': Ruler,
 }
 
-function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete }: {
+function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete, onEdit }: {
   tpl: FigureTemplate
   index: number
   onApply: () => void
@@ -94,6 +99,7 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete }
   onCompare: () => void
   busy: boolean
   onDelete?: () => void
+  onEdit?: () => void
 }) {
   const { t } = useI18n()
   const [imgOk, setImgOk] = useState(true)
@@ -175,21 +181,41 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete }
           <GitCompareArrows className="h-3 w-3" aria-hidden />
           {t({ zh: '对比', en: 'Compare' })}
         </span>
-        {/* 删除按钮（r79 自定义模板专属——hover 浮现；左下镜像位） */}
-        {onDelete && (
+        {/* 自定义模板管理排（r82 编辑 + r79 删除——hover 浮现；左下镜像位） */}
+        {(onDelete || onEdit) && (
           <span
-            role="button"
-            tabIndex={0}
-            onClick={e => { e.stopPropagation(); onDelete() }}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onDelete() } }}
-            title={t({ zh: '删除这个自定义模板', en: 'Delete this custom template' })}
             className={cn(
-              'absolute bottom-2 left-2 flex h-7 cursor-pointer items-center gap-1 rounded-full border border-red-500/40 bg-background/85 px-2.5 text-[10px] font-semibold text-red-600 backdrop-blur-sm transition-opacity duration-200 dark:text-red-400',
+              'absolute bottom-2 left-2 flex items-center gap-1 transition-opacity duration-200',
               'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100',
             )}
           >
-            <Trash2 className="h-3 w-3" aria-hidden />
-            {t({ zh: '删除', en: 'Delete' })}
+            {onEdit && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={e => { e.stopPropagation(); onEdit() }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEdit() } }}
+                title={t({ zh: '编辑名称/分类/命令序列', en: 'Edit name / category / commands' })}
+                data-open-edit
+                className="flex h-7 cursor-pointer items-center gap-1 rounded-full border border-violet-500/40 bg-background/85 px-2.5 text-[10px] font-semibold text-violet-600 backdrop-blur-sm dark:text-violet-400"
+              >
+                <Pencil className="h-3 w-3" aria-hidden />
+                {t({ zh: '编辑', en: 'Edit' })}
+              </span>
+            )}
+            {onDelete && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={e => { e.stopPropagation(); onDelete() }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onDelete() } }}
+                title={t({ zh: '删除这个自定义模板', en: 'Delete this custom template' })}
+                className="flex h-7 cursor-pointer items-center gap-1 rounded-full border border-red-500/40 bg-background/85 px-2.5 text-[10px] font-semibold text-red-600 backdrop-blur-sm dark:text-red-400"
+              >
+                <Trash2 className="h-3 w-3" aria-hidden />
+                {t({ zh: '删除', en: 'Delete' })}
+              </span>
+            )}
           </span>
         )}
       </button>
@@ -284,28 +310,53 @@ const PARSING_STAGES: DualText[] = [
   { zh: '翻译为命令序列并过白名单校验…', en: 'Translating to a command sequence and validating…' },
 ]
 
-function UploadPanel({ onBack, onSaved, onPreviewApply }: {
+/** r82：CustomTemplate → TemplateDraft（编辑模式复用审核表单——analysis 换编辑说明） */
+function templateToDraft(tpl: CustomTemplate): TemplateDraft {
+  return {
+    name: tpl.name,
+    tagline: tpl.tagline,
+    purpose: tpl.purpose,
+    tags: tpl.tags,
+    category: tpl.category,
+    demo: tpl.demo,
+    accent: tpl.accent,
+    analysis: {
+      zh: '你创建的模板——可修改名称、描述、分类、演示结构与命令序列，保存即更新。',
+      en: 'Your template — edit the name, description, category, demo structure or commands; saving updates it in place.',
+    },
+    commands: tpl.commands,
+  }
+}
+
+function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
   onBack: () => void
   onSaved: (tplId: string) => void
   onPreviewApply: (tpl: FigureTemplate) => void
+  /** r82 编辑模式：非空时直接进入预填的审核态（无重解析/换图） */
+  editTarget?: CustomTemplate | null
 }) {
   const { t, locale } = useI18n()
   const hasStructure = useMolStore(s => s.structures.length > 0)
   const fileRef = useRef<HTMLInputElement>(null)
-  // 状态机：idle → picked → parsing → review；error 就地展示不独占态
-  const [phase, setPhase] = useState<'idle' | 'picked' | 'parsing' | 'review'>('idle')
-  const [img, setImg] = useState<{ dataUrl: string; thumb: string; w: number; h: number } | null>(null)
+  const editMode = !!editTarget
+  // 状态机：idle → picked → parsing → review；error 就地展示不独占态。
+  // r82 编辑模式：直接落 review（表单预填自 editTarget）
+  const [phase, setPhase] = useState<'idle' | 'picked' | 'parsing' | 'review'>(editMode ? 'review' : 'idle')
+  // 编辑模式左栏用缩存缩略图展示（无原图高分辨版本）；无缩略图退紫系占位
+  const [img, setImg] = useState<{ dataUrl: string; thumb: string; w: number; h: number } | null>(
+    editTarget?.thumb ? { dataUrl: editTarget.thumb, thumb: editTarget.thumb, w: 0, h: 0 } : null,
+  )
   const [dragOver, setDragOver] = useState(false)
   const [stage, setStage] = useState(0)
   const [error, setError] = useState('')
   const [dropped, setDropped] = useState<{ cmd: string; reason: string }[]>([])
   // 审核表单（当前语言值可改；另一语言保留 AI 原稿）
-  const [draft, setDraft] = useState<TemplateDraft | null>(null)
-  const [nameVal, setNameVal] = useState('')
-  const [taglineVal, setTaglineVal] = useState('')
-  const [categoryVal, setCategoryVal] = useState<TemplateDraft['category']>('basic')
-  const [demoVal, setDemoVal] = useState('4HHB')
-  const [commandsVal, setCommandsVal] = useState('')
+  const [draft, setDraft] = useState<TemplateDraft | null>(editTarget ? templateToDraft(editTarget) : null)
+  const [nameVal, setNameVal] = useState(editTarget ? (locale === 'en' ? editTarget.name.en : editTarget.name.zh) : '')
+  const [taglineVal, setTaglineVal] = useState(editTarget ? (locale === 'en' ? editTarget.tagline.en : editTarget.tagline.zh) : '')
+  const [categoryVal, setCategoryVal] = useState<TemplateDraft['category']>(editTarget?.category ?? 'basic')
+  const [demoVal, setDemoVal] = useState(editTarget?.demo ?? '4HHB')
+  const [commandsVal, setCommandsVal] = useState(editTarget?.commands.join('\n') ?? '')
 
   // 解析中阶段文案轮播（stage 归零在 parse() 入口同步完成——effect 内 setState 触发 set-state-in-effect）
   useEffect(() => {
@@ -335,8 +386,9 @@ function UploadPanel({ onBack, onSaved, onPreviewApply }: {
     }
   }
 
-  // 粘贴通道（Ctrl+V 论文截图直入）
+  // 粘贴通道（Ctrl+V 论文截图直入；编辑模式不注册——粘贴新图会打断编辑流）
   useEffect(() => {
+    if (editMode) return
     const onPaste = (e: ClipboardEvent) => {
       const f = e.clipboardData?.files?.[0]
       if (f && f.type.startsWith('image/')) {
@@ -346,7 +398,7 @@ function UploadPanel({ onBack, onSaved, onPreviewApply }: {
     }
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [])
+  }, [editMode])
 
   const reset = () => {
     setPhase('idle')
@@ -400,26 +452,47 @@ function UploadPanel({ onBack, onSaved, onPreviewApply }: {
   const commandLines = commandsVal.split('\n').map(x => x.trim()).filter(Boolean)
   const invalidLines = commandLines.filter(x => !validateTemplateCommand(x).ok)
   const demoOk = /^[0-9][A-Z0-9]{3}$/.test(demoVal.trim().toUpperCase())
-  const canSave = !!draft && !!img && nameVal.trim().length > 0 && commandLines.length >= 2 && invalidLines.length === 0 && demoOk
+  const canSave = !!draft && (editMode || !!img) && nameVal.trim().length > 0 && commandLines.length >= 2 && invalidLines.length === 0 && demoOk
 
   const save = () => {
-    if (!draft || !img || !canSave) return
+    if (!draft || !canSave) return
     const name = { ...draft.name, ...(locale === 'en' ? { en: nameVal.trim().slice(0, 30) } : { zh: nameVal.trim().slice(0, 10) }) }
     const tagline = { ...draft.tagline, ...(locale === 'en' ? { en: taglineVal.trim().slice(0, 80) } : { zh: taglineVal.trim().slice(0, 40) }) }
     try {
-      const saved = addCustomTemplate({
-        name, tagline,
-        purpose: draft.purpose,
-        tags: draft.tags,
-        category: categoryVal,
-        demo: demoVal.trim().toUpperCase(),
-        accent: draft.accent,
-        commands: commandLines,
-        thumb: img.thumb,
-      })
-      toast.success(tt({ zh: `自定义模板「${locale === 'en' ? name.en : name.zh}」已入库`, en: `Custom template "${locale === 'en' ? name.en : name.zh}" saved` }), {
-        description: tt({ zh: '在「我的模板」分区查看——与内置模板同权应用/演示', en: 'Find it under "My templates" — applies and demos like a built-in' }),
-      })
+      // r82：编辑模式 → updateCustomTemplate（命令重过闸，保留 id/createdAt/缩略图）；
+      // 否则 addCustomTemplate 新建入库
+      const saved = editTarget
+        ? updateCustomTemplate(editTarget.id, {
+            name, tagline,
+            purpose: draft.purpose,
+            tags: draft.tags,
+            category: categoryVal,
+            demo: demoVal.trim().toUpperCase(),
+            accent: draft.accent,
+            commands: commandLines,
+            thumb: img?.thumb,
+          })
+        : addCustomTemplate({
+            name, tagline,
+            purpose: draft.purpose,
+            tags: draft.tags,
+            category: categoryVal,
+            demo: demoVal.trim().toUpperCase(),
+            accent: draft.accent,
+            commands: commandLines,
+            thumb: img?.thumb,
+          })
+      toast.success(
+        editTarget
+          ? tt({ zh: `已保存对「${locale === 'en' ? name.en : name.zh}」的修改`, en: `Saved changes to "${locale === 'en' ? name.en : name.zh}"` })
+          : tt({ zh: `自定义模板「${locale === 'en' ? name.en : name.zh}」已入库`, en: `Custom template "${locale === 'en' ? name.en : name.zh}" saved` }),
+        {
+          description: tt({
+            zh: editTarget ? '修改即时生效于「我的模板」分区与画廊' : '在「我的模板」分区查看——与内置模板同权应用/演示',
+            en: editTarget ? 'Changes apply immediately under "My templates" and in the gallery' : 'Find it under "My templates" — applies and demos like a built-in',
+          }),
+        },
+      )
       onSaved(saved.id)
     } catch (e) {
       const reason = e instanceof Error && e.message === 'INVALID_COMMANDS'
@@ -446,7 +519,7 @@ function UploadPanel({ onBack, onSaved, onPreviewApply }: {
 
   return (
     <div data-template-upload className="flex flex-col gap-3">
-      {/* 头：返回 + 标题 */}
+      {/* 头：返回 + 标题（r82：编辑模式换文案与徽记） */}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -456,9 +529,22 @@ function UploadPanel({ onBack, onSaved, onPreviewApply }: {
           <ArrowLeft className="h-3 w-3" aria-hidden />
           {t({ zh: '返回图库', en: 'Back to library' })}
         </button>
-        <ImagePlus className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-        <span className="text-[13.5px] font-bold leading-none">{t({ zh: '从图片创建模板', en: 'Create a template from an image' })}</span>
-        <span className="ml-auto rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-primary">AI {t({ zh: '图式解析', en: 'STYLE PARSE' })}</span>
+        {editMode ? (
+          <Pencil className="h-4 w-4 shrink-0 text-violet-500" aria-hidden />
+        ) : (
+          <ImagePlus className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+        )}
+        <span className="text-[13.5px] font-bold leading-none">
+          {editMode
+            ? t({ zh: '编辑自定义模板', en: 'Edit custom template' })
+            : t({ zh: '从图片创建模板', en: 'Create a template from an image' })}
+        </span>
+        <span className={cn(
+          'ml-auto rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em]',
+          editMode ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400' : 'bg-primary/10 text-primary',
+        )}>
+          {editMode ? t({ zh: '编辑', en: 'EDIT' }) : <>AI {t({ zh: '图式解析', en: 'STYLE PARSE' })}</>}
+        </span>
       </div>
 
       {/* idle：投放区 */}
@@ -549,16 +635,22 @@ function UploadPanel({ onBack, onSaved, onPreviewApply }: {
         </div>
       )}
 
-      {/* review：左原图 + AI 判读 / 右编辑表单 */}
-      {phase === 'review' && img && draft && (
+      {/* review：左原图 + AI 判读 / 右编辑表单（r82：编辑模式无原图时退紫系占位） */}
+      {phase === 'review' && draft && (img || editMode) && (
         <>
           <div className="grid gap-3 md:grid-cols-2">
             {/* 左：原图 + AI 视觉判读 */}
             <div className="flex flex-col gap-2.5">
               <div className="relative overflow-hidden rounded-lg border border-border bg-muted/40">
-                <img src={img.dataUrl} alt={t({ zh: '解析原图', en: 'Parsed image' })} className="aspect-[16/10] w-full object-contain" />
+                {img ? (
+                  <img src={img.dataUrl} alt={t({ zh: '解析原图', en: 'Parsed image' })} className="aspect-[16/10] w-full object-contain" />
+                ) : (
+                  <span className="flex aspect-[16/10] w-full items-center justify-center bg-gradient-to-br from-violet-500/20 via-violet-500/[0.08] to-transparent">
+                    <ImagePlus className="h-8 w-8 text-violet-500/60" aria-hidden />
+                  </span>
+                )}
                 <span className="absolute left-2 top-2 rounded bg-background/85 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-muted-foreground backdrop-blur-sm">
-                  {t({ zh: '原图', en: 'SOURCE' })}
+                  {editMode ? t({ zh: '缩略图', en: 'THUMB' }) : t({ zh: '原图', en: 'SOURCE' })}
                 </span>
               </div>
               <div className="rounded-lg border border-border bg-muted/30 p-2.5">
@@ -666,7 +758,7 @@ function UploadPanel({ onBack, onSaved, onPreviewApply }: {
             </div>
           </div>
 
-          {/* 动作排 */}
+          {/* 动作排（r82：编辑模式隐藏重解析/换图——无原图可换；保存文案换「保存修改」） */}
           <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-2.5">
             <button
               type="button"
@@ -676,8 +768,10 @@ function UploadPanel({ onBack, onSaved, onPreviewApply }: {
               className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:pointer-events-none disabled:opacity-50"
               data-upload-save
             >
-              <Wand2 className="h-3.5 w-3.5" aria-hidden />
-              {t({ zh: '保存为我的模板', en: 'Save as my template' })}
+              {editMode ? <Pencil className="h-3.5 w-3.5" aria-hidden /> : <Wand2 className="h-3.5 w-3.5" aria-hidden />}
+              {editMode
+                ? t({ zh: '保存修改', en: 'Save changes' })
+                : t({ zh: '保存为我的模板', en: 'Save as my template' })}
             </button>
             <button
               type="button"
@@ -689,20 +783,24 @@ function UploadPanel({ onBack, onSaved, onPreviewApply }: {
               <Play className="h-3.5 w-3.5" aria-hidden />
               {t({ zh: '先试效果', en: 'Try it first' })}
             </button>
-            <button
-              type="button"
-              onClick={() => void parse()}
-              className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              {t({ zh: '重新解析', en: 'Re-parse' })}
-            </button>
-            <button
-              type="button"
-              onClick={reset}
-              className="ml-auto flex h-8 cursor-pointer items-center gap-1 rounded-md px-2.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {t({ zh: '换一张图', en: 'New image' })}
-            </button>
+            {!editMode && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void parse()}
+                  className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {t({ zh: '重新解析', en: 'Re-parse' })}
+                </button>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="ml-auto flex h-8 cursor-pointer items-center gap-1 rounded-md px-2.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {t({ zh: '换一张图', en: 'New image' })}
+                </button>
+              </>
+            )}
           </div>
         </>
       )}
@@ -878,19 +976,23 @@ export function FigureTemplatesDialog() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [filter, setFilter] = useState<FigureCategory | 'all' | 'mine'>('all')
   // r75：对比视图状态（非空 = 对比模式，替换网格与过滤 chips）；
-  // r79：上传视图状态（三视图：grid 网格 / upload 上传创建）；
-  // 弹窗关闭时重置回图库（重开落在网格而非残留对比页——库的浏览语义）
+  // r79：上传视图（grid 网格 / upload 上传创建）；
+  // r82：编辑视图（edit——复用上传面板的审核表单，editTarget 预填）；
+  // 弹窗关闭时重置回图库（重开落在网格而非残留对比/编辑页——库的浏览语义）
   const [compareId, setCompareId] = useState<string | null>(null)
-  const [view, setView] = useState<'grid' | 'upload'>('grid')
-  useEffect(() => { if (!open) { setCompareId(null); setView('grid') } }, [open])
+  const [view, setView] = useState<'grid' | 'upload' | 'edit'>('grid')
+  const [editId, setEditId] = useState<string | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { if (!open) { setCompareId(null); setView('grid'); setEditId(null) } }, [open])
   // 欢迎页画廊「＋ 从图片创建」入口：广播事件直达上传视图
   useEffect(() => {
-    const onOpenUpload = () => { setCompareId(null); setView('upload') }
+    const onOpenUpload = () => { setCompareId(null); setView('upload'); setEditId(null) }
     window.addEventListener('open-template-upload', onOpenUpload)
     return () => window.removeEventListener('open-template-upload', onOpenUpload)
   }, [])
   const allTemplates = [...FIGURE_TEMPLATES, ...customs]
   const compareTpl = allTemplates.find(x => x.id === compareId) ?? null
+  const editTpl = view === 'edit' ? (customs.find(x => x.id === editId) ?? null) : null
   const shown =
     filter === 'all' ? allTemplates
     : filter === 'mine' ? customs
@@ -940,6 +1042,49 @@ export function FigureTemplatesDialog() {
     })
   }
 
+  // r82：导出——全量自定义模板 → JSON 文件下载（bundle 协议，跨设备迁移/团队共享）
+  const exportCustoms = () => {
+    if (customs.length === 0) return
+    const blob = new Blob([exportCustomTemplates()], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `molvision-templates-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(tt({ zh: `已导出 ${customs.length} 张自定义模板`, en: `Exported ${customs.length} custom templates` }), {
+      description: tt({ zh: 'JSON 文件含命令序列与缩略图——导入到另一台设备即可复现', en: 'The JSON file carries commands & thumbnails — import it on another device to reproduce' }),
+    })
+  }
+
+  // r82：导入——JSON 文件 → 逐张过存储侧防线 → 与现有按 id 合并（同 id 更新/新 id 追加）
+  const onImportFile = async (f: File) => {
+    if (f.size > 4 * 1024 * 1024) {
+      toast.error(tt({ zh: '文件超过 4MB——不是常规模板导出（缩略图过多过大）', en: 'File exceeds 4MB — not a usual template export (too many/large thumbnails)' }))
+      return
+    }
+    try {
+      const text = await f.text()
+      const { imported, updated, skipped } = importCustomTemplates(text)
+      if (imported + updated === 0) {
+        toast.error(tt({ zh: `没有可导入的模板（${skipped} 条无效——命令未过白名单或字段缺失）`, en: `No importable templates (${skipped} invalid — commands failed the whitelist or fields missing)` }))
+        return
+      }
+      toast.success(tt({ zh: `导入完成：新增 ${imported} · 更新 ${updated}`, en: `Import done: ${imported} new · ${updated} updated` }), {
+        description: skipped
+          ? tt({ zh: `${skipped} 条无效条目已跳过（命令未过白名单或字段缺失）`, en: `${skipped} invalid entries skipped (whitelist or field failures)` })
+          : tt({ zh: '在「我的模板」分区查看', en: 'Find them under "My templates"' }),
+      })
+      setFilter('mine')
+    } catch (e) {
+      toast.error(e instanceof Error && e.message === 'BAD_FILE'
+        ? tt({ zh: '不是有效的模板 JSON 文件（需 MolVision 导出格式或模板数组）', en: 'Not a valid template JSON (MolVision export format or template array expected)' })
+        : tt({ zh: '导入失败——文件读取异常', en: 'Import failed — file read error' }))
+    } finally {
+      if (importRef.current) importRef.current.value = ''
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={v => setUi({ templateOpen: v })}>
       <DialogContent className="max-w-3xl">
@@ -969,6 +1114,14 @@ export function FigureTemplatesDialog() {
         ) : view === 'upload' ? (
           /* r79：从图片创建模板（上传 → AI 解析 → 审核入库） */
           <UploadPanel
+            onBack={() => setView('grid')}
+            onSaved={() => { setView('grid'); setFilter('mine') }}
+            onPreviewApply={tpl => apply(tpl)}
+          />
+        ) : view === 'edit' && editTpl ? (
+          /* r82：编辑自定义模板（复用审核表单预填；保存即更新，命令重过闸） */
+          <UploadPanel
+            editTarget={editTpl}
             onBack={() => setView('grid')}
             onSaved={() => { setView('grid'); setFilter('mine') }}
             onPreviewApply={tpl => apply(tpl)}
@@ -1014,7 +1167,7 @@ export function FigureTemplatesDialog() {
                   <span className="ml-1 font-mono text-[9px] opacity-70">{customs.length}</span>
                 </button>
               )}
-              {/* r79：上传图片创建自定义模板（与 chips 同排右对齐——库的一等公民入口） */}
+              {/* r79 上传创建入口 + r82 导入导出（库的一等公民入口；导出无模板时置灰） */}
               <button
                 type="button"
                 onClick={() => setView('upload')}
@@ -1025,6 +1178,36 @@ export function FigureTemplatesDialog() {
                 <ImagePlus className="h-3 w-3" aria-hidden />
                 {t({ zh: '从图片创建', en: 'From image' })}
               </button>
+              <button
+                type="button"
+                onClick={() => importRef.current?.click()}
+                data-import-templates
+                className="flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
+                title={t({ zh: '导入模板 JSON 文件（与现有模板合并，命令重新校验）', en: 'Import a template JSON file (merged with existing; commands re-validated)' })}
+              >
+                <Upload className="h-3 w-3" aria-hidden />
+                {t({ zh: '导入', en: 'Import' })}
+              </button>
+              <button
+                type="button"
+                onClick={exportCustoms}
+                disabled={customs.length === 0}
+                data-export-templates
+                className="flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40 cursor-pointer"
+                title={customs.length
+                  ? t({ zh: `导出 ${customs.length} 张自定义模板为 JSON（跨设备迁移/分享）`, en: `Export ${customs.length} custom templates as JSON (migrate / share)` })
+                  : t({ zh: '还没有可导出的自定义模板', en: 'No custom templates to export yet' })}
+              >
+                <Download className="h-3 w-3" aria-hidden />
+                {t({ zh: '导出', en: 'Export' })}
+              </button>
+              <input
+                ref={importRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) void onImportFile(f) }}
+              />
             </div>
 
             <div className="mol-scroll -mx-1 max-h-[62vh] overflow-y-auto px-1">
@@ -1039,6 +1222,7 @@ export function FigureTemplatesDialog() {
                     onDemo={() => void demo(tpl)}
                     onCompare={() => setCompareId(tpl.id)}
                     onDelete={tpl.custom ? () => removeCustom(tpl) : undefined}
+                    onEdit={tpl.custom ? () => { setCompareId(null); setEditId(tpl.id); setView('edit') } : undefined}
                   />
                 ))}
               </div>

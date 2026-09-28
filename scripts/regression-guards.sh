@@ -295,8 +295,25 @@ check "错误边界硬重启"           "location.reload"                "src/ap
 check "错误边界双语"             "仪器遇到临时故障.*temporary instrument fault" "src/app/error.tsx"      1
 check "错误边界故障码透传"       "error.digest"                   "src/app/error.tsx"                 2
 
+# ---- r82：UGC 三件套补齐「编辑」 + 导入导出 JSON ----
+check "更新存储库函数"           "updateCustomTemplate"           "src/lib/molecular/custom-templates.ts" 1
+check "更新命令重过闸"           "INVALID_COMMANDS"               "src/lib/molecular/custom-templates.ts" 2
+check "导出 bundle 协议"         "kind: 'custom-templates'"        "src/lib/molecular/custom-templates.ts" 1
+check "导入合并统计"             "importCustomTemplates"          "src/lib/molecular/custom-templates.ts" 1
+check "导入脏条目跳过"           "skipped\+\+"                    "src/lib/molecular/custom-templates.ts" 1
+check "卡片编辑入口"             "data-open-edit"                 "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "编辑模式预填"             "templateToDraft"                "src/components/studio/FigureTemplatesDialog.tsx" 2
+check "保存修改文案"             "保存修改.*Save changes"         "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "编辑模式禁粘贴"           "if \(editMode\) return"         "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "编辑视图接线"             "view === 'edit' && editTpl"     "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "导入入口按钮"             "data-import-templates"          "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "导出入口按钮"             "data-export-templates"          "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "导入文件读取"             "f\.text\(\)"                    "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "导出文件下载"             "URL\.createObjectURL"           "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "导入体积上限"             "4 \* 1024 \* 1024"              "src/components/studio/FigureTemplatesDialog.tsx" 1
+
 # ---- 汇总 ----
-TOTAL=192
+TOTAL=207
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0
