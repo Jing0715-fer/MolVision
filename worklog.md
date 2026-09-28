@@ -3114,3 +3114,33 @@ Stage Summary:
   2. 【中】对比视图左栏「现场渲染」按钮（对比时不看缩略图管线旧图，而是对当前结构实时应用渲染——对比体验闭环）
   3. 【中】模板缩略图 blur-up 占位 + 欢迎页画廊虚拟化（17 卡 img 全量加载，40+ 模板时需懒渲染）
   4. 【低】模板收藏/自定义保存（用户调好存为模板写 localStorage——UGC 闭环）
+
+---
+Task ID: r76
+Agent: main
+Task: 用户指令「拉取最新代码并继续，模版预览图注意不要显示无关的黑框」+ 上轮遗留四项（演示初始不居中全量排查 / 轮廓仍太粗 / 模板样式打磨 / 分类细化扩容）——缩略图清洁视口管线根治 + demoThenApply 居中双根因修复 + 轮廓单像素级 + 分类 4→6 组 + 位点特写两新模板（二硫键网络/金属活性中心）+ adapt 层⑨⑩两新规则 + guards 102→112 + E2E 全绿（像素级居中实证）
+
+Work Log:
+- 【同步】git fetch 发现远端已推进 r73-r75（cron 轮次：会话边界/参数化适配/欢迎页重设计/模板扩容 12→17）——本地 r72 孤儿提交经 patch-id + tree diff 证实与远端 3dbbdb9 内容全同（仅 PNG mode 位差异）→ reset --hard origin/main 干净同步
+- 【用户主诉①缩略图黑框/灰框根因定位】VLM 审旧图实锤：右侧黑框 = ViewBar 书签条空态卡（"Save view / No bookmarks yet"）；左上灰框 = ViewportHUD 结构信息 chip（PDB 号·原子数·表示法）；另有右上 84px WebGL 万向轮、右下 Quick styles、1D3Z 的底部系综条——全部是视口 overlay 被 canvas rect 裁剪截入
+- 【管线根治（gen-template-thumbs.sh）】①遍历 main 隐藏一切 absolute/fixed 且不含 canvas 的元素（八类 overlay 一网打尽——比逐类 CSS 选择器健壮，免 top-1\/2 转义坑）②万向轮是 WebGL scissor 渲染进 canvas 像素的，DOM 隐藏无效 → 关 window.__molEngine.settings.showAxes（引擎持 store settings 同一引用，applySettings 直赋值——实证 sync 不会覆盖；QA 钩子合法通道）③分两遍隐藏：命令前 + 截图前（命令会新造 overlay：pore 卡/系综条/密度图例——第二遍是 pore-analysis 干净截图的必要条件）④SPECS 增 2 条（idx 17/18）
+- 【全量重生成 19 张】两批前台执行（沙箱后台进程会被命令结束杀灭——r76 新坑入档：nohup & 在本 Bash 工具下不存活，须分块前台 + 10min timeout）；像素验证：18 张亮底右缘/左上角暗像素占比 0.00（旧图黑框区实打实消失）、ensemble 墨底属配方本意；VLM 五图抽审（rainbow/ensemble/disulfide/metal/pore）：无 UI 框、居中、内容对号
+- 【用户主诉②演示居中双根因修复】根因 A（欢迎页首发链路）：fetchPdbId resolve 在 parse 前 + MolViewer（dynamic chunk）晚于结构挂载 + 自动 fit 是 650ms 动画——旧 600ms 定时器跑命令时 turn/view 把 fit 打断在 partial pose，或 whenEngineReady 队列 FIFO 冲刷时 turn 紧跟 fit 起飞即取消（1D3Z「不在屏幕中心」实锤链路）；根因 B（in-template）：orient 飞行 650ms 后 120ms 接 turn z 90 同样半途打断（KcsA 竖排视角靠运气）。修：demoThenApply 改四段门控（结构入 store 轮询 ≤8s → whenEngineReady resolver → 80ms 两帧余量让队列里 rAF(fitView) 起飞 → waitForCameraIdle ≤2.6s 等飞行落地含 cinematic 1200ms）；runTemplateCommands 对 CAMERA_CMD_RE（orient/view/turn/move/zoom/dolly/rock/bookmark/clip）先 waitForCameraIdle(1800) 再执行——非相机命令节奏不变
+- 【居中实证（像素级质心）】1D3Z 欢迎页演示：剔除万向轮亮像素后质心 (466,192) vs 画面中心 (472,192) → 偏差 -0.7%/-0.1% 完美居中；pore-analysis 工作台演示（最险的 orient→turn 链）：-0.1% x / +4.9% y（膜板+环带构图的天然重 心，VLM 判「centered and well-framed」）；教训：live 视口测质心必须先剔 UI 亮像素（万向轮/pore 卡能把质心拖偏 +19%——第一轮测量假阳性险些误判修复无效）
+- 【用户主诉③轮廓再减细】模板配方全体 1.3/1.2（ss-motif 1.2/1.1）→ 统一 1.1 1.0（厚度触及 Sobel 采样步长 clamp 下限 1——单像素级）；全局默认 outlineThickness 1.5 → 1.2（types.ts + commands.ts 三处 clampNum 默认值 + 双语用法文案同步）；VLM 复审 rainbow/ligand-pocket：「thin/hairline, 0.5-1px, journal-quality, 不遮结构细节」
+- 【用户主诉④分类细化】FigureCategory general 拆三：basic 基础图式 4（rainbow/chain/ss/publication）/ surface 表面与全局 4（sasa/density/symmetry/ensemble）/ site 位点特写 5（ligand-pocket/domain/mutation + 新二）——FIGURE_CATEGORIES 6 chips（全部19/基础4/表面4/位点5/互作4/膜2），弹窗与欢迎页画廊双处动态计数 E2E 实证（All19 Basic4 Surface4 Site5 Interaction4 Membrane2）；位点过滤 → 5 卡 ✓
+- 【用户主诉⑤两新模板（语法预验证先行）】disulfide-bonds（3INS 胰岛素：show sticks, resn CYS 实测 12 残基 + color yellow + util cbc + orient；图式源 Adams 1969 Nature 224:491 菱方 2Zn 胰岛素——Hodgkin 组，DOI 10.1038/224491a0 doi.org 302 核实）；metal-center（2CBA 牛 CA II：show spheres, resn ZN 实测 1 离子 + color orange + 3.2Å 配位棍 byres(within) + 8Å 聚焦 zoom；图式源 Pavletich & Pabo 1991 Science 252:809 Zif268 锌指配位几何，DOI 10.1126/science.2028256 doi.org 302 核实）；COMMAND_GLOSSARY 增四条（color yellow/orange, resn · show sticks, byres · show spheres, resn——具体前置于泛匹配，color orange, resn 必须先于 color (teal|orange|...) 否则吞为域色）
+- 【adapt 层⑨⑩】⑨金属中心：结构无 ZN 但有其它金属（MG/FE/MN/CU/NI/CA/K/NA/CO/CD/HG 十二种）→ resn ZN 逐命令重映射 + note；无任何金属 → 四命令整组跳过 + note（1D3Z 实测 "1 smart adaptation"）；⑩二硫键：无 CYS → 命令仍跑（空选择自然 no-op）+ 诚实说明（1D3Z 泛素无 CYS 实测触发）
+- 【r75 同款坑当轮再犯再修（E2E 揭发）】⑨ 去重键写成「金属离子已重映射」而文案是「金属中心已重映射」→ 3CNA（含 MN²⁺）实测 "4 smart adaptations"（4 条 resn ZN 命令各刷一条 note）——去重键与文案严格对齐后复测 "1 smart adaptation"；r75 的教训原样重演一次，守卫已盖
+- 【E2E 全链路】欢迎画廊 19 卡（新增 18/19 号位）+ 6 分类 chips 计数 + 新缩略图 19/19 加载完成 + 画廊卡片点击演示 → 1D3Z 居中像素实证 + 模板弹窗 apply（1D3Z 上 metal-center 触发⑨跳过 / disulfide 触发⑩说明 / 3CNA 上 metal-center 触发⑨ MN 重映射）+ 位点过滤 5 卡 + VLM 终审欢迎页（「clean, production-ready, no UI boxes」）+ 移动端 375px（scrollW=375 零溢出，VLM 判布局堆叠干净）+ console 全程零错误
+- 【门禁】lint 0 · tsc src 0 错 · guards 102→112（+10：三新分类 13 行/二新模板 3 行/二图标/二命令序列/居中门控四件套/相机串行/金属重映射/无 CYS 说明/管线两遍隐藏/全局默认减细）· smoke 4/4 · dev.log 全 200
+
+Stage Summary:
+- 交付：缩略图清洁视口管线（overlay 双遍隐藏 + WebGL 万向轮关闭——右黑框/左上灰框根治，19 张全量重生成像素实证 0% 暗框残留）+ 演示居中双根因修复（欢迎页首发链路门控 + 相机命令串行等飞行——1D3Z 像素级 -0.7%/-0.1% 完美居中）+ 轮廓单像素级（1.1/1.0 + 全局默认 1.2）+ 分类 4→6 组直达分析目的 + 位点特写两新模板（二硫键网络/金属活性中心，DOI 双核实）+ adapt 层⑨金属重映射⑩无 CYS 说明
+- 用户五点指令全闭环：黑框（根治+实证）· 居中（双根因+像素级验证）· 轮廓（hairline 复审）· 样式打磨（管线清洁+分类+画廊）· 更多模板+分类（19 模板 6 组）
+- 坑（新入档）：①沙箱 Bash 工具后台进程不存活（nohup & 被杀）——长管线分块前台跑；②live 视口像素质心测量必须先剔 UI 亮像素（万向轮能拖偏 +19% 造成假阳性）；③agent-browser 视口设置是 `set viewport <w> <h>`（非 resize/viewport 直呼）；④git stash 混进临时脚本差点吞掉重生成缩略图（当场 pop 找回——永远别在验证脚本里顺手 stash）；⑤引擎 settings 与 store settings 同引用（applySettings 直赋值）——QA 钩子直接改 showAxes 不会被 sync 覆盖；⑥去重键≠文案 → 按命令条数刷屏（r75 坑 r76 原样重演——守卫盖住但模式要警觉）
+- 下一轮建议（按优先级）：
+  1. 【中】两态构象对比模板（superpose+morph 双结构 load 架构——runTemplateCommands 需 load 异步支持；r72 起长期欠账）
+  2. 【中】对比视图左栏「现场渲染」按钮（实时对当前结构应用渲染 vs 看管线旧图——对比体验闭环）
+  3. 【中】pore 收缩点残基归属标注（最近原子 → 残基名 3D label；r72 建议③）
+  4. 【低】模板收藏/自定义保存（localStorage UGC 闭环）；40+ 模板时画廊虚拟化 + blur-up

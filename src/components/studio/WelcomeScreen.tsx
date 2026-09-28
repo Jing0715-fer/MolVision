@@ -86,6 +86,7 @@ function GalleryCard({ tpl, index, busy, onDemo }: {
               src={`/templates/${tpl.id}.png`}
               alt={t(tpl.tagline)}
               loading="lazy"
+              decoding="async"
               onError={() => setImgOk(false)}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
             />

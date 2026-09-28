@@ -1606,7 +1606,7 @@ export function runCommand(raw: string): void {
         return ok(on ? tt({ zh: '自动性能模式开启（帧率持续偏低时自动关闭后处理并降分辨率）', en: 'Auto performance mode on (post-processing off and resolution lowered when fps stays low)' }) : tt({ zh: '自动性能模式关闭（画质设置已还原）', en: 'Auto performance mode off (quality settings restored)' }))
       }
       case 'outline': case 'silhouettes': case 'silhouette': {
-        if (!on && !off) return err(tt({ zh: '用法：set outline on|off（出版级轮廓线；或 outline on 1.5 2；ChimeraX 称 silhouettes）', en: 'Usage: set outline on|off (publication-grade outlines; or outline on 1.5 2; ChimeraX calls them silhouettes)' }))
+        if (!on && !off) return err(tt({ zh: '用法：set outline on|off（出版级轮廓线；或 outline on 1.1 1；ChimeraX 称 silhouettes）', en: 'Usage: set outline on|off (publication-grade outlines; or outline on 1.1 1; ChimeraX calls them silhouettes)' }))
         s.updateSettings({ outline: on })
         return ok(tt({ zh: `轮廓线 ${on ? '开启（Sobel 深度+亮度描边；ray 静帧同样生效；ChimeraX silhouettes 同义）' : '关闭'}`, en: `Outlines ${on ? 'on (Sobel depth+brightness edges; applies to ray stills too; ChimeraX silhouettes synonym)' : 'off'}` }))
       }
@@ -1616,9 +1616,9 @@ export function runCommand(raw: string): void {
         return ok(tt({ zh: `轮廓线强度 → ${clampNum(num, 0.2, 3, 1).toFixed(1)}（已开启）`, en: `Outline strength → ${clampNum(num, 0.2, 3, 1).toFixed(1)} (on)` }))
       }
       case 'outline_thickness': {
-        if (isNaN(num)) return err(tt({ zh: '用法：set outline_thickness <1-4>（像素采样步长），默认 1.5', en: 'Usage: set outline_thickness <1-4> (pixel sample step), default 1.5' }))
-        s.updateSettings({ outline: true, outlineThickness: clampNum(num, 1, 4, 1.5) })
-        return ok(tt({ zh: `轮廓线粗细 → ${clampNum(num, 1, 4, 1.5).toFixed(1)}px（已开启）`, en: `Outline thickness → ${clampNum(num, 1, 4, 1.5).toFixed(1)}px (on)` }))
+        if (isNaN(num)) return err(tt({ zh: '用法：set outline_thickness <1-4>（像素采样步长），默认 1.2', en: 'Usage: set outline_thickness <1-4> (pixel sample step), default 1.2' }))
+        s.updateSettings({ outline: true, outlineThickness: clampNum(num, 1, 4, 1.2) })
+        return ok(tt({ zh: `轮廓线粗细 → ${clampNum(num, 1, 4, 1.2).toFixed(1)}px（已开启）`, en: `Outline thickness → ${clampNum(num, 1, 4, 1.2).toFixed(1)}px (on)` }))
       }
       case 'transparency': case 'surface_opacity': {
         if (isNaN(num)) return err(tt({ zh: '用法：set transparency <0-1>（0=不透明，作用于表面表示）', en: 'Usage: set transparency <0-1> (0 = opaque; applies to surface representations)' }))
@@ -1684,7 +1684,7 @@ export function runCommand(raw: string): void {
     const strength = rest[1] !== undefined ? parseFloat(rest[1]) : NaN
     if (!isNaN(strength)) patch.outlineStrength = clampNum(strength, 0.2, 3, 1)
     const thickness = rest[2] !== undefined ? parseFloat(rest[2]) : NaN
-    if (!isNaN(thickness)) patch.outlineThickness = clampNum(thickness, 1, 4, 1.5)
+    if (!isNaN(thickness)) patch.outlineThickness = clampNum(thickness, 1, 4, 1.2)
     s.updateSettings(patch)
     if (!on) return ok(tt({ zh: '轮廓线已关闭', en: 'Outlines off' }))
     const cur = useMolStore.getState().settings

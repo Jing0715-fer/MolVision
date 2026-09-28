@@ -1,11 +1,22 @@
 'use client'
 
-// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比）
+// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化）
 // ─────────────────────────────────────────────────────────────────────────────
 // 定位：把 Cell / Nature / Science 等高影响力结构生物学文章中反复出现的「图式」
 // （figure style）——表示法组合 + 配色 + 视角 + 灯光 + 轮廓 + 相机——固化为命令
 // 序列模板。一键应用到用户当前结构，快速得到 CNS 级别作图。
 //
+// r76 打磨（用户反馈驱动）：
+//  · 分类细化：general 11 拆为基础图式/表面与全局/位点特写三类——过滤 chips 从
+//    4 组到 6 组（全部/基础/表面/位点/互作/膜蛋白），用户按目的直达
+//  · 轮廓再减细：全体描边模板 1.3/1.2 → 1.1/1.0（粗细触及 Sobel 采样步长下限——
+//    单像素级发丝线；全局默认同步 1.5 → 1.2）
+//  · 演示居中根治：demoThenApply 等结构入 store + 引擎挂载 + 自动 fit 飞行落地后
+//    才跑命令序列（旧 600ms 定时器会在 fit 半途打断相机——1D3Z 演示偏心根因）；
+//    runTemplateCommands 对相机命令串行等飞行落地（orient 后 120ms 接 turn 打断
+//    在 partial pose 的另一半根因）
+//  · 位点特写扩容：二硫键网络（胰岛素黄棍 CYS）+ 金属活性中心（金属球 + 配位棍）；
+//    adapt 层新规则⑨金属离子重映射/退避与⑩无半胱氨酸说明
 // r75 扩容（用户指令：继续增加更多模板，涵盖互作分析等多种场景）：
 //  · 新分类 interaction（互作分析）：盐桥网络 / 配体氢键网络 / DNA-蛋白复合物
 //    （+既有 interface-contacts 重归类）——全部走 contacts/hbonds 真实分析命令
@@ -35,7 +46,8 @@
 //  · 逐条执行间隔 120ms（preset 聚焦动画 / spectrum worker 着色平滑衔接）
 import { runCommand } from './commands'
 import { fetchPdbId } from './loader'
-import { dataRegistry, useMolStore } from './store'
+import { dataRegistry, engineRef, useMolStore } from './store'
+import { whenEngineReady } from './engine-ready'
 import { tt } from '@/i18n'
 import type { DualText } from '@/i18n'
 
@@ -48,8 +60,8 @@ export interface FigureCitation {
   doi?: string
 }
 
-/** 模板分类：通用图式（任意蛋白）vs 互作分析（接触/氢键/DNA）vs 特定蛋白类型（膜/通道） */
-export type FigureCategory = 'general' | 'interaction' | 'membrane'
+/** 模板分类（r76 细化）：基础构图 / 表面与全局 / 位点特写 / 互作分析 / 特定蛋白类型（膜/通道） */
+export type FigureCategory = 'basic' | 'surface' | 'site' | 'interaction' | 'membrane'
 
 /** 论文图复现模板 */
 export interface FigureTemplate {
@@ -62,7 +74,7 @@ export interface FigureTemplate {
   purpose: DualText
   /** 标签 chips（≤3，双语） */
   tags: DualText[]
-  /** 分类（弹窗过滤 chips：通用 / 互作分析 / 膜蛋白·通道） */
+  /** 分类（弹窗过滤 chips：基础 / 表面与全局 / 位点特写 / 互作分析 / 膜蛋白·通道） */
   category: FigureCategory
   /** 原文图式参考（「对比」视图右栏） */
   figure?: FigureRef
@@ -76,10 +88,12 @@ export interface FigureTemplate {
   accent: 'rose' | 'emerald' | 'amber' | 'sky' | 'violet' | 'teal' | 'orange' | 'fuchsia' | 'lime' | 'cyan' | 'slate'
 }
 
-/** 分类元数据（弹窗/欢迎页画廊过滤 chips） */
+/** 分类元数据（弹窗/欢迎页画廊过滤 chips；r76：general 11 拆三类，过滤直达分析目的） */
 export const FIGURE_CATEGORIES: { key: FigureCategory | 'all'; label: DualText }[] = [
   { key: 'all', label: { zh: '全部', en: 'All' } },
-  { key: 'general', label: { zh: '通用图式', en: 'General styles' } },
+  { key: 'basic', label: { zh: '基础图式', en: 'Basic styles' } },
+  { key: 'surface', label: { zh: '表面与全局', en: 'Surface & global' } },
+  { key: 'site', label: { zh: '位点特写', en: 'Site close-ups' } },
   { key: 'interaction', label: { zh: '互作分析', en: 'Interaction analysis' } },
   { key: 'membrane', label: { zh: '膜蛋白 · 通道', en: 'Membrane · channels' } },
 ]
@@ -99,12 +113,12 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: 'N→C 渐变卡通 + 白底细描边：结构文首图惯例', en: 'N→C rainbow cartoon on white with hairline outlines: the classic opening figure' },
     purpose: { zh: '整体概览 · 折叠走向 · 组装示意', en: 'Overall architecture · fold topology · assembly' },
     tags: [{ zh: '整体结构', en: 'Overview' }, { zh: '首图', en: 'Panel A' }],
-    category: 'general',
+    category: 'basic',
     figure: { ref: 'Fig. 1a', shows: { zh: '整体结构首图：全貌 + 折叠走向 + 结构域标注', en: 'Opening figure: overall architecture, fold topology and domain annotations' } },
     citation: { journal: 'Science', year: 2020, title: 'Cryo-EM structure of the 2019-nCoV spike in the prefusion conformation', doi: '10.1126/science.abb2507' },
     demo: '4HHB',
     // 差异点：纯白底 + 细描边 + PCA 主轴对齐（基线「经典款」，其余模板均偏离它）
-    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg white', 'outline on 1.3 1.2', 'orient'],
+    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg white', 'outline on 1.1 1.0', 'orient'],
     accent: 'rose',
   },
   {
@@ -113,7 +127,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: '逐链配色 + 加宽卡通 + 冷灰底正面视角：寡聚体组成一目了然', en: 'Per-chain coloring + widened cartoon + cool-gray front view: oligomer composition at a glance' },
     purpose: { zh: '多亚基组装 · 化学计量 · 界面初判', en: 'Multi-subunit assembly · stoichiometry · interfaces' },
     tags: [{ zh: '寡聚体', en: 'Oligomer' }, { zh: '复合物', en: 'Complex' }],
-    category: 'general',
+    category: 'basic',
     figure: { ref: 'Fig. 1', shows: { zh: '组装层级图：亚基如何拼成复合物 + 化学计量标注', en: 'Assembly hierarchy: how subunits build the complex, with stoichiometry' } },
     citation: { journal: 'Science', year: 2022, title: 'Architecture of the linker-scaffold in the nuclear pore complex' },
     demo: '4HHB',
@@ -127,12 +141,12 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: 'helix/sheet/coil 三色 + 暖象牙底 + 斜侧 20°：基序与拓扑教学图式', en: 'Helix/sheet/coil tri-color + warm ivory + 20° oblique: motif & topology schematics' },
     purpose: { zh: '折叠类型 · 基序识别 · 教学示意', en: 'Fold class · motif recognition · teaching' },
     tags: [{ zh: '拓扑', en: 'Topology' }, { zh: '基序', en: 'Motif' }],
-    category: 'general',
+    category: 'basic',
     figure: { ref: 'Fig. 1b', shows: { zh: '拓扑概览图：螺旋/折叠片布局 + 基序标注', en: 'Topology overview: helix/sheet layout with motif annotations' } },
     citation: { journal: 'Nature', year: 2024, title: 'Structural and molecular basis of choline uptake into the brain by FLVCR2', doi: '10.1038/s41586-024-57361-2' },
     demo: '1AKI',
     // 差异点：暖象牙底（#fbf8f1）+ 斜侧视角 turn y -20（基元交叠可辨）+ 细描边
-    commands: ['preset cartoon', 'util ss', 'bg #fbf8f1', 'turn y -20', 'outline on 1.2 1.1'],
+    commands: ['preset cartoon', 'util ss', 'bg #fbf8f1', 'turn y -20', 'outline on 1.1 1.0'],
     accent: 'amber',
   },
   {
@@ -141,12 +155,12 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: '口袋球棍 + 元素着色 + 自动聚焦 + 细描边：药物靶点文主角图', en: 'Pocket ball-stick + element coloring + auto-zoom + hairline edges: the drug-target hero figure' },
     purpose: { zh: '抑制剂设计 · 互作残基 · 靶点验证', en: 'Inhibitor design · contacting residues · target validation' },
     tags: [{ zh: '药物靶点', en: 'Drug target' }, { zh: '互作', en: 'Interactions' }],
-    category: 'general',
+    category: 'site',
     figure: { ref: 'Fig. 2', shows: { zh: '抑制剂口袋特写：互作残基 + 氢键/疏水接触逐项标注', en: 'Inhibitor pocket close-up: contacting residues annotated bond by bond' } },
     citation: { journal: 'Nature', year: 2020, title: 'Structure of Mpro from SARS-CoV-2 and discovery of its inhibitors', doi: '10.1038/s41586-020-2223-y' },
     demo: '6LU7',
     // 差异点：白底特写（bindingsite 自动聚焦）+ 细描边——近景描边必须细，粗线会糊掉球棍
-    commands: ['preset bindingsite', 'bg white', 'outline on 1.3 1.2'],
+    commands: ['preset bindingsite', 'bg white', 'outline on 1.1 1.0'],
     accent: 'emerald',
   },
   {
@@ -155,7 +169,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: 'SASA 渐变表面 + 冷雾底无描边：疏水核心与 patch 分布', en: 'SASA-graded surface on cool mist, outline-free: hydrophobic cores and patch distribution' },
     purpose: { zh: '表面性质 · 疏水 patch · 界面预测', en: 'Surface properties · hydrophobic patches · interface prediction' },
     tags: [{ zh: '表面', en: 'Surface' }, { zh: '疏水性', en: 'Hydrophobicity' }],
-    category: 'general',
+    category: 'surface',
     figure: { ref: 'Fig. 3', shows: { zh: '表面性质图：疏水/亲水 patch 分布与功能位点标注', en: 'Surface property map: hydrophobic/philic patches and functional sites' } },
     citation: { journal: 'Nature', year: 2024, title: 'Structural and molecular basis of choline uptake into the brain by FLVCR2', doi: '10.1038/s41586-024-57361-2' },
     demo: '4HHB',
@@ -169,7 +183,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: '彩虹模型 + 电子密度网格 + 平光：cryo-EM 局部质量图式', en: 'Rainbow model + density mesh + flat ambient: cryo-EM local-quality figure' },
     purpose: { zh: '模型质量 · 局部分辨率 · 投稿审稿', en: 'Model quality · local resolution · review-ready' },
     tags: [{ zh: 'cryo-EM', en: 'cryo-EM' }, { zh: '密度图', en: 'Maps' }],
-    category: 'general',
+    category: 'surface',
     figure: { ref: 'Fig. 1 / ED', shows: { zh: '模型-密度叠合图：局部质量与分辨率验证', en: 'Model-to-map overlay: local quality and resolution validation' } },
     citation: { journal: 'Science', year: 2020, title: 'Cryo-EM structure of the 2019-nCoV spike in the prefusion conformation', doi: '10.1126/science.abb2507' },
     demo: '3EKJ',
@@ -188,7 +202,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Nature', year: 2026, title: 'Next-generation inhibitors of SARS-CoV-2 Mpro overcome Paxlovid deficiencies' },
     demo: '6LU7',
     // 差异点：冷灰底 + 正面视角（界面正对读者，接触线全程可见）+ 细描边
-    commands: ['preset cartoon', 'util cbc', 'interface A B', 'bg #f5f7fa', 'view front', 'outline on 1.3 1.2'],
+    commands: ['preset cartoon', 'util cbc', 'interface A B', 'bg #f5f7fa', 'view front', 'outline on 1.1 1.0'],
     accent: 'orange',
   },
   {
@@ -197,7 +211,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: '对称伴侣 + 俯视晶格视角：结晶学组装语境图', en: 'Symmetry mates + top-down lattice view: crystallographic packing context' },
     purpose: { zh: '生物组装判读 · 晶格核对', en: 'Biological assembly · lattice cross-check' },
     tags: [{ zh: '晶体学', en: 'Crystallography' }, { zh: '组装', en: 'Assembly' }],
-    category: 'general',
+    category: 'surface',
     figure: { ref: 'Fig. S1', shows: { zh: '晶格堆积图：晶体学组装 vs 生物组装判读', en: 'Lattice packing: crystallographic vs biological assembly' } },
     citation: { journal: 'Nature', year: 2020, title: 'Structure of Mpro from SARS-CoV-2 and discovery of its inhibitors', doi: '10.1038/s41586-020-2223-y' },
     demo: '1CRN',
@@ -211,7 +225,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: 'NMR 多构象 + 墨底夜色系 + 细杆卡通：动力学与柔性图式', en: 'NMR conformers + ink-dark night palette + thin-rod cartoon: dynamics & flexibility' },
     purpose: { zh: '构象变化 · 柔性区段 · NMR 验证', en: 'Conformational spread · flexible segments · NMR validation' },
     tags: [{ zh: 'NMR', en: 'NMR' }, { zh: '动力学', en: 'Dynamics' }],
-    category: 'general',
+    category: 'surface',
     figure: { ref: 'Fig. 4', shows: { zh: '构象系综图：柔性区段散布与功能构象采样', en: 'Conformational ensemble: flexible segment spread and functional sampling' } },
     citation: { journal: 'Cell', year: 2021, title: 'Structural and dynamic insights into the activation of the μ-opioid receptor' },
     demo: '1D3Z',
@@ -226,12 +240,12 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: '出版互作预设 + 发丝描边 + Ray 渲染：直接可投稿', en: 'Publication preset + hairline outlines + ray render: submission-ready' },
     purpose: { zh: '投稿图 · 高分辨率 · 免修图', en: 'Submission figures · hi-res · no post-processing' },
     tags: [{ zh: '出稿', en: 'Figure out' }, { zh: 'Ray', en: 'Ray' }],
-    category: 'general',
+    category: 'basic',
     figure: { ref: 'Fig. 1', shows: { zh: '投稿主图：全貌 + 完整标注的出版静帧', en: 'Submission hero figure: fully annotated publication still' } },
     citation: { journal: 'Nature', year: 2026, title: 'Next-generation inhibitors of SARS-CoV-2 Mpro overcome Paxlovid deficiencies' },
     demo: '4HHB',
-    // 差异点：纯白底 + Ray 1920 静帧（超采样 AA）+ 发丝描边 1.3 1.2（r72 减细主战场）
-    commands: ['preset publication', 'bg white', 'outline on 1.3 1.2', 'ray 1920'],
+    // 差异点：纯白底 + Ray 1920 静帧（超采样 AA）+ 发丝描边 1.1 1.0（r76 再减细——单像素级）
+    commands: ['preset publication', 'bg white', 'outline on 1.1 1.0', 'ray 1920'],
     accent: 'lime',
   },
   {
@@ -246,7 +260,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Science', year: 1998, title: 'The Structure of the Potassium Channel: Molecular Basis of K+ Conduction and Selectivity', doi: '10.1126/science.280.5360.69' },
     demo: '1BL8',
     // 差异点（分析模板）：membrane 34 脂双层 + pore 计算环带（红/绿/蓝）+ 主轴对齐竖排视角
-    commands: ['preset cartoon', 'util cbc', 'bg white', 'membrane 34', 'pore', 'orient', 'turn z 90', 'outline on 1.3 1.2'],
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'membrane 34', 'pore', 'orient', 'turn z 90', 'outline on 1.1 1.0'],
     accent: 'slate',
   },
   {
@@ -284,7 +298,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
       'contacts (resn ASP+GLU and sidechain) | (resn LYS+ARG+HIS and sidechain) 4.0',
       'color red, resn ASP+GLU', 'color blue, resn LYS+ARG+HIS',
       'show sticks, (resn ASP+GLU+LYS+ARG+HIS) and sidechain',
-      'view front', 'outline on 1.3 1.2',
+      'view front', 'outline on 1.1 1.0',
     ],
     accent: 'rose',
   },
@@ -300,7 +314,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     demo: '6LU7',
     // 差异点：hbonds 范围烘焙（配体 5Å 邻域 byres 展开，非全局）——互作虚线只在口袋内
     // 出现；6LU7 N3 抑制剂实测 65 条氢键；无配体时 adapt 退避主链氢键网络
-    commands: ['preset bindingsite', 'bg white', 'hbonds on 3.4 in byres(within 5 of (ligand)) and not water', 'outline on 1.3 1.2'],
+    commands: ['preset bindingsite', 'bg white', 'hbonds on 3.4 in byres(within 5 of (ligand)) and not water', 'outline on 1.1 1.0'],
     accent: 'emerald',
   },
   {
@@ -317,7 +331,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // 差异点：核酸专属视觉（碱基五色棍 + 骨架管）+ protein|nucleic 零参接触——
     // 链名无关（任意 DNA/RNA-蛋白复合物开箱即用）；界面聚焦 zoom（识别图惯例——
     // 全景下接触虚线太稀，视图收到 DNA ± 8Å 接触面残基）；1LMB 实测 55 对接触
-    commands: ['preset cartoon', 'util cbc', 'color residue, nucleic', 'show sticks, nucleic', 'contacts protein | nucleic 4.0', 'bg white', 'view front', 'zoom byres(within 8 of (nucleic))', 'outline on 1.3 1.2'],
+    commands: ['preset cartoon', 'util cbc', 'color residue, nucleic', 'show sticks, nucleic', 'contacts protein | nucleic 4.0', 'bg white', 'view front', 'zoom byres(within 8 of (nucleic))', 'outline on 1.1 1.0'],
     accent: 'violet',
   },
   {
@@ -326,14 +340,14 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: '按域分段纯色 + 白底细描边：多域架构与域界一图说清', en: 'Solid color per domain + white hairlines: multi-domain architecture and boundaries at a glance' },
     purpose: { zh: '多域架构 · 域界标注 · 嵌合设计', en: 'Multi-domain architecture · boundary mapping · chimera design' },
     tags: [{ zh: '结构域', en: 'Domains' }, { zh: '架构', en: 'Architecture' }],
-    category: 'general',
+    category: 'site',
     figure: { ref: 'Fig. 1', shows: { zh: '结构域组织图：I/II/III 域分段 + 功能位点标注', en: 'Domain organization: I/II/III partition with functional site annotations' } },
     citation: { journal: 'Nature', year: 2020, title: 'Structure of Mpro from SARS-CoV-2 and discovery of its inhibitors', doi: '10.1038/s41586-020-2223-y' },
     demo: '6LU7',
     // 差异点：三域四段纯色（I 1-99 teal · II 100-182 orange · linker 183-197 gray ·
     // III 198-306 slate）——区间按 SARS-CoV-2 Mpro 域界（Alzyoud 2022 综述）；
     // adapt 层对短结构给诚实截断说明
-    commands: ['preset cartoon', 'util cbc', 'bg white', 'color teal, (resi 1-99)', 'color orange, (resi 100-182)', 'color gray, (resi 183-197)', 'color slate, (resi 198-306)', 'orient', 'outline on 1.3 1.2'],
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'color teal, (resi 1-99)', 'color orange, (resi 100-182)', 'color gray, (resi 183-197)', 'color slate, (resi 198-306)', 'orient', 'outline on 1.1 1.0'],
     accent: 'sky',
   },
   {
@@ -342,7 +356,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: 'B 因子通道热点高亮 + 残基标签：变异位点与关键残基标注图式', en: 'B-factor channel hotspots + residue labels: variant and key-residue annotation' },
     purpose: { zh: '疾病突变 · 催化残基 · 功能位点标注', en: 'Disease variants · catalytic residues · functional site annotation' },
     tags: [{ zh: '突变', en: 'Variants' }, { zh: '标注', en: 'Annotation' }],
-    category: 'general',
+    category: 'site',
     figure: { ref: '机制图版', shows: { zh: '变异位点图：关键残基标注 + 生化后果注解', en: 'Variant map: key residues annotated with biochemical consequences' } },
     citation: { journal: 'Nature', year: 1970, title: 'Stereochemistry of cooperative effects in haemoglobin: haem-haem interaction and the problem of allostery', doi: '10.1038/228726a0' },
     demo: '4HHB',
@@ -361,9 +375,46 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
       'show spheres, ((resi 6 and chain B+D) or (resi 87 and chain A+C) or (resi 92 and chain B+D))',
       'select (name CA) and ((resi 6 and chain B+D) or (resi 87 and chain A+C) or (resi 92 and chain B+D))',
       'label on',
-      'orient', 'outline on 1.3 1.2',
+      'orient', 'outline on 1.1 1.0',
     ],
     accent: 'fuchsia',
+  },
+
+  // ── r76 位点特写扩容：共价交联与金属配位两大经典「位点图」──
+  // 命令语法全部 E2E 预验证：3INS 实测 resn CYS 12 残基（黄棍在位）；2CBA 实测
+  // resn ZN 1 离子（橙球 + 3.2Å 配位棍 + 8Å 聚焦构图全部生效）
+  {
+    id: 'disulfide-bonds',
+    name: { zh: '二硫键网络', en: 'Disulfide network' },
+    tagline: { zh: '半胱氨酸黄棍 + 链分色卡通：共价交联架构一图判读', en: 'Cysteine yellow sticks + chain-colored cartoon: covalent cross-linking at a glance' },
+    purpose: { zh: '链间交联 · 折叠稳定 · 工程改造', en: 'Inter-chain crosslinks · fold stability · engineering' },
+    tags: [{ zh: '二硫键', en: 'Disulfide' }, { zh: '共价交联', en: 'Crosslinks' }],
+    category: 'site',
+    figure: { ref: 'Fig. 1', shows: { zh: '胰岛素首图：A/B 链二硫交联（A6-A11 链内 + A7-B7 / A20-B19 链间）', en: 'Insulin opening figure: A/B-chain disulfide crosslinks (A6-A11 intra + A7-B7 / A20-B19 inter)' } },
+    citation: { journal: 'Nature', year: 1969, title: 'Structure of rhombohedral 2 zinc insulin crystals', doi: '10.1038/224491a0' },
+    demo: '3INS',
+    // 差异点：黄棍 CYS 语义色（胰岛素二硫键教科书图式）+ 链分色卡通（交联归属可辨）
+    // + 白底细描边；adapt 层规则⑩：无 CYS 时诚实说明（命令仍跑、自然 no-op）
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'show sticks, resn CYS', 'color yellow, resn CYS', 'orient', 'outline on 1.1 1.0'],
+    accent: 'amber',
+  },
+  {
+    id: 'metal-center',
+    name: { zh: '金属活性中心', en: 'Metal active center' },
+    tagline: { zh: '金属橙球 + 配位残基棍 + 位点聚焦：金属酶催化几何一图判读', en: 'Orange metal sphere + coordinating sticks + site zoom: metalloenzyme geometry at a glance' },
+    purpose: { zh: '催化机制 · 配位几何 · 抑制剂设计', en: 'Catalysis · coordination geometry · inhibitor design' },
+    tags: [{ zh: '金属酶', en: 'Metalloenzyme' }, { zh: '配位几何', en: 'Coordination' }],
+    category: 'site',
+    figure: { ref: 'Fig. 2', shows: { zh: '金属配位几何图：锌位点配位键 + 螺旋取向（Cys2His2 型图式源流）', en: 'Coordination geometry figure: zinc-site ligation and helix presentation (the Cys2His2 archetype)' } },
+    // 图式源：Pavletich & Pabo 1991 Science 252:809（Zif268 锌指——金属配位几何图的
+    // 奠基图式）；演示取材 2CBA 牛 CA II（经典锌金属酶，催化锌 + 配位残基齐全）
+    citation: { journal: 'Science', year: 1991, title: 'Zinc finger-DNA recognition: crystal structure of a Zif268-DNA complex at 2.1 Å', doi: '10.1126/science.2028256' },
+    demo: '2CBA',
+    // 差异点：金属橙球（视觉锚点）+ 3.2Å 配位残基棍（几何可读）+ 8Å 聚焦（催化
+    // 中心满幅）+ 彩虹全局（上下文）；adapt 层规则⑨：无 ZN 时重映射结构内其它
+    // 金属离子（MG/FE/MN/CU/NI/CA/K/NA…）或整组退避
+    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg white', 'show spheres, resn ZN', 'color orange, resn ZN', 'show sticks, byres(within 3.2 of (resn ZN))', 'zoom byres(within 8 of (resn ZN))', 'outline on 1.1 1.0'],
+    accent: 'cyan',
   },
 ]
 
@@ -382,6 +433,8 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^color sasa/i, label: { zh: 'SASA 可及性渐变', en: 'SASA gradient' } },
   { re: /^color red, resn/i, label: { zh: '酸性残基红（ASP/GLU）', en: 'Acidic residues red (ASP/GLU)' } },
   { re: /^color blue, resn/i, label: { zh: '碱性残基蓝（LYS/ARG/HIS）', en: 'Basic residues blue (LYS/ARG/HIS)' } },
+  { re: /^color yellow, resn/i, label: { zh: '半胱氨酸黄（二硫键）', en: 'Cysteines yellow (disulfides)' } },
+  { re: /^color orange, resn/i, label: { zh: '金属离子橙', en: 'Metal ion orange' } },
   { re: /^color (teal|orange|gray|slate|sky|amber)\b/i, label: { zh: '结构域分段纯色', en: 'Domain partition color' } },
   { re: /^bg (white|#)/i, label: { zh: '期刊制版底色', en: 'Publication background' } },
   { re: /^outline on/i, label: { zh: '发丝级描边', en: 'Hairline outlines' } },
@@ -403,7 +456,9 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^membrane \d+/i, label: { zh: '脂双层板语境', en: 'Bilayer slab context' } },
   { re: /^pore\b/i, label: { zh: 'HOLE 孔道剖面环带', en: 'HOLE pore rings' } },
   { re: /^show sticks, nucleic/i, label: { zh: 'DNA 棍状表示', en: 'DNA sticks' } },
+  { re: /^show sticks, byres/i, label: { zh: '配位残基棍（金属邻域）', en: 'Coordinating residues (metal neighborhood)' } },
   { re: /^show sticks/i, label: { zh: '侧链棍状表示', en: 'Sidechain sticks' } },
+  { re: /^show spheres, resn/i, label: { zh: '金属离子球状标记', en: 'Metal ion spheres' } },
   { re: /^show spheres/i, label: { zh: '热点位球状标记', en: 'Hotspot site spheres' } },
   { re: /^zoom byres/i, label: { zh: '界面聚焦取景', en: 'Interface-focused framing' } },
   { re: /^zoom/i, label: { zh: '聚焦取景', en: 'Focused framing' } },
@@ -420,10 +475,44 @@ export function explainCommand(cmd: string): DualText | null {
   return null
 }
 
-/** 按命令序列逐条应用（120ms 微间隔衔接聚焦动画/worker 着色） */
+/** 相机类命令（执行前需确认在飞相机动画已落地——见 runTemplateCommands） */
+const CAMERA_CMD_RE = /^(orient|view|views|turn|move|zoom|dolly|rock|bookmark|clip)\b/i
+
+/** 等待相机动画落地（r76：orient 650ms 飞行后 120ms 接 turn 会把相机打断在
+ *  partial pose——KcsA 竖排环带/演示居中的另一半根因；上限兑底防僵死） */
+async function waitForCameraIdle(maxMs: number): Promise<void> {
+  const t0 = performance.now()
+  while (performance.now() - t0 < maxMs) {
+    const eng = engineRef.current
+    if (!eng || !eng.isCameraAnimating()) return
+    await new Promise(r => setTimeout(r, 60))
+  }
+}
+
+/** 等待结构真正入 store（r76：fetchPdbId resolve 在 parse 前——欢迎页首发链路
+ *  parse 走 rAF 异步，旧 600ms 定时器靠运气；超时兑底返 false） */
+async function waitForStructureInStore(pdbId: string, maxMs: number): Promise<boolean> {
+  const target = pdbId.trim().toUpperCase()
+  const t0 = performance.now()
+  while (performance.now() - t0 < maxMs) {
+    const s = useMolStore.getState()
+    if (s.structures.some(x => (x.meta.pdbId ?? '').toUpperCase() === target || x.name.toUpperCase() === target)) return true
+    await new Promise(r => setTimeout(r, 80))
+  }
+  return false
+}
+
+/** 按命令序列逐条应用（120ms 微间隔衔接聚焦动画/worker 着色；r76：相机命令
+ *  先等在飞相机动画落地再执行——非相机命令不受影响，节奏不变） */
 export function runTemplateCommands(commands: string[]): void {
   commands.forEach((cmd, i) => {
-    setTimeout(() => runCommand(cmd), i * 120)
+    setTimeout(() => {
+      if (CAMERA_CMD_RE.test(cmd.trim())) {
+        void waitForCameraIdle(1800).then(() => runCommand(cmd))
+      } else {
+        runCommand(cmd)
+      }
+    }, i * 120)
   })
 }
 
@@ -439,6 +528,10 @@ export function runTemplateCommands(commands: string[]): void {
 //  ⑥（r75）核酸三命令（color residue, nucleic / show sticks, nucleic / contacts protein|nucleic）→ 无核酸链逐条跳过
 //  ⑦（r75）结构域区间命令 → 聚合物短于域界时诚实截断说明（命令仍执行，超出区间自然 no-op）
 //  ⑧（r75）链特异热点（alter/select 引用 chain A-D）→ 链不匹配时退避天然 B 因子热图（跳过 alter/select/label）
+//  ⑨（r76）金属中心（resn ZN 四命令）→ 重映射结构内实际金属离子（MG/FE/MN…）；
+//          无任何金属时整组跳过（球化空选择会得到无球金属酶图——诚实跳过）
+//  ⑩（r76）二硫键网络（resn CYS 两命令）→ 无半胱氨酸时诚实说明（命令仍跑、
+//          选择自然 no-op——与⑦同哲学：可空转但要说清楚）
 // notes 携带每条降级说明（调用方 toast/appendLog 呈现）——「诚实降级」而非静默吞命令。
 // demoThenApply 不走此层：演示结构即模板取材结构，特征必然齐备。
 
@@ -478,6 +571,24 @@ export function adaptTemplateCommands(tpl: FigureTemplate): AdaptedTemplate {
   const tplChainRefs = new Set<string>()
   for (const c of tpl.commands) for (const m of c.matchAll(/chain ([A-D])/gi)) tplChainRefs.add(m[1].toUpperCase())
   const hotspotMismatch = tplChainRefs.size > 0 && [...tplChainRefs].some(c => !chainIds.has(c))
+  // ⑨ 预探测：金属离子（模板按演示结构 ZN 硬编码——用户结构可能是 MG/FE…或无金属）
+  const METAL_RESNS = ['ZN', 'MG', 'MN', 'FE', 'CU', 'NI', 'CO', 'CA', 'K', 'NA', 'CD', 'HG']
+  const metalsPresent = active.ligands.map(l => l.resName.trim().toUpperCase()).filter(r => METAL_RESNS.includes(r))
+  const hasZn = metalsPresent.includes('ZN')
+  const altMetal = metalsPresent.find(m => m !== 'ZN')
+  const tplMetal = /resn ZN\b/i.test(tpl.commands.join('\n'))
+  let metalNoted = false
+  // ⑩ 预探测：有无半胱氨酸（二硫键模板）
+  let hasCys = false
+  for (const ch of data.chains) {
+    if (ch.type === 'water') continue
+    for (const ri of ch.residueIdx) {
+      const r = data.residues[ri]
+      if (r && r.resName === 'CYS') { hasCys = true; break }
+    }
+    if (hasCys) break
+  }
+  const tplDisulfide = /resn CYS\b/i.test(tpl.commands.join('\n'))
   let domainNoted = false
   for (const cmd of tpl.commands) {
     // ① 界面接触：链重映射 / 单链跳过
@@ -574,6 +685,36 @@ export function adaptTemplateCommands(tpl: FigureTemplate): AdaptedTemplate {
         continue
       }
     }
+    // ⑨（r76）金属中心：模板按演示结构 ZN 硬编码——重映射结构内实际金属
+    //    （resn ZN → resn MG/FE/…）；无任何金属时四命令整组跳过（一次提示）
+    if (tplMetal && /resn ZN\b/i.test(cmd)) {
+      if (!hasZn && !altMetal) {
+        if (notes.every(n => !n.zh.includes('未检出金属离子'))) {
+          notes.push({ zh: '未检出金属离子——金属中心命令组已跳过（适用于锌酶/金属酶等含金属结构）', en: 'No metal ions detected — metal-center commands skipped (meant for metalloproteins)' })
+        }
+        continue
+      }
+      if (!hasZn && altMetal) {
+        commands.push(cmd.replace(/resn ZN\b/gi, `resn ${altMetal}`))
+        // 去重键 =「金属中心已重映射」——与文案严格对齐（r75 E2E 教训：去重键与
+        // 文案错位会按命令条数刷屏；r76 当轮 E2E 再揭发一次同类坑）
+        if (notes.every(n => !n.zh.includes('金属中心已重映射'))) {
+          notes.push({ zh: `金属中心已重映射为结构内的 ${altMetal} 离子（模板演示 ZN 锌）`, en: `Metal center remapped to the structure's ${altMetal} ion (template demos ZN zinc)` })
+        }
+        continue
+      }
+      commands.push(cmd)
+      continue
+    }
+    // ⑩（r76）二硫键网络：无半胱氨酸时诚实说明（命令仍跑——空选择自然 no-op，
+    //     与⑦域区间同哲学：可空转但要说清楚；一次提示）
+    if (tplDisulfide && /resn CYS\b/i.test(cmd) && !hasCys) {
+      if (notes.every(n => !n.zh.includes('无半胱氨酸'))) {
+        notes.push({ zh: '当前结构无半胱氨酸（CYS）——二硫键棍为空选择自然不显示（适用于含 CYS 的结构）', en: 'No cysteines (CYS) in this structure — disulfide sticks select nothing (meant for CYS-containing structures)' })
+      }
+      commands.push(cmd)
+      continue
+    }
     commands.push(cmd)
   }
   return { commands, notes }
@@ -584,10 +725,25 @@ export function logAdaptNotes(notes: DualText[]): void {
   for (const n of notes) useMolStore.getState().appendLog('out', tt(n))
 }
 
-/** 加载演示结构并应用模板（「演示」按钮：100% 还原缩略图的取材路径） */
+/** 加载演示结构并应用模板（「演示」按钮：100% 还原缩略图的取材路径）。
+ *  r76 居中根治：旧实现 fetchPdbId 后固定 600ms 就跑命令——但欢迎页首发链路里
+ *  parse 走 rAF 异步、MolViewer（dynamic chunk）晚于结构挂载、自动 fit 是
+ *  650ms 动画，三者叠加时 turn/view 命令会在 fit 半途把相机打断在 partial pose
+ *  （1D3Z NMR 演示「结构不在屏幕中心」的根因）。新序列：结构入 store →
+ *  引擎就绪 → 自动 fit 落地 → 才开始命令序列（runTemplateCommands 内部再对
+ *  相机命令串行等飞行，见上） */
 export async function demoThenApply(tpl: FigureTemplate): Promise<void> {
   await fetchPdbId(tpl.demo)
-  // 加载 resolve 后引擎首帧 rep 建立需一拍
-  await new Promise(r => setTimeout(r, 600))
+  const loaded = await waitForStructureInStore(tpl.demo, 8000)
+  if (!loaded) return // fetch 失败已 toast；兑底防僵死
+  // 引擎挂载（欢迎页首发：结构入 store 后 MolViewer 才开始挂载；fitView 已在
+  // whenEngineReady 队列里，先于本 resolver 入队 → 冲刷时先起飞）
+  await new Promise<void>(res => whenEngineReady(() => res()))
+  // 冲刷后 fit 起飞还差一拍 rAF（loader 的入队体是 rAF(fitView)）——先过两帧
+  // 再等飞行，否则 waitForCameraIdle 首检时动画尚未起飞会假性「立即落地」
+  await new Promise(r => setTimeout(r, 80))
+  // 自动 fit 飞行落地（normal 650ms / cinematic 1200ms 都等完；无动画时立即过）
+  await waitForCameraIdle(2600)
+  await new Promise(r => setTimeout(r, 100)) // 落位后一拍余量
   runTemplateCommands(tpl.commands)
 }

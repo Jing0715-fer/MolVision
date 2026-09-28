@@ -15,8 +15,8 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, BookOpenText, Boxes, Camera, CircleDot, Component, Dna, ExternalLink, Film,
-  GitCompareArrows, Grid3x3, Hexagon, Layers, Loader2, Magnet, MapPin, Network, Palette,
+  ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Dna, ExternalLink, Film,
+  GitCompareArrows, Grid3x3, Hexagon, Layers, Link2, Loader2, Magnet, MapPin, Network, Palette,
   Play, Target, Waves, Wand2, Cylinder, Zap, type LucideIcon,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
@@ -69,6 +69,9 @@ export const TPL_ICONS: Record<string, LucideIcon> = {
   'dna-protein-complex': Dna,
   'domain-coloring': Component,
   'mutation-hotspots': MapPin,
+  // r76 位点特写两新模板：Link2（共价交联）/ Atom（金属离子）
+  'disulfide-bonds': Link2,
+  'metal-center': Atom,
 }
 
 function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
@@ -106,6 +109,7 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
             src={`/templates/${tpl.id}.png`}
             alt={t(tpl.tagline)}
             loading="lazy"
+            decoding="async"
             onError={() => setImgOk(false)}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
           />
@@ -242,6 +246,8 @@ function ComparePanel({ tpl, onBack, onApply, onDemo, busy, hasStructure }: {
               <img
                 src={`/templates/${tpl.id}.png`}
                 alt={t(tpl.tagline)}
+                loading="lazy"
+                decoding="async"
                 onError={() => setImgOk(false)}
                 className="h-full w-full object-cover"
               />

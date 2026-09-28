@@ -150,7 +150,7 @@ check "模板分类过滤"             "FIGURE_CATEGORIES|category: 'membrane'" 
 check "模板专属图标"             "TPL_ICONS"                       "src/components/studio/FigureTemplatesDialog.tsx" 2
 check "模板差异化配方"           "set cartoon_width|view front|view top|turn y -20" "src/lib/molecular/figure-templates.ts" 4
 check0 "轮廓减细（负向：粗线回归即 FAIL）" "outline on 2 2\.5" "src/lib/molecular/figure-templates.ts"
-check "细描边配方在位"           "outline on 1\.3 1\.2"            "src/lib/molecular/figure-templates.ts" 4
+check "发丝描边配方（r76 单像素级）" "outline on 1\.1 1\.0"          "src/lib/molecular/figure-templates.ts" 13
 
 # ---- r73：会话边界体系（修复「新会话泄漏旧视角」——书签/场景 = 会话上下文） ----
 check "会话边界判定函数"         "beginFreshSessionIfSkipped"      "src/lib/molecular/session.ts"      1
@@ -179,7 +179,7 @@ check "画廊库弹窗入口"           "templateOpen"                    "src/c
 # ---- r75：模板扩容（互作分析）+ 原文图式对比 + 画廊 hover 浮层 ----
 check "互作分析分类四模板"       "category: 'interaction'"         "src/lib/molecular/figure-templates.ts" 4
 check "五新模板入库"             "salt-bridge-network|hbond-network|dna-protein-complex|domain-coloring|mutation-hotspots" "src/lib/molecular/figure-templates.ts" 5
-check "原文图式参考字段"         "figure:"                         "src/lib/molecular/figure-templates.ts" 17
+check "原文图式参考字段"         "figure:"                         "src/lib/molecular/figure-templates.ts" 19
 check "命令图鉴表"               "COMMAND_GLOSSARY"                "src/lib/molecular/figure-templates.ts" 3
 check "命令图鉴导出"             "export function explainCommand"  "src/lib/molecular/figure-templates.ts" 1
 check "对比视图组件"             "ComparePanel"                    "src/components/studio/FigureTemplatesDialog.tsx" 2
@@ -194,8 +194,20 @@ check "热点链不匹配降级"         "链不匹配"                        "
 check "域区间截断说明"           "结构域区间按"                    "src/lib/molecular/figure-templates.ts" 1
 check "缩略图管线增量模式"       "filtered mode"                   "scripts/gen-template-thumbs.sh"    1
 
+# ---- r76：清洁缩略图 + 演示居中根治 + 分类细化 + 位点特写扩容 ----
+check "分类细化三新类"           "category: 'basic'|category: 'surface'|category: 'site'" "src/lib/molecular/figure-templates.ts" 13
+check "位点特写两新模板"         "disulfide-bonds|metal-center"   "src/lib/molecular/figure-templates.ts" 3
+check "二新模板图标"             "'disulfide-bonds': Link2"        "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "二新模板命令序列"         "show sticks, resn CYS|show spheres, resn ZN" "src/lib/molecular/figure-templates.ts" 2
+check "演示居中根治（结构入店+引擎就绪+fit 落地）" "waitForStructureInStore|whenEngineReady|waitForCameraIdle" "src/lib/molecular/figure-templates.ts" 4
+check "相机命令串行等飞行"       "CAMERA_CMD_RE"                   "src/lib/molecular/figure-templates.ts" 2
+check "金属重映射降级"           "金属中心已重映射"                 "src/lib/molecular/figure-templates.ts" 1
+check "无半胱氨酸说明"           "无半胱氨酸"                      "src/lib/molecular/figure-templates.ts" 1
+check "管线清洁视口两遍"         "hidden:"                         "scripts/gen-template-thumbs.sh"    2
+check "全局默认描边减细"         "outlineThickness: 1\.2"          "src/lib/molecular/types.ts"        1
+
 # ---- 汇总 ----
-TOTAL=102
+TOTAL=112
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

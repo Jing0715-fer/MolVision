@@ -248,7 +248,7 @@ export function defaultSettings(): Settings {
     autoPerf: true,
     outline: false,
     outlineStrength: 1,
-    outlineThickness: 1.5,
+    outlineThickness: 1.2,
     showMembrane: false,
     membraneThickness: 34,
     sequenceHeight: 'normal',
