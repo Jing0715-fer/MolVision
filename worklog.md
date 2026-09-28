@@ -3263,3 +3263,41 @@ Stage Summary:
   2. 【中】解析结果「对照预览」分屏（左原图/右引擎按命令实时渲染——用 demoThenApply 的相机门控渲染到小视口）
   3. 【中】自定义模板导入导出（JSON 文件——跨设备迁移；命令序列天然可移植）
   4. 【低】40+ 模板时画廊虚拟化 + blur-up（r78 起建议仍有效）
+
+---
+Task ID: r80
+Agent: main
+Task: 用户指令「语言切换只保留右下角的即可，右上重复的删掉；继续打磨已有功能，全面代码审查和 E2E 测试；打磨欢迎页 UI——右侧还可以，左侧不够美观」——语言入口全应用去重（顶栏双处删除）+ 欢迎页左舱四项打磨（hero 主色晕染/三格遥测读数板/加载舱面板/示例卡 desc 副行）+ guards 179→187 + E2E 全链路（语言切换双端交互/画廊演示进工作台/上传面板/移动端零溢出）+ VLM 双主题视觉终审
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r79 即最新）；dev server 存活（GET / 200 稳定）
+- 【r80-1 语言入口去重】全应用 4 处实例盘点（欢迎页顶栏 welcome 变体 / 欢迎页页脚 default / 工作台 Toolbar / 工作台 StatusBar）→ 按用户指令只保留右下角两处：
+  · 欢迎页顶栏 `<LanguageToggle variant="welcome">` 删除（顶栏右侧只剩主题 + GitHub）
+  · Toolbar `<LanguageToggle variant="toolbar">` 删除 + import 清理（右翼簇减一控件，移动端溢出余量更宽）
+  · LanguageToggle 组件重写瘦身：welcome/toolbar 两死变体连同 Languages 图标 import、widthClass/abbrevZh 尾挂参数、md 尺寸一并清除——variant 收敛为 status|default 双形态（OrbitTrack tone= 命中 4→2）
+  · 顶栏顺带去重：Molecular Visualization Studio 截断文本删除（hero 副标题已承载同一文案，顶栏信息冗余）
+- 【r80-2 欢迎页左舱打磨】用户反馈右侧满意、左侧不足——四项结构化改造：
+  · hero 主色晕染：六角芯片外缘 -inset-9 径向渐变 blur-xl（primary 15%→透明 70%）——open-design hero 焦点光惯例，浅深双主题各实证
+  · 单枚版本徽章 → 三格遥测读数板：图式模板数（动态 allTemplates.length=28 主色等宽）/ WebGL 引擎就绪（LED 脉冲）/ RCSB 实时源——信息密度与设计感兼得；版本号仍由顶栏徽章+页脚承载（信息不丢）
+  · 加载舱面板：PDB 表单 + 状态行 + 「或本地文件」分隔线 + 本地文件按钮收拢为单座 rounded-xl 面板（bg-card/65 + backdrop-blur + 内高光阴影）——在线编号与本地文件两路进样方式同舱分组；内部元素随面板整体入场（原 280/300/340ms 三段 stagger 归并为面板级 280ms）
+  · 经典示例芯片 → 双列卡片：启用 loader 中 desc 字段（此前从未上屏——「小蛋白 · 327 原子」「药物靶点 · 二聚体」等六条副行）；长标题 truncate + 原生 title 提示（6LU7 一例按设计截断）
+- 【r80-3 代码审查】lint 0 错 · tsc src 0 错（examples/mini-services/skills 范围外 5 条历史预存与 src 无关）· guards 179→187（-1 旧「欢迎页浮动语言入口」正向往改为 2 负向 + 7 正向 r80 新守卫：顶栏/Toolbar 语言入口已删负向 ×2、状态栏入口保留、hero 晕染、遥测板动态数、加载舱面板、示例 desc 上屏、双列栅格）· dev.log 全程无 error/warn
+- 【E2E 全链路】
+  · 语言去重实证：欢迎页全页 [data-slide] 恰 1 处且在页脚（顶栏 false）→ 工作台全页恰 1 处且在状态栏（Toolbar false）——双端「只留右下角」双证
+  · 语言切换交互双端实证：页脚 EN→中文 tagline 即时切换 ✓；工作台状态栏 中文→EN（slide=en + Command palette 标签切换）→ 切回中文 ✓
+  · 左舱新元素实证：遥测板 3 格 + tplCount=28 动态 ✓ · 加载舱含 form/submit/或分隔/本地按钮同面板 ✓ · 示例卡 6 张含 desc 副行（首末抽查）✓
+  · 画廊演示链路：点击首卡 → 10s 内欢迎页卸载 + 工作台 canvas 就位（demoThenApply 完整链）✓
+  · 上传面板：欢迎页「从图片创建」→ 弹窗上传视图（含拖拽区）✓
+  · 移动端 375px：scrollW=375 零横向溢出 · 遥测板 3×106px · 示例栅格 2×156px ✓
+- 【VLM 视觉终审】深色 8.5/10（hero 层次「优秀」·加载舱分组「优秀」·遥测板「既美观又增加工具可信度」·确认顶栏仅主题+GitHub 无语言控件、右下角语言位）· 浅色全清（遥测板可读/加载舱无缺陷/示例卡无截断/无重叠破版）· 移动端全清（垂直堆叠正常/无溢出/三格等宽可读）· VLM 建议采纳一条：本地文件按钮格式提示 /85→全不透明（对比度微提亮）
+- 【门禁】lint 0 · tsc src 0 · guards 187/187 · smoke 4/4（console 错误零）· dev.log 无 error
+
+Stage Summary:
+- 交付：语言切换入口全应用去重（用户指令逐字闭环——顶栏两处删、右下角两处留且交互双端实证）；欢迎页左舱四项打磨（hero 晕染/遥测读数板/加载舱面板/示例双列卡 desc 副行——启用从未上屏的 loader desc 字段）；LanguageToggle 组件瘦身（死变体+死参数清除）
+- 用户指令全闭环：「右上重复的删掉」（双端实证）·「打磨欢迎页左栏」（VLM 双主题+移动端三审通过）·「全面代码审查」（lint/tsc/guards/smoke/dev.log 五路）·「E2E 测试」（语言切换/画廊/上传/移动端全链路）
+- 架构资产：负向守卫先例（check0 验证「已删除」类回归——防止语言入口被后续改写复活）；desc 字段上屏先例（loader 数据字段与 UI 同步维护的提醒）
+- 下一轮建议（按优先级）：
+  1. 【中】自定义模板「编辑」入口（r79 起建议仍有效——updateCustomTemplate + 审核表单复用）
+  2. 【中】解析结果「对照预览」分屏（左原图/右引擎实时渲染）
+  3. 【低】SessionResume 卡片箭头垂直居中微调（VLM 点名的唯一视觉微瑕）
+  4. 【低】40+ 模板时画廊虚拟化 + blur-up

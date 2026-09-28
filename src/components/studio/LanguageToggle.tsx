@@ -1,27 +1,23 @@
 'use client'
 
-// 语言切换器（r68「轨道驻留开关」；r69 全应用形态统一）
+// 语言切换器（r68「轨道驻留开关」；r80 入口去重）
 // ─────────────────────────────────────────────────────────────────────────────
 // 设计概念——呼应欢迎页原子轨道视觉主题：两个「轨道位」（中文 / EN，母语名
 // 惯例），一枚「电子滑块」驻留在当前语言位；切换时滑块沿轨道滑向另一位
-// （probe-pop 同族回弹缓动），到位瞬间触发一次 LED「锁定」脉冲（r69：仪器
+// （probe-pop 同族回弹缓动），到位瞬间触发一次 LED「锁定」脉冲（仪器
 // 到位反馈语义——滑块滑到驻留位 = 仪器旋钮到位锁定）。
 //
-// r69 形态统一——全应用四处入口均为轨道滑块形态（消除旧分段控件混搭）：
-//  · welcome  —— 欢迎页顶栏内联玻璃胶囊（r74 由右上浮动位迁入顶部导航栏，
-//    主入口；与右下 AI 胶囊对角呼应）
-//  · default  —— 欢迎页页脚 instrument-bar 墨色仪表滑轨（sm，紧凑次入口）
-//  · toolbar  —— 工作台顶栏常驻（neutral 浅底滑轨 + Languages 图标，
-//    外框沿用工具栏胶囊 border-border bg-muted/40，窄屏图标隐藏）
-//  · status   —— 工作台底部状态栏（instrument 墨底紧凑 xs 滑轨，
-//    与欢迎页页脚同款仪表语义）
+// r80 入口去重——用户指令「语言切换只保留右下角的即可，右上重复的删掉」：
+//  · 全应用仅保留两处右下角入口，顶栏重复入口（欢迎页顶栏 welcome 变体 /
+//    工作台 toolbar 变体）已删除：
+//    · default —— 欢迎页页脚 instrument-bar 墨色仪表滑轨（sm，唯一主入口）
+//    · status  —— 工作台底部状态栏（instrument 墨底紧凑 xs 滑轨）
 //
 // 交互细节：
 //  · 键盘：Tab 逐位聚焦（原生 button）；位上 ←/→ 在两位间拨动（仪表拨杆语义）
 //  · 切换即写 cookie（molvision-locale），下次首屏 SSR 直读该 cookie，零闪烁
 //  · prefers-reduced-motion 下滑块过渡与锁定脉冲均退化为瞬时
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Languages } from 'lucide-react'
 import { useI18n, type Locale } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -35,7 +31,7 @@ const ITEMS: { key: Locale; label: string; title: string }[] = [
 const SLIDE = 'transition-[transform,translate] duration-300 ease-[cubic-bezier(0.34,1.35,0.64,1)] motion-reduce:duration-0'
 
 type Tone = 'plain' | 'instrument'
-type Size = 'md' | 'sm' | 'xs'
+type Size = 'sm' | 'xs'
 
 /**
  * 双位轨道 + 电子滑块（全形态共用核心）。
@@ -43,12 +39,10 @@ type Size = 'md' | 'sm' | 'xs'
  * 两位按钮（各占内容盒 50%）的中心与滑块两驻留位的中心严格重合；
  * en 时滑块 translate-x-full（= 自身宽度）→ 严格对称换位。
  * data-slide 暴露滑块当前驻留位（E2E 探针）。
- *  · tone：plain（常规底——胶囊/工具栏外框内）/ instrument（墨色仪表底座恒深底）
- *  · size：md（welcome h-10）/ sm（default + toolbar h-7）/ xs（status h-6）
- *  · widthClass：宽度覆写（toolbar 移动端收紧至 60px 防顶栏溢出，≥sm 恢复）
- *  · abbrevZh：中文位 <sm 显示单字「中」（工具栏窄屏沿用旧版缩写惯例）
+ *  · tone：plain（常规底）/ instrument（墨色仪表底座恒深底）
+ *  · size：sm（default h-7）/ xs（status h-6）
  */
-function OrbitTrack({ tone, size, widthClass, abbrevZh }: { tone: Tone; size: Size; widthClass?: string; abbrevZh?: boolean }) {
+function OrbitTrack({ tone, size }: { tone: Tone; size: Size }) {
   const { locale, setLocale, t } = useI18n()
   const en = locale === 'en'
 
@@ -83,10 +77,8 @@ function OrbitTrack({ tone, size, widthClass, abbrevZh }: { tone: Tone; size: Si
       onKeyDown={onKeyDown}
       className={cn(
         'relative flex shrink-0 select-none rounded-full p-[3px]',
-        size === 'md' && 'h-10 w-[120px]',
-        size === 'sm' && 'h-7',
+        size === 'sm' && 'h-7 w-[100px]',
         size === 'xs' && 'h-6 w-[88px]',
-        widthClass ?? (size === 'sm' && 'w-[100px]'),
         tone === 'instrument' && 'border border-white/10 bg-white/5',
       )}
     >
@@ -114,7 +106,6 @@ function OrbitTrack({ tone, size, widthClass, abbrevZh }: { tone: Tone; size: Si
           title={it.title}
           className={cn(
             'relative z-[1] flex h-full w-1/2 cursor-pointer items-center justify-center rounded-full font-semibold tracking-wide transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
-            size === 'md' && 'text-[12.5px]',
             size === 'sm' && 'text-[11px]',
             size === 'xs' && 'text-[10px]',
             tone === 'instrument'
@@ -126,13 +117,7 @@ function OrbitTrack({ tone, size, widthClass, abbrevZh }: { tone: Tone; size: Si
                 : 'text-muted-foreground hover:text-foreground',
           )}
         >
-          {/* 窄屏缩写（移动端工具栏空间紧张），≥sm 全名 */}
-          {it.key === 'zh' && abbrevZh ? (
-            <>
-              <span className="sm:hidden">中</span>
-              <span className="hidden sm:inline">中文</span>
-            </>
-          ) : it.label}
+          {it.label}
         </button>
       ))}
     </div>
@@ -142,42 +127,13 @@ function OrbitTrack({ tone, size, widthClass, abbrevZh }: { tone: Tone; size: Si
 export function LanguageToggle({
   variant = 'default',
 }: {
-  variant?: 'status' | 'default' | 'toolbar' | 'welcome'
+  variant?: 'status' | 'default'
 }) {
-  // —— welcome：欢迎页顶栏内联玻璃胶囊（r74 欢迎页重设计——原右上浮动位退役，
-  //     迁入顶部导航栏流式槽位；保留玻璃质感 + 图标 + 轨道 md。
-  //     注意不可用 welcome-float-chip（其 position:absolute 会破坏顶栏流式布局），
-  //     浮起改走 translate 属性（顶栏无 fill-mode:both 动画占用，transform 亦可用）——
-  //     行为手感与浮动胶囊保持一致） ——
-  if (variant === 'welcome') {
-    return (
-      <div
-        className="welcome-in flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-foreground/[0.16] bg-card/85 pl-2.5 pr-1 shadow-[0_2px_12px_oklch(0.25_0.01_80/0.1)] transition-[translate,box-shadow,border-color] duration-200 hover:translate-y-[-1px] hover:border-foreground/30 hover:shadow-[0_4px_16px_oklch(0.25_0.01_80/0.16)] dark:border-white/[0.15] dark:bg-white/[0.07] dark:shadow-[0_2px_14px_oklch(0_0_0/0.35)] dark:hover:border-white/30 dark:hover:shadow-[0_4px_16px_oklch(0_0_0/0.42)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-        style={{ animationDelay: '500ms' }}
-      >
-        <Languages aria-hidden className="h-3.5 w-3.5 shrink-0 text-primary/85" />
-        <OrbitTrack tone="plain" size="md" />
-      </div>
-    )
-  }
-
-  // —— toolbar：工作台顶栏（muted 外框胶囊 + 图标 + 浅底滑轨；窄屏图标隐藏；
-  //     移动端轨道收紧 60px + 中文缩写「中」——总宽 69px 与 r68 旧版持平，
-  //     防顶栏右溢（r69 E2E 实测 375px 下旧版零冗余，任何加宽即溢出） ——
-  if (variant === 'toolbar') {
-    return (
-      <div className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-muted/40 pl-1 sm:pl-1.5 pr-[3px]">
-        <Languages aria-hidden className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
-        <OrbitTrack tone="plain" size="sm" widthClass="w-[60px] sm:w-[100px]" abbrevZh />
-      </div>
-    )
-  }
-
   // —— status：工作台底部状态栏（instrument 紧凑 xs 滑轨） ——
   if (variant === 'status') {
     return <OrbitTrack tone="instrument" size="xs" />
   }
 
-  // —— default：欢迎页页脚 instrument-bar 墨色仪表滑轨（紧凑次入口） ——
+  // —— default：欢迎页页脚 instrument-bar 墨色仪表滑轨（r80 起唯一主入口） ——
   return <OrbitTrack tone="instrument" size="sm" />
 }

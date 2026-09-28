@@ -1,18 +1,27 @@
 'use client'
 
-// 欢迎页（r74 Open-design 风格重设计）：未加载结构时的「仪器待机 + 作品橱窗」大屏
+// 欢迎页（r74 Open-design 风格重设计；r80 左舱打磨 + 语言入口去重）：未加载
+// 结构时的「仪器待机 + 作品橱窗」大屏
 // ─────────────────────────────────────────────────────────────────────────────
 // r74 用户需求：「首页也需要展示模板加载示例等，优化欢迎页美观度，做成类似
 // open design 那种风格」——现代设计工具官网（open design / gallery showcase）
 // 的经典布局语言落位：
-//   · 顶栏：品牌 monogram + 版本徽章 + 右侧语言轨道 / 主题 / GitHub
-//     （语言入口由右上浮动位迁入顶栏——LanguageToggle welcome 变体内联化）
+//   · 顶栏：品牌 monogram + 版本徽章 + 右侧主题 / GitHub
+//     （r80：语言切换入口去重——顶栏重复入口删除，全应用仅保留右下角
+//      两处：欢迎页页脚 instrument-bar + 工作台状态栏）
 //   · 大屏分栏（lg+）：左 hero 加载舱（仪器语义全保留：轨道背景 / 晶体按键
-//     CTA / 会话恢复 / 示例芯片）｜右模板画廊（12 张引擎真实渲染缩略图，
+//     CTA / 会话恢复 / 示例卡片）｜右模板画廊（引擎真实渲染缩略图，
 //     点击卡片即刻「演示加载」——未加载结构时模板库的最短体验路径）
 //   · 移动端（<lg）：垂直堆叠整页滚动（hero → 画廊 → 仪表条）
 //   · 双栏各自独立滚动（lg+）：作品橱窗的应用分栏感；画廊 sticky 区头
 //     毛玻璃常驻（gallery-head-blur）
+//
+// r80 左舱打磨（用户反馈「右侧还可以，左侧不够美观」）：
+//   · hero 六角芯片加主色晕染（open-design hero 焦点光）
+//   · 单枚版本徽章 → 三格遥测读数板（图式模板数动态 / WebGL 引擎 LED /
+//     RCSB 实时源——信息密度与设计感兼得）
+//   · 加载区收拢为「加载舱」面板（表单 + 或分隔 + 本地文件同座）
+//   · 示例芯片 → 双列卡片（启用 desc 副行——此前从未上屏）
 //
 // 历史资产保留（r45/r68/r69 打磨成果）：轨道电子巡航 / 六角 halo 呼吸 /
 // 原子核呼吸 / LED 待机脉冲 / CTA 晶体按键 / welcome-in 错峰入场 /
@@ -275,13 +284,10 @@ export function WelcomeScreen() {
             v1.4
           </span>
         </div>
-        <span className="mol-micro ml-1 hidden truncate text-muted-foreground/70 lg:inline">
-          Molecular Visualization Studio
-        </span>
         <div className="flex-1" />
-        {/* 右侧动作：语言轨道（welcome 内联胶囊）· 主题 · GitHub */}
+        {/* 右侧动作：主题 · GitHub（r80：语言入口去重——顶栏重复入口删除，
+            欢迎页唯一语言入口在页脚右下角 instrument-bar） */}
         <div className="flex shrink-0 items-center gap-1.5">
-          <LanguageToggle variant="welcome" />
           <button
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
             suppressHydrationWarning
@@ -318,8 +324,10 @@ export function WelcomeScreen() {
         <div className="mol-scroll flex w-full flex-col lg:w-[400px] lg:shrink-0 lg:overflow-y-auto lg:border-r lg:border-border/60 xl:w-[448px]">
           <div className="m-auto flex w-full max-w-[368px] flex-col items-center px-6 py-10 lg:px-7 [&:has(.panel-card)_.load-sep]:mt-7">
 
-            {/* —— 品牌 hero（六角芯片：弹性入场 + halo 呼吸 + 双电子巡航 + 原子核呼吸） —— */}
+            {/* —— 品牌 hero（六角芯片：弹性入场 + halo 呼吸 + 双电子巡航 + 原子核呼吸；
+                 r80 主色晕染——open-design hero 焦点光，极淡径向渐变衬托芯片） —— */}
             <div className="hero-badge-in relative flex h-[76px] w-[76px] items-center justify-center" aria-hidden>
+              <div className="absolute -inset-9 rounded-full bg-[radial-gradient(circle,color-mix(in_oklab,var(--primary)_15%,transparent),transparent_70%)] blur-xl" />
               <svg viewBox="0 0 28 28" className="hero-halo absolute inset-0 h-full w-full">
                 <polygon points="14,1 25.1,7.25 25.1,20.75 14,27 2.9,20.75 2.9,7.25" className="fill-primary" />
               </svg>
@@ -353,14 +361,30 @@ export function WelcomeScreen() {
               {t({ zh: '在浏览器中探索蛋白质 · 核酸 · 配体与电子密度', en: 'Explore proteins · nucleic acids · ligands & electron density in the browser' })}
             </p>
 
-            {/* 版本徽章（正式产品可信度：版本 + 引擎就绪读数） */}
-            <div className="welcome-in mt-5 flex items-center gap-2" style={{ animationDelay: '185ms' }}>
-              <span className="flex items-center gap-1.5 rounded-full border border-foreground/[0.16] dark:border-white/15 px-2.5 py-[3.5px]">
-                <span className="led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-                <span className="font-mono text-[9px] font-semibold tracking-[0.12em] text-muted-foreground">
-                  v1.4 · {t({ zh: 'WebGL 引擎就绪', en: 'WebGL engine ready' })}
+            {/* r80 遥测读数板（取代单枚版本徽章——open-design hero 统计行 ×
+                仪器遥测语义：动态模板数 / 引擎就绪 LED / 数据源实况；
+                版本号仍由顶栏徽章 + 页脚承载） */}
+            <div
+              className="welcome-in mt-5 grid w-full grid-cols-3 overflow-hidden rounded-lg border border-foreground/[0.14] bg-card/60 backdrop-blur-[2px] dark:border-white/[0.12] dark:bg-white/[0.035]"
+              style={{ animationDelay: '185ms' }}
+              role="group"
+              aria-label={t({ zh: '平台遥测读数', en: 'Platform telemetry' })}
+            >
+              <div className="flex flex-col items-center gap-1 border-r border-foreground/[0.1] py-2.5 dark:border-white/[0.08]">
+                <span className="font-mono text-[15px] font-bold leading-none tabular-nums text-primary">{allTemplates.length}</span>
+                <span className="mol-micro text-[8px] leading-none">{t({ zh: '图式模板', en: 'Figure styles' })}</span>
+              </div>
+              <div className="flex flex-col items-center gap-1 border-r border-foreground/[0.1] py-2.5 dark:border-white/[0.08]">
+                <span className="flex items-center gap-1.5 font-mono text-[15px] font-bold leading-none text-foreground">
+                  <span className="led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+                  WebGL
                 </span>
-              </span>
+                <span className="mol-micro text-[8px] leading-none">{t({ zh: '引擎就绪', en: 'Engine ready' })}</span>
+              </div>
+              <div className="flex flex-col items-center gap-1 py-2.5">
+                <span className="font-mono text-[15px] font-bold leading-none text-foreground">RCSB</span>
+                <span className="mol-micro text-[8px] leading-none">{t({ zh: '实时数据源', en: 'Live source' })}</span>
+              </div>
             </div>
 
             {/* —— 继续上次会话（dynamic ssr:false 客户端挂载：水合安全 + 存档读取） —— */}
@@ -376,59 +400,71 @@ export function WelcomeScreen() {
               <span className="h-px flex-1 bg-foreground/[0.14] dark:bg-foreground/[0.13]" />
             </div>
 
-            <form
-              onSubmit={e => { e.preventDefault(); submitId() }}
-              className="welcome-in mt-4 flex w-full gap-2"
+            {/* r80 加载舱（open-design 主 CTA 面板化：表单 + 或分隔 + 本地文件
+                同座——仪器语义的「进样舱」分组，内部元素随面板整体入场） */}
+            <div
+              className="welcome-in mt-4 w-full rounded-xl border border-foreground/[0.14] bg-card/65 p-3.5 shadow-[inset_0_1px_0_oklch(1_0_0/0.45),0_1px_10px_oklch(0.25_0.01_80/0.05)] backdrop-blur-[2px] dark:border-white/[0.12] dark:bg-white/[0.035] dark:shadow-none"
               style={{ animationDelay: '280ms' }}
             >
-              <input
-                ref={inputRef}
-                value={id}
-                onChange={e => setId(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
-                maxLength={4}
-                placeholder={t({ zh: 'PDB 编号 · 如 4HHB', en: 'PDB ID · e.g. 4HHB' })}
-                aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
-                autoComplete="off"
-                spellCheck={false}
-                className="h-12 w-full min-w-0 flex-1 rounded-md border border-foreground/20 bg-card text-center font-mono text-[15px] font-medium uppercase tracking-[0.28em] text-foreground shadow-[inset_0_1px_2px_oklch(0.25_0.01_80/0.07)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:font-sans placeholder:text-[11.5px] placeholder:font-normal placeholder:tracking-[0.1em] placeholder:text-muted-foreground hover:border-foreground/35 focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_24%,transparent),inset_0_1px_2px_oklch(0.25_0.01_80/0.04)] dark:border-white/[0.16] dark:bg-white/[0.045] dark:shadow-none dark:hover:border-white/25 dark:focus-visible:border-primary dark:focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_26%,transparent)]"
-              />
-              <button
-                type="submit"
-                disabled={loading || id.length !== 4}
-                className="welcome-cta flex h-12 shrink-0 select-none items-center gap-2 rounded-md bg-primary px-5 text-[13px] font-semibold text-primary-foreground disabled:pointer-events-none disabled:opacity-40"
+              <form
+                onSubmit={e => { e.preventDefault(); submitId() }}
+                className="flex w-full gap-2"
               >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {t({ zh: '获取结构', en: 'Fetch' })}
+                <input
+                  ref={inputRef}
+                  value={id}
+                  onChange={e => setId(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
+                  maxLength={4}
+                  placeholder={t({ zh: 'PDB 编号 · 如 4HHB', en: 'PDB ID · e.g. 4HHB' })}
+                  aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-12 w-full min-w-0 flex-1 rounded-md border border-foreground/20 bg-card text-center font-mono text-[15px] font-medium uppercase tracking-[0.28em] text-foreground shadow-[inset_0_1px_2px_oklch(0.25_0.01_80/0.07)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:font-sans placeholder:text-[11.5px] placeholder:font-normal placeholder:tracking-[0.1em] placeholder:text-muted-foreground hover:border-foreground/35 focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_24%,transparent),inset_0_1px_2px_oklch(0.25_0.01_80/0.04)] dark:border-white/[0.16] dark:bg-white/[0.045] dark:shadow-none dark:hover:border-white/25 dark:focus-visible:border-primary dark:focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_26%,transparent)]"
+                />
+                <button
+                  type="submit"
+                  disabled={loading || id.length !== 4}
+                  className="welcome-cta flex h-12 shrink-0 select-none items-center gap-2 rounded-md bg-primary px-5 text-[13px] font-semibold text-primary-foreground disabled:pointer-events-none disabled:opacity-40"
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {t({ zh: '获取结构', en: 'Fetch' })}
+                </button>
+              </form>
+
+              {/* 状态行：固定高度避免加载态布局位移 */}
+              <div className="mt-2.5 flex h-4 w-full items-center justify-center">
+                {loading ? (
+                  <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {loadingMsg || t({ zh: '处理中…', en: 'Processing…' })}
+                  </span>
+                ) : (
+                  <span className="text-center text-[10px] text-muted-foreground">
+                    {t({ zh: 'RCSB 实时获取 · 可拖放文件到页面', en: 'Live from RCSB PDB · drag & drop files anywhere' })}
+                  </span>
+                )}
+              </div>
+
+              {/* 或分隔（在线编号 ↔ 本地文件两路进样方式） */}
+              <div className="mt-1.5 flex items-center gap-2.5">
+                <span className="h-px flex-1 bg-foreground/[0.1] dark:bg-foreground/[0.1]" />
+                <span className="mol-micro text-muted-foreground/85">{t({ zh: '或本地文件', en: 'or local file' })}</span>
+                <span className="h-px flex-1 bg-foreground/[0.1] dark:bg-foreground/[0.1]" />
+              </div>
+
+              {/* —— 本地文件（含 .molvision 会话）：容器化底座提升可点击暗示 —— */}
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={loading}
+                className="group mt-2.5 flex h-11 w-full items-center justify-center gap-2 rounded-md border border-foreground/[0.16] bg-secondary/50 text-xs font-medium text-foreground/85 shadow-[inset_0_1px_0_oklch(1_0_0/0.5)] transition-[border-color,background-color,transform] duration-150 hover:border-foreground/30 hover:bg-secondary/80 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 dark:border-white/[0.13] dark:bg-white/[0.035] dark:shadow-none dark:hover:border-white/25 dark:hover:bg-white/[0.06]"
+              >
+                <FolderOpen className="h-3.5 w-3.5 text-primary/80 transition-transform duration-200 group-hover:-translate-y-px" />
+                {t({ zh: '打开本地文件…', en: 'Open local file…' })}
+                <span className="font-mono text-[9.5px] font-normal tracking-wide text-muted-foreground">
+                  PDB / CIF / CCP4 / .molvision
+                </span>
               </button>
-            </form>
-
-            {/* 状态行：固定高度避免加载态布局位移 */}
-            <div className="welcome-in mt-2.5 flex h-4 w-full items-center justify-center" style={{ animationDelay: '300ms' }}>
-              {loading ? (
-                <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  {loadingMsg || t({ zh: '处理中…', en: 'Processing…' })}
-                </span>
-              ) : (
-                <span className="text-center text-[10px] text-muted-foreground">
-                  {t({ zh: 'RCSB 实时获取 · 可拖放文件到页面', en: 'Live from RCSB PDB · drag & drop files anywhere' })}
-                </span>
-              )}
             </div>
-
-            {/* —— 本地文件（含 .molvision 会话）：容器化底座提升可点击暗示 —— */}
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={loading}
-              className="welcome-in group mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md border border-foreground/[0.16] bg-secondary/50 text-xs font-medium text-foreground/85 shadow-[inset_0_1px_0_oklch(1_0_0/0.5)] transition-[border-color,background-color,transform] duration-150 hover:border-foreground/30 hover:bg-secondary/80 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 dark:border-white/[0.13] dark:bg-white/[0.035] dark:shadow-none dark:hover:border-white/25 dark:hover:bg-white/[0.06]"
-              style={{ animationDelay: '340ms' }}
-            >
-              <FolderOpen className="h-3.5 w-3.5 text-primary/80 transition-transform duration-200 group-hover:-translate-y-px" />
-              {t({ zh: '打开本地文件…', en: 'Open local file…' })}
-              <span className="font-mono text-[9.5px] font-normal tracking-wide text-muted-foreground/85">
-                PDB / CIF / CCP4 / .molvision
-              </span>
-            </button>
             <input
               ref={fileRef}
               type="file"
@@ -440,25 +476,31 @@ export function WelcomeScreen() {
               }}
             />
 
-            {/* —— 经典示例（卡片化芯片：ID 主色等宽 + 名称灰阶，悬停浮起） —— */}
+            {/* —— 经典示例（r80 双列卡片：ID 主色等宽 + 名称 + desc 副行——启用
+                loader 中此前从未上屏的描述字段，卡片比芯片更有作品感） —— */}
             <div className="welcome-in mt-8 flex w-full items-center gap-2.5" style={{ animationDelay: '380ms' }}>
               <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
               <span className="mol-micro text-muted-foreground">{t({ zh: '经典示例', en: 'Classic examples' })}</span>
               <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
             </div>
-            <div className="welcome-in mt-3.5 flex flex-wrap justify-center gap-2" style={{ animationDelay: '420ms' }}>
+            <div className="welcome-in mt-3.5 grid w-full grid-cols-2 gap-2" style={{ animationDelay: '420ms' }}>
               {WELCOME_EXAMPLES.map(ex => (
                 <button
                   key={ex.id}
                   onClick={() => void fetchPdbId(ex.id)}
                   disabled={loading}
-                  className="group flex items-center gap-2 rounded-md border border-foreground/[0.16] bg-secondary/55 px-3 py-2 transition-[border-color,background-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/45 hover:bg-primary/[0.06] hover:shadow-[0_2px_10px_color-mix(in_oklab,var(--primary)_13%,transparent)] active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 dark:border-white/[0.11] dark:bg-white/[0.03] dark:hover:border-primary/50 dark:hover:bg-primary/[0.09]"
+                  className="group flex flex-col gap-1 rounded-lg border border-foreground/[0.16] bg-secondary/55 px-3 py-2.5 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/45 hover:bg-primary/[0.06] hover:shadow-[0_2px_10px_color-mix(in_oklab,var(--primary)_13%,transparent)] active:translate-y-0 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 dark:border-white/[0.11] dark:bg-white/[0.03] dark:hover:border-primary/50 dark:hover:bg-primary/[0.09]"
                 >
-                  <span className="font-mono text-[11px] font-bold leading-none tracking-[0.08em] text-primary/90 transition-colors duration-150 group-hover:text-primary">
-                    {ex.id}
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="font-mono text-[11px] font-bold leading-none tracking-[0.08em] text-primary/90 transition-colors duration-150 group-hover:text-primary">
+                      {ex.id}
+                    </span>
+                    <span className="truncate text-[11.5px] font-semibold leading-none text-foreground/90" title={t(ex.title)}>
+                      {t(ex.title)}
+                    </span>
                   </span>
-                  <span className="text-[11px] leading-none text-muted-foreground transition-colors duration-150 group-hover:text-foreground/85">
-                    {t(ex.title)}
+                  <span className="truncate text-[9.5px] leading-none text-muted-foreground" title={t(ex.desc)}>
+                    {t(ex.desc)}
                   </span>
                 </button>
               ))}
@@ -625,8 +667,8 @@ export function WelcomeScreen() {
       {/* AI 助手面板（悬浮变体：与右下胶囊同一悬浮语言；加载结构后随工作台重挂载并还原历史） */}
       <AgentPanel float />
 
-      {/* 墨色仪表底座（待机遥测读数；语言次入口保留——顶栏为主入口）
-          主题/GitHub 已上移顶栏（r74 去重） */}
+      {/* 墨色仪表底座（待机遥测读数；r80 起语言切换唯一入口——右下角，
+          顶栏重复入口已按用户指令删除） 主题/GitHub 在顶栏（r74） */}
       <footer className="instrument-bar relative z-30 flex h-9 shrink-0 items-center gap-3 px-4">
         <span className="status-val font-bold tracking-wide" style={{ color: 'var(--status-hot)' }}>MolVision <span className="opacity-70">v1.4</span></span>
         <span className="status-sep" />

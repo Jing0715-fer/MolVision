@@ -112,12 +112,12 @@ check "序列条渲染封顶"           "SEQ_CELL_HARD"                   "src/c
 check "大链折叠行双语"           "大链已折叠.*Large chain collapsed" "src/components/studio/SequenceBar.tsx" 1
 check "截断提示双语"             "仅渲染前.*more residues are hidden" "src/components/studio/SequenceBar.tsx" 1
 
-# ---- r68：欢迎页语言切换重设计（轨道驻留开关） ----
+# ---- r68：欢迎页语言切换重设计（轨道驻留开关；r80 入口去重） ----
 check "语言轨道开关滑块探针"     "data-slide"                      "src/components/studio/LanguageToggle.tsx" 2
-check "欢迎页浮动语言入口"       "variant=\"welcome\""              "src/components/studio/WelcomeScreen.tsx" 1
+check "页脚语言入口（r80 唯一）"  "variant=\"default\""              "src/components/studio/WelcomeScreen.tsx" 1
 
-# ---- r69：语言控件全应用形态统一（OrbitTrack 四变体）+ 滑块锁定脉冲 + 浮动胶囊工具类 ----
-check "语言控件全形态滑轨化"     "OrbitTrack tone="                "src/components/studio/LanguageToggle.tsx" 4
+# ---- r69：语言控件滑轨形态 + 滑块锁定脉冲 + 浮动胶囊工具类 ----
+check "语言控件滑轨化（双变体）" "OrbitTrack tone="                "src/components/studio/LanguageToggle.tsx" 2
 check "滑块锁定脉冲组件接线"     "lang-lock"                       "src/components/studio/LanguageToggle.tsx" 2
 check "滑块锁定脉冲样式"         "lang-lock-pulse"                 "src/app/globals.css"              2
 check "浮动胶囊工具类定义"       "welcome-float-chip"              "src/app/globals.css"              2
@@ -277,8 +277,19 @@ check "mock 剔除实证命令"        "make everything beautiful"     "mini-ser
 check "模板图式解析提示词"       "论文图模板解析"                "src/app/api/templates/parse/route.ts" 1
 check "图式模板 custom 字段"     "custom\?: true"               "src/lib/molecular/figure-templates.ts" 1
 
+# ---- r80：语言入口去重（用户指令：只保留右下角） + 欢迎页左舱打磨 ----
+check0 "顶栏语言入口已删（负向）" "variant=\"welcome\"|variant=\"toolbar\"" "src/components/studio/"
+check0 "Toolbar 语言开关已删（负向）" "LanguageToggle"              "src/components/studio/Toolbar.tsx"
+check "状态栏语言入口保留"       "variant=\"status\""              "src/components/studio/StatusBar.tsx" 1
+check "hero 主色晕染"            "radial-gradient\(circle,color-mix" "src/components/studio/WelcomeScreen.tsx" 1
+check "遥测读数板（动态模板数）" "\{allTemplates.length\}"       "src/components/studio/WelcomeScreen.tsx" 1
+check "遥测读数板标签"           "图式模板.*Figure styles"        "src/components/studio/WelcomeScreen.tsx" 1
+check "加载舱面板"               "或本地文件.*or local file"      "src/components/studio/WelcomeScreen.tsx" 1
+check "示例卡 desc 副行上屏"     "t\(ex\.desc\)"                  "src/components/studio/WelcomeScreen.tsx" 1
+check "示例双列卡片栅格"         "mt-3.5 grid w-full grid-cols-2" "src/components/studio/WelcomeScreen.tsx" 1
+
 # ---- 汇总 ----
-TOTAL=179
+TOTAL=187
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0
