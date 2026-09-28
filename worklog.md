@@ -3420,3 +3420,41 @@ Stage Summary:
   3. 【中】欢迎页「我的模板」画廊卡直编入口（GalleryCard 加管理排 + open-template-edit 广播直达编辑视图——当前仅弹窗内可编辑）
   4. 【低】命令面板隐藏 DOM 残留体检（closed Radix portal 的 dialog-description 仍在 DOM——无视觉影响，排查 DialogContent 卸载路径是否 forceMount）
   5. 【低】SessionResume 箭头垂直居中微调 · 40+ 模板时画廊虚拟化 + blur-up
+
+---
+Task ID: r84
+Agent: main
+Task: 用户指令「继续下一阶段开发，完成后进行qa测试」——按 r83 提案清单第 1 项（高价值）交付：解析结果「对照预览」分屏（r81 方向 2 落地）——上传审核面板左原图/下引擎按当前命令真实渲染并截取视口快照，「读命令」升级为「看效果」；编辑模式同样受益。QA 全链路（E2E 双 bug 揭发当轮修 + VLM 三审 + 移动端）+ guards 210→218
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r83 `7f8b274` 即最新）；dev server 掉线一次（错误导入中间态崩溃）→ Python double-fork 守护拉起恢复
+- 【r84-1 管线导出改造】figure-templates.ts 四处：
+  · waitForCameraIdle / waitForStructureInStore 导出（对照预览复用 r76 相机门控）
+  · runTemplateCommands 签名 void → Promise<void>（fire-and-forget 调用方不受影响——回归实证「Applied "Preview test" · 4 commands executed」正常）
+  · 新增 isStructureInStore(pdbId) 同步单查（免拉取探测）
+- 【r84-2 TemplatePreview 组件】src/components/studio/TemplatePreview.tsx（新文件）：
+  · 管线：isStructureInStore 单查 →（未入库）fetchPdbId + waitForStructureInStore 9s → whenEngineReady（欢迎页首发：结构入 store → 工作台挂载 → 引擎冲刷队列——弹窗 page.tsx 根级挂载跨页面转变存活）→ 80ms 双帧 + waitForCameraIdle 2.6s + 100ms 余量 → adaptTemplateCommands（智能适配与正式应用同路径）→ await runTemplateCommands（序列完成才截屏）→ 450ms 表示重建余量 → engine.capture({scale:1.5})（composer/AO/轮廓路径自动处理 + 恢复渲染状态）
+  · 状态机 idle/running/done/error + 四段剧场轮播（拉取结构/引擎取景/应用命令/截取视口）
+  · 诚实语义：CTA 文案明说「将后台加载演示结构并应用命令」（与演示/试效果同副作用语系）· 命令修改后 capturedSig 比对 → 琥珀过期横幅「命令已修改——重新渲染对照」绝不拿旧图冒充新效果 · adapt notes 计数徽记（title 逐条）· 元信息行「4HHB · N cmds」+ 重新渲染钮 · LOAD_TIMEOUT/NO_ENGINE 诚实归因
+- 【r84-3 接线】FigureTemplatesDialog review 左栏：原图（SOURCE/THUMB 徽记）下方插入 `{previewTpl && <TemplatePreview tpl={previewTpl} />}`——上传解析与编辑模式共用（previewTpl 由当前表单值实时组装）
+- 【E2E 双 bug 揭发当轮修】
+  · bug①：单探测漏 await——waitForStructureInStore 返回 Promise 恒真值 → 跳过 fetch → 欢迎页无引擎 → 管线悬死 whenEngineReady（E2E 症状：24s 轮询 img 恒 false + canvas 恒 false）
+  · bug②：maxMs=0 伪探测——循环体不执行恒返 false → 「已入 store」探测形同虚设 → 二次渲染仍重新 fetch（E2E 症状：重渲染后 /api/pdb 计数 +1）→ 根治：isStructureInStore 同步单查
+- 【QA 全链路】
+  · 首渲染全链路：种子 → 编辑视图 → CTA → 12s 内快照落屏（img dataURL 1.25M 字符 = 真实渲染非空白）· RENDER 徽记 · 「4HHB · 4 cmds」元信息 · /api/pdb/4HHB 恰一次 ✓
+  · 过期机制：textarea 加 color red（native setter + input 事件）→ 过期横幅即时出现 → 点击重渲染 → 「4HHB · 5 cmds」新快照 + **快路径零网络请求**（计数保持）✓
+  · 回归：正常模板应用不受 runTemplateCommands 签名改动影响（toast 正常）✓
+  · VLM 三审：完成态 8/10（RENDER 面板描述准确「real-time 3D visualization snapshot of 4HHB」）；两处微瑕 DOM 实测均误报（RENDER/THUMB 内缩同为 9/9px；meta 徽记右下 9px 无裁剪）；移动端两报亦误报（scrollW=375 零溢出，chips flex-wrap 换行非裁切）
+  · 移动端 375px：弹窗开启 + 预览可见态 scrollW=375 零横向溢出 ✓
+  · 测试种子清理 · smoke 4/4 · console 错误零
+- 【门禁】lint 0 · tsc src 0 · guards 210→218（+9：对照预览组件/CTA/过期横幅/快路径同步探测/探测接线/管线可等待/相机门控导出/快照截取/审核表单接线）· dev.log 无 error
+
+Stage Summary:
+- 交付：对照预览分屏（r81 方向 2 / r83 提案第 1 项闭环）——审核表单左原图/下渲染对照，保存前「看效果」；管线全复用既有里程碑资产（demoThenApply 相机门控 / adaptTemplateCommands 智能适配 / engine.capture 快照）
+- 用户指令全闭环：「继续下一阶段开发」（r83 提案首项落地）·「完成后进行 QA 测试」（E2E 双 bug 揭发修复 + 快慢双路径 + 过期机制 + VLM 三审 + 移动端 + 回归）
+- 坑（新入档）：①漏 await 的 Promise 恒真值——布尔语义的异步函数必须 await 再判（症状：管线静默悬死）②maxMs=0 的轮询循环体不执行——「单探测」须显式同步实现而非复用轮询函数传 0 ③VLM 移动端缺陷报告三连误报先例（r83+r84 各一轮）——DOM scrollWidth 实测为唯一权威 ④dev server 崩溃后 Python double-fork 拉起仍是唯一可靠路径
+- 下一轮建议（按优先级）：
+  1. 【中】会话分享链接（r83 提案第 2 项：.molvision 会话转 URL 片段/base64 短链——无后端依赖；与导入导出同交互语汇）
+  2. 【中】欢迎页「我的模板」画廊卡直编入口（r83 提案第 3 项：GalleryCard 管理排 + open-template-edit 广播直达编辑视图）
+  3. 【中】对照预览增强：上传解析流（upload 视图）的 review 相同接线已就绪——真实 VLM 解析走一遍 E2E 即可实证（本轮以编辑模式实证同一渲染树）
+  4. 【低】命令面板隐藏 DOM 残留体检 · SessionResume 箭头居中微调 · 40+ 模板画廊虚拟化

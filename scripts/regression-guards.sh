@@ -317,8 +317,19 @@ check "订阅挂载失效"             "挂载即失效"                     "sr
 check "订阅失效重读"             "cache = null"                  "src/lib/molecular/custom-templates.ts" 3
 check "保存NOT_FOUND归因"        "NOT_FOUND"                     "src/components/studio/FigureTemplatesDialog.tsx" 2
 
+# ---- r84：对照预览分屏（读命令 → 看效果） ----
+check "对照预览组件"             "data-template-preview"         "src/components/studio/TemplatePreview.tsx" 1
+check "预览CTA"                  "data-preview-cta"              "src/components/studio/TemplatePreview.tsx" 1
+check "过期横幅"                 "data-preview-stale"            "src/components/studio/TemplatePreview.tsx" 1
+check "快路径同步探测"           "export function isStructureInStore" "src/lib/molecular/figure-templates.ts" 1
+check "探测接线"                 "isStructureInStore"            "src/components/studio/TemplatePreview.tsx" 2
+check "管线可等待"               "runTemplateCommands\(commands: string\[\]\): Promise<void>" "src/lib/molecular/figure-templates.ts" 1
+check "相机门控导出"             "export async function waitForCameraIdle" "src/lib/molecular/figure-templates.ts" 1
+check "快照截取"                 "capture\(\{ scale: 1\.5 \}\)"   "src/components/studio/TemplatePreview.tsx" 1
+check "审核表单接线"             "TemplatePreview"               "src/components/studio/FigureTemplatesDialog.tsx" 2
+
 # ---- 汇总 ----
-TOTAL=210
+TOTAL=218
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

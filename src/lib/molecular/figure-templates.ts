@@ -713,8 +713,9 @@ const CAMERA_CMD_RE = /^(orient|view|views|turn|move|zoom|dolly|rock|bookmark|cl
 const LOAD_CMD_RE = /^(load|fetch)\s+(\S+)\s*$/i
 
 /** 等待相机动画落地（r76：orient 650ms 飞行后 120ms 接 turn 会把相机打断在
- *  partial pose——KcsA 竖排环带/演示居中的另一半根因；上限兑底防僵死） */
-async function waitForCameraIdle(maxMs: number): Promise<void> {
+ *  partial pose——KcsA 竖排环带/演示居中的另一半根因；上限兑底防僵死）。
+ *  r84 导出：对照预览分屏复用同一相机门控 */
+export async function waitForCameraIdle(maxMs: number): Promise<void> {
   const t0 = performance.now()
   while (performance.now() - t0 < maxMs) {
     const eng = engineRef.current
@@ -724,8 +725,9 @@ async function waitForCameraIdle(maxMs: number): Promise<void> {
 }
 
 /** 等待结构真正入 store（r76：fetchPdbId resolve 在 parse 前——欢迎页首发链路
- *  parse 走 rAF 异步，旧 600ms 定时器靠运气；超时兑底返 false） */
-async function waitForStructureInStore(pdbId: string, maxMs: number): Promise<boolean> {
+ *  parse 走 rAF 异步，旧 600ms 定时器靠运气；超时兑底返 false）。
+ *  r84 导出：对照预览分屏复用 */
+export async function waitForStructureInStore(pdbId: string, maxMs: number): Promise<boolean> {
   const target = pdbId.trim().toUpperCase()
   const t0 = performance.now()
   while (performance.now() - t0 < maxMs) {
@@ -736,17 +738,28 @@ async function waitForStructureInStore(pdbId: string, maxMs: number): Promise<bo
   return false
 }
 
+/** 结构是否已在 store（同步单查——r84 对照预览的免拉取探测；r84 E2E 揭发
+ *  waitForStructureInStore(id, 0) 的 maxMs=0 循环体不执行恒返 false，伪探测） */
+export function isStructureInStore(pdbId: string): boolean {
+  const target = pdbId.trim().toUpperCase()
+  const s = useMolStore.getState()
+  return s.structures.some(x => (x.meta.pdbId ?? '').toUpperCase() === target || x.name.toUpperCase() === target)
+}
+
 /** 按命令序列逐条应用（r76：相机命令先等在飞动画落地；r78：改为顺序执行器——
  *  load/fetch 命令等结构真正入 store 再继续，构象对比模板的第二条结构落地后
  *  superpose/morph 才不会扑空；非 load 命令仍保持 120ms 微间隔衔接动画/着色。
  *  r77 收尾清选择：模板成品不应携带选择光晕（mutation 类模板的 select+label 流
  *  会把琥珀色 halo 留在终帧上——罩住刚渲染的视觉锚点；命令级 color/spectrum
  *  泄漏已在 commands.ts 根治，此处兜底所有 select 型模板） */
-export function runTemplateCommands(commands: string[]): void {
-  void runTemplateCommandsSeq(commands)
+/** 按命令序列逐条应用（对外 fire-and-forget 语义保持；r84 返回 Promise 供
+ *  对照预览分屏等待序列完成后再截屏——三个既有调用方不 await 不受影响） */
+export function runTemplateCommands(commands: string[]): Promise<void> {
+  return runTemplateCommandsSeq(commands)
 }
 
-/** 顺序执行器本体（对外签名保持 void——三个调用方均为 fire-and-forget，不悬空 Promise） */
+/** 顺序执行器本体（load 等结构落地 / 相机等飞行——r84 起由 runTemplateCommands
+ *  返回 Promise，fire-and-forget 调用方与可等待调用方（对照预览）共用） */
 async function runTemplateCommandsSeq(commands: string[]): Promise<void> {
   for (let i = 0; i < commands.length; i++) {
     const cmd = commands[i].trim()

@@ -33,6 +33,7 @@ import {
   updateCustomTemplate, useCustomTemplates, type CustomTemplate,
 } from '@/lib/molecular/custom-templates'
 import { validateTemplateCommand, type TemplateDraft } from '@/lib/molecular/template-command-guard'
+import { TemplatePreview } from '@/components/studio/TemplatePreview'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -657,6 +658,8 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
                   {editMode ? t({ zh: '缩略图', en: 'THUMB' }) : t({ zh: '原图', en: 'SOURCE' })}
                 </span>
               </div>
+              {/* r84 对照预览分屏：按当前命令真实渲染并截取视口——「读命令」升级为「看效果」 */}
+              {previewTpl && <TemplatePreview tpl={previewTpl} />}
               <div className="rounded-lg border border-border bg-muted/30 p-2.5">
                 <span className="mol-micro text-muted-foreground">{t({ zh: 'AI 视觉判读', en: 'AI VISUAL READ' })}</span>
                 <p className="mt-1.5 text-[11px] leading-relaxed text-foreground/85">{t(draft.analysis)}</p>
