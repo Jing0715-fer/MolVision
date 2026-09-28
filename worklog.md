@@ -3458,3 +3458,39 @@ Stage Summary:
   2. 【中】欢迎页「我的模板」画廊卡直编入口（r83 提案第 3 项：GalleryCard 管理排 + open-template-edit 广播直达编辑视图）
   3. 【中】对照预览增强：上传解析流（upload 视图）的 review 相同接线已就绪——真实 VLM 解析走一遍 E2E 即可实证（本轮以编辑模式实证同一渲染树）
   4. 【低】命令面板隐藏 DOM 残留体检 · SessionResume 箭头居中微调 · 40+ 模板画廊虚拟化
+
+---
+Task ID: r85
+Agent: main
+Task: 用户指令「继续下一阶段开发，完成后进行qa测试」——r84 尾部建议清单推进：主任务①会话分享链接（r83 提案第 2 项落地：轻量会话快照 → URL #s=base64url 片段，接收端按 PDB ID 重拉——传播成本从「发文件」降为「发链接」）+ 任务②欢迎页画廊卡直编入口（r83 提案第 3 项：CUSTOM 卡管理排 + open-template-edit 广播直达编辑视图）。QA 全链路（E2E 发送/接收/幂等三段 + VLM 双审 + 移动端）
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r84 `687a9f6` 即最新且已推送）；dev server 健康 200；worklog 确认 r84 已闭环（对照预览分屏 + guards 218 + QA 全链）→ 本轮 r85 开工
+- 【r85-1 侦察】Explore 代理五路侦察：①.molvision 管线（saveSession/exportSessionFile/importSessionFile/restoreSession 全在 session.ts）②全量会话 0.1~2MB（含源文本）超 URL 上限 → 分享链接必须走轻量快照 ③项目零 URL 状态逻辑（hash/search 全空白）④无压缩依赖⑤sonner + clipboard 语汇现成（TourOverlay/HistoryDialog 两处先例）
+- 【r85-2 会话分享链接】
+  · session.ts 重构：restoreSession() 主体抽出 restoreSessionData(data)（localStorage 存档与分享快照共用恢复核心；SessionData/SessionStructure/SessionMap 导出）；restoreSession 薄壳化
+  · 新文件 src/lib/molecular/share-link.ts（~310 行）：
+    · ShareSnapshot 协议：结构引用（pdbId + reps + colorOverrides + transform + symmetry + hiddenChains）+ settings + camera + namedSelections + views（thumb 剥离）+ map（SF 参数）+ skippedLocal 诚实计数
+    · buildShareLink：store 提取 → base64url（TextEncoder 分块编码防调用栈溢出）→ URL #s= 片段；SHARE_LIMIT=100KB 跨浏览器保守上限；选择集 indices>2048 且无 expr 整条跳过（体积护栏）；本地文件结构跳过计数（无公共 ID 可引用——诚实边界）
+    · applyShareSnapshot：逐结构 fetch /api/pdb/:id 重拉源文本（headers x-mol-format 优先）→ 失败跳过计数 → namedSelections/activeIndex 重映射到成功列表 → 清空现有结构（与 importSessionFile 同替换语义）→ restoreSessionData；toast 诚实总结（失败数/发送端本地结构数/书签数）
+    · consumeShareLinkOnBoot：启动消费 hash → 立即 history.replaceState 清除（防刷新循环/书签污染）→ 异步恢复；StrictMode 双效应幂等（第二次 hash 已清 → decode null 退出）
+    · copyShareLinkToClipboard：统一复制入口（build → clipboard → 成功/权限失败双 toast 路径）
+  · 接线五处：Toolbar 会话菜单「复制分享链接」（data-qa=share-link-item，Share2 翠绿图标）· ScenePanel 会话区全宽翠绿按钮 · CommandPalette qa-session-share 快速动作 · 命令行 session share（乐观返回 + 异步复制失败 toast 纠正）· COMMAND_HELP 词条更新 · page.tsx 挂载 consumeShareLinkOnBoot 一次性 effect
+- 【r85-3 画廊卡直编入口】GalleryCard props 加 onEdit：CUSTOM 卡渲染管理排（主 button 兄弟节点——嵌套 button 不合法；UGC 紫印 + 「编辑」钮 data-welcome-tpl-edit）→ setUi 开弹窗 + dispatch open-template-edit（与「从图片创建」open-template-upload 同一事件语汇）；FTD 新增监听（setView('edit') + setEditId + setFilter('mine')——关闭后回落我的模板分区；editTpl null 时既有 view==='edit' && editTpl 防御回落网格）
+- 【E2E 三段全旅程】
+  · 发送端：4HHB 加载 → 命令行 session share →「Share link generated (1 structure · 2.4 KB)」真实编码实证；Toolbar 菜单项点击 → headless clipboard 权限拒绝 → 诚实降级 toast「Link generated — retry from the Session menu」失败分支同证
+  · 接收端：手工构造 915B 快照（cartoon+spectrum rep + camera + 1 书签）→ navigate #s= → 结构重拉 → 工作台就位（canvas + 4HHB）→ toast「Session loaded from share link: 1 structure · 1 view bookmark」→ hash 清空实证（replaceState 生效）
+  · 幂等三连：带 hash reload → 重新恢复（正确重复语义）+ hash 再清 ✓；无 hash reload → 停欢迎页 + SessionResumeCard 显示 4HHB（autosave 接管——「点开分享链接=拥有这份会话」与「打开会话文件」同语义）✓
+  · 画廊直编：种子注入 → 欢迎页 custom 卡管理排「Edit」钮 → 点击 → 弹窗开 + EDIT 徽记 + name/demo/commands 预填 + Save changes 全证（name 预填须读 input.value——textContent 不含表单值，新坑位）
+- 【VLM 双审 + 三误报判例延续】桌面 9/10（「描述截断」——tagline truncate 是设计 + title tooltip 在位，误报）；移动端 9/10 三报全实测澄清：①密集排版（scrollW=375 零溢出）②placeholder 对比度（muted-foreground/40 既有设计语言决议）③FAB 重叠（实测重叠对象全是可滚动内容——fixed 悬浮芯片浮于滚动流是 Material FAB 标准语义，滚动即可避开；语言钮在页流内非固定遮挡）
+- 【门禁】lint 0 · tsc src 0 · guards 218→238（+20：分享模块四导出/体积上限/诚实计数/接收重拉/清hash防循环/恢复核心参数化/书签缩略剥离/选择集护栏/工具栏+面板+面板+命令行+启动五接线/画廊管理排+双广播）· smoke 4/4 · dev.log 无 error · 测试种子清理 + viewport 恢复 1440×900
+
+Stage Summary:
+- 交付：会话分享链接（r83 提案第 2 项闭环——轻量快照协议 + base64url 编解码 + 接收端重拉恢复 + 五入口接线）+ 画廊卡直编入口（r83 提案第 3 项闭环——管理排 + 广播直达编辑视图）
+- 用户指令全闭环：「继续下一阶段开发」（两项中优先级提案落地）·「完成后进行qa测试」（E2E 发送/接收/幂等三段全旅程 + VLM 双审 + 移动端 375px + 门禁四链）
+- 坑（新入档）：①form input 的 value 不在 textContent——断言表单预填必须读 input.value（本轮 namePrefilled 首测假阴性）②Radix DropdownMenuTrigger 对 JS element.click() 不响应——须 agent-browser 原生 click 命令（真实指针事件）③agent-browser eval 里声明 const 与页面全局重名时报「已声明」——一律 IIFE 包裹④agent-browser open 后 location.hash 显示仍在 ≠ replaceState 失效——open 命令的导航时序会在页面加载后回写 hash；用原生 location.reload() 验证 hash 清除才可靠 ⑤VLM 缺陷报告 DOM 实测定性判例连续第三轮成立（本轮三误报）
+- 已知限制（诚实边界，worklog 记录不修复）：①分享链接不含场景快照（scenes——全量结构状态体积大）②本地文件结构不入链（无公共 PDB ID）③接收端 autosave 会把分享会话写入本地档（与「打开会话文件」同替换语义——接收方刷新后 SessionResumeCard 可恢复）
+- 下一轮建议（按优先级）：
+  1. 【中】分享链接增强：命令面板 session 组补「session share」直填（现 qa-session-share 走 copyShareLinkToClipboard 统一入口）+ 欢迎页 SessionResumeSlot 旁「从分享链接加载」说明入口（教育发现性）
+  2. 【中】对照预览上传流 E2E：upload 视图 review 面板 TemplatePreview 接线已就绪（r84），真实 VLM 解析流走一遍 E2E 实证
+  3. 【低】命令面板隐藏 DOM 残留体检 · SessionResume 箭头居中微调 · 40+ 模板画廊虚拟化

@@ -997,6 +997,20 @@ export function FigureTemplatesDialog() {
     window.addEventListener('open-template-upload', onOpenUpload)
     return () => window.removeEventListener('open-template-upload', onOpenUpload)
   }, [])
+  // r85：欢迎页画廊卡「编辑」入口：广播事件直达编辑视图（detail.id = 自定义模板 id）；
+  // 同时切到「我的模板」分区——关闭弹窗后回落到模板所属分区（浏览语义）
+  useEffect(() => {
+    const onOpenEdit = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string }>).detail?.id
+      if (!id) return
+      setCompareId(null)
+      setView('edit')
+      setEditId(id)
+      setFilter('mine')
+    }
+    window.addEventListener('open-template-edit', onOpenEdit)
+    return () => window.removeEventListener('open-template-edit', onOpenEdit)
+  }, [])
   const allTemplates = [...FIGURE_TEMPLATES, ...customs]
   const compareTpl = allTemplates.find(x => x.id === compareId) ?? null
   const editTpl = view === 'edit' ? (customs.find(x => x.id === editId) ?? null) : null

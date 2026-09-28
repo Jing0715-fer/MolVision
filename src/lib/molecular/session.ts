@@ -19,7 +19,7 @@ const KEY = 'molvision-session-v1'
 /** 文本总预算（localStorage 通常 5MB） */
 const TEXT_BUDGET = 3.2 * 1024 * 1024
 
-interface SessionStructure {
+export interface SessionStructure {
   name: string
   format: 'pdb' | 'cif'
   text: string
@@ -34,7 +34,7 @@ interface SessionStructure {
   hiddenChains?: number[]
 }
 
-interface SessionData {
+export interface SessionData {
   version: 1
   savedAt: number
   activeIndex: number
@@ -90,7 +90,7 @@ export function beginFreshSessionIfSkipped(): void {
   }))
 }
 
-interface SessionMap {
+export interface SessionMap {
   pdbId: string
   kind: '2fofc' | 'fofc'
   iso: number
@@ -221,15 +221,23 @@ export function hasSession(): boolean {
   }
 }
 
-/** 恢复会话；返回恢复的结构数量 */
+/** 恢复会话（localStorage 存档）；返回恢复的结构数量 */
 export function restoreSession(): number {
-  markSessionBoundary()
   let data: SessionData | null = null
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) data = JSON.parse(raw) as SessionData
   } catch { /* ignore */ }
   if (!data || data.version !== 1) return 0
+  return restoreSessionData(data)
+}
+
+/** 从快照数据恢复会话（r85：localStorage 存档与分享链接共用的恢复核心）。
+ *  替换语义——结构/设置/相机/命名选择/书签/场景全部按快照重建；
+ *  调用方负责在恢复前清理现有场景（导入/分享路径）或依赖欢迎页空场（存档路径）。 */
+export function restoreSessionData(data: SessionData): number {
+  if (!data || data.version !== 1 || !Array.isArray(data.structures)) return 0
+  markSessionBoundary()
   let restored = 0
   const indexToId = new Map<number, string>()
   data.structures.forEach((ss, idx) => {
@@ -268,7 +276,7 @@ export function restoreSession(): number {
   useMolStore.setState(s => ({
     settings: {
       ...defaultSettings(),
-      ...data!.settings,
+      ...data.settings,
       showHBonds: false,
       ...(archivedHBondsOn ? { hbondSelOnly: true } : {}),
     },

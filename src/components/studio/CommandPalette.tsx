@@ -9,11 +9,12 @@ import { toast } from 'sonner'
 import {
   Boxes, Bot, ChevronRight, Command as CommandIcon, HelpCircle,
   FolderOpen, History, Palette, Sparkles, Star, Terminal, Triangle,
-  Maximize, RotateCcw, Zap, Camera, Download, Save, FilePlus2,
+  Maximize, RotateCcw, Zap, Camera, Download, Save, FilePlus2, Share2,
 } from 'lucide-react'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
 import { COMMAND_HELP, commandCmd, runCommand } from '@/lib/molecular/commands'
 import { exportSessionFile, newSession, saveSession } from '@/lib/molecular/session'
+import { copyShareLinkToClipboard } from '@/lib/molecular/share-link'
 import {
   appendCmdHistory, dispatchFillCmd, pinnedCmdsSnapshot, cmdHistorySnapshot, emptyCmdSnapshot, subscribeCmdHistory,
 } from '@/lib/molecular/cmd-history'
@@ -155,6 +156,11 @@ export function CommandPalette() {
       icon: Download, iconCls: 'text-muted-foreground',
     },
     {
+      id: 'qa-session-share', label: { zh: '复制分享链接', en: 'Copy share link' }, desc: { zh: 'URL 片段携带会话 · 打开即恢复', en: 'URL fragment carries the session · restores on open' },
+      run: '', fill: 'session ',
+      icon: Share2, iconCls: 'text-emerald-500',
+    },
+    {
       id: 'qa-session-new', label: { zh: '新建会话', en: 'New session' }, desc: { zh: '清空全部结构与状态', en: 'Clear all structures and state' },
       run: '', fill: 'session ',
       icon: FilePlus2, iconCls: 'text-muted-foreground',
@@ -244,6 +250,10 @@ export function CommandPalette() {
         if (exportSessionFile()) toast.success(tt({ zh: '会话已导出', en: 'Session exported' }), { description: tt({ zh: '文件已开始下载', en: 'File download started' }) })
         else toast.error(tt({ zh: '导出失败——场景为空或结构过大', en: 'Export failed — empty scene or structure too large' }))
       })
+      return
+    }
+    if (item.id === 'qa-session-share') {
+      requestAnimationFrame(() => { void copyShareLinkToClipboard() })
       return
     }
     if (item.id === 'qa-session-new') {

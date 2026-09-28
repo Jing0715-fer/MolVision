@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect } from 'react'
+
 // MolVision 主页面：未加载结构 → 欢迎页（仪器待机大屏，仅保留加载/会话入口）；
 // 结构就位 → 完整工作台（工具栏 + 左面板 + 3D 视口取景框 + 序列条 + 墨色仪表状态栏）
 import dynamic from 'next/dynamic'
@@ -17,6 +19,7 @@ import { CommandPalette } from '@/components/studio/CommandPalette'
 import { AgentPanel } from '@/components/studio/AgentPanel'
 import { ViewportHUD } from '@/components/studio/ViewportHUD'
 import { useMolStore } from '@/lib/molecular/store'
+import { consumeShareLinkOnBoot } from '@/lib/molecular/share-link'
 import { useI18n } from '@/i18n'
 
 const MolViewer = dynamic(() => import('@/components/molecular/MolViewer'), {
@@ -41,6 +44,9 @@ export default function Home() {
   const { t } = useI18n()
   // 未加载任何结构 → 欢迎页接管整个视口（会话恢复 / PDB / 文件 / 示例入口在此完成）
   const empty = useMolStore(s => s.structures.length === 0)
+  // r85 分享链接：启动时消费 URL 片段（#s=…）——立即清 hash 后异步重拉结构恢复会话；
+  // 幂等（StrictMode 双效应下第二次 hash 已清）且无片段时零开销
+  useEffect(() => { void consumeShareLinkOnBoot() }, [])
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       {empty ? (

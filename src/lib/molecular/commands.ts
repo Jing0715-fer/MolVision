@@ -3,6 +3,7 @@ import { PRESETS, useMolStore, engineRef, dataRegistry, buildNamedMasks } from '
 import { SCENE_PRESETS } from './scenes'
 import { FIGURE_TEMPLATES, runTemplateCommands, adaptTemplateCommands, logAdaptNotes } from './figure-templates'
 import { saveSession, clearSession, sessionInfo, exportSessionFile, newSession } from './session'
+import { buildShareLink } from './share-link'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
 import { REP_LABELS, type RepType } from './types'
 import { useEnsembleStore } from './ensemble-store'
@@ -167,7 +168,7 @@ export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; exampl
   { cmd: 'fps on|off', desc: { zh: '状态栏性能指示器（FPS/绘制调用/三角形）', en: 'Status-bar performance indicator (FPS / draw calls / triangles)' }, example: 'fps on' },
   { cmd: 'perf on|off|status|restore', desc: { zh: '自动性能模式（低帧率降级/恢复）', en: 'Auto performance mode (degrade on low fps / restore)' }, example: 'perf status · perf off' },
   { cmd: 'outline on|off [强度 粗细]', cmdEn: 'outline on|off [strength thickness]', desc: { zh: '出版级轮廓线（Sobel 深度+亮度描边；ray 同样生效）', en: 'Publication-grade outlines (Sobel depth+brightness edges; applies to ray stills too)' }, example: 'outline on · outline on 2 2.5' },
-  { cmd: 'session save|export|new|info|clear', desc: { zh: '会话存档 / 文件导出 / 新建', en: 'Session archive / file export / new session' }, example: 'session export · session new' },
+  { cmd: 'session save|export|share|new|info|clear', desc: { zh: '会话存档 / 文件导出 / 分享链接 / 新建', en: 'Session archive / file export / share link / new session' }, example: 'session export · session share · session new' },
   { cmd: 'history [clear]', desc: { zh: '命令历史面板（搜索/置顶/执行；clear 清空）', en: 'Command history panel (search / pin / run; clear empties)' }, example: 'history · history clear' },
   { cmd: 'label on|off', desc: { zh: '标记当前选择 / 清除标签', en: 'Label current selection / clear labels' }, example: 'label on' },
   { cmd: 'preset <名>', cmdEn: 'preset <name>', desc: { zh: '应用风格预设（含出版级互作）', en: 'Apply a style preset (incl. publication-grade interactions)' }, example: 'preset publication' },
@@ -2328,6 +2329,22 @@ export function runCommand(raw: string): void {
       return okExport
         ? ok(tt({ zh: '会话已导出为 .molvision 文件（含结构源文本 · 表示法 · 设置 · 相机视角 · 书签）', en: 'Session exported as a .molvision file (structure source text · representations · settings · camera views · bookmarks)' }))
         : err(tt({ zh: '无可导出的会话（先加载结构）', en: 'No session to export (load a structure first)' }))
+    }
+    if (sub === 'share' || sub === 'link') {
+      // r85：会话分享链接（轻量快照 → URL 片段；结构按 PDB ID 重拉，本地文件结构不入链）
+      const r = buildShareLink()
+      if (!r.ok) return err(r.reason)
+      // 复制异步：乐观返回 + 失败 toast 纠正（HistoryDialog 复制同款语汇）
+      void navigator.clipboard.writeText(r.url).then(
+        () => toast.success(tt({ zh: '分享链接已复制到剪贴板', en: 'Share link copied to clipboard' }), {
+          description: tt({
+            zh: `${r.shared} 个结构 · ${(r.bytes / 1024).toFixed(1)} KB${r.views ? ` · ${r.views} 个书签` : ''}${r.skippedLocal ? ` · ${r.skippedLocal} 个本地文件结构未入链` : ''}`,
+            en: `${r.shared} structure${r.shared === 1 ? '' : 's'} · ${(r.bytes / 1024).toFixed(1)} KB${r.views ? ` · ${r.views} bookmark${r.views === 1 ? '' : 's'}` : ''}${r.skippedLocal ? ` · ${r.skippedLocal} local-file structure${r.skippedLocal === 1 ? '' : 's'} not in the link` : ''}`,
+          }),
+        }),
+        () => toast.error(tt({ zh: '链接已生成但复制失败（剪贴板权限）——可从工具栏「会话」菜单重试', en: 'Link generated but copy failed (clipboard permission) — retry from the Session menu in the toolbar' })),
+      )
+      return ok(tt({ zh: `分享链接已生成（${r.shared} 个结构 · ${(r.bytes / 1024).toFixed(1)} KB）——复制结果见通知`, en: `Share link generated (${r.shared} structure${r.shared === 1 ? '' : 's'} · ${(r.bytes / 1024).toFixed(1)} KB) — see the notification for copy status` }))
     }
     if (sub === 'new') {
       const closed = newSession()

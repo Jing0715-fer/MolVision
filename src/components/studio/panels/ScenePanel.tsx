@@ -2,11 +2,12 @@
 
 // 场景面板：背景/雾/FOV/正交/旋转/裁剪/画质/显示过滤/会话管理
 import { useRef, useState } from 'react'
-import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d, Activity, PenLine, SquareSplitHorizontal, Contrast, Timer } from 'lucide-react'
+import { CloudFog, Box, Aperture, Layers, Gauge, EyeOff, Droplets, Zap, Download, Upload, FileJson, Waves, SunMedium, Sun, Sparkle, Gem, Glasses, Axis3d, Activity, PenLine, SquareSplitHorizontal, Contrast, Timer, Share2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { NAMED_COLORS } from '@/lib/molecular/colors'
 import { exportSessionFile, importSessionFile } from '@/lib/molecular/session'
+import { copyShareLinkToClipboard } from '@/lib/molecular/share-link'
 import { useI18n, tt } from '@/i18n'
 import { SectionTitle, PanelHint } from '../LeftPanel'
 import { Slider } from '@/components/ui/slider'
@@ -523,6 +524,17 @@ export function ScenePanel() {
             {importing ? t({ zh: '导入中…', en: 'Importing…' }) : t({ zh: '导入会话', en: 'Import session' })}
           </button>
         </div>
+        <button
+          onClick={() => { void copyShareLinkToClipboard() }}
+          disabled={!structures.length}
+          data-qa="share-link-panel"
+          className={cn(
+            'flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-emerald-500/35 bg-emerald-500/[0.06] text-[11px] font-medium text-emerald-600 transition dark:text-emerald-400',
+            structures.length ? 'hover:border-emerald-500/60 hover:bg-emerald-500/[0.12]' : 'cursor-not-allowed opacity-40',
+          )}
+        >
+          <Share2 className="h-3.5 w-3.5" /> {t({ zh: '复制分享链接', en: 'Copy share link' })}
+        </button>
         <p className="flex items-start gap-1 text-[10px] leading-relaxed text-muted-foreground/70">
           <FileJson className="mt-0.5 h-3 w-3 shrink-0" />
           {t({ zh: '.molvision 文件包含完整结构源文本与全部视图状态，可跨设备分享（导入将替换当前场景）。', en: '.molvision files contain full structure sources and all view state — share across devices (importing replaces the current scene).' })}

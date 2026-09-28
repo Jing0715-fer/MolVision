@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import {
   Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
-  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot, Sparkles,
+  FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot, Sparkles, Share2,
   Award, Target, Minimize2, MoreHorizontal, ExternalLink, LayoutTemplate, BookOpenText,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
@@ -17,6 +17,7 @@ import { SCENE_PRESETS, applyScenePreset } from '@/lib/molecular/scenes'
 import { runCommand } from '@/lib/molecular/commands'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
 import { exportSessionFile, importSessionFile, mergeSessionFile, newSession, sessionInfo } from '@/lib/molecular/session'
+import { copyShareLinkToClipboard } from '@/lib/molecular/share-link'
 import { buildSvgExport, downloadSvg } from '@/lib/molecular/svg-export'
 import { TOURS } from '@/lib/molecular/tours'
 import { useTourStore } from '@/lib/molecular/tour-store'
@@ -251,6 +252,18 @@ export function Toolbar() {
               <span className="flex-1">
                 <span className="block text-xs">{t({ zh: '保存会话文件…', en: 'Save session file…' })}</span>
                 <span className="block text-[10px] text-muted-foreground">{t({ zh: '导出 .molvision，可跨设备分享', en: 'Export .molvision, share across devices' })}</span>
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => { void copyShareLinkToClipboard() }}
+              disabled={!structures.length}
+              className="gap-2"
+              data-qa="share-link-item"
+            >
+              <Share2 className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="flex-1">
+                <span className="block text-xs">{t({ zh: '复制分享链接', en: 'Copy share link' })}</span>
+                <span className="block text-[10px] text-muted-foreground">{t({ zh: 'URL 片段携带会话视图，打开即恢复（按 PDB ID 重拉）', en: 'URL fragment carries the session view; restores on open (re-fetch by PDB ID)' })}</span>
               </span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => { sessionImportMode.current = 'replace'; sessionFileRef.current?.click() }} disabled={sessionImporting} className="gap-2">

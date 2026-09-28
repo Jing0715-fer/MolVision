@@ -328,8 +328,30 @@ check "相机门控导出"             "export async function waitForCameraIdle"
 check "快照截取"                 "capture\(\{ scale: 1\.5 \}\)"   "src/components/studio/TemplatePreview.tsx" 1
 check "审核表单接线"             "TemplatePreview"               "src/components/studio/FigureTemplatesDialog.tsx" 2
 
+# ---- r85：会话分享链接（轻量快照 → URL #s=base64url）+ 画廊卡直编入口 ----
+check "分享模块存在"             "export function buildShareLink" "src/lib/molecular/share-link.ts" 1
+check "分享解码器"               "export function decodeShareLink" "src/lib/molecular/share-link.ts" 1
+check "分享应用恢复"             "export async function applyShareSnapshot" "src/lib/molecular/share-link.ts" 1
+check "启动消费幂等"             "export async function consumeShareLinkOnBoot" "src/lib/molecular/share-link.ts" 1
+check "快照体积上限"             "SHARE_LIMIT"                   "src/lib/molecular/share-link.ts" 2
+check "本地结构诚实计数"         "skippedLocal"                  "src/lib/molecular/share-link.ts" 6
+check "接收端重拉管线"           "api/pdb/"                      "src/lib/molecular/share-link.ts" 1
+check "启动清hash防循环"         "history\.replaceState"         "src/lib/molecular/share-link.ts" 1
+check "恢复核心参数化"           "export function restoreSessionData" "src/lib/molecular/session.ts" 1
+check "书签缩略图剥离"           "thumb: null as null"           "src/lib/molecular/share-link.ts" 1
+check "选择集体积护栏"           "SEL_INDICES_LIMIT"             "src/lib/molecular/share-link.ts" 2
+check "工具栏分享入口"           "data-qa=\"share-link-item\""   "src/components/studio/Toolbar.tsx" 1
+check "面板分享按钮"             "data-qa=\"share-link-panel\""  "src/components/studio/panels/ScenePanel.tsx" 1
+check "统一复制入口"             "copyShareLinkToClipboard"      "src/components/studio/Toolbar.tsx" 1
+check "启动接线"                 "consumeShareLinkOnBoot"        "src/app/page.tsx" 1
+check "命令行share"              "sub === 'share' \|\| sub === 'link'" "src/lib/molecular/commands.ts" 1
+check "面板快速动作"             "qa-session-share"              "src/components/studio/CommandPalette.tsx" 2
+check "画廊卡管理排"             "data-welcome-tpl-edit"         "src/components/studio/WelcomeScreen.tsx" 1
+check "画廊编辑广播"             "open-template-edit"            "src/components/studio/WelcomeScreen.tsx" 1
+check "编辑广播监听"             "open-template-edit"            "src/components/studio/FigureTemplatesDialog.tsx" 1
+
 # ---- 汇总 ----
-TOTAL=218
+TOTAL=238
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

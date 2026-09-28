@@ -31,7 +31,7 @@ import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
   ArrowUpRight, BookOpenText, Bot, FileUp, FolderOpen, Github, ImagePlus, Loader2, Moon,
-  Play, Sun, Wand2,
+  Pencil, Play, Sun, Wand2,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt } from '@/i18n'
@@ -58,11 +58,13 @@ const MINI_ORBIT_B = 'M 14.1 17.1 A 8.2 3.1 60 1 1 5.9 2.9 A 8.2 3.1 60 1 1 14.1
 
 // ── 画廊卡片（作品橱窗形态：点击整卡 = 演示加载——欢迎页无结构语境下
 //    模板库的最短体验路径；hover 浮起 + 缩略图轻放大 + 演示徽章浮现） ──────────
-function GalleryCard({ tpl, index, busy, onDemo }: {
+function GalleryCard({ tpl, index, busy, onDemo, onEdit }: {
   tpl: FigureTemplate
   index: number
   busy: boolean
   onDemo: () => void
+  /** r85：自定义模板管理排的编辑入口（仅 custom 卡渲染；直通弹窗编辑视图） */
+  onEdit?: () => void
 }) {
   const { t } = useI18n()
   const [imgOk, setImgOk] = useState(true)
@@ -171,6 +173,29 @@ function GalleryCard({ tpl, index, busy, onDemo }: {
           </span>
         </span>
       </button>
+      {/* r85：自定义模板管理排（主 button 的兄弟节点——嵌套 button 不合法）。
+          编辑直通模板弹窗的编辑视图（open-template-edit 广播），与「从图片创建」
+          入口同一事件语汇；管理排也扩大触控命中面（整排可点） */}
+      {tpl.custom && onEdit && (
+        <div
+          role="group"
+          aria-label={t({ zh: '自定义模板管理', en: 'Custom template management' })}
+          className="flex items-center gap-1.5 border-t border-border/70 bg-violet-500/[0.04] px-3 py-1.5"
+        >
+          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-violet-500/90">UGC</span>
+          <span className="truncate text-[10px] text-muted-foreground">{t({ zh: '自定义模板', en: 'Custom template' })}</span>
+          <button
+            type="button"
+            data-welcome-tpl-edit
+            onClick={onEdit}
+            title={t({ zh: '编辑这张模板的命令序列与元数据', en: 'Edit this template\'s command recipe and metadata' })}
+            className="ml-auto flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-violet-500/40 bg-violet-500/10 px-2.5 text-[10.5px] font-semibold text-violet-600 transition-colors hover:bg-violet-500/20 dark:text-violet-400"
+          >
+            <Pencil className="h-3 w-3" aria-hidden />
+            {t({ zh: '编辑', en: 'Edit' })}
+          </button>
+        </div>
+      )}
     </article>
   )
 }
@@ -606,6 +631,12 @@ export function WelcomeScreen() {
                   index={allTemplates.indexOf(tpl)}
                   busy={busyId === tpl.id || loading}
                   onDemo={() => void demo(tpl)}
+                  onEdit={tpl.custom ? () => {
+                    // r85：画廊卡直编入口——与「从图片创建」同一事件语汇：
+                    // 先开弹窗，再广播 open-template-edit 直达编辑视图（预填）
+                    setUi({ templateOpen: true })
+                    window.dispatchEvent(new CustomEvent('open-template-edit', { detail: { id: tpl.id } }))
+                  } : undefined}
                 />
               ))}
               {filter === 'mine' && customs.length === 0 && (
