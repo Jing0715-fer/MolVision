@@ -129,6 +129,7 @@ export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; exampl
   { cmd: 'move <x|y|z> <±Å>', desc: { zh: '平移视角（x右 y上 z推拉）', en: 'Translate view (x right, y up, z dolly)' }, example: 'move z -10 · move x 5' },
   { cmd: 'view <front|top|left|right|back|bottom|x|y|z>', desc: { zh: '正交视角预设（保持距离平滑转）', en: 'Orthographic view presets (smooth, distance preserved)' }, example: 'view top · view front' },
   { cmd: 'activate <名|编号>', cmdEn: 'activate <name|index>', desc: { zh: '切换活动结构（多结构工作流）', en: 'Switch active structure (multi-structure workflows)' }, example: 'activate 1BQL' },
+  { cmd: 'disable|enable [名]', desc: { zh: '隐藏/恢复整个结构对象（缺省活动结构；morph 模板收尾清理源构象）', en: 'Hide/restore a whole structure object (defaults to the active one; morph templates clean up source conformers)' }, example: 'disable 4ake · enable m1' },
   { cmd: 'orient [sel]', desc: { zh: '主轴对齐视角（PCA）', en: 'Principal-axis aligned view (PCA)' }, example: 'orient chain A' },
   { cmd: 'get_view / set_view', desc: { zh: '视角导出/恢复（JSON）', en: 'Export/restore camera view (JSON)' }, example: 'get_view' },
   { cmd: 'view save|go|del|list…', desc: { zh: '视角书签（缩略图+平滑跳转，Shift+数字）', en: 'View bookmarks (thumbnails + smooth jumps, Shift+number)' }, example: 'view save 口袋', exampleEn: 'view save pocket' },
@@ -812,6 +813,34 @@ export function runCommand(raw: string): void {
       return ok(tt({ zh: `活动结构 → ${found.name}（show/hide/color/preset 等命令均作用于它）`, en: `Active structure → ${found.name} (show/hide/color/preset etc. act on it)` }))
     }
     return ok(tt({ zh: `${found.name} 已是活动结构`, en: `${found.name} is already the active structure` }))
+  }
+
+  // r78：disable/enable <名>（PyMOL 语义：整对象级隐藏/恢复；缺省作用于活动结构）
+  // —— 构象 morph 模板收尾清理两个源结构用（morph 对象接管视口，源构象退场）
+  if (cmd === 'disable' || cmd === 'enable') {
+    const s = useMolStore.getState()
+    if (!s.structures.length) return err(tt({ zh: '没有加载结构', en: 'No structure loaded' }))
+    const hide = cmd === 'disable'
+    const nameArg = parts.slice(1).join(' ').trim()
+    const resolveByName = (q: string) => s.structures.find(x =>
+      x.name.toLowerCase() === q.toLowerCase() ||
+      x.name.toLowerCase().startsWith(q.toLowerCase()) ||
+      x.meta.pdbId?.toLowerCase() === q.toLowerCase())
+    const target = nameArg
+      ? resolveByName(nameArg)
+      : s.structures.find(x => x.id === s.activeId)
+    if (!target) return err(tt({
+      zh: `未找到结构 "${nameArg || '(活动)'}"（可用：${s.structures.map(x => x.name).join('、')}）`,
+      en: `Structure "${nameArg || '(active)'}" not found (available: ${s.structures.map(x => x.name).join(', ')})`,
+    }))
+    if (target.visible === hide) {
+      s.setStructureVisible(target.id, !hide)
+      return ok(tt({
+        zh: hide ? `已隐藏结构 ${target.name}（enable ${target.name} 恢复）` : `已恢复显示结构 ${target.name}`,
+        en: hide ? `Structure ${target.name} hidden (enable ${target.name} to restore)` : `Structure ${target.name} shown again`,
+      }))
+    }
+    return ok(tt({ zh: `${target.name} 已是${hide ? '隐藏' : '可见'}状态`, en: `${target.name} is already ${hide ? 'hidden' : 'visible'}` }))
   }
 
   if (cmd === 'spin') {

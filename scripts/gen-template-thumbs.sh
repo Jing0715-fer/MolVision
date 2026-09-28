@@ -33,6 +33,10 @@ mkdir -p "$OUT"
 # r76 新增两模板（17-18）：disulfide 11s（黄棍 + orient）；metal 12s（球/棍 + 聚焦动画）
 # r77 新增四模板（19-22）：cpk 10s（hide all→spheres 空间填充）；mobility 10s（spectrum b）；
 # heme 12s（棍 + 聚焦动画）；cation-pi 11s（contacts + 侧链棍）
+# r78 新增四模板（23-26）：morph 24s（load 1ake 网络 + create 提取 + morph 计算/精修 +
+# orient + ensemble play 后稳定帧）；two-state 20s（load 5p21 + superpose + SASA 表面
+# worker + 幽灵透明）；ghost 14s（表面计算 + 透明 + 卡通叠加）；catalytic 12s（sticks +
+# measure 标注 + 缓冲取景）
 SPECS=(
   rainbow-overview:10:4HHB:0
   chain-assembly:10:4HHB:1
@@ -57,6 +61,10 @@ SPECS=(
   mobility-bfactor:10:3INS:20
   heme-pocket:12:1MBO:21
   cation-pi:11:1AKI:22
+  conformational-morph:24:4AKE:23
+  two-state-comparison:20:4Q21:24
+  ghost-surface:14:4HHB:25
+  catalytic-residues:12:1AKI:26
 )
 
 # r75：可选增量模式——命令行传模板 id 列表则只生成指定项（缺省全量）

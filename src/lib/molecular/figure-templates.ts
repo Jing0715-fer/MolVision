@@ -1,10 +1,23 @@
 'use client'
 
-// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化 · r77 表示法经典与辅因子位扩容）
+// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化 · r77 表示法经典与辅因子位扩容 · r78 构象与动力学分类落地）
 // ─────────────────────────────────────────────────────────────────────────────
 // 定位：把 Cell / Nature / Science 等高影响力结构生物学文章中反复出现的「图式」
 // （figure style）——表示法组合 + 配色 + 视角 + 灯光 + 轮廓 + 相机——固化为命令
 // 序列模板。一键应用到用户当前结构，快速得到 CNS 级别作图。
+//
+// r78 扩容（用户指令：继续打磨所有模板 + 继续加入更多模板——构象与动力学分类落地）：
+//  · 新分类 conform「构象与动力学」（ensemble/mobility 迁入）——r72 起的长期欠账
+//    「两态构象对比」终于清偿：conformational-morph（ADK 开/合双结构 load + create
+//    单体提取 + morph 插值轨迹 + disable 聚焦 + ensemble play 播放）与
+//    two-state-comparison（Ras GDP/GTP 幽灵表面叠合——不透明双卡通在 1.6Å 级
+//    位移上不可读的实测教训产物）
+//  · ghost-surface（同结构灰壳半透明表面 + 内部分链卡通——「壳+核」分层语境）；
+//    catalytic-residues（催化残基棍 + measure dist 距离虚线标注——模板库首个
+//    「测量图式」，Phillips 1966 溶菌酶 Glu35/Asp52 教科书图式）
+//  · runTemplateCommands 改顺序执行器：load/fetch 等结构真正入 store 再继续
+//    （morph/superpose 不再扑空——双结构模板的执行地基）；⑬构象对补齐/去重/隐藏
+//    聚焦 ⑭短结构催化位点整组跳过
 //
 // r77 扩容（用户指令：继续加入更多模板——表示法经典 + 动力学 + 辅因子位点 + 互作第四式）：
 //  · CPK 空间填充（Corey-Pauling 1953 模型图式源流，hide everything + show spheres +
@@ -72,7 +85,7 @@ export interface FigureCitation {
 }
 
 /** 模板分类（r76 细化）：基础构图 / 表面与全局 / 位点特写 / 互作分析 / 特定蛋白类型（膜/通道） */
-export type FigureCategory = 'basic' | 'surface' | 'site' | 'interaction' | 'membrane'
+export type FigureCategory = 'basic' | 'surface' | 'conform' | 'site' | 'interaction' | 'membrane'
 
 /** 论文图复现模板 */
 export interface FigureTemplate {
@@ -99,11 +112,13 @@ export interface FigureTemplate {
   accent: 'rose' | 'emerald' | 'amber' | 'sky' | 'violet' | 'teal' | 'orange' | 'fuchsia' | 'lime' | 'cyan' | 'slate'
 }
 
-/** 分类元数据（弹窗/欢迎页画廊过滤 chips；r76：general 11 拆三类，过滤直达分析目的） */
+/** 分类元数据（弹窗/欢迎页画廊过滤 chips；r76：general 11 拆三类；r78：拆出构象与动力学——
+ *  surface 留「表面与全局」，ensemble/mobility 迁入新类并接收 morph/两态叠合） */
 export const FIGURE_CATEGORIES: { key: FigureCategory | 'all'; label: DualText }[] = [
   { key: 'all', label: { zh: '全部', en: 'All' } },
   { key: 'basic', label: { zh: '基础图式', en: 'Basic styles' } },
   { key: 'surface', label: { zh: '表面与全局', en: 'Surface & global' } },
+  { key: 'conform', label: { zh: '构象与动力学', en: 'Conformations & dynamics' } },
   { key: 'site', label: { zh: '位点特写', en: 'Site close-ups' } },
   { key: 'interaction', label: { zh: '互作分析', en: 'Interaction analysis' } },
   { key: 'membrane', label: { zh: '膜蛋白 · 通道', en: 'Membrane · channels' } },
@@ -236,7 +251,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: 'NMR 多构象 + 墨底夜色系 + 细杆卡通：动力学与柔性图式', en: 'NMR conformers + ink-dark night palette + thin-rod cartoon: dynamics & flexibility' },
     purpose: { zh: '构象变化 · 柔性区段 · NMR 验证', en: 'Conformational spread · flexible segments · NMR validation' },
     tags: [{ zh: 'NMR', en: 'NMR' }, { zh: '动力学', en: 'Dynamics' }],
-    category: 'surface',
+    category: 'conform',
     figure: { ref: 'Fig. 4', shows: { zh: '构象系综图：柔性区段散布与功能构象采样', en: 'Conformational ensemble: flexible segment spread and functional sampling' } },
     citation: { journal: 'Cell', year: 2021, title: 'Structural and dynamic insights into the activation of the μ-opioid receptor' },
     demo: '1D3Z',
@@ -453,7 +468,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     tagline: { zh: '天然 B 因子蓝→红渐变 + 冷雾底无描边：柔性环区与刚性核心一图判读', en: 'Native B-factor blue→red gradient on cool mist: flexible loops vs rigid core at a glance' },
     purpose: { zh: '局部柔性 · 环区定位 · 动力学解读', en: 'Local flexibility · loop mapping · dynamics reading' },
     tags: [{ zh: 'B 因子', en: 'B-factor' }, { zh: '动力学', en: 'Dynamics' }],
-    category: 'surface',
+    category: 'conform',
     figure: { ref: 'Fig. 1', shows: { zh: '温度因子图：不同温度下原子位移参数的分布与变化', en: 'Temperature-factor plates: displacement parameters across temperatures' } },
     citation: { journal: 'Nature', year: 1979, title: 'Temperature-dependent X-ray diffraction as a probe of protein structural dynamics', doi: '10.1038/280558a0' },
     demo: '3INS',
@@ -499,6 +514,114 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     commands: ['preset cartoon', 'util cbc', 'bg white', 'contacts (resn PHE+TYR+TRP and sidechain) | (resn LYS+ARG+HIS and sidechain) 4.0', 'color purple, resn PHE+TYR+TRP', 'color cyan, resn LYS+ARG+HIS', 'show sticks, (resn PHE+TYR+TRP+LYS+ARG+HIS) and sidechain', 'view front', 'outline on 1.1 1.0'],
     accent: 'violet',
   },
+
+  // ── r78 扩容：构象与动力学分类（r72 起的长期欠账——两态构象对比终于落地）──
+  // 命令语法全部活体预验证：morph 对象 1,656 原子·214 残基对·40 帧（链 A↔A 单体对，
+  // RMSD 7.13Å 全局叠合）；Ras 叠合 166 对 CA·1.642Å；幽灵表面灰 14.9%+彩 3.5% 像素
+  // 实证；催化距离标注 8.19Å 虚线在位。create 对象名不能数字开头（[A-Za-z_] 规则）。
+  {
+    id: 'conformational-morph',
+    name: { zh: '两态构象 morph 动画', en: 'Two-state morph movie' },
+    tagline: { zh: '开/合双构象插值轨迹 + 彩虹卡通 + 播放条：域运动机理一图播放', en: 'Open/closed interpolation trajectory + rainbow cartoon + playback bar: domain motion as a movie' },
+    purpose: { zh: '构象转变 · 域运动 · 机理动画', en: 'Conformational change · domain motion · mechanism movies' },
+    tags: [{ zh: 'morph', en: 'morph' }, { zh: '域运动', en: 'Domain motion' }],
+    category: 'conform',
+    figure: { ref: 'Fig. 1', shows: { zh: '构象插值轨迹图：中间构象序列 + 域运动路径标注', en: 'Interpolated trajectory: intermediate conformers with the domain-motion path' } },
+    // 图式源流：Krebs & Gerstein 2000 morph server（构象插值可视化方法的奠基文献，
+    // DOI 经 crossref 核实）；演示对 = ADK 开/合两态（4AKE 开放 / 1AKE 闭合+Ap5A）
+    citation: { journal: 'Nucleic Acids Research', year: 2000, title: 'The morph server: a standardized system for analyzing and visualizing macromolecular motions', doi: '10.1093/nar/28.8.1665' },
+    demo: '4AKE',
+    // 差异点（双结构架构·r78 落地）：create 提取两态单体链 A（二聚体直连 morph 会把
+    // 链 B 拉伸 170Å——实测教训：superpose 只对齐链 A，morph 包围球暴涨相机推远）；
+    // morph 内部自动叠合（RMSD 7.13Å 全局）→ disable 四源对象聚焦动画 → 底部播放条
+    // 逐帧浏览 + ensemble play 自动播放；adapt ⑬：非演示端点结构补 load + 隐藏聚焦
+    commands: [
+      'load 1ake',
+      'create closedA = chain A and polymer',
+      'use 4ake',
+      'create openA = chain A and polymer',
+      'morph m1 = openA closedA 40',
+      'disable 4ake', 'disable 1ake', 'disable closedA', 'disable openA',
+      'preset cartoon', 'spectrum count, rainbow', 'bg white', 'orient', 'ensemble play', 'outline on 1.1 1.0',
+    ],
+    accent: 'cyan',
+  },
+  {
+    id: 'two-state-comparison',
+    name: { zh: '两态叠合对比', en: 'Two-state superposition' },
+    tagline: { zh: '灰色幽灵表面（参考态）+ 彩虹卡通（移动态）叠合：分子开关运动一图判读', en: 'Gray ghost surface (reference) + rainbow cartoon (mobile) superposed: the switching motion at a glance' },
+    purpose: { zh: '活性/非活性 · switch 区运动 · 变构传播', en: 'Active/inactive · switch regions · allosteric propagation' },
+    tags: [{ zh: '构象对比', en: 'Conformational' }, { zh: '分子开关', en: 'Molecular switch' }],
+    category: 'conform',
+    figure: { ref: 'Fig. 4', shows: { zh: '活性/非活性叠合图：switch I/II 区段位移 + 配体环境对比', en: 'Active/inactive superposition: switch I/II displacements with ligand environments' } },
+    // 图式源流：Milburn et al. 1990 Science 247:939「Molecular switch」（Ras 两态对比
+    // 图式的奠基文献，DOI 经 crossref 核实）；演示对 = H-Ras GDP（4Q21）/ GTP 类似物（5P21）
+    citation: { journal: 'Science', year: 1990, title: 'Molecular switch for signal transduction: structural differences between active and inactive forms of protooncogenic ras proteins', doi: '10.1126/science.2406906' },
+    demo: '4Q21',
+    // 差异点：不透明双卡通叠合在 Ras（1.642Å）上不可读（彩虹罩死灰参考——实测教训）；
+    // 参考态转半透明灰表面（0.55）+ 移动态彩虹卡通 = 「幽灵壳内开关」图式；
+    // 【r78 实测教训：zoom 替 orient】叠合后用 zoom 重适配可见的两提取物（保持载入
+    // 视向）——orient 的 PCA 视向在表面内容下同样有偏心风险；adapt ⑬：非演示端点
+    // 结构补 load + 隐藏聚焦
+    commands: [
+      'load 5p21',
+      'create gtpA = chain A and polymer',
+      'use 4q21',
+      'create gdpA = chain A and polymer',
+      'disable 5p21', 'disable 4q21',
+      'superpose gtpA onto gdpA',
+      'use gdpA', 'preset surface', 'color gray', 'set transparency 0.55',
+      'use gtpA', 'spectrum count, rainbow',
+      'bg white', 'zoom', 'outline on 1.1 1.0',
+    ],
+    accent: 'slate',
+  },
+  {
+    id: 'ghost-surface',
+    name: { zh: '幽灵表面语境', en: 'Ghost surface context' },
+    tagline: { zh: '半透明分子表面 + 内部分链卡通：整体形状与折叠细节同框分层', en: 'Translucent surface shell + per-chain cartoon inside: global shape and fold detail layered in one frame' },
+    purpose: { zh: '表面形状 · 内部架构 · 语境叠加', en: 'Overall shape · internal architecture · layered context' },
+    tags: [{ zh: '表面', en: 'Surface' }, { zh: '分层语境', en: 'Layered context' }],
+    category: 'surface',
+    figure: { ref: 'Fig. 2', shows: { zh: '分子表面概览：整体形状与包装特征 + 功能位点标注', en: 'Molecular-surface overview: overall shape and packing with functional sites' } },
+    // 图式源流：Richards 1977 Annu Rev Biophys Bioeng（分子表面/可及面积概念的
+    // 缔造文献，DOI 经 crossref 核实）；演示取材 4HHB 血红蛋白四聚体
+    citation: { journal: 'Annu. Rev. Biophys. Bioeng.', year: 1977, title: 'Areas, volumes, packing, and protein structure', doi: '10.1146/annurev.bb.06.060177.001055' },
+    demo: '4HHB',
+    // 差异点：同一结构的「壳+核」双层表示（与 two-state 的跨结构幽灵壳互补）——
+    // 灰壳给整体形状读数、分链卡通给折叠拓扑读数；像素实证灰壳 14.9% + 彩核 3.5%。
+    // 【r78 实测教训：无 orient】orient 的 PCA 视向在「表面内容 + 全原子（含结晶水
+    // 离群点）取景目标」下会把内容挤出画框左下角（像素实证 33%,65% 裁切）；继承
+    // 载入时适配（实测 49%,61% 居中）——与 sasa-surface 同构的无相机命令配方
+    commands: ['preset surface', 'color gray', 'set transparency 0.5', 'show cartoon', 'util cbc', 'bg #eef1f5'],
+    accent: 'teal',
+  },
+  {
+    id: 'catalytic-residues',
+    name: { zh: '催化位点几何标注', en: 'Catalytic-site geometry' },
+    tagline: { zh: '催化残基侧链棍 + 距离虚线标注 + 位点特写：催化机理一图判读', en: 'Catalytic sidechain sticks + distance dashes + site close-up: the catalytic machinery at a glance' },
+    purpose: { zh: '催化机制 · 活性位点 · 突变验证', en: 'Catalysis · active sites · mutagenesis readout' },
+    tags: [{ zh: '催化残基', en: 'Catalytic' }, { zh: '距离标注', en: 'Distance' }],
+    category: 'site',
+    figure: { ref: '机制图版', shows: { zh: '溶菌酶机理图：Glu35/Asp52 催化双残基几何 + 底物裂解注解', en: 'Lysozyme mechanism plate: Glu35/Asp52 catalytic geometry with substrate cleavage' } },
+    // 图式源流：Phillips 1966 Sci Am「The Three-Dimensional Structure of an Enzyme
+    // Molecule」（Glu35/Asp52 催化位点图式的教科书缔造，DOI 经 crossref 核实）；
+    // 演示取材 1AKI 鸡蛋清溶菌酶（实测 Glu35 OE2↔Asp52 OD1 = 8.19Å）
+    citation: { journal: 'Sci. Am.', year: 1966, title: 'The three-dimensional structure of an enzyme molecule', doi: '10.1038/scientificamerican1166-78' },
+    demo: '1AKI',
+    // 差异点：measure dist 真实测量标注（虚线 + Å 标签——模板库首个「测量图式」）；
+    // 位点缓冲取景 zoom (resi 35 or resi 52), 8（实测 8Å 邻域 byres 展开会把取景拉回
+    // 全景——421 原子包围盒近整蛋白；两残基+缓冲 8Å 相机 55° 恰好特写）；
+    // 多链结构 measure 自动取最近原子对；adapt ⑭：短于 60 残基结构整组跳过
+    commands: [
+      'preset cartoon', 'util cbc', 'bg white',
+      'show sticks, (resi 35 or resi 52) and sidechain',
+      'measure dist (resi 35 and name OE2) (resi 52 and name OD1)',
+      'zoom (resi 35 or resi 52), 8',
+      'outline on 1.1 1.0',
+    ],
+    accent: 'amber',
+  },
 ]
 
 /** 命令图鉴（r75：「对比」视图把命令序列翻成双语图式解剖；未命中退回原命令）。
@@ -512,6 +635,17 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^spectrum b\b/i, label: { zh: 'B 因子热图渐变', en: 'B-factor heatmap gradient' } },
   { re: /^util cbc/i, label: { zh: '逐链配色', en: 'Per-chain coloring' } },
   { re: /^util ss\b/i, label: { zh: '二级结构三色', en: 'Secondary-structure colors' } },
+  // r78 构象对比四模板新词条（具体锚定先于泛匹配：color gray 必须先于域色正则）
+  { re: /^load \w/i, label: { zh: '加载第二构象结构', en: 'Load the second conformer' } },
+  { re: /^create \w+ = chain/i, label: { zh: '提取单链单体对象', en: 'Extract a single-chain monomer' } },
+  { re: /^use \w/i, label: { zh: '切换活动结构', en: 'Switch the active structure' } },
+  { re: /^superpose .* onto/i, label: { zh: '构象叠合对齐（刚体变换）', en: 'Conformational superposition (rigid-body)' } },
+  { re: /^morph /i, label: { zh: '构象插值轨迹生成（自动叠合+精修）', en: 'Conformational morph trajectory (auto-superpose + refine)' } },
+  { re: /^disable \w/i, label: { zh: '隐藏源构象聚焦动画', en: 'Hide source conformers to focus the movie' } },
+  { re: /^measure dist/i, label: { zh: '催化距离虚线标注（Å）', en: 'Catalytic distance dashes (Å)' } },
+  { re: /^set transparency/i, label: { zh: '表面半透明化', en: 'Surface translucency' } },
+  { re: /^color gray$/i, label: { zh: '参考态幽灵灰表面', en: 'Reference ghost-gray surface' } },
+  { re: /^show cartoon$/i, label: { zh: '表面内叠加卡通骨架', en: 'Cartoon skeleton inside the surface' } },
   { re: /^color residue, nucleic/i, label: { zh: '核酸碱基五色', en: 'Nucleic base coloring' } },
   { re: /^color sasa/i, label: { zh: 'SASA 可及性渐变', en: 'SASA gradient' } },
   { re: /^color red, resn/i, label: { zh: '酸性残基红（ASP/GLU）', en: 'Acidic residues red (ASP/GLU)' } },
@@ -570,6 +704,10 @@ export function explainCommand(cmd: string): DualText | null {
 /** 相机类命令（执行前需确认在飞相机动画已落地——见 runTemplateCommands） */
 const CAMERA_CMD_RE = /^(orient|view|views|turn|move|zoom|dolly|rock|bookmark|clip)\b/i
 
+/** load/fetch 类命令（r78：构象对比模板需要第二条结构——load 是 fire-and-forget
+ *  异步（fetch→parse→addStructure 约 1-3s），后续命令必须等结构落地再执行） */
+const LOAD_CMD_RE = /^(load|fetch)\s+(\S+)\s*$/i
+
 /** 等待相机动画落地（r76：orient 650ms 飞行后 120ms 接 turn 会把相机打断在
  *  partial pose——KcsA 竖排环带/演示居中的另一半根因；上限兑底防僵死） */
 async function waitForCameraIdle(maxMs: number): Promise<void> {
@@ -594,26 +732,37 @@ async function waitForStructureInStore(pdbId: string, maxMs: number): Promise<bo
   return false
 }
 
-/** 按命令序列逐条应用（120ms 微间隔衔接聚焦动画/worker 着色；r76：相机命令
- *  先等在飞相机动画落地再执行——非相机命令不受影响，节奏不变）。
+/** 按命令序列逐条应用（r76：相机命令先等在飞动画落地；r78：改为顺序执行器——
+ *  load/fetch 命令等结构真正入 store 再继续，构象对比模板的第二条结构落地后
+ *  superpose/morph 才不会扑空；非 load 命令仍保持 120ms 微间隔衔接动画/着色。
  *  r77 收尾清选择：模板成品不应携带选择光晕（mutation 类模板的 select+label 流
  *  会把琥珀色 halo 留在终帧上——罩住刚渲染的视觉锚点；命令级 color/spectrum
  *  泄漏已在 commands.ts 根治，此处兜底所有 select 型模板） */
 export function runTemplateCommands(commands: string[]): void {
-  commands.forEach((cmd, i) => {
-    setTimeout(() => {
-      if (CAMERA_CMD_RE.test(cmd.trim())) {
-        void waitForCameraIdle(1800).then(() => runCommand(cmd))
-      } else {
-        runCommand(cmd)
-      }
-    }, i * 120)
-  })
-  // 兜底清选择：最坏链路（末条为相机命令）= 末条触发 + 1800ms 飞行等待，取 2800ms 余量
-  setTimeout(() => {
-    const s = useMolStore.getState()
-    if (s.selection.indices.length) s.setSelection(null, [])
-  }, commands.length * 120 + 2800)
+  void runTemplateCommandsSeq(commands)
+}
+
+/** 顺序执行器本体（对外签名保持 void——三个调用方均为 fire-and-forget，不悬空 Promise） */
+async function runTemplateCommandsSeq(commands: string[]): Promise<void> {
+  for (let i = 0; i < commands.length; i++) {
+    const cmd = commands[i].trim()
+    if (i > 0) await new Promise(r => setTimeout(r, 120))
+    const loadM = cmd.match(LOAD_CMD_RE)
+    if (loadM) {
+      runCommand(cmd)
+      // 网络拉取兑底 15s：fetch 失败已 toast（fetchPdbId 内部），超时后继续余下
+      // 序列而非整链僵死——诚实降级哲学的命令序列版
+      await waitForStructureInStore(loadM[2], 15000)
+    } else if (CAMERA_CMD_RE.test(cmd)) {
+      await waitForCameraIdle(1800)
+      runCommand(cmd)
+    } else {
+      runCommand(cmd)
+    }
+  }
+  // 兜底清选择（旧版按 commands.length*120+2800 估时；顺序版循环天然吸收相机等待）
+  const s = useMolStore.getState()
+  if (s.selection.indices.length) s.setSelection(null, [])
 }
 
 // ── 模板参数化适配（r73 创立 · r75 扩展四条）──────────────────────
@@ -705,6 +854,35 @@ export function adaptTemplateCommands(tpl: FigureTemplate): AdaptedTemplate {
   const bf = data.atoms.bfactors
   if (bf && bf.length > 0 && !bf.some(v => v > 0)) allZeroB = true
   let domainNoted = false
+  // ⑬（r78）预扫描：构象对模板（commands 含 morph/superpose 两态配方）——
+  //     端点结构缺哪个补 load 哪个；用户既有结构隐藏聚焦 + 诚实说明。构象对是模板
+  //     固有配方（用户结构无法凭空变出第二构象）——补齐演示对是最诚实的行为；
+  //     对自己的构象对：load 两个结构 + superpose/morph 即可复现同款图式。
+  //     防双载：端点已被模板自身 load 覆盖时不前置（load 1ake 在命令里）；端点已在
+  //     store 时把模板的 load 去重丢弃（重复 load 会 addStructure 两份同名结构）
+  const tplIsTwoState = tpl.commands.some(c => /^(morph|superpose)\b/i.test(c))
+  const endpoints = new Set<string>()
+  const tplLoads = new Set<string>()
+  if (tplIsTwoState) {
+    for (const c of tpl.commands) {
+      const lm = c.match(/^load\s+(\w+)/i)
+      if (lm) tplLoads.add(lm[1].toUpperCase())
+      for (const m of c.matchAll(/\b([0-9][a-z0-9]{3})\b/gi)) endpoints.add(m[1].toUpperCase())
+    }
+  }
+  const structKey = (x: { name: string; meta: { pdbId?: string | null } }) => (x.meta.pdbId ?? x.name).toUpperCase()
+  const endpointPresent = (id: string) => s.structures.some(x => structKey(x) === id)
+  const extraLoads: string[] = []
+  if (tplIsTwoState) {
+    for (const e of endpoints) {
+      if (!endpointPresent(e) && !tplLoads.has(e)) extraLoads.push(`load ${e.toLowerCase()}`)
+    }
+  }
+  // ⑭（r78）预扫描：催化位点模板（measure dist + resi 35/52 按溶菌酶演示硬编码）——
+  //     聚合物短于 60 残基时位点三命令整组跳过（measure 空选择会报错——诚实跳过优于
+  //     报错刷屏；60 = 52 号催化位点 + 环区余量）
+  const tplIsCatalytic = tpl.commands.some(c => /^measure dist\b/i.test(c))
+  const catalyticSkip = tplIsCatalytic && maxResi < 60
   for (const cmd of tpl.commands) {
     // ① 界面接触：链重映射 / 单链跳过
     if (/^interface\s/i.test(cmd)) {
@@ -858,9 +1036,43 @@ export function adaptTemplateCommands(tpl: FigureTemplate): AdaptedTemplate {
       }
       continue
     }
+    // ⑬（r78）构象对去重：端点已在 store 时丢弃模板的 load（防 addStructure 双份同名）
+    if (tplIsTwoState && /^load\s+\w+/i.test(cmd)) {
+      const id = cmd.replace(/^load\s+/i, '').trim().toUpperCase()
+      if (endpointPresent(id)) continue
+      commands.push(cmd)
+      continue
+    }
+    // ⑭（r78）催化位点：短结构时位点三命令（sticks/measure/zoom——都引用 resi 35/52）
+    //     整组跳过（去重键 =「催化位点按溶菌酶演示」与文案严格对齐）
+    if (catalyticSkip && /resi (35|52)\b/i.test(cmd)) {
+      if (notes.every(n => !n.zh.includes('催化位点按溶菌酶演示'))) {
+        notes.push({ zh: `催化位点按溶菌酶 Glu35/Asp52 演示——当前结构最长链仅 ${maxResi} 残基，位点命令组已跳过（可用 select + measure dist 标注自己的位点）`, en: `Catalytic sites follow the lysozyme Glu35/Asp52 demo — the longest chain here is only ${maxResi} residues, so the site commands were skipped (mark your own sites via select + measure dist)` })
+      }
+      continue
+    }
     commands.push(cmd)
   }
-  return { commands, notes }
+  // ⑬（r78）构象对模板收尾：前置补齐缺失端点 load + 后置隐藏用户既有结构聚焦演示
+  let finalCommands = commands
+  if (tplIsTwoState) {
+    const hiddenOthers: string[] = []
+    for (const x of s.structures) {
+      if (endpoints.has(structKey(x))) continue // 端点（含演示结构）不隐藏
+      hiddenOthers.push(`disable ${x.name}`)
+    }
+    if (extraLoads.length || hiddenOthers.length) {
+      finalCommands = [...extraLoads, ...commands, ...hiddenOthers]
+      // 去重键 =「构象对已按演示结构补齐」——与文案严格对齐（r75/r76 刷屏教训）
+      if (notes.every(n => !n.zh.includes('构象对已按演示结构补齐'))) {
+        notes.push({
+          zh: `构象对已按演示结构补齐（${[...endpoints].join(' / ')}）${hiddenOthers.length ? `；已隐藏你的 ${hiddenOthers.length} 个既有结构以聚焦演示（enable <名> 可恢复）` : ''}——对自己的构象对：load 两个结构后 superpose / morph 即可复现此图式`,
+          en: `Conformational pair loaded per the template demo (${[...endpoints].join(' / ')})${hiddenOthers.length ? `; your ${hiddenOthers.length} existing structure(s) hidden to focus the demo (enable <name> restores)` : ''} — for your own pair: load both structures, then superpose / morph`,
+        })
+      }
+    }
+  }
+  return { commands: finalCommands, notes }
 }
 
 /** 适配说明入命令日志（应用方调用——诚实降级的可追溯通道） */

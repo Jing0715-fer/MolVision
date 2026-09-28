@@ -225,8 +225,29 @@ check "期刊类型拓宽"               "journal: string"            "src/lib/m
 check "管线四新缩略图"             "cpk-spacefill:10:1CRN:19"   "scripts/gen-template-thumbs.sh" 1
 check "mobility 演示换 3INS"       "mobility-bfactor:10:3INS:20" "scripts/gen-template-thumbs.sh" 1
 
+# ---- r78：构象与动力学分类 + 两态对比落地 + 幽灵表面 + 催化测量 + 顺序执行器 ----
+check "conform 新分类"              "category: 'conform'"           "src/lib/molecular/figure-templates.ts" 4
+check "分类七 chips"                "'conform', label"               "src/lib/molecular/figure-templates.ts" 1
+check "四新模板入库"                "conformational-morph|two-state-comparison|ghost-surface|catalytic-residues" "src/lib/molecular/figure-templates.ts" 6
+check "四新模板图标"                "'conformational-morph': Orbit"  "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "morph 命令序列"              "morph m1 = openA closedA 40"    "src/lib/molecular/figure-templates.ts" 1
+check "两态幽灵叠合序列"            "superpose gtpA onto gdpA"       "src/lib/molecular/figure-templates.ts" 1
+check "催化测量命令"                "measure dist \(resi 35 and name OE2\)" "src/lib/molecular/figure-templates.ts" 1
+check "顺序执行器（load 门控）"     "runTemplateCommandsSeq"         "src/lib/molecular/figure-templates.ts" 2
+check "load 等结构入店"             "LOAD_CMD_RE"                    "src/lib/molecular/figure-templates.ts" 2
+check "disable/enable 命令"         "cmd === 'disable' || cmd === 'enable'" "src/lib/molecular/commands.ts" 1
+check "disable 帮助词条"            "disable\|enable \[名\]"         "src/lib/molecular/commands.ts" 1
+check "⑬ 构象对补齐降级"            "构象对已按演示结构补齐"          "src/lib/molecular/figure-templates.ts" 2
+check "⑭ 催化位点跳过"              "催化位点按溶菌酶演示"            "src/lib/molecular/figure-templates.ts" 2
+check "图鉴新词条（morph/测量）"    "构象插值轨迹生成|催化距离虚线标注" "src/lib/molecular/figure-templates.ts" 2
+check "幽灵表面无 orient（负向）"   "util cbc', 'bg #eef1f5'\],"      "src/lib/molecular/figure-templates.ts" 1
+check "管线四新缩略图"              "conformational-morph:24:4AKE:23" "scripts/gen-template-thumbs.sh" 1
+check "管线 two-state 规格"         "two-state-comparison:20:4Q21:24" "scripts/gen-template-thumbs.sh" 1
+check "体检脚本资产"                "health-check-templates.sh"      "scripts/health-check-templates.sh" 1
+check "体检状态翻转等待"            "backgroundPinned"               "scripts/health-check-templates.sh" 1
+
 # ---- 汇总 ----
-TOTAL=129
+TOTAL=148
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

@@ -3179,3 +3179,39 @@ Stage Summary:
   2. 【中】对比视图左栏「现场渲染」按钮（实时对当前结构应用渲染 vs 管线旧图）
   3. 【中】选择光晕视觉降权（大选择集 opacity 0.3 仍偏重——0.15/边缘线框化可让「选择中微调颜色」的工作流更顺）
   4. 【低】模板收藏/自定义保存（localStorage UGC）；40+ 模板时画廊虚拟化 + blur-up
+---
+Task ID: r78
+Agent: main
+Task: 用户指令「继续打磨所有模板，看看是否都是正常的，继续加入更多模板」+ r72 起长期欠账「两态构象对比模板」终于清偿——构象与动力学新分类落地（conform）+ 模板库 23→27（两态 morph 动画/两态幽灵叠合/幽灵表面语境/催化位点几何标注，DOI 四路 crossref 核实）+ runTemplateCommands 顺序执行器（load 门控——双结构模板的执行地基）+ disable/enable 命令（PyMOL 对象级显隐）+ adapt ⑬构象对补齐⑭催化位点跳过 + orient+表面偏心裁切实测揭发当轮修 + 4 张新缩略图 + 27 模板全量体检（bgPinned 状态翻转等待法防中序列假阳性）+ guards 129→148 + E2E 全绿
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r77 即最新）；dev server 存活
+- 【r72 长期欠账清偿——两态构象对比】命令集探查确认 morph/superpose/load/create/use 全部就绪 → 活体预验证设计：
+  · 【揭发 A：二聚体直连 morph 会拉爆包围球】4AKE/1AKE 均为二聚体——superpose 只对齐链 A，两态的链 B 各在一方（相距 ~170Å），morph 链 B 在两远距位形间插值 → orient 取景包围球暴涨 → 相机推远 + 播放时结构小到近不可见。修复：create 提取两态单体链 A（closedA/openA，[A-Za-z_] 开头命名——数字开头违 create 正则实测揭发）→ morph m1 = openA closedA 40（1656 原子·214 残基对·40 帧·单链对·RMSD 7.13Å）
+  · 【揭发 B：不透明双卡通叠合在 Ras 上不可读】4Q21/5P21 叠合（166 对 CA·1.642Å）后彩虹卡通完全罩死灰参考。修复：参考态转半透明灰表面（0.55）+ 移动态彩虹卡通 =「幽灵壳内开关」图式（VLM 判「translucency well-calibrated」）
+- 【执行地基：runTemplateCommands 顺序执行器】load 是 fire-and-forget 异步（fetch→parse→addStructure 1-3s+），旧版固定 120ms 间隔下 superpose/morph 会扑空（「未找到结构」）——改为 for-await 顺序循环：load 命令 waitForStructureInStore(id, 15000) 门控后再继续；相机命令保持 r76 的等飞行语义；对外签名保持 void（三调用方 fire-and-forget 不悬空 Promise）
+- 【disable/enable 命令】PyMOL 对象级显隐语义（缺省作用于活动结构；按名/前缀/PDB号解析）——morph 模板收尾清理四个源对象、聚焦动画的必备件；setStructureVisible bump visualRev 触发重渲染
+- 【四新模板（用户点名「继续加入更多模板」）】DOI 全部 crossref 权威核实：
+  · conformational-morph（conform，4AKE→1AKE）：load 1ake + create 单体提取 + morph 40 帧 + disable×4 聚焦 + spectrum rainbow + ensemble play（底部播放条逐帧浏览）；Krebs & Gerstein 2000 NAR 28(8):1665 morph server（10.1093/nar/28.8.1665）
+  · two-state-comparison（conform，4Q21/5P21）：单体提取 + superpose + gdpA 灰幽灵表面 0.55 + gtpA 彩虹卡通；Milburn et al. 1990 Science 247:939「Molecular switch」（10.1126/science.2406906）
+  · ghost-surface（surface，4HHB）：同结构灰壳半透明 + 内部分链卡通「壳+核」分层；Richards 1977 Annu Rev Biophys Bioeng 6（10.1146/annurev.bb.06.060177.001055）
+  · catalytic-residues（site，1AKI）：催化残基侧链棍 + measure dist 距离虚线标注（8.19Å Glu35 OE2↔Asp52 OD1——模板库首个「测量图式」）+ 位点缓冲取景 zoom (resi 35 or resi 52), 8（实测 8Å 邻域 byres 展开包围盒近整蛋白会拉回全景——两残基+缓冲恰好特写）；Phillips 1966 Sci Am 215（10.1038/scientificamerican1166-78）
+  · 分类重组：新类 conform「构象与动力学」（ensemble-dynamics/mobility-bfactor 迁入 + 两新 = 4）；surface 留 sasa/density/symmetry/ghost = 4；七 chips 计数 27/5/4/4/7/5/2 弹窗+画廊双处动态实证；conform 过滤 4 卡 E2E 实证
+- 【揭发 C：orient + 表面内容 = 偏心裁切】ghost-surface 首版缩略图偏心 (33%,65%) 且左下裁切。二分法逐命令定位（七步 bisect：基线 50%,50% → preset surface 49%,61% ✓ → … → orient 破坏）实锤 orient 为元凶：PCA 视向 + 全原子（含结晶水离群点）取景目标把表面内容挤出画框。修复：ghost 去 orient（继承载入适配 49%,61%——与 sasa-surface 同构配方）；two-state 以 zoom 替 orient（叠合后重适配保持载入视向）。重生成后 ghost (48%,61%) 无裁切、two-state (50%,50%) 无裁切，VLM 双证「centered, nothing clipped, readable」
+  · morph 不受影响实查：create 提取的聚合物无结晶水 → orient 取景无离群点拖偏（52%,47% 居中 VLM 判「reasonably sized, central legible」）
+- 【adapt 层 ⑬⑭】⑬ 构象对模板（commands 含 morph/superpose 判定）：端点缺哪个补 load 哪个（防双载：端点已入 store 丢弃模板 load；被模板自身 load 覆盖不前置）+ 用户既有结构 disable 聚焦 + 诚实说明（对自己的构象对 load 两结构 + superpose/morph）；⑭ 催化位点：聚合物 <60 残基整组跳过位点三命令（measure 空选择会报错——诚实跳过优于报错）。E2E 实证：1CRN 上应用 morph → load 4ake 前置 + disable 1CRN 后置 + m1 播放（回显序列实锤）；1CRN 上应用催化 → 回显只剩 4 条命令（sticks/measure/zoom 被跳过）+ note 入日志
+- 【27 模板全量体检】新资产 scripts/health-check-templates.sh（画廊逐卡点击→demoThenApply 全链路→画布像素内容验证）；【揭发 D：固定秒数等待的中序列假阳性】morph 首测 0.8% 内容实为中途暗帧（无头低帧率下序列拖到 40s+，UI 条纹骗过 0.5% 阈值）——升级 bgPinned 状态翻转等待法（上限 wait+25s）后 morph 20.4%/two-state 25.9% 内容居中无裁切真实通过；27/27 全 PASS（质心全部 50±1% 横向）
+- 【缩略图管线】SPECS 23→27（morph 24s/two-state 20s/ghost 14s/catalytic 12s）；4 张产出 + 构图验证（ghost 灰壳 14.4% 彩核、two-state 灰壳 19.2%+彩 2.4%、catalytic 33% 位点评图、morph 25%×41% 居中）
+- 【运维坑档再触发】Turbopack panic（PostCSS worker「failed to receive message」→ / 500）——rm -rf .next 全清 + Python double-fork 重启恢复；agent-browser eval 支持 Promise await（实证）；EAGAIN 资源耗尽→关全部会话+清进程
+- 【门禁】lint 0 · tsc src 0 错 · guards 129→148（+19：conform 分类/四模板/四图标/命令序列/顺序执行器/disable 命令/⑬⑭降级/图鉴词条/无 orient 负向守卫/管线规格/体检脚本）· smoke 4/4 · 欢迎页 VLM（chips 计数可读、无重叠无破图）· 移动端 375px scrollW=375 零溢出 VLM 判布局堆叠干净
+
+Stage Summary:
+- 交付：模板库 23→27 + conform 新分类（r72 长期欠账「两态构象对比」清偿——morph 动画与幽灵叠合两种图式）；runTemplateCommands 顺序执行器（load 门控）+ disable/enable 命令（双结构模板执行地基）；adapt ⑬⑭；orient+表面偏心裁切修复；4 张新缩略图；27 模板全量体检工具与全绿结果
+- 用户三点指令全闭环：打磨所有模板（27/27 体检 + orient 偏心实测揭发当轮修）· 看看是否都是正常的（全量体检 + 三处假阳性/假阴性揭发：二聚体包围球/中序列暗帧/催化 zoom 邻域展开）· 继续加入更多模板（+4 入库 DOI 四路核实全链路）
+- 架构资产：load 门控顺序执行器（未来任何双结构模板的地基）；「create 提取单体 → morph → disable 聚焦」标准链；bgPinned 状态翻转等待法入体检脚本资产
+- 坑（新入档）：①二聚体直连 morph 拉爆包围球（superpose 只对齐首链——链 B 两态远距）②create 对象名 [A-Za-z_] 开头（数字开头静默 usage error）③orient 的 PCA 视向 + 含水离群的全原子取景在表面内容下偏心裁切（表面类模板继承载入适配或用 zoom 重适配）④体检固定秒数会截到中序列暗帧（bgPinned 翻转等待）⑤agent-browser fill 后焦点不在输入框（被弹窗遮挡时 fill 静默无效——先 Escape 关弹窗再操作）⑥Turbopack PostCSS worker 崩溃→rm -rf .next 全清重启
+- 下一轮建议（按优先级）：
+  1. 【中】morph 模板扩展「用户自己的构象对」工作流（load A + load B 后 figure conformational-morph 自动识别两同源结构改写端点——adapt ⑬ 的语义升级版）
+  2. 【中】催化几何模板泛化（探测活性位点注释/SiteRecord 而非硬编码 35/52；或 SER/CYS-HIS 丝氨酸蛋白酶催化三联体版本）
+  3. 【中】对比视图左栏「现场渲染」按钮（r75 起建议仍有效——morph/两态模板后更显价值）
+  4. 【低】40+ 模板时画廊虚拟化 + blur-up；模板收藏/自定义保存（localStorage UGC）

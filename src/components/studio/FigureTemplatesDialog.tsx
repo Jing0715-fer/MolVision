@@ -16,8 +16,8 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Dna, ExternalLink, Film,
-  Gauge, Gem, GitCompareArrows, Grid3x3, Hexagon, Layers, Link2, Loader2, Magnet, MapPin, Network, Palette,
-  Play, Shapes, Sparkles, Target, Waves, Wand2, Cylinder, Zap, type LucideIcon,
+  Gauge, Gem, Ghost, GitCompareArrows, Grid3x3, Hexagon, Layers, Link2, Loader2, Magnet, MapPin, Network, Orbit, Palette,
+  Play, Ruler, Shapes, Sparkles, Target, Waves, Wand2, Cylinder, Zap, type LucideIcon,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt } from '@/i18n'
@@ -77,6 +77,11 @@ export const TPL_ICONS: Record<string, LucideIcon> = {
   'mobility-bfactor': Gauge,
   'heme-pocket': Gem,
   'cation-pi': Sparkles,
+  // r78 四新模板：Orbit（构象轨迹环绕）/ GitCompareArrows（两态对比）/ Ghost（幽灵表面）/ Ruler（几何测量）
+  'conformational-morph': Orbit,
+  'two-state-comparison': GitCompareArrows,
+  'ghost-surface': Ghost,
+  'catalytic-residues': Ruler,
 }
 
 function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
