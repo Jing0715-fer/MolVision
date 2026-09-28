@@ -288,8 +288,15 @@ check "加载舱面板"               "或本地文件.*or local file"      "src
 check "示例卡 desc 副行上屏"     "t\(ex\.desc\)"                  "src/components/studio/WelcomeScreen.tsx" 1
 check "示例双列卡片栅格"         "mt-3.5 grid w-full grid-cols-2" "src/components/studio/WelcomeScreen.tsx" 1
 
+# ---- r81：全面代码审查缺口修复——路由级错误边界 ----
+check "路由错误边界文件"         "RouteError"                     "src/app/error.tsx"                 2
+check "错误边界复位动作"         "onClick=\{reset\}"               "src/app/error.tsx"                 1
+check "错误边界硬重启"           "location.reload"                "src/app/error.tsx"                 1
+check "错误边界双语"             "仪器遇到临时故障.*temporary instrument fault" "src/app/error.tsx"      1
+check "错误边界故障码透传"       "error.digest"                   "src/app/error.tsx"                 2
+
 # ---- 汇总 ----
-TOTAL=187
+TOTAL=192
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

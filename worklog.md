@@ -3301,3 +3301,42 @@ Stage Summary:
   2. 【中】解析结果「对照预览」分屏（左原图/右引擎实时渲染）
   3. 【低】SessionResume 卡片箭头垂直居中微调（VLM 点名的唯一视觉微瑕）
   4. 【低】40+ 模板时画廊虚拟化 + blur-up
+
+---
+Task ID: r81
+Agent: main
+Task: 用户指令「进行全面代码审查和 e2e 测试。提出下一阶段开发方向」——静态五路门禁 + 深度代码审查（TODO/事件监听/计时器/any/console/API 路由逐项扫描）+ E2E 五程全旅程 + 审查缺口修复（路由级 error.tsx 错误边界）+ guards 187→192 + 下一阶段方向提案
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r80 即最新）；dev server 存活
+- 【静态门禁五路】lint 0 错 · tsc src 0 错（examples/mini-services/skills 范围外历史预存与 src 无关）· guards 187/187 · dev.log 全程 0 error · console 生产残留 0
+- 【深度代码审查】逐项扫描全过 + 一项实质缺口：
+  · TODO/FIXME/HACK 标记：src 零命中（无技术债标记）
+  · 事件监听泄漏：30 处 addEventListener 全部成对 removeEventListener（use-mobile/FigureTemplatesDialog/SequenceBar/ConsoleBar/CommandPalette/FadeEdge/AgentPanel/MovieTimeline/MolViewer）
+  · 计时器泄漏：setInterval 仅 2 处（RecordBadge 录制计时/FigureTemplatesDialog 解析进度剧场）均 clearInterval 清理
+  · `as any`/`: any`：src 零命中
+  · r79 API 路由复查：dataURL 正则校验/5MB 体积折算/SSRF sanitize/provider 直连 90s 超时+ZAI 兜底/2 轮重试/JSON 括号平衡打捞/字段清洗逐项确认健壮；prompt 置于 assistant 角色位与 /api/agent 同构
+  · 【实质缺口】src/app 无 error.tsx / global-error.tsx——客户端渲染抛错会落 Next 默认报错页（英文、与产品视觉脱节、无恢复动作）→ 当轮修
+- 【r81 修复：路由级错误边界】src/app/error.tsx（RouteError）：
+  · 仪器语义「故障检修面板」：六角警示徽章（hero 六角芯片故障变体·琥珀）+ 故障码行（error.digest 透传·led-dot 指示）+ 复位重试（reset 重渲染）+ 硬重启（location.reload 清客户端状态）
+  · 双语（useI18n——layout I18nProvider 包裹可用）+ 「已加载结构与会话存档不受影响」的诚实文案（session-resume 卡硬重启后仍可接续）
+  · 极简依赖面（无 store 订阅/无外部组件——边界场景最不可能再抛）；开发环境 console.error 透传
+  · 回归验证：页面正常流不受影响（welcome 正常渲染、错误边界不误触发）· lint 0 · tsc 0 · guards 5 条新守卫（正则 {} 元字符转义坑当轮修——onClick={reset} 首版 FAIL 复盘）
+- 【E2E 五程全旅程】
+  · ① PDB 输入加载：native setter + input 事件注入「4HHB」→ submit → 9s 内欢迎页卸载 + 工作台 canvas/toolbar 就位 ✓
+  · ② 模板库：工具栏入口开弹窗（63 按钮网格）→ 点击卡片（apply 语义 title 实证）→ VLM 审「4HHB cartoon 带状渲染清晰、顶栏/面板/序列条布局正常、无报错破版」✓
+  · ③ 命令面板：工具栏按钮入口（无头环境 Ctrl+K dispatch 不达 window——工具栏按钮路径实证）→ 搜索「color red」12 项 → 执行首项 → 面板关闭 + molvision-cmd-history 入 localStorage ✓
+  · ④ 命令行：工具栏开 → 注入「turn y 30」+ Enter → 回显 ✓
+  · ⑤ 移动端 375px 工作台：scrollW=375 零横向溢出 ✓ · smoke 4/4（console 错误零）✓
+- 【门禁】lint 0 · tsc src 0 · guards 192/192 · smoke 4/4 · dev.log 无 error
+
+Stage Summary:
+- 交付：全面代码审查（静态五路 + 六类深度扫描，结论：技术债为零、唯一实质缺口 error boundary 当轮修复）+ E2E 五程全旅程全绿 + 路由级错误边界（双语仪器风格故障面板）
+- 用户指令全闭环：「全面代码审查」（五路门禁+六类扫描+缺口修复）·「E2E 测试」（加载→模板→面板→命令行→移动端五程）·「下一阶段方向」（见下）
+- 坑（新入档）：guards 正则中 JSX 属性花括号是 rg 元字符（onClick={reset} 须写 onClick=\{reset\}）；无头环境 synthetic KeyboardEvent dispatch 不达 window 级监听——快捷键入口用工具栏按钮路径实证
+- 下一阶段方向提案（按价值排序）：
+  1. 【高价值】自定义模板「编辑」闭环：custom-templates 层补 updateCustomTemplate（含命令重过闸）+ 画廊卡片编辑入口 + 审核表单复用——UGC 三件套（建/删/编辑）补最后一块，工作量小（表单/闸门全现成）
+  2. 【高价值】解析结果「对照预览」分屏：上传审核面板左原图/右引擎按当前命令实时小视口渲染（demoThenApply 相机门控管线复用）——用户保存前即可看到「AI 翻译的命令到底渲染成什么样」，将信任感从「读命令」升级为「看效果」
+  3. 【中】自定义模板导入导出 JSON：跨设备迁移 + 团队共享（命令序列天然可移植；导出即 localStorage 序列化+文件下载，导入即过闸入库）
+  4. 【中】会话分享链接：.molvision 会话转 URL 片段/base64 短链（无后端依赖），传播成本从「发文件」降为「发链接」
+  5. 【低】SessionResume 箭头垂直居中微调（VLM 点名微瑕）· 40+ 模板画廊虚拟化 + blur-up
