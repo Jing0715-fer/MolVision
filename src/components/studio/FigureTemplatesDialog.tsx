@@ -12,20 +12,22 @@
 // 无结构时应用动作给引导 toast（或直接走演示）。
 // 缩略图管线：public/templates/{id}.png 由引擎渲染生成（r71/r72 E2E 批量管线）；
 // 缺图时以强调色渐变占位，文件生成后无需改码自动浮现。
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Dna, ExternalLink, Film,
-  Gauge, Gem, Ghost, GitCompareArrows, Grid3x3, Hexagon, Layers, Link2, Loader2, Magnet, MapPin, Network, Orbit, Palette,
-  Play, Ruler, Shapes, Sparkles, Target, Waves, Wand2, Cylinder, Zap, type LucideIcon,
+  Gauge, Gem, Ghost, GitCompareArrows, Grid3x3, Hexagon, ImagePlus, Layers, Link2, Loader2, Magnet, MapPin, Network, Orbit, Palette,
+  Play, Ruler, Shapes, Sparkles, Target, Trash2, Waves, Wand2, Cylinder, Zap, type LucideIcon,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
-import { useI18n, tt } from '@/i18n'
+import { useI18n, tt, type DualText } from '@/i18n'
 import {
   demoThenApply, explainCommand, FIGURE_CATEGORIES, FIGURE_TEMPLATES, runTemplateCommands,
   adaptTemplateCommands, logAdaptNotes,
   type FigureCategory, type FigureTemplate,
 } from '@/lib/molecular/figure-templates'
+import { addCustomTemplate, removeCustomTemplate, useCustomTemplates, type CustomTemplate } from '@/lib/molecular/custom-templates'
+import { validateTemplateCommand, type TemplateDraft } from '@/lib/molecular/template-command-guard'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -84,19 +86,22 @@ export const TPL_ICONS: Record<string, LucideIcon> = {
   'catalytic-residues': Ruler,
 }
 
-function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
+function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete }: {
   tpl: FigureTemplate
   index: number
   onApply: () => void
   onDemo: () => void
   onCompare: () => void
   busy: boolean
+  onDelete?: () => void
 }) {
   const { t } = useI18n()
   const [imgOk, setImgOk] = useState(true)
   const a = ACCENT[tpl.accent]
   const Icon = TPL_ICONS[tpl.id] ?? BookOpenText
   const doiUrl = tpl.citation.doi ? `https://doi.org/${tpl.citation.doi}` : null
+  // r79：自定义模板缩略图 = 用户上传图缩存 dataURL；内置模板 = 管线 PNG；两者缺图都退强调色渐变
+  const thumbSrc = tpl.custom && tpl.thumb ? tpl.thumb : `/templates/${tpl.id}.png`
 
   return (
     <div
@@ -114,9 +119,10 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
         className="relative block aspect-[16/10] w-full cursor-pointer overflow-hidden bg-muted/40 disabled:pointer-events-none disabled:opacity-60"
       >
         {imgOk ? (
-          // 静态资源缩略图（管线产物，非内容图）；next/image 对 public 静态占位无增益
+          // 静态资源缩略图（管线产物，非内容图）；next/image 对 public 静态占位无增益。
+          // r79：自定义模板为 dataURL（同一 img 元素直接消费）
           <img
-            src={`/templates/${tpl.id}.png`}
+            src={thumbSrc}
             alt={t(tpl.tagline)}
             loading="lazy"
             decoding="async"
@@ -128,10 +134,16 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
             <BookOpenText className={cn('h-8 w-8 opacity-60', a.text)} />
           </span>
         )}
-        {/* 序号角标（仪器簇编号惯例） */}
-        <span className={cn('absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em]', a.chip)}>
-          {String(index + 1).padStart(2, '0')}
-        </span>
+        {/* 序号角标（仪器簇编号惯例）；自定义模板换「自定义」印记 */}
+        {tpl.custom ? (
+          <span className="absolute left-2 top-2 rounded bg-violet-500/85 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-white">
+            {t({ zh: '自定义', en: 'CUSTOM' })}
+          </span>
+        ) : (
+          <span className={cn('absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em]', a.chip)}>
+            {String(index + 1).padStart(2, '0')}
+          </span>
+        )}
         {/* 演示按钮（hover 浮现；触屏恒显） */}
         <span
           role="button"
@@ -163,6 +175,23 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
           <GitCompareArrows className="h-3 w-3" aria-hidden />
           {t({ zh: '对比', en: 'Compare' })}
         </span>
+        {/* 删除按钮（r79 自定义模板专属——hover 浮现；左下镜像位） */}
+        {onDelete && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={e => { e.stopPropagation(); onDelete() }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onDelete() } }}
+            title={t({ zh: '删除这个自定义模板', en: 'Delete this custom template' })}
+            className={cn(
+              'absolute bottom-2 left-2 flex h-7 cursor-pointer items-center gap-1 rounded-full border border-red-500/40 bg-background/85 px-2.5 text-[10px] font-semibold text-red-600 backdrop-blur-sm transition-opacity duration-200 dark:text-red-400',
+              'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100',
+            )}
+          >
+            <Trash2 className="h-3 w-3" aria-hidden />
+            {t({ zh: '删除', en: 'Delete' })}
+          </span>
+        )}
       </button>
 
       {/* 正文 */}
@@ -182,17 +211,24 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
           {tpl.category === 'membrane' && (
             <span className="rounded bg-foreground/[0.06] px-1.5 py-px text-[9.5px] font-semibold text-foreground/70">{t({ zh: '特定类型', en: 'Type-specific' })}</span>
           )}
+          {tpl.custom && (
+            <span className="rounded bg-violet-500/12 px-1.5 py-px text-[9.5px] font-semibold text-violet-600 dark:text-violet-400">{t({ zh: '图片解析', en: 'From image' })}</span>
+          )}
           <span className="ml-auto text-[9.5px] text-muted-foreground">{t(tpl.purpose)}</span>
         </div>
       </div>
 
-      {/* 文献参考行（可溯源；无 DOI 时仅展示） */}
+      {/* 文献参考行（可溯源；无 DOI 时仅展示；自定义模板显示创建时间替代 DOI） */}
       <div className="flex items-center gap-1.5 border-t border-border/70 px-3 py-1.5">
         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', a.text.replace('text-', 'bg-'))} aria-hidden />
         <span className="truncate text-[9.5px] text-muted-foreground">
           {t({ zh: '图式参考', en: 'Style ref.' })} · {tpl.citation.journal} {tpl.citation.year}
         </span>
-        {doiUrl && (
+        {tpl.custom ? (
+          <span className="ml-auto shrink-0 font-mono text-[9px] text-muted-foreground">
+            {new Date((tpl as CustomTemplate).createdAt).toLocaleDateString()}
+          </span>
+        ) : doiUrl ? (
           <a
             href={doiUrl}
             target="_blank"
@@ -202,8 +238,474 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy }: {
           >
             DOI <ExternalLink className="h-2.5 w-2.5" />
           </a>
-        )}
+        ) : null}
       </div>
+    </div>
+  )
+}
+
+// ── r79：从图片创建模板（上传 → VLM 解析 → 审核表单 → 入库） ──────────────────
+// 三态流：idle（拖/点/粘贴选图）→ picked（预览 + AI 解析按钮）→ parsing（阶段
+// 提示文案轮播）→ review（左原图 + AI 视觉判读 / 右可编辑表单：名称/描述/分类/
+// 演示结构/命令逐行实时校验）→ 保存入 localStorage 自定义模板层。
+// 图片前端缩放：≤1280px JPEG 送解析（省流量/防超限）+ ≤384px 缩存做卡片缩略图。
+
+/** 图片文件 → { 解析用 dataURL（≤1280px）, 卡片缩略图 dataURL（≤384px）, 宽高 }。
+ *  PNG 透明通道先铺白底（分子图惯例——JPEG 无 alpha，避免黑底事故） */
+async function fileToImages(file: File): Promise<{ dataUrl: string; thumb: string; w: number; h: number }> {
+  const bitmap = await createImageBitmap(file)
+  const scale = Math.min(1, 1280 / bitmap.width)
+  const w = Math.round(bitmap.width * scale)
+  const h = Math.round(bitmap.height * scale)
+  const paint = (width: number, height: number, source: ImageBitmap) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('canvas 2d unavailable')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+    ctx.drawImage(source, 0, 0, width, height)
+    return canvas
+  }
+  const dataUrl = paint(w, h, bitmap).toDataURL('image/jpeg', 0.85)
+  const tw = Math.min(384, w)
+  const th = Math.max(1, Math.round(tw * (h / w)))
+  const thumb = paint(tw, th, bitmap).toDataURL('image/jpeg', 0.72)
+  bitmap.close()
+  return { dataUrl, thumb, w, h }
+}
+
+/** 解析阶段提示轮播（进度剧场——VLM 实需 10-60s，静态转轮无信息量） */
+const PARSING_STAGES: DualText[] = [
+  { zh: '识别表示法（卡通带 / 球棍 / 表面 / CPK 球）…', en: 'Identifying representations (cartoon / sticks / surface / CPK)…' },
+  { zh: '还原配色方案（彩虹 / 逐链 / 元素色 / SASA 渐变）…', en: 'Recovering the color scheme (rainbow / per-chain / element / SASA)…' },
+  { zh: '估读视角与景别（全景 / 位点特写 / 正交）…', en: 'Reading camera & framing (overview / site close-up / orthogonal)…' },
+  { zh: '翻译为命令序列并过白名单校验…', en: 'Translating to a command sequence and validating…' },
+]
+
+function UploadPanel({ onBack, onSaved, onPreviewApply }: {
+  onBack: () => void
+  onSaved: (tplId: string) => void
+  onPreviewApply: (tpl: FigureTemplate) => void
+}) {
+  const { t, locale } = useI18n()
+  const hasStructure = useMolStore(s => s.structures.length > 0)
+  const fileRef = useRef<HTMLInputElement>(null)
+  // 状态机：idle → picked → parsing → review；error 就地展示不独占态
+  const [phase, setPhase] = useState<'idle' | 'picked' | 'parsing' | 'review'>('idle')
+  const [img, setImg] = useState<{ dataUrl: string; thumb: string; w: number; h: number } | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const [stage, setStage] = useState(0)
+  const [error, setError] = useState('')
+  const [dropped, setDropped] = useState<{ cmd: string; reason: string }[]>([])
+  // 审核表单（当前语言值可改；另一语言保留 AI 原稿）
+  const [draft, setDraft] = useState<TemplateDraft | null>(null)
+  const [nameVal, setNameVal] = useState('')
+  const [taglineVal, setTaglineVal] = useState('')
+  const [categoryVal, setCategoryVal] = useState<TemplateDraft['category']>('basic')
+  const [demoVal, setDemoVal] = useState('4HHB')
+  const [commandsVal, setCommandsVal] = useState('')
+
+  // 解析中阶段文案轮播（stage 归零在 parse() 入口同步完成——effect 内 setState 触发 set-state-in-effect）
+  useEffect(() => {
+    if (phase !== 'parsing') return
+    const iv = setInterval(() => setStage(s => Math.min(s + 1, PARSING_STAGES.length - 1)), 6000)
+    return () => clearInterval(iv)
+  }, [phase])
+
+
+  const acceptFile = async (f: File) => {
+    if (!/^image\/(png|jpe?g|webp)$/.test(f.type)) {
+      toast.error(tt({ zh: '仅支持 PNG / JPG / WebP 图片', en: 'Only PNG / JPG / WebP images are supported' }))
+      return
+    }
+    if (f.size > 10 * 1024 * 1024) {
+      toast.error(tt({ zh: '图片超过 10MB——请先裁剪或压缩', en: 'Image exceeds 10MB — crop or compress it first' }))
+      return
+    }
+    try {
+      const images = await fileToImages(f)
+      setImg(images)
+      setError('')
+      setDraft(null)
+      setPhase('picked')
+    } catch {
+      toast.error(tt({ zh: '图片解码失败（文件可能损坏）', en: 'Failed to decode the image (file may be corrupt)' }))
+    }
+  }
+
+  // 粘贴通道（Ctrl+V 论文截图直入）
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const f = e.clipboardData?.files?.[0]
+      if (f && f.type.startsWith('image/')) {
+        e.preventDefault()
+        void acceptFile(f)
+      }
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [])
+
+  const reset = () => {
+    setPhase('idle')
+    setImg(null)
+    setError('')
+    setDropped([])
+    setDraft(null)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  const parse = async () => {
+    if (!img) return
+    setStage(0)
+    setPhase('parsing')
+    setError('')
+    try {
+      const res = await fetch('/api/templates/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: img.dataUrl }),
+      })
+      const data = (await res.json()) as { ok?: boolean; draft?: TemplateDraft; dropped?: { cmd: string; reason: string }[]; error?: string }
+      if (!res.ok || !data.ok || !data.draft) {
+        setError(data.error ?? tt({ zh: '解析失败，请稍后重试或换一张图', en: 'Parsing failed — retry later or try another image' }))
+        setPhase('picked')
+        return
+      }
+      const d = data.draft
+      setDraft(d)
+      setDropped(data.dropped ?? [])
+      setNameVal(locale === 'en' ? d.name.en : d.name.zh)
+      setTaglineVal(locale === 'en' ? d.tagline.en : d.tagline.zh)
+      setCategoryVal(d.category)
+      setDemoVal(d.demo)
+      setCommandsVal(d.commands.join('\n'))
+      setPhase('review')
+      toast.success(tt({ zh: `图式解析完成：${d.commands.length} 条命令`, en: `Figure style parsed: ${d.commands.length} commands` }), {
+        description: tt({
+          zh: data.dropped?.length ? `${data.dropped.length} 条不受支持的命令已剔除（详见表单下方）` : '全部命令通过白名单校验',
+          en: data.dropped?.length ? `${data.dropped.length} unsupported commands dropped (see below the form)` : 'All commands passed the whitelist check',
+        }),
+      })
+    } catch (e) {
+      const msg = e instanceof Error && e.name === 'AbortError' ? tt({ zh: '请求已取消', en: 'Request aborted' }) : ''
+      setError(msg || tt({ zh: '网络异常——解析请求失败', en: 'Network error — the parse request failed' }))
+      setPhase('picked')
+    }
+  }
+
+  // 表单实时校验：命令逐行过闸（保存时再全量过一道——双保险）
+  const commandLines = commandsVal.split('\n').map(x => x.trim()).filter(Boolean)
+  const invalidLines = commandLines.filter(x => !validateTemplateCommand(x).ok)
+  const demoOk = /^[0-9][A-Z0-9]{3}$/.test(demoVal.trim().toUpperCase())
+  const canSave = !!draft && !!img && nameVal.trim().length > 0 && commandLines.length >= 2 && invalidLines.length === 0 && demoOk
+
+  const save = () => {
+    if (!draft || !img || !canSave) return
+    const name = { ...draft.name, ...(locale === 'en' ? { en: nameVal.trim().slice(0, 30) } : { zh: nameVal.trim().slice(0, 10) }) }
+    const tagline = { ...draft.tagline, ...(locale === 'en' ? { en: taglineVal.trim().slice(0, 80) } : { zh: taglineVal.trim().slice(0, 40) }) }
+    try {
+      const saved = addCustomTemplate({
+        name, tagline,
+        purpose: draft.purpose,
+        tags: draft.tags,
+        category: categoryVal,
+        demo: demoVal.trim().toUpperCase(),
+        accent: draft.accent,
+        commands: commandLines,
+        thumb: img.thumb,
+      })
+      toast.success(tt({ zh: `自定义模板「${locale === 'en' ? name.en : name.zh}」已入库`, en: `Custom template "${locale === 'en' ? name.en : name.zh}" saved` }), {
+        description: tt({ zh: '在「我的模板」分区查看——与内置模板同权应用/演示', en: 'Find it under "My templates" — applies and demos like a built-in' }),
+      })
+      onSaved(saved.id)
+    } catch (e) {
+      const reason = e instanceof Error && e.message === 'INVALID_COMMANDS'
+        ? tt({ zh: '命令校验未通过（请修正表单中标红的行）', en: 'Command validation failed (fix the flagged lines)' })
+        : tt({ zh: '本地存储写入失败（可能配额不足）', en: 'Local storage write failed (quota may be full)' })
+      toast.error(reason)
+    }
+  }
+
+  // 试效果：以当前表单值组装临时模板走标准应用管线（与入库后行为一致）
+  const previewTpl: FigureTemplate | null = draft ? {
+    id: '__preview__',
+    name: locale === 'en' ? { zh: draft.name.zh, en: nameVal || draft.name.en } : { zh: nameVal || draft.name.zh, en: draft.name.en },
+    tagline: locale === 'en' ? { zh: draft.tagline.zh, en: taglineVal || draft.tagline.en } : { zh: taglineVal || draft.tagline.zh, en: draft.tagline.en },
+    purpose: draft.purpose,
+    tags: draft.tags,
+    category: categoryVal,
+    citation: { journal: '自定义 · 预览', year: new Date().getFullYear(), title: '预览未入库' },
+    demo: demoVal.trim().toUpperCase(),
+    accent: draft.accent,
+    commands: commandLines,
+    custom: true,
+  } : null
+
+  return (
+    <div data-template-upload className="flex flex-col gap-3">
+      {/* 头：返回 + 标题 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex h-7 cursor-pointer items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ArrowLeft className="h-3 w-3" aria-hidden />
+          {t({ zh: '返回图库', en: 'Back to library' })}
+        </button>
+        <ImagePlus className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+        <span className="text-[13.5px] font-bold leading-none">{t({ zh: '从图片创建模板', en: 'Create a template from an image' })}</span>
+        <span className="ml-auto rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-primary">AI {t({ zh: '图式解析', en: 'STYLE PARSE' })}</span>
+      </div>
+
+      {/* idle：投放区 */}
+      {phase === 'idle' && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => fileRef.current?.click()}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click() } }}
+          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) void acceptFile(f) }}
+          className={cn(
+            'flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors',
+            dragOver ? 'border-primary/70 bg-primary/[0.06]' : 'border-border bg-muted/30 hover:border-primary/40 hover:bg-muted/50',
+          )}
+        >
+          <span className={cn('flex h-12 w-12 items-center justify-center rounded-full', dragOver ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}>
+            <ImagePlus className="h-6 w-6" aria-hidden />
+          </span>
+          <div>
+            <p className="text-[13px] font-semibold">{t({ zh: '拖入论文图 · 点击选择 · Ctrl+V 粘贴截图', en: 'Drop a paper figure · click to browse · Ctrl+V to paste' })}</p>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              {t({
+                zh: 'PNG / JPG / WebP ≤ 10MB。AI 将判读表示法 · 配色 · 视角 · 专业元素，生成可编辑的图式命令模板',
+                en: 'PNG / JPG / WebP ≤ 10MB. The AI reads representations · colors · camera · motifs and produces an editable style-command template',
+              })}
+            </p>
+          </div>
+          <span className="text-[10px] text-muted-foreground">{t({ zh: '解析在你的默认 AI 供应商上完成（可在设置中更换）', en: 'Parsing runs on your default AI provider (changeable in settings)' })}</span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) void acceptFile(f) }}
+          />
+        </div>
+      )}
+
+      {/* picked / parsing：预览 + 动作 */}
+      {(phase === 'picked' || phase === 'parsing') && img && (
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative overflow-hidden rounded-lg border border-border bg-muted/40 sm:w-[46%]">
+            <img src={img.dataUrl} alt={t({ zh: '待解析的图片', en: 'Image to parse' })} className="aspect-[16/10] w-full object-contain" />
+            {phase === 'parsing' && (
+              <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-[2px]">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
+                <span className="max-w-[80%] text-center text-[11px] font-medium text-foreground/80">{t(PARSING_STAGES[stage])}</span>
+              </span>
+            )}
+            <span className="absolute bottom-2 left-2 rounded bg-background/85 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground backdrop-blur-sm">
+              {img.w}×{img.h}
+            </span>
+          </div>
+          <div className="flex flex-1 flex-col justify-center gap-2.5">
+            {error && (
+              <p className="rounded-md border border-red-500/40 bg-red-500/[0.07] px-2.5 py-2 text-[11px] leading-relaxed text-red-600 dark:text-red-400" role="alert">
+                {error}
+              </p>
+            )}
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {t({
+                zh: 'AI 将判读这张图的分子图式——表示法（卡通/球棍/表面）、着色（彩虹/逐链/元素色）、背景与描边、景别（全景/特写）与专业元素（氢键虚线/距离标注），并翻译成可执行的命令序列。解析通常需要 10-60 秒。',
+                en: 'The AI reads the molecular figure style — representations (cartoon / sticks / surface), coloring (rainbow / per-chain / element), background & outlines, framing (overview / close-up) and motifs (H-bond dashes / distance labels) — then translates it into executable commands. Typically 10-60 seconds.',
+              })}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void parse()}
+                disabled={phase === 'parsing'}
+                className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:pointer-events-none disabled:opacity-60"
+              >
+                {phase === 'parsing' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" aria-hidden />}
+                {phase === 'parsing' ? t({ zh: '解析中…', en: 'Parsing…' }) : t({ zh: 'AI 解析图式', en: 'Parse figure style' })}
+              </button>
+              <button
+                type="button"
+                onClick={reset}
+                disabled={phase === 'parsing'}
+                className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
+              >
+                {t({ zh: '换一张图', en: 'Another image' })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* review：左原图 + AI 判读 / 右编辑表单 */}
+      {phase === 'review' && img && draft && (
+        <>
+          <div className="grid gap-3 md:grid-cols-2">
+            {/* 左：原图 + AI 视觉判读 */}
+            <div className="flex flex-col gap-2.5">
+              <div className="relative overflow-hidden rounded-lg border border-border bg-muted/40">
+                <img src={img.dataUrl} alt={t({ zh: '解析原图', en: 'Parsed image' })} className="aspect-[16/10] w-full object-contain" />
+                <span className="absolute left-2 top-2 rounded bg-background/85 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-muted-foreground backdrop-blur-sm">
+                  {t({ zh: '原图', en: 'SOURCE' })}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/30 p-2.5">
+                <span className="mol-micro text-muted-foreground">{t({ zh: 'AI 视觉判读', en: 'AI VISUAL READ' })}</span>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-foreground/85">{t(draft.analysis)}</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {draft.tags.map((tag, i) => (
+                    <span key={i} className="rounded bg-primary/10 px-1.5 py-px text-[9.5px] font-semibold text-primary">{t(tag)}</span>
+                  ))}
+                  <span className="rounded bg-foreground/[0.06] px-1.5 py-px font-mono text-[9.5px] font-semibold text-foreground/70">{draft.demo}</span>
+                </div>
+              </div>
+              {dropped.length > 0 && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/[0.07] p-2.5">
+                  <span className="mol-micro text-amber-600 dark:text-amber-400">{t({ zh: `已剔除 ${dropped.length} 条不受支持的命令`, en: `${dropped.length} unsupported commands dropped` })}</span>
+                  <ul className="mt-1.5 flex flex-col gap-1">
+                    {dropped.map((d, i) => (
+                      <li key={i} className="font-mono text-[9.5px] leading-snug text-amber-700 dark:text-amber-400/90" title={d.reason}>
+                        <span className="line-through">{d.cmd}</span> — {d.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* 右：编辑表单 */}
+            <div className="mol-scroll flex max-h-[52vh] flex-col gap-2.5 overflow-y-auto pr-0.5">
+              <label className="flex flex-col gap-1">
+                <span className="mol-micro text-muted-foreground">{t({ zh: '模板名称', en: 'Template name' })}</span>
+                <input
+                  value={nameVal}
+                  onChange={e => setNameVal(e.target.value)}
+                  maxLength={30}
+                  className="h-8 rounded-md border border-border bg-background px-2.5 text-[12px] font-semibold outline-none focus:border-primary/60"
+                  data-upload-name
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="mol-micro text-muted-foreground">{t({ zh: '图式描述', en: 'Style description' })}</span>
+                <textarea
+                  value={taglineVal}
+                  onChange={e => setTaglineVal(e.target.value)}
+                  maxLength={80}
+                  rows={2}
+                  className="resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-[11px] leading-relaxed outline-none focus:border-primary/60"
+                  data-upload-tagline
+                />
+              </label>
+              <div className="flex flex-col gap-1">
+                <span className="mol-micro text-muted-foreground">{t({ zh: '分类', en: 'Category' })}</span>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label={t({ zh: '模板分类', en: 'Template category' })}>
+                  {FIGURE_CATEGORIES.filter(c => c.key !== 'all').map(c => {
+                    const active = categoryVal === c.key
+                    return (
+                      <button
+                        key={c.key}
+                        type="button"
+                        onClick={() => setCategoryVal(c.key as TemplateDraft['category'])}
+                        aria-pressed={active}
+                        className={cn(
+                          'rounded-full border px-2 py-0.5 text-[10.5px] font-semibold transition-colors cursor-pointer',
+                          active ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground',
+                        )}
+                      >
+                        {t(c.label)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <label className="flex flex-col gap-1">
+                <span className="mol-micro text-muted-foreground">
+                  {t({ zh: '演示结构（PDB 编号）', en: 'Demo structure (PDB ID)' })}
+                </span>
+                <input
+                  value={demoVal}
+                  onChange={e => setDemoVal(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 4))}
+                  placeholder="4HHB"
+                  className={cn('h-8 w-28 rounded-md border bg-background px-2.5 font-mono text-[12px] outline-none', demoOk ? 'border-border focus:border-primary/60' : 'border-red-500/60')}
+                  data-upload-demo
+                />
+                {!demoOk && (
+                  <span className="text-[10px] text-red-600 dark:text-red-400">{t({ zh: 'PDB 编号为 4 位（首字符数字）', en: 'A PDB ID is 4 characters (leading digit)' })}</span>
+                )}
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="mol-micro text-muted-foreground">
+                  {t({ zh: `命令序列（每行一条${invalidLines.length ? ` · ${invalidLines.length} 行不合法` : ''}）`, en: `Command sequence (one per line${invalidLines.length ? ` · ${invalidLines.length} invalid` : ''})` })}
+                </span>
+                <textarea
+                  value={commandsVal}
+                  onChange={e => setCommandsVal(e.target.value)}
+                  rows={Math.min(10, Math.max(5, commandLines.length + 1))}
+                  spellCheck={false}
+                  className="mol-scroll resize-y rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-[10.5px] leading-relaxed outline-none focus:border-primary/60"
+                  data-upload-commands
+                />
+                <span className={cn('text-[10px]', invalidLines.length ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+                  {invalidLines.length
+                    ? t({ zh: `不合法的行保存时将被剔除：${invalidLines.join(' · ')}`, en: `Invalid lines will be dropped on save: ${invalidLines.join(' · ')}` })
+                    : t({ zh: `${commandLines.length} 条命令 · 白名单校验全绿`, en: `${commandLines.length} commands · all pass the whitelist` })}
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* 动作排 */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-2.5">
+            <button
+              type="button"
+              onClick={save}
+              disabled={!canSave}
+              title={!canSave ? t({ zh: '修正表单中标红项后可保存', en: 'Fix the flagged fields to save' }) : undefined}
+              className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/15 disabled:pointer-events-none disabled:opacity-50"
+              data-upload-save
+            >
+              <Wand2 className="h-3.5 w-3.5" aria-hidden />
+              {t({ zh: '保存为我的模板', en: 'Save as my template' })}
+            </button>
+            <button
+              type="button"
+              onClick={() => previewTpl && onPreviewApply(previewTpl)}
+              disabled={!previewTpl || !hasStructure || invalidLines.length > 0 || !demoOk}
+              title={hasStructure ? undefined : t({ zh: '先加载一个结构再预览', en: 'Load a structure first to preview' })}
+              className="flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            >
+              <Play className="h-3.5 w-3.5" aria-hidden />
+              {t({ zh: '先试效果', en: 'Try it first' })}
+            </button>
+            <button
+              type="button"
+              onClick={() => void parse()}
+              className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {t({ zh: '重新解析', en: 'Re-parse' })}
+            </button>
+            <button
+              type="button"
+              onClick={reset}
+              className="ml-auto flex h-8 cursor-pointer items-center gap-1 rounded-md px-2.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {t({ zh: '换一张图', en: 'New image' })}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -372,14 +874,27 @@ export function FigureTemplatesDialog() {
   const loading = useMolStore(s => s.loading)
   const hasStructure = useMolStore(s => s.structures.length > 0)
   const activeName = useMolStore(s => s.structures.find(x => x.id === s.activeId)?.name)
+  const customs = useCustomTemplates()
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [filter, setFilter] = useState<FigureCategory | 'all'>('all')
+  const [filter, setFilter] = useState<FigureCategory | 'all' | 'mine'>('all')
   // r75：对比视图状态（非空 = 对比模式，替换网格与过滤 chips）；
+  // r79：上传视图状态（三视图：grid 网格 / upload 上传创建）；
   // 弹窗关闭时重置回图库（重开落在网格而非残留对比页——库的浏览语义）
   const [compareId, setCompareId] = useState<string | null>(null)
-  useEffect(() => { if (!open) setCompareId(null) }, [open])
-  const compareTpl = FIGURE_TEMPLATES.find(x => x.id === compareId) ?? null
-  const shown = filter === 'all' ? FIGURE_TEMPLATES : FIGURE_TEMPLATES.filter(x => x.category === filter)
+  const [view, setView] = useState<'grid' | 'upload'>('grid')
+  useEffect(() => { if (!open) { setCompareId(null); setView('grid') } }, [open])
+  // 欢迎页画廊「＋ 从图片创建」入口：广播事件直达上传视图
+  useEffect(() => {
+    const onOpenUpload = () => { setCompareId(null); setView('upload') }
+    window.addEventListener('open-template-upload', onOpenUpload)
+    return () => window.removeEventListener('open-template-upload', onOpenUpload)
+  }, [])
+  const allTemplates = [...FIGURE_TEMPLATES, ...customs]
+  const compareTpl = allTemplates.find(x => x.id === compareId) ?? null
+  const shown =
+    filter === 'all' ? allTemplates
+    : filter === 'mine' ? customs
+    : allTemplates.filter(x => x.category === filter)
 
   const apply = (tpl: FigureTemplate) => {
     if (!hasStructure) {
@@ -411,6 +926,20 @@ export function FigureTemplatesDialog() {
     }
   }
 
+  const removeCustom = (tpl: FigureTemplate) => {
+    const name = t(tpl.name)
+    toast(tt({ zh: `删除自定义模板「${name}」？`, en: `Delete custom template "${name}"?` }), {
+      action: {
+        label: tt({ zh: '删除', en: 'Delete' }),
+        onClick: () => {
+          removeCustomTemplate(tpl.id)
+          toast.success(tt({ zh: '已删除', en: 'Deleted' }))
+        },
+      },
+      duration: 8000,
+    })
+  }
+
   return (
     <Dialog open={open} onOpenChange={v => setUi({ templateOpen: v })}>
       <DialogContent className="max-w-3xl">
@@ -421,8 +950,8 @@ export function FigureTemplatesDialog() {
           </DialogTitle>
           <DialogDescription>
             {t({
-              zh: 'Cell / Nature / Science 结构文章的经典图式 + 互作分析（盐桥/氢键/DNA/阳离子-π）+ 位点特写（辅因子/金属/二硫键）+ 特定类型分析图（离子通道孔道等）——一键应用，命令透明可改，可对照原文图式',
-              en: 'Classic figure styles from Cell / Nature / Science papers + interaction analysis (salt bridges / H-bonds / DNA / cation–π) + site close-ups (cofactors / metals / disulfides) + type-specific figures (ion-channel pores etc.) — one click; transparent recipes, comparable against the originals',
+              zh: 'Cell / Nature / Science 结构文章的经典图式 + 互作分析（盐桥/氢键/DNA/阳离子-π）+ 位点特写（辅因子/金属/二硫键）+ 特定类型分析图（离子通道孔道等）——一键应用，命令透明可改，可对照原文图式；上传论文图可 AI 解析为你的自定义模板',
+              en: 'Classic figure styles from Cell / Nature / Science papers + interaction analysis (salt bridges / H-bonds / DNA / cation–π) + site close-ups (cofactors / metals / disulfides) + type-specific figures (ion-channel pores etc.) — one click; transparent recipes, comparable against the originals. Upload a paper figure to parse it into your own custom template',
             })}
           </DialogDescription>
         </DialogHeader>
@@ -437,12 +966,19 @@ export function FigureTemplatesDialog() {
             busy={busyId === compareTpl.id || loading}
             hasStructure={hasStructure}
           />
+        ) : view === 'upload' ? (
+          /* r79：从图片创建模板（上传 → AI 解析 → 审核入库） */
+          <UploadPanel
+            onBack={() => setView('grid')}
+            onSaved={() => { setView('grid'); setFilter('mine') }}
+            onPreviewApply={tpl => apply(tpl)}
+          />
         ) : (
           <>
-            {/* 分类过滤 chips（通用 / 互作分析 / 膜蛋白·通道） */}
+            {/* 分类过滤 chips（六分类 + 我的模板）+ 上传创建入口 */}
             <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t({ zh: '模板分类', en: 'Template categories' })}>
               {FIGURE_CATEGORIES.map(c => {
-                const n = c.key === 'all' ? FIGURE_TEMPLATES.length : FIGURE_TEMPLATES.filter(x => x.category === c.key).length
+                const n = c.key === 'all' ? allTemplates.length : allTemplates.filter(x => x.category === c.key).length
                 const active = filter === c.key
                 return (
                   <button
@@ -462,6 +998,33 @@ export function FigureTemplatesDialog() {
                   </button>
                 )
               })}
+              {customs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilter('mine')}
+                  aria-pressed={filter === 'mine'}
+                  className={cn(
+                    'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer',
+                    filter === 'mine'
+                      ? 'border-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                      : 'border-violet-500/30 bg-violet-500/[0.06] text-violet-600/80 hover:bg-violet-500/12 dark:text-violet-400/80',
+                  )}
+                >
+                  {t({ zh: '我的模板', en: 'My templates' })}
+                  <span className="ml-1 font-mono text-[9px] opacity-70">{customs.length}</span>
+                </button>
+              )}
+              {/* r79：上传图片创建自定义模板（与 chips 同排右对齐——库的一等公民入口） */}
+              <button
+                type="button"
+                onClick={() => setView('upload')}
+                data-open-upload
+                className="ml-auto flex items-center gap-1 rounded-full border border-primary/45 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15 cursor-pointer"
+                title={t({ zh: '上传论文图，AI 解析图式生成自定义模板', en: 'Upload a paper figure — the AI parses the style into a custom template' })}
+              >
+                <ImagePlus className="h-3 w-3" aria-hidden />
+                {t({ zh: '从图片创建', en: 'From image' })}
+              </button>
             </div>
 
             <div className="mol-scroll -mx-1 max-h-[62vh] overflow-y-auto px-1">
@@ -470,21 +1033,39 @@ export function FigureTemplatesDialog() {
                   <TemplateCard
                     key={tpl.id}
                     tpl={tpl}
-                    index={FIGURE_TEMPLATES.indexOf(tpl)}
+                    index={allTemplates.indexOf(tpl)}
                     busy={busyId === tpl.id || loading}
                     onApply={() => apply(tpl)}
                     onDemo={() => void demo(tpl)}
                     onCompare={() => setCompareId(tpl.id)}
+                    onDelete={tpl.custom ? () => removeCustom(tpl) : undefined}
                   />
                 ))}
               </div>
+              {filter === 'mine' && customs.length === 0 && (
+                <div className="flex flex-col items-center gap-2.5 rounded-lg border border-dashed border-border bg-muted/30 px-6 py-10 text-center">
+                  <ImagePlus className="h-8 w-8 text-muted-foreground/60" aria-hidden />
+                  <p className="text-[12px] font-semibold">{t({ zh: '还没有自定义模板', en: 'No custom templates yet' })}</p>
+                  <p className="max-w-sm text-[11px] leading-relaxed text-muted-foreground">
+                    {t({ zh: '上传一张论文/科研分子图，AI 将解析其图式配方（表示法·配色·视角）并生成可编辑命令模板', en: 'Upload a paper or scientific molecular figure — the AI parses its style recipe (representations · colors · camera) into an editable command template' })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setView('upload')}
+                    className="mt-1 flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/15"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+                    {t({ zh: '上传第一张图', en: 'Upload your first image' })}
+                  </button>
+                </div>
+              )}
             </div>
 
             <p className="flex items-start gap-1.5 text-[10px] leading-relaxed text-muted-foreground">
               <Wand2 className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
               {t({
-                zh: '模板复现的是图式视觉配方（表示法·配色·视角·灯光·轮廓）与分析命令（孔道剖面/脂双层/盐桥/氢键），不含论文原图；卡片缩略图由 MolVision 引擎对代表结构真实渲染。点卡片右下「对比」可与原论文图式逐项对照。',
-                en: 'Templates reproduce figure-style recipes (representations · coloring · camera · lighting · outlines) and analysis commands (pore profiles / bilayers / salt bridges / H-bonds), not original artwork; card thumbnails are genuine engine renders. Use "Compare" on a card to check the recipe against the original paper figure.',
+                zh: '模板复现的是图式视觉配方（表示法·配色·视角·灯光·轮廓）与分析命令（孔道剖面/脂双层/盐桥/氢键），不含论文原图；卡片缩略图由 MolVision 引擎对代表结构真实渲染。点卡片右下「对比」可与原论文图式逐项对照；点右上「从图片创建」用 AI 把你自己的论文图变成新模板。',
+                en: 'Templates reproduce figure-style recipes (representations · coloring · camera · lighting · outlines) and analysis commands (pore profiles / bilayers / salt bridges / H-bonds), not original artwork; card thumbnails are genuine engine renders. Use "Compare" on a card to check the recipe against the original paper figure — or "From image" to turn your own figure into a new template with AI.',
               })}
             </p>
           </>

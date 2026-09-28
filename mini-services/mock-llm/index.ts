@@ -12,6 +12,8 @@
 // r66-b VLM 支持：user content 为多模态数组（含 image_url 段，AgentPanel 截图自查请求）时按
 // 视觉自查模板处理——默认「通过」；归一化文本含「失败演练 / fail drill」→ 演练未达标路径
 // （下发修正命令）。数组 content 先归一化为纯文本再走模板（直toLowerCase 会 TypeError 500）。
+// r79 模板解析分支：多模态文本含标记「论文图模板解析」（/api/templates/parse 固定注入）→
+// 返回 TemplateDraft 协议 JSON（含 2 条白名单外命令——save/make——供路由剔除明细透传 UI 的联调实证）。
 const models = {
   object: 'list',
   data: [
@@ -134,6 +136,35 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
   // 0. VLM 视觉自查（最前：含 image_url 的多模态请求按视觉分支处理，文本模板不受影响）。
   //    默认「通过」；归一化文本含「失败演练 / fail drill」→ 演练未达标路径（修正命令透传回前端执行）
   if (hasImagePart(lastUserMsg?.content)) {
+    // r79：论文图模板解析（/api/templates/parse 的多模态请求——文本含固定标记
+    // 「论文图模板解析」）：返回 TemplateDraft 协议 JSON（非 AgentDecision 形状——
+    // 路由端 extractJsonObject + sanitizeTemplateDraft 消费）。含两条白名单外命令
+    // （save x.pdb / fake verbs）供「剔除明细透传 UI」路径的联调实证
+    if (/论文图模板解析/.test(lastUser)) {
+      const draft = {
+        name: { zh: '彩虹卡通全景', en: 'Rainbow cartoon overview' },
+        tagline: { zh: 'N→C 渐变卡通带 + 白底细描边 + 主轴全景', en: 'N→C rainbow cartoon on white with hairline outlines, principal-axis framing' },
+        purpose: { zh: '整体概览 · 折叠走向', en: 'Overview · fold topology' },
+        tags: [{ zh: '整体结构', en: 'Overview' }, { zh: '图片解析', en: 'From image' }],
+        category: 'basic',
+        demo: '4HHB',
+        accent: 'rose',
+        analysis: {
+          zh: '图中为四聚体蛋白的卡通带表示：N→C 彩虹渐变着色、纯白背景、发丝级轮廓描边、主轴对齐全景构图，无氢键虚线或距离标注等分析元素。',
+          en: 'A tetramer shown as cartoon ribbons: N→C rainbow gradient, pure white background, hairline outlines, principal-axis overview framing; no H-bond dashes or distance labels.',
+        },
+        commands: [
+          'preset cartoon',
+          'spectrum count, rainbow',
+          'bg white',
+          'outline on 1.1 1.0',
+          'orient',
+          'save x.pdb',
+          'make everything beautiful',
+        ],
+      }
+      return draft as unknown as { reply: string; commands: string[] }
+    }
     if (/失败演练|fail drill/i.test(lastUser)) {
       return dec(zh,
         '视觉自查未达标：目标颜色未生效，已自动下发修正命令。',

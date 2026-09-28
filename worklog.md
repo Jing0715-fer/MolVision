@@ -3215,3 +3215,51 @@ Stage Summary:
   2. 【中】催化几何模板泛化（探测活性位点注释/SiteRecord 而非硬编码 35/52；或 SER/CYS-HIS 丝氨酸蛋白酶催化三联体版本）
   3. 【中】对比视图左栏「现场渲染」按钮（r75 起建议仍有效——morph/两态模板后更显价值）
   4. 【低】40+ 模板时画廊虚拟化 + blur-up；模板收藏/自定义保存（localStorage UGC）
+
+---
+Task ID: r79
+Agent: main
+Task: 用户指令「增加上传图片，llm解析后创建用户自定义新模板的新功能，继续打磨已有模板」——图片→自定义模板全链路落地：/api/templates/parse VLM 解析路由（provider 直连+ZAI 兜底）+ template-command-guard 服务端/客户端共用命令白名单闸（三层防线+set 等号归一）+ custom-templates localStorage 存储层（useSyncExternalStore 订阅+配额韧性三段降）+ FigureTemplatesDialog 上传面板（拖/点/粘贴三通道+四阶段进度剧场+审核表单实时校验）+ 欢迎页画廊「从图片创建」一级入口与「我的模板」紫系分区 + mock-llm 模板解析分支（含 2 条白名单外命令供剔除路径实证）+ guards 148→179 + E2E 三证（mock 全链路 / 真实 glm-4.6v 双图解析 / 错误路径）
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r78 即最新）；mock-llm 未在跑 → Python double-fork 守护启动（3999）
+- 【r79-1 命令白名单闸】template-command-guard.ts（纯函数零依赖，服务端路由+客户端表单共用 import）：
+  · 三层防线：①字符集 SEL_CHARS（拦分号/反引号/$/花括号——注入与垃圾）②动词白名单 TEMPLATE_VERBS（64 动词，刻意排除 save/png/session/movie——ray 例外收录：内置 publication-ready 即以 ray 1920 收尾）③逐动词 anchored 参数形状 VERB_SHAPES（ChimeraX 别名 ~display/display/bgcolor/silhouettes/rotate/translate/distance/align/match 归一映射）
+  · 自检实证：27 内置模板 190 条命令 0 剔除（4 个初版漏收动词 ray/membrane/pore/use 由自检揭发当轮补齐）+ 36 变体抽查（26 过 10 拦——rm -rf/反引号注入/HTML 标签全拦）
+  · set 等号归一：normalizeCommand 剥离 set 键值间裸「=」（实测 glm-4.6v 产出 set ambient = 0.4，commands.ts 按空白切分不识别——归一后语义不变可执行）
+- 【r79-2 解析路由】src/app/api/templates/parse/route.ts：POST {image: dataURL} → VLM → TemplateDraft 协议：
+  · 供应商分派与 /api/agent 视觉自查同构：visionWithProvider 直连优先（90s 超时）→ null 时 ZAI SDK createVision（glm-4.6v，thinking disabled）→ 2 轮重试
+  · 提示词：六维图式解剖（表示法/着色/背景/描边/景别/专业元素）+ 命令速查（图式配方子集）+ demo 映射表（认出具体蛋白选其 PDB；膜通道→1BL8、核酸→1A3N、缺省 4HHB）+ 协议 JSON
+  · sanitizeTemplateDraft 逐字段校验：分类/强调色枚举、demo 4 位正则、双语字段兜底截断、命令过闸（dropped 明细透传）；有效命令 <2 条按打捞失败 502（宁可诚实拒绝不可入库空转模板）
+  · dataURL 校验 image/(png|jpe?g|webp) + 5MB 上限（413）；请求级 locale 检测与 agent 路由同规则
+- 【r79-3 存储层】custom-templates.ts：localStorage 键 molvision.customTemplates.v1，上限 20 张 LRU：
+  · sanitizeStoredTemplate 存储侧字段防线（命令全绿才收——手改 localStorage 脏数据不进渲染管线）
+  · 配额韧性三段降：原样写 → 去 thumb 重试 → 逐张丢最旧重试
+  · useSyncExternalStore 订阅（storage 事件 + custom-templates-changed 广播双通道，跨标签页同步）
+  · 【揭发 A（本轮最险坑）】getServerSnapshot 内联 () => [] 每调用新数组 → React「The result of getServerSnapshot should be cached to avoid an infinite loop」保护性报错 → 渲染进程 CDP 全超时冻死（上传后 eval/screenshot 全挂）。修复：模块级 EMPTY_SNAPSHOT 稳定引用。对照实验定位法：无监听空页面 upload 正常（排除 agent-browser 基建）+ 应用页 eval 直跑 canvas/createImageBitmap/toDataURL 管线全通（排除图像处理）→ 锁定 React 渲染侧 → console 揪出 getServerSnapshot 报错
+- 【r79-4 上传面板】FigureTemplatesDialog 新 view 状态机（grid/upload）+ UploadPanel 组件：
+  · 三通道选图：拖拽（dragover 高亮）/点击浏览/Ctrl+V 粘贴；类型与 10MB 前置校验
+  · fileToImages：createImageBitmap + canvas 白底铺底（PNG 透明通道 JPEG 化防黑底事故）双产出（≤1280px q0.85 送解析 + ≤384px q0.72 缩存卡片缩略图）
+  · 四阶段进度剧场（表示法→配色→视角→命令翻译，6s 轮播）——VLM 实需 10-60s 的信息量补偿
+  · 审核表单：名称/图式描述（当前语言可改、另一语言保留 AI 原稿）+ 分类 chips + demo PDB 输入（4 位实时校验）+ 命令 textarea 逐行实时过闸（不合法行警告+保存时剔除说明）+ 左栏原图预览与 AI 视觉判读卡 + 琥珀色 dropped 明细（line-through + 原因）
+  · 动作排：保存为我的模板（canSave 五条件门控）/先试效果（临时模板走标准 adapt+apply 管线——与入库后行为一致）/重新解析/换图
+  · lint 坑两枚当轮修：acceptFile 闭包先于声明（react-hooks/immutability → 挪位）+ effect 内 setStage(0)（set-state-in-effect → 归零移入 parse() 入口）
+- 【r79-5 双端画廊接入】弹窗与欢迎页画廊同源合并 [...FIGURE_TEMPLATES, ...customs]：分类计数/过滤/序号统一口径 + 「我的模板」紫系 chip（customs>0 才出现）+ 自定义卡片差异（紫 CUSTOM 徽记替代序号、dataURL 缩略图、删除钮 hover 浮现、footer 创建日期替代 DOI）+ 空态引导卡；欢迎页画廊头「＋ 从图片创建」按钮 → open-template-upload 广播事件直达弹窗上传视图（弹窗监听重置 compare 态）
+- 【r79-6 mock 分支】论文图模板解析标记匹配 → TemplateDraft 协议 JSON（含 save x.pdb / make everything beautiful 两条白名单外命令——剔除明细透传 UI 的联调实证）；另建 /tmp 垃圾 mock（3997 恒返 200 纯文本）测 502 错误路径
+- 【E2E 三证】
+  · mock 全链路：欢迎页入口→上传 rainbow-overview.png→解析（5 命令+2 剔除带原因）→审核表单（名称/demo/分类可改）→保存→网格「我的模板」分区自定义卡→删除确认 toast→localStorage 归零；重载后画廊 28 图含自定义卡持久
+  · 真实 glm-4.6v 双图解析（UI 完整流非 curl）：rainbow-overview.png → 「多链彩虹全景图」demo 4HHB + 8 命令全过闸（正确识别卡通带/彩虹渐变/白底/俯视全景）；pore-analysis.png → 「Membrane Protein Channel Cross」demo 1BL8 + membrane 34 命令（正确识别通道+脂双层语境——与内置 pore-analysis 配方同构，demo 映射表生效）
+  · 错误路径：垃圾 provider → 面板内红框报错「The model reply contained no usable template」+ 回到可重试态；弹窗演示自定义卡 → demoThenApply 完整链（VLM 像素级终审「彩虹渐变清晰、白底」——readPixels 无 preserveDrawingBuffer 假阴性教训：以 VLM 截图审替代）
+- 【VLM 视觉终审】审核表单 9.0/10（图文对照设计获赞、dropped 琥珀警示「提升调试效率」）；移动端 375px 零溢出零截断（弹窗开启态 scrollW=375）；「我的模板」画廊视图（CUSTOM 徽记/缩略图/紫 chip 高亮/无重叠全确认）
+- 【门禁】lint 0 · tsc src 0 错 · guards 148→179（+31：路由/白名单闸/存储层/上传面板/双端接入/mock 分支/共享类型等）· smoke 4/4 · console 与 page errors 双零 · dev.log POST /api/templates/parse 7 次全 200
+
+Stage Summary:
+- 交付：图片→自定义模板完整功能链（VLM 解析路由 + 命令白名单闸 + localStorage 存储层 + 上传/审核 UI + 双端画廊接入 + mock 联调通道）；真实 glm-4.6v 双图解析实证（KcsA 通道图被正确还原为 membrane 34 配方 + demo 映射 1BL8 命中）
+- 用户指令全闭环：「上传图片 llm 解析创建自定义模板」（全链路+真实 VLM 三证）·「继续打磨已有模板」（guards 179/179 + 27 模板 190 命令白名单自检全绿 + 弹窗/画廊文案与入口打磨）
+- 架构资产：template-command-guard 三防线白名单（未来任何 AI 产出命令的入库闸门——agent 命令流可复用）；useSyncExternalStore+localStorage 的 UGC 层范式；「内联空数组 server snapshot 冻死页面」坑档（React 19 语义，E2E 必测项）
+- 坑（新入档）：①useSyncExternalStore getServerSnapshot 必须返回稳定引用（内联 () => [] → 无限循环保护报错 → CDP 冻死——对照实验+console 三步定位法）②readPixels 无 preserveDrawingBuffer 返回全零（像素证据改用 VLM 截图审）③agent-browser upload 对 hidden input 有效（file input 无需可见）④命令动词白名单初版漏 ray/membrane/pore/use——27 内置模板全量自检是白名单的正确性基准⑤eslint react-hooks 新规则（immutability/set-state-in-effect）比 tsc 严格——useEffect 内同步 setState 要移到事件入口
+- 下一轮建议（按优先级）：
+  1. 【中】自定义模板「编辑」入口（保存后可改名/改命令——custom-templates 层补 updateCustomTemplate；审核表单复用）
+  2. 【中】解析结果「对照预览」分屏（左原图/右引擎按命令实时渲染——用 demoThenApply 的相机门控渲染到小视口）
+  3. 【中】自定义模板导入导出（JSON 文件——跨设备迁移；命令序列天然可移植）
+  4. 【低】40+ 模板时画廊虚拟化 + blur-up（r78 起建议仍有效）

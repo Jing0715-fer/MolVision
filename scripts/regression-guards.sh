@@ -166,7 +166,7 @@ check "适配层双调用方接线"       "adaptTemplateCommands"           "src
 check "适配说明入日志"           "logAdaptNotes"                   "src/lib/molecular"                 3
 
 # ---- r74：欢迎页 Open-design 重设计（顶栏 + 左 hero/右模板画廊分栏） ----
-check "欢迎页画廊数据接线"       "FIGURE_TEMPLATES"                "src/components/studio/WelcomeScreen.tsx" 5
+check "欢迎页画廊数据接线"       "FIGURE_TEMPLATES"                "src/components/studio/WelcomeScreen.tsx" 2
 check "欢迎页画廊演示动作"       "demoThenApply"                   "src/components/studio/WelcomeScreen.tsx" 3
 check "欢迎页画廊缩略图"         "/templates/"                     "src/components/studio/WelcomeScreen.tsx" 1
 check "画廊卡片入场动画定义"     "gallery-card-in"                "src/app/globals.css"              4
@@ -246,8 +246,39 @@ check "管线 two-state 规格"         "two-state-comparison:20:4Q21:24" "scrip
 check "体检脚本资产"                "health-check-templates.sh"      "scripts/health-check-templates.sh" 1
 check "体检状态翻转等待"            "backgroundPinned"               "scripts/health-check-templates.sh" 1
 
+# ---- r79：图片上传 → AI 解析 → 自定义模板 ----
+check "模板解析 API 路由"        "图式解析失败"                  "src/app/api/templates/parse/route.ts" 1
+check "VLM 供应商分派+ZAI 兜底"  "visionWithProvider"            "src/app/api/templates/parse/route.ts" 2
+check "草案协议清洗"             "sanitizeTemplateDraft"         "src/app/api/templates/parse/route.ts" 2
+check "命令白名单闸"             "sanitizeTemplateCommands"      "src/app/api/templates/parse/route.ts" 1
+check "图片体积上限"             "5 \* 1024 \* 1024"             "src/app/api/templates/parse/route.ts" 1
+check "guard 纯函数库"           "TEMPLATE_VERBS"                "src/lib/molecular/template-command-guard.ts" 2
+check "注入字符集拦截"           "SEL_CHARS"                     "src/lib/molecular/template-command-guard.ts" 2
+check "set 等号归一"             "normalizeCommand"              "src/lib/molecular/template-command-guard.ts" 2
+check "模板草案共享类型"         "TemplateDraft"                 "src/lib/molecular/template-command-guard.ts" 1
+check "自定义模板存储库"         "customTemplates.v1"            "src/lib/molecular/custom-templates.ts" 2
+check "存储侧字段防线"           "sanitizeStoredTemplate"        "src/lib/molecular/custom-templates.ts" 2
+check "上限 20 张 LRU"           "MAX_CUSTOM"                    "src/lib/molecular/custom-templates.ts" 2
+check "React 订阅钩子"           "useCustomTemplates"            "src/lib/molecular/custom-templates.ts" 2
+check "存储配额韧性"             "QuotaExceededError"            "src/lib/molecular/custom-templates.ts" 1
+check "上传面板三态流"           "phase === 'picked' \|\| phase === 'parsing'" "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "审核表单"                 "data-upload-commands"          "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "保存动作"                 "data-upload-save"              "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "上传入口按钮"             "data-open-upload"              "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "弹窗监听上传事件"         "open-template-upload"          "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "自定义卡片删除"           "removeCustomTemplate"          "src/components/studio/FigureTemplatesDialog.tsx" 2
+check "我的模板过滤 chip"        "我的模板"                      "src/components/studio/FigureTemplatesDialog.tsx" 2
+check "欢迎页创建入口"           "data-welcome-create-template" "src/components/studio/WelcomeScreen.tsx" 1
+check "欢迎页画廊合并自定义"     "allTemplates"                  "src/components/studio/WelcomeScreen.tsx" 3
+check "欢迎页我的 chip"          "data-welcome-mine-chip"        "src/components/studio/WelcomeScreen.tsx" 1
+check "自定义缩略图 dataURL"     "tpl.thumb"                     "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "mock 模板解析分支"        "论文图模板解析"                "mini-services/mock-llm/index.ts" 2
+check "mock 剔除实证命令"        "make everything beautiful"     "mini-services/mock-llm/index.ts" 1
+check "模板图式解析提示词"       "论文图模板解析"                "src/app/api/templates/parse/route.ts" 1
+check "图式模板 custom 字段"     "custom\?: true"               "src/lib/molecular/figure-templates.ts" 1
+
 # ---- 汇总 ----
-TOTAL=148
+TOTAL=179
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

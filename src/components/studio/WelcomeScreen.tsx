@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  ArrowUpRight, BookOpenText, Bot, FileUp, FolderOpen, Github, Loader2, Moon,
+  ArrowUpRight, BookOpenText, Bot, FileUp, FolderOpen, Github, ImagePlus, Loader2, Moon,
   Play, Sun, Wand2,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
@@ -31,6 +31,7 @@ import {
   demoThenApply, FIGURE_CATEGORIES, FIGURE_TEMPLATES,
   type FigureCategory, type FigureTemplate,
 } from '@/lib/molecular/figure-templates'
+import { useCustomTemplates } from '@/lib/molecular/custom-templates'
 import { ACCENT, TPL_ICONS } from './FigureTemplatesDialog'
 import { SessionResumeSlot } from './SessionResumeCard'
 import { AgentPanel } from './AgentPanel'
@@ -58,6 +59,8 @@ function GalleryCard({ tpl, index, busy, onDemo }: {
   const [imgOk, setImgOk] = useState(true)
   const a = ACCENT[tpl.accent]
   const Icon = TPL_ICONS[tpl.id] ?? BookOpenText
+  // r79：自定义模板缩略图 = 上传图缩存 dataURL；内置 = 管线 PNG
+  const thumbSrc = tpl.custom && tpl.thumb ? tpl.thumb : `/templates/${tpl.id}.png`
 
   return (
     <article
@@ -81,9 +84,10 @@ function GalleryCard({ tpl, index, busy, onDemo }: {
         {/* 缩略图（引擎真实渲染产物；缺图渐变占位） */}
         <span className="relative block aspect-[16/10] w-full overflow-hidden bg-muted/40">
           {imgOk ? (
-            // 静态资源缩略图（管线产物，非内容图）；next/image 对 public 静态占位无增益
+            // 静态资源缩略图（管线产物，非内容图）；next/image 对 public 静态占位无增益。
+            // r79：自定义模板为 dataURL（同一 img 元素直接消费）
             <img
-              src={`/templates/${tpl.id}.png`}
+              src={thumbSrc}
               alt={t(tpl.tagline)}
               loading="lazy"
               decoding="async"
@@ -108,10 +112,16 @@ function GalleryCard({ tpl, index, busy, onDemo }: {
               {tpl.commands.length} {t({ zh: '条命令', en: 'cmds' })}
             </span>
           </span>
-          {/* 序号角标（仪器簇编号惯例，与模板库对话框同源） */}
-          <span className={cn('absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em]', a.chip)}>
-            {String(index + 1).padStart(2, '0')}
-          </span>
+          {/* 序号角标（仪器簇编号惯例，与模板库对话框同源）；自定义模板换紫印 */}
+          {tpl.custom ? (
+            <span className="absolute left-2 top-2 rounded bg-violet-500/85 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-white">
+              {t({ zh: '自定义', en: 'CUSTOM' })}
+            </span>
+          ) : (
+            <span className={cn('absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em]', a.chip)}>
+              {String(index + 1).padStart(2, '0')}
+            </span>
+          )}
           {/* 演示徽章（hover 浮现；触屏恒显——作品集 hover 提示惯例） */}
           <span className={cn(
             'absolute bottom-2 right-2 flex h-6 items-center gap-1 rounded-full border border-border bg-background/85 px-2 text-[10px] font-semibold backdrop-blur-sm transition-opacity duration-200',
@@ -163,14 +173,19 @@ export function WelcomeScreen() {
   const loadingMsg = useMolStore(s => s.loadingMsg)
   const agentOpen = useMolStore(s => s.ui.agentOpen)
   const setUi = useMolStore(s => s.setUi)
+  const customs = useCustomTemplates()
   const [id, setId] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  const [filter, setFilter] = useState<FigureCategory | 'all'>('all')
+  const [filter, setFilter] = useState<FigureCategory | 'all' | 'mine'>('all')
   const [busyId, setBusyId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-
-  const shown = filter === 'all' ? FIGURE_TEMPLATES : FIGURE_TEMPLATES.filter(x => x.category === filter)
+  // r79：画廊 = 内置 + 自定义同源合并（计数/过滤/序号统一口径）
+  const allTemplates = [...FIGURE_TEMPLATES, ...customs]
+  const shown =
+    filter === 'all' ? allTemplates
+    : filter === 'mine' ? customs
+    : allTemplates.filter(x => x.category === filter)
 
   // 精确指针设备才自动聚焦（触屏避免弹出键盘）
   useEffect(() => {
@@ -464,11 +479,11 @@ export function WelcomeScreen() {
                 {t({ zh: '论文图模板', en: 'Paper-figure styles' })}
               </h2>
               <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[9.5px] font-bold text-primary">
-                {FIGURE_TEMPLATES.length}
+                {allTemplates.length}
               </span>
               <div className="ml-auto flex items-center gap-1.5" role="group" aria-label={t({ zh: '画廊分类', en: 'Gallery categories' })}>
                 {FIGURE_CATEGORIES.map(c => {
-                  const n = c.key === 'all' ? FIGURE_TEMPLATES.length : FIGURE_TEMPLATES.filter(x => x.category === c.key).length
+                  const n = c.key === 'all' ? allTemplates.length : allTemplates.filter(x => x.category === c.key).length
                   const active = filter === c.key
                   return (
                     <button
@@ -488,7 +503,35 @@ export function WelcomeScreen() {
                     </button>
                   )
                 })}
+                {customs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFilter('mine')}
+                    aria-pressed={filter === 'mine'}
+                    data-welcome-mine-chip
+                    className={cn(
+                      'cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors',
+                      filter === 'mine'
+                        ? 'border-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                        : 'border-violet-500/30 bg-violet-500/[0.06] text-violet-600/80 hover:bg-violet-500/12 dark:text-violet-400/80',
+                    )}
+                  >
+                    {t({ zh: '我的模板', en: 'My templates' })}
+                    <span className="ml-1 font-mono text-[9px] opacity-70">{customs.length}</span>
+                  </button>
+                )}
               </div>
+              {/* r79：上传论文图 → AI 解析自定义模板（画廊一级入口） */}
+              <button
+                type="button"
+                data-welcome-create-template
+                onClick={() => { setUi({ templateOpen: true }); window.dispatchEvent(new CustomEvent('open-template-upload')) }}
+                className="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-primary/45 bg-primary/10 px-3 text-[11px] font-semibold text-primary transition-[border-color,background-color] duration-150 hover:bg-primary/15"
+                title={t({ zh: '上传论文图，AI 解析图式生成你的自定义模板', en: 'Upload a paper figure — the AI parses it into your custom template' })}
+              >
+                <ImagePlus className="h-3 w-3" aria-hidden />
+                {t({ zh: '从图片创建', en: 'From image' })}
+              </button>
               <button
                 type="button"
                 onClick={() => setUi({ templateOpen: true })}
@@ -501,8 +544,8 @@ export function WelcomeScreen() {
             </div>
             <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted-foreground">
               {t({
-                zh: 'Cell / Nature / Science 结构文章的经典图式——缩略图由引擎真实渲染，点击卡片即刻加载演示结构并应用',
-                en: 'Classic figure styles from Cell / Nature / Science papers — thumbnails are genuine engine renders; click a card to load the demo structure with the style applied',
+                zh: 'Cell / Nature / Science 结构文章的经典图式——缩略图由引擎真实渲染，点击卡片即刻加载演示结构并应用；上传你自己的论文图可 AI 解析为新模板',
+                en: 'Classic figure styles from Cell / Nature / Science papers — thumbnails are genuine engine renders; click a card to load the demo structure with the style applied. Upload your own figure to parse it into a new template with AI',
               })}
             </p>
           </div>
@@ -518,11 +561,28 @@ export function WelcomeScreen() {
                 <GalleryCard
                   key={tpl.id}
                   tpl={tpl}
-                  index={FIGURE_TEMPLATES.indexOf(tpl)}
+                  index={allTemplates.indexOf(tpl)}
                   busy={busyId === tpl.id || loading}
                   onDemo={() => void demo(tpl)}
                 />
               ))}
+              {filter === 'mine' && customs.length === 0 && (
+                <div className="col-span-full flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-border bg-muted/30 px-6 py-12 text-center">
+                  <ImagePlus className="h-9 w-9 text-muted-foreground/50" aria-hidden />
+                  <p className="text-[12.5px] font-semibold">{t({ zh: '还没有自定义模板', en: 'No custom templates yet' })}</p>
+                  <p className="max-w-sm text-[11px] leading-relaxed text-muted-foreground">
+                    {t({ zh: '上传一张论文/科研分子图，AI 将解析其图式配方并生成可编辑命令模板', en: 'Upload a paper or scientific molecular figure — the AI parses its style recipe into an editable command template' })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setUi({ templateOpen: true }); window.dispatchEvent(new CustomEvent('open-template-upload')) }}
+                    className="mt-1 flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/15"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+                    {t({ zh: '上传第一张图', en: 'Upload your first image' })}
+                  </button>
+                </div>
+              )}
             </div>
             {/* 诚实版权脚注（与模板库对话框同口径） */}
             <p className="gallery-card-in mt-5 flex max-w-xl items-start gap-1.5 text-[10px] leading-relaxed text-muted-foreground" style={{ animationDelay: '700ms' }}>

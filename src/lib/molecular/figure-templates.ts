@@ -110,6 +110,10 @@ export interface FigureTemplate {
   commands: string[]
   /** 卡片强调色（Tailwind 类族名，用于占位渐变与 hover 边框） */
   accent: 'rose' | 'emerald' | 'amber' | 'sky' | 'violet' | 'teal' | 'orange' | 'fuchsia' | 'lime' | 'cyan' | 'slate'
+  /** r79：用户自定义模板标记（图片解析创建；缩略图为用户上传图缩存 dataURL） */
+  custom?: true
+  /** r79：自定义模板卡片缩略图（dataURL，≤384px JPEG；存储配额不足时可缺省→强调色渐变占位） */
+  thumb?: string
 }
 
 /** 分类元数据（弹窗/欢迎页画廊过滤 chips；r76：general 11 拆三类；r78：拆出构象与动力学——
