@@ -372,19 +372,48 @@ check "红蓝立体模板（印刷对）"    "id: 'stereo-anaglyph'"         "sr
 check "胖瘦管模板（管径对）"      "id: 'putty-flexibility'"       "src/lib/molecular/figure-templates.ts" 1
 check "切层剖面模板（剖切对）"    "id: 'slab-cutaway'"            "src/lib/molecular/figure-templates.ts" 1
 check "图鉴 r87 新词条"           "红蓝立体渲染（双通道色分移）"  "src/lib/molecular/figure-templates.ts" 1
-check "速览条选目"               "WELCOME_TEASER_IDS"            "src/components/studio/WelcomeScreen.tsx" 2
-check "速览条渲染"               "data-welcome-teaser-strip"     "src/components/studio/WelcomeScreen.tsx" 1
-check "速览条尾卡滚动锚"         "data-welcome-teaser-all"       "src/components/studio/WelcomeScreen.tsx" 1
-check "速览图组件（降级占位）"    "TeaserThumb"                   "src/components/studio/WelcomeScreen.tsx" 2
-check "hero 响应式收紧"           "px-5 py-7 sm:px-6 sm:py-9"     "src/components/studio/WelcomeScreen.tsx" 1
+check "hero 响应式收紧"           "px-5 pb-6 pt-7 sm:px-6 sm:pt-9" "src/components/studio/WelcomeScreen.tsx" 1
 check "画廊 chips 横滑"           "mol-toolbar-scroll ml-auto"   "src/components/studio/WelcomeScreen.tsx" 1
 check "分享卡窄屏图标化提交"      "w-9 shrink-0"                  "src/components/studio/ShareLinkLoadCard.tsx" 1
 check "管线五新缩略图"            "ink-night-cover:11:4HHB:27"   "scripts/gen-template-thumbs.sh" 1
 check "管线表单锚定修复"          "closest\('form'\)"            "scripts/gen-template-thumbs.sh" 1
-check "版本升级 1.5"              "v1\.5"                          "src/components/studio/WelcomeScreen.tsx" 2
+check "版本升级 1.6"              "v1\.6"                          "src/components/studio/WelcomeScreen.tsx" 2
+
+# ---- r89：窄屏画廊去重重构（分类横滚行 + 画廊上移）+ 多风格新五连 + 缩略图内容收紧管线 ----
+check0 "速览条退役（零残留）"      "WELCOME_TEASER_IDS"            "src/components/studio/WelcomeScreen.tsx"
+check0 "速览条探针零残留"          "data-welcome-teaser"            "src/components/studio/WelcomeScreen.tsx"
+check "左栏 display:contents 载体" "\[display:contents\] lg:flex" "src/components/studio/WelcomeScreen.tsx" 1
+check "part1 表单舱 order-1"      "order-1 mx-auto flex w-full max-w-\[368px\]" "src/components/studio/WelcomeScreen.tsx" 1
+check "part2 示例舱 order-3"      "order-3 mx-auto flex w-full max-w-\[368px\]" "src/components/studio/WelcomeScreen.tsx" 1
+check "画廊 order-2 上移"         "mol-scroll order-2 flex w-full" "src/components/studio/WelcomeScreen.tsx" 1
+check "分类横滚行容器"            "data-welcome-cat-rows"         "src/components/studio/WelcomeScreen.tsx" 1
+check "分类行渲染探针"            "data-welcome-cat-row"          "src/components/studio/WelcomeScreen.tsx" 2
+check "行卡渲染探针"              "data-welcome-row-card"         "src/components/studio/WelcomeScreen.tsx" 1
+check "行头查看全部按钮"          "data-welcome-row-all"          "src/components/studio/WelcomeScreen.tsx" 1
+check "行卡组件"                  "function RowCard"              "src/components/studio/WelcomeScreen.tsx" 1
+check "紧凑缩略图组件"            "function CompactThumb"         "src/components/studio/WelcomeScreen.tsx" 1
+check "过滤网格条件渲染"          "filter === 'all'"              "src/components/studio/WelcomeScreen.tsx" 3
+check "紧凑卡 2 列网格"           "'grid grid-cols-2 xl:grid-cols-3'" "src/components/studio/WelcomeScreen.tsx" 1
+check "信息条 <sm 隐藏溯源"       "mt-1\.5 hidden items-center gap-1\.5 sm:flex" "src/components/studio/WelcomeScreen.tsx" 1
+check "线描骨架模板"              "id: 'wire-skeleton'"           "src/lib/molecular/figure-templates.ts" 1
+check "黑白制版模板"              "id: 'grayscale-print'"         "src/lib/molecular/figure-templates.ts" 1
+check "红蓝静电模板"              "id: 'electrostatic-surface'"   "src/lib/molecular/figure-templates.ts" 1
+check "水合壳层模板"              "id: 'hydration-shell'"         "src/lib/molecular/figure-templates.ts" 1
+check "晶胞语境模板"              "id: 'unit-cell-context'"       "src/lib/molecular/figure-templates.ts" 1
+check "静电中性底修正"            "color gray', 'color red"       "src/lib/molecular/figure-templates.ts" 1
+check "弱模板取景收紧三连"        "zoom 1\.5"                     "src/lib/molecular/figure-templates.ts" 2
+check "线描取景收紧"              "zoom 1\.7"                     "src/lib/molecular/figure-templates.ts" 1
+check "图鉴 r89 新词条"           "线框全原子表示"                "src/lib/molecular/figure-templates.ts" 1
+check "图鉴水合词条"              "水分子小球显示"                "src/lib/molecular/figure-templates.ts" 1
+check "图鉴晶胞词条"              "晶胞盒线框（a红 b绿 c蓝）"    "src/lib/molecular/figure-templates.ts" 1
+check "图标 r89 五新键"           "'wire-skeleton': Waypoints"    "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "图标水合键"                "'hydration-shell': Droplets"   "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "管线 r89 五新规格"         "wire-skeleton:10:1CRN:32"      "scripts/gen-template-thumbs.sh" 1
+check "管线高清视口"              "set viewport 1920 960"         "scripts/gen-template-thumbs.sh" 1
+check "缩略图内容收紧脚本"        "content_bbox"                  "scripts/tighten-thumbs.py" 2
 
 # ---- 汇总 ----
-TOTAL=268
+TOTAL=282
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

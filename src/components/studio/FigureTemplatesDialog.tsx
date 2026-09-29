@@ -17,9 +17,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Dna, Download, ExternalLink, Film,
+  ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Contrast, Dna, Download, ExternalLink, Film,
   Gauge, Gem, Ghost, GitCompareArrows, Glasses, Grid3x3, Hexagon, ImagePlus, Layers, Link2, Loader2, Magnet, MapPin, Moon, Network, Orbit, Palette,
-  Pencil, Play, Ruler, Scissors, Shapes, Sparkles, Spline, Target, Trash2, Upload, Waves, Wand2, Cylinder, Zap, type LucideIcon,
+  Pencil, Play, Ruler, Scissors, Shapes, Sparkles, Spline, Target, Trash2, Upload, Waves, Wand2, Waypoints, Cylinder, Droplets, Box, Zap, type LucideIcon,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -98,6 +98,14 @@ export const TPL_ICONS: Record<string, LucideIcon> = {
   'stereo-anaglyph': Glasses,
   'putty-flexibility': Spline,
   'slab-cutaway': Scissors,
+  // r89 五新模板（多风格再五连）：Waypoints（线描骨架——节点与连线网络）/ Contrast
+  // （黑白制版——明度对比）/ Zap（红蓝静电——与盐桥网络同源静电语义，复用判例）/
+  // Droplets（水合壳层——水滴）/ Box（晶胞语境——立方盒）
+  'wire-skeleton': Waypoints,
+  'grayscale-print': Contrast,
+  'electrostatic-surface': Zap,
+  'hydration-shell': Droplets,
+  'unit-cell-context': Box,
 }
 
 function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete, onEdit }: {

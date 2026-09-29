@@ -1,6 +1,6 @@
 'use client'
 
-// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化 · r77 表示法经典与辅因子位扩容 · r78 构象与动力学分类落地 · r87 同类异风变体扩容）
+// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化 · r77 表示法经典与辅因子位扩容 · r78 构象与动力学分类落地 · r87 同类异风变体扩容 · r89 多风格再五连）
 // ─────────────────────────────────────────────────────────────────────────────
 // 定位：把 Cell / Nature / Science 等高影响力结构生物学文章中反复出现的「图式」
 // （figure style）——表示法组合 + 配色 + 视角 + 灯光 + 轮廓 + 相机——固化为命令
@@ -270,7 +270,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     demo: '1D3Z',
     // 差异点：墨底夜色（#14171c，封面/ graphical abstract 惯例）+ 细杆卡通（0.5×——
     // 多构象叠影下粗杆会糊成一团）+ 斜侧 turn y 25
-    commands: ['preset cartoon', 'spectrum count, rainbow', 'ensemble play', 'bg #14171c', 'set cartoon_width 0.5', 'turn y 25'],
+    commands: ['preset cartoon', 'spectrum count, rainbow', 'ensemble play', 'bg #14171c', 'set cartoon_width 0.5', 'turn y 25', 'zoom 1.5'],
     accent: 'cyan',
   },
   {
@@ -653,7 +653,7 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // 差异点：墨蓝夜底（#101418——AlphaFold 时代论文深底呈现风）+ 卡通 1.4× 加宽
     // （远距投屏可读）+ 斜侧 25°（封面动感构图）；无描边（深底上轮廓线反而收束
     // 色块——与白底 rainbow-overview 构成同类型「明暗两风格」）
-    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg #101418', 'set cartoon_width 1.4', 'turn y 25'],
+    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg #101418', 'set cartoon_width 1.4', 'turn y 25', 'zoom 1.5'],
     accent: 'cyan',
   },
   {
@@ -721,6 +721,86 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     commands: ['preset surface', 'color sasa', 'bg #eef1f5', 'slab 14', 'slab cap on', 'view front'],
     accent: 'teal',
   },
+  // ── r89 扩容（用户指令：继续添加新模板——多风格再五连：线描/灰度占 basic 未覆盖
+  //    的「无彩色」两子风格，静电/水合/晶胞占 surface 的电荷·溶剂·晶体学三通道。
+  //    全部命令沿用既有白名单语法（validateTemplateCommand 预验证） ──
+  {
+    id: 'wire-skeleton',
+    name: { zh: '线描骨架', en: 'Wireframe skeleton' },
+    tagline: { zh: '全原子线框 + 白底：键网络的「工程制图」风全貌', en: 'All-atom wireframe on white: an engineering-drawing view of the bond network' },
+    purpose: { zh: '键网络 · 原子级检视 · 小蛋白全貌', en: 'Bond network · atom-level inspection · small-protein overviews' },
+    tags: [{ zh: '线框', en: 'Wireframe' }, { zh: '全原子', en: 'All-atom' }],
+    category: 'basic',
+    figure: { ref: 'Fig. 1', shows: { zh: '线框全原子模型：肌红蛋白三级结构的首次呈现', en: 'All-atom wire model: the first view of myoglobin\'s tertiary structure' } },
+    citation: { journal: 'Nature', year: 1958, title: 'A three-dimensional model of the myoglobin molecule obtained by x-ray analysis', doi: '10.1038/181662a0' },
+    demo: '1CRN',
+    // 差异点：全原子 lines（无卡通无球）——与球棍的「球+棍」不同，纯线网络读键连
+    // 拓扑；小蛋白适用（大蛋白会变发球）；1CRN 46 残基线描清晰可读
+    commands: ['preset wireframe', 'bg white', 'orient', 'zoom 1.7'],
+    accent: 'cyan',
+  },
+  {
+    id: 'grayscale-print',
+    name: { zh: '黑白制版', en: 'Grayscale print' },
+    tagline: { zh: '全灰卡通 + 白底细描边：单色印刷与学术海报的稳妥款', en: 'All-gray cartoon on white with hairlines: the safe pick for B/W print and posters' },
+    purpose: { zh: '单色印刷 · 海报 · 复印友好', en: 'Monochrome print · posters · photocopy-friendly' },
+    tags: [{ zh: '单色', en: 'Monochrome' }, { zh: '印刷', en: 'Print' }],
+    category: 'basic',
+    figure: { ref: 'Fig. 1', shows: { zh: '黑白制版结构图：无彩色印刷时代的全灰呈现', en: 'Grayscale structure figure: all-gray rendering of the pre-color print era' } },
+    citation: { journal: 'Nature', year: 1960, title: 'Structure of haemoglobin: a three-dimensional Fourier synthesis at 5.5-A resolution', doi: '10.1038/185416a0' },
+    demo: '4HHB',
+    // 差异点：util cnc 全灰（与分色/彩虹系全部相反——单通道明度制图；1960 年印刷
+    // 时代即此风格，现代单色期刊/海报仍在用）；描边保留（灰度分层靠明度差+轮廓）
+    commands: ['preset cartoon', 'util cnc', 'bg white', 'outline on 1.1 1.0', 'orient'],
+    accent: 'slate',
+  },
+  {
+    id: 'electrostatic-surface',
+    name: { zh: '红蓝静电表面', en: 'Electrostatic surface' },
+    tagline: { zh: '酸红碱蓝双色调表面：口袋与结合位点的电荷语境', en: 'Acid-red / base-blue two-tone surface: the charge context of pockets and binding sites' },
+    purpose: { zh: '电荷分布 · 等电语境 · 结合预判', en: 'Charge distribution · pI context · binding-site prediction' },
+    tags: [{ zh: '静电', en: 'Electrostatics' }, { zh: '表面', en: 'Surface' }],
+    category: 'surface',
+    figure: { ref: 'Fig. 2', shows: { zh: '静电势表面图：红负蓝正的电荷 patch 与配体取向', en: 'Electrostatic-potential surface: red-negative/blue-positive patches and ligand orientation' } },
+    citation: { journal: 'Science', year: 1995, title: 'Classical electrostatics in biology and chemistry', doi: '10.1126/science.268.5214.1144' },
+    demo: '4HHB',
+    // 差异点：表面 + 中性灰底 + 酸碱残基双色调（酸红 ASP/GLU、碱蓝 LYS/ARG/HIS）
+    // ——盐桥网络同款配色移到表面载体上：颜色即电荷 patch，配体/互作位点一眼定位
+    // （先 color gray 中性底再上双色调——非酸碱残基不残留链配色，r89 缩略图 VLM
+    // 验证揭发的混色问题当轮修正）
+    commands: ['preset surface', 'color gray', 'color red, resn ASP+GLU', 'color blue, resn LYS+ARG+HIS', 'bg white'],
+    accent: 'rose',
+  },
+  {
+    id: 'hydration-shell',
+    name: { zh: '水合壳层', en: 'Hydration shell' },
+    tagline: { zh: '卡通 + 晶体水小球：蛋白表面首层水分子的语境图', en: 'Cartoon + crystal-water spheres: the first hydration layer in context' },
+    purpose: { zh: '晶体水 · 溶剂含量 · 首壳水分析', en: 'Crystal waters · solvent content · first-shell analysis' },
+    tags: [{ zh: '水分子', en: 'Waters' }, { zh: '晶体学', en: 'Crystallography' }],
+    category: 'surface',
+    figure: { ref: 'Fig. 3', shows: { zh: '表面有序水图：首壳水分子与主链羰基的氢键网络', en: 'Ordered waters: first-shell molecules H-bonded to backbone carbonyls' } },
+    citation: { journal: 'Nature', year: 1968, title: 'Solvent effect in protein crystals', doi: '10.1038/218665a0' },
+    demo: '4HHB',
+    // 差异点：show waters（水 rep 转小球，ChimeraX nonbonded 风）——蛋白质晶体约
+    // 半体积是溶剂（Matthews 1968）；水球即表面有序位点的诚实标注
+    commands: ['preset cartoon', 'util cbc', 'show waters', 'bg white', 'orient'],
+    accent: 'sky',
+  },
+  {
+    id: 'unit-cell-context',
+    name: { zh: '晶胞语境', en: 'Unit-cell context' },
+    tagline: { zh: '卡通 + a红b绿c蓝晶胞盒：结构数据的晶体学坐标系构图', en: 'Cartoon + a-red/b-green/c-blue cell box: the crystallographic composition frame' },
+    purpose: { zh: '晶格参数 · 对称性初判 · PDB 溯源', en: 'Lattice parameters · symmetry first-look · PDB provenance' },
+    tags: [{ zh: '晶胞', en: 'Unit cell' }, { zh: '晶体学', en: 'Crystallography' }],
+    category: 'surface',
+    figure: { ref: 'Fig. 1', shows: { zh: '不对称单元与晶胞：分子在晶体中的平移重复语境', en: 'Asymmetric unit in its cell: translational context of the molecule in the crystal' } },
+    citation: { journal: 'Nucleic Acids Res.', year: 2000, title: 'The Protein Data Bank', doi: '10.1093/nar/28.1.235' },
+    demo: '4HHB',
+    // 差异点：show cell（CRYST1 晶胞盒线框，a红b绿c蓝）——结构数据「从哪块晶体
+    // 来」的诚实语境图；无 CRYST1 的结构自动退化为无盒纯卡通（命令零报错）
+    commands: ['preset cartoon', 'util cbc', 'show cell', 'bg white', 'orient'],
+    accent: 'lime',
+  },
 ]
 
 /** 命令图鉴（r75：「对比」视图把命令序列翻成双语图式解剖；未命中退回原命令）。
@@ -779,6 +859,11 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^stereo on/i, label: { zh: '红蓝立体渲染（双通道色分移）', en: 'Red-cyan anaglyph stereo' } },
   { re: /^slab cap on/i, label: { zh: '剖面实心封盖', en: 'Solid slab caps' } },
   { re: /^slab \d+/i, label: { zh: '切层裁剪厚度（Å）', en: 'Slab clipping thickness (Å)' } },
+  // r89 新词条（线描/灰度/静电/水合/晶胞五模板；具体锚定先于泛匹配）
+  { re: /^preset wireframe\b/i, label: { zh: '线框全原子表示', en: 'All-atom wireframe' } },
+  { re: /^util cnc/i, label: { zh: '整体灰化（单色制版）', en: 'Overall gray (monochrome)' } },
+  { re: /^show waters$/i, label: { zh: '水分子小球显示', en: 'Water spheres shown' } },
+  { re: /^show cell$/i, label: { zh: '晶胞盒线框（a红 b绿 c蓝）', en: 'Unit-cell box (a red, b green, c blue)' } },
   { re: /^ensemble play/i, label: { zh: 'NMR 构象系综动画', en: 'NMR ensemble animation' } },
   { re: /^membrane \d+/i, label: { zh: '脂双层板语境', en: 'Bilayer slab context' } },
   { re: /^pore\b/i, label: { zh: 'HOLE 孔道剖面环带', en: 'HOLE pore rings' } },

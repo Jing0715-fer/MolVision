@@ -3585,3 +3585,42 @@ Stage Summary:
 - 交付：「页面没有加载出来」故障全闭环（3000 失守 → dmesg OOM 根因确诊 → devd 守护部署 → config 跨域放行 → 双端 E2E + VLM + 门禁四链全绿）；devd.py 成为 dev server 永久自愈基础设施（崩溃 3s 重启，不再依赖人工/cron 拉起）
 - 坑（新入档）：①next-server 被 OOM SIGKILL 时 dev.log 不留任何 error——「log 无 error」不再等价于「进程存活」，健康检查须 ss 端口探测为主、日志为辅；②package.json dev script 内嵌 tee 与外部 O_APPEND 重定向双写交错——守护拉起一律 bunx next dev 直起绕开 tee；③cron「exec limits exceeded」为账户级配额硬限，删除旧任务不释放配额；④z-ai CLI 输出前有 🚀 前缀行——管道 JSON 解析须先截取首个 { 起的片段
 - 风险与建议：①cron 配额耗尽期间无巡检——devd 已覆盖最大单点（dev server），mock-llm 3999 尚无守护（本轮存活；后续轮可仿 devd 加 3999 守护）；②Next dev server 内存随编译路由数增长（击杀时 1.67GB）——长期可评估 --max-old-space-size 限额或定时优雅重启（现靠 OOM 后 3s 自愈兜底）；③功能开发下一轮建议沿用 r87 清单：速览条 filter 联动 / 移动端画廊卡 <sm 隐藏 citation / fill 事件回放 / session open <url> 子命令 / 40+ 模板虚拟化
+
+---
+Task ID: r89
+Agent: main
+Task: 用户指令「窄屏幕时模板重复出现了，还是不太满意这个修改，重新优化一下。继续打磨已有模板，继续添加新模板」——三指令全闭环：①窄屏画廊去重重构（速览条退役 + 分类横滚行）②已有模板打磨（VLM 审计驱动：zoom 取景 + 高清管线 + 内容感知收紧）③新模板五连（线描/灰度/静电/水合/晶胞，37 支全过白名单）。QA 全链路（移动端全交互 E2E + 桌面回归 + VLM 双主题审 + 门禁四链）+ guards 268→282
+
+Work Log:
+- 【侦察】r87 速览条（hero 下 8 支缩略图）与画廊（全部 32 支）在窄屏同页堆叠 = 同模板出现两次（用户报障「模板重复」根因确认）；命令白名单侦察确认 preset wireframe / util cnc / ssao on / show cell / show waters / color red|blue resn 全部有实现——五支新模板配方可行
+- 【r89-1 窄屏画廊去重重构（任务①重做）】WelcomeScreen.tsx：
+  · 速览条整条退役（WELCOME_TEASER_IDS / TeaserThumb / 尾卡 galleryRef 全删，guards 改 check0 负向守卫锁零回归）
+  · 画廊上移地基：左栏载体 <lg [display:contents]（part1 表单舱 order-1 / part2 示例舱 order-3 直接成为主容器 flex 项）——画廊 section order-2 插到「加载表单之后 · 示例之前」；lg+ 恢复实体左栏（lg:flex + lg:flex-col + 独立滚动 + 右边框），桌面结构零变化
+  · 画廊本体 <lg 改「分类横滚行」（App Store Today 模式）：catRows（六类 + 自定义行）每行行头（类名 + 计数 + 「查看全部」按钮）+ snap 横滑 RowCard 紧凑卡（缩略图 + 图标 + 名称 + 演示徽章）——每支模板页面上恰好出现一次（重复根治）
+  · filter='all' 时网格 <lg hidden（零视觉重复）；特定过滤时网格 2 列紧凑卡（161px 实测）；GalleryCard 信息条 <sm 隐藏期刊溯源行（r87 遗留清偿）
+  · 【E2E 揭发当轮修】flex-1（basis 0）+ min-h-0 在画廊插中位后产生 24px 扁盒 + 内容溢出叠压（r87 时画廊是末位元素、溢出不可见所以无碍）→ lg:flex-1 lg:min-h-0（移动端内容自适应高）
+- 【r89-2 新模板五连（任务③）】figure-templates.ts 32→37：
+  · wire-skeleton（basic·线描对）：preset wireframe 全原子线网络——与球棍的「球+棍」互斥读键连拓扑（Kendrew 1958 Nature 肌红蛋白线模型源流）
+  · grayscale-print（basic·单色对）：util cnc 全灰 + 白底细描边——1960 印刷时代制版风（Perutz 1960 Nature 血红蛋白源流）
+  · electrostatic-surface（surface·电荷对）：表面 + color gray 中性底 + 酸红 ASP/GLU + 碱蓝 LYS/ARG/HIS——盐桥网络同款配色移到表面载体（Honig & Nicholls 1995 Science）
+  · hydration-shell（surface·溶剂对）：show waters（水 rep 转小球）——晶体半体积溶剂的诚实标注（Matthews 1968 Nature）
+  · unit-cell-context（surface·晶体对）：show cell CRYST1 盒线框 a红b绿c蓝（Berman 2000 NAR）
+  · COMMAND_GLOSSARY +4 词条（preset wireframe / util cnc / show waters / show cell）；TPL_ICONS +5（Waypoints/Contrast/Zap 复用判例/Droplets/Box）；bunx tsx validateTemplateCommand 37 支全量零失败 ×3 轮
+- 【r89-3 已有模板打磨（任务②）】：
+  · VLM 拼版审计三弱项（ensemble-dynamics / ink-night-cover 3 分）→ zoom 1.5/1.7 取景收紧三连（线描/墨夜/系综）+ 静电模板 VLM 揭发混色（非酸碱残基残留链配色）→ color gray 中性底先行修正，重产复验 YES
+  · 像素实测揭发系统性取景问题：全部 37 张缩略图分子内容仅占画布 24-76%（引擎默认 fit 边距大 + 2:1 视口 vs 球形分子几何）→ scripts/tighten-thumbs.py 内容感知收紧（bbox 检测 + 8% 余量裁剪 + 16:10 重排 92% 覆盖 + 采样底色保真）
+  · 高清管线：gen-template-thumbs.sh 开头 set viewport 1920 960（内容 ~2× 像素）+ 末尾自动跑 tighten——消灭小内容上采样软化（rainbow 350px→590px 放大 1.7× 发虚的 VLM 揭发）；全量 37 张重产 + tighten 后：内容高度 40-62%→77-85%，弱项 VLM 复评 ink-night 3→8 / ensemble 3→7 / rainbow 4→6
+  · 诚实边界：wire-skeleton 4/10 为 WebGL LineBasicMaterial 1px 线宽硬限（无宽度控制 API）的风格判定——取景已 77% 满高 + 2× 降采样锐利，卡片语境读作工程制图美学，判例记录不改
+- 【E2E 交互全链】①移动 375：分类行 6 行 37 卡各一次 + gridDisplay:none（零视觉重复 DOM 实证）+ 表单 458px 首屏 + 画廊 640px 紧贴表单 + 零横向溢出 ②行卡点击全链：wire-skeleton 卡 → demoThenApply → 工作台 1 结构 + VLM 证线描渲染（thin-line wireframe, no cartoon ribbons, no spheres）③查看全部流：surface 行按钮 → 行退役 + 8 卡 2 列网格（161px 卡宽）+ citation <sm 隐藏 ④「全部」chip → 行恢复 37 卡 ⑤粘性画廊头：滚动容器 scrollTop 1000 → 头贴滚动区顶 56px（topbar 下）⑥桌面 1440 回归：leftcolDisplay:flex + 368px 居中 + 画廊 448px 起 3 列 + 零溢出 + console 零错误
+- 【VLM 审 + 误报判例】移动双主题（暗/亮）零缺陷 + 终审「molecules large and readable / No template card is shown twice」；桌面终审 well-framed high-contrast；拼版微缩格 VLM 报 10 张「cut off」——像素实测全澄清（边距 13-47px 零裁切、bbox 35-74%×70-85% 一致取景）＝第 7 次误报判例（200×125 微缩格噪音，DOM/像素实测仍为唯一权威）
+- 【门禁】lint 0 · tsc src 0 · guards 268→282（+14：去重五件套/分类行五件套/条件渲染/2 列网格/citation 隐藏/五新模板/静电修正/zoom 三连/图鉴三词条/图标两键/管线高清视口/tighten 脚本；-4 速览条守卫转 check0 负向；修 1 条 flex 修复后类名）· smoke 4/4 · dev.log 清零复验零 error · E2E 清场（localStorage clear + 视口还原 1440×900 + 主题还原）
+
+Stage Summary:
+- 交付：窄屏画廊去重重构（速览条退役 + display:contents 画廊上移 + 分类横滚行——「太空」与「重复」双诉求同时满足，桌面零变化）+ 新模板五连（37 支全过白名单，basic 无彩色两风格 + surface 电荷/溶剂/晶体三通道）+ 已有模板打磨（zoom 取景三连 + 静电混色修正 + 高清管线 + 内容感知收紧 37 张全量重产）
+- 用户指令全闭环：「模板重复出现了…重新优化」（分类行去重 + DOM/像素/VLM 三重实证零重复）·「继续打磨已有模板」（VLM 审计驱动三连修 + 系统性取景根治）·「继续添加新模板」（五连 + 图鉴/图标/缩略图全链）
+- 坑（新入档）：①flex-1（basis 0）+ min-h-0 的元素插到 flex 流中间会产生扁盒 + 内容溢出叠压（末位元素时不可见）——中位插入元素须 lg:flex-1 移动端内容自适应 ②display:contents 一层只剥一档（左栏载体的中间 wrapper 会挡住 order 传递——part1/part2 必须是载体直接子级）③编辑运行中 bash 脚本尾部有增量读取风险（本轮实测存活但应避免——改动等管线跑完再落）④LineBasicMaterial 线宽 WebGL 硬限 1px——线描风可见性只能靠取景收紧 ⑤后台长任务 nohup 仍会被工具会话回收——Python double-fork 是唯一可靠方式（r88 判例第二次复现）
+- 下一轮建议（按优先级）：
+  1. 【中】分类行「查看全部」后的过滤网格在移动端加返回行视图的显式入口（现靠「全部」chip——可用性可再降一档门槛）
+  2. 【中】自定义模板行卡接编辑直通（现仅 demo——「我的模板」行卡可加 Pencil 角标）
+  3. 【低】40+ 模板时分类行虚拟化 + 行内 blur-up（37 支 6 行尚流畅）
+  4. 【低】wire-skeleton 线宽：引擎层面评估 Line2 双三角带渲染（three.js examples 语义）解锁可变线宽——列入引擎 backlog

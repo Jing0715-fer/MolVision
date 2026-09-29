@@ -40,6 +40,9 @@ mkdir -p "$OUT"
 # r87 新增五模板（27-31）：ink-night 11s（深底 + 加宽卡通 + turn）；ballstick 10s（全
 # 结构球棍）；stereo 10s（红蓝立体后处理即成）；putty 10s（胖瘦管几何 + bfactor 归一）；
 # slab 15s（SASA 表面 worker + 切层封盖——与 sasa 13s 同基线加余量）
+# r89 新增五模板（32-36）：wire 10s（线框即成）；grayscale 10s（灰化即成）；electrostatic
+# 13s（SASA 表面 worker 基线）；hydration 11s（水 rep 转小球 + orient）；unit-cell 10s
+# （CRYST1 盒线框即成）
 SPECS=(
   rainbow-overview:10:4HHB:0
   chain-assembly:10:4HHB:1
@@ -73,6 +76,11 @@ SPECS=(
   stereo-anaglyph:10:1AKI:29
   putty-flexibility:10:3INS:30
   slab-cutaway:15:4HHB:31
+  wire-skeleton:10:1CRN:32
+  grayscale-print:10:4HHB:33
+  electrostatic-surface:13:4HHB:34
+  hydration-shell:11:4HHB:35
+  unit-cell-context:10:4HHB:36
 )
 
 # r75：可选增量模式——命令行传模板 id 列表则只生成指定项（缺省全量）
@@ -83,6 +91,11 @@ if [ $# -gt 0 ]; then
   done))
   echo "== filtered mode: ${#SPECS[@]} templates =="
 fi
+
+# r89：高清视口截取（1920×960 → 内容 ~2× 像素）——配合 scripts/tighten-thumbs.py
+# 内容感知裁剪 + 降采样到 640×320，消灭小内容上采样软化（r89 VLM 审揭发：
+# 默认 944×471 画布下 ~350px 内容放大 1.7× 后发虚）。视口只影响本 session。
+agent-browser set viewport 1920 960 >/dev/null 2>&1
 
 gen_one() {
   local id="$1" wait="$2" demo="$3" idx="$4"
@@ -141,4 +154,8 @@ for spec in "${SPECS[@]}"; do
   IFS=':' read -r id wait demo idx <<< "$spec"
   gen_one "$id" "$wait" "$demo" "$idx"
 done
+
+# r89：内容感知收紧（bbox 检测 + 裁剪 + 16:10 重排）——管线产出后自动跑一遍，
+# 消灭「分子在画布里只占 24-76%」的展示卡取景问题（详见 tighten-thumbs.py 头注）
+python3 "$(dirname "$0")/tighten-thumbs.py"
 echo "== phase done =="
