@@ -305,15 +305,18 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
   {
     id: 'membrane-embed',
     name: { zh: '膜蛋白脂双层语境', en: 'Membrane-embedded context' },
-    tagline: { zh: '表面渐变 + 橙头基双层板 + 侧视：膜蛋白跨膜区一图判读', en: 'Gradient surface + orange headgroup slab + side view: transmembrane extent at a glance' },
+    tagline: { zh: '钢蓝表面 + 橙头基双层板 + 侧视：膜蛋白跨膜区一图判读', en: 'Steel-blue surface + orange headgroup slab + side view: transmembrane extent at a glance' },
     purpose: { zh: '跨膜深度 · 膜界面 patch · β-桶/螺旋束', en: 'TM span · interfacial patches · barrel vs helix bundle' },
     tags: [{ zh: '膜蛋白', en: 'Membrane' }, { zh: '水通道', en: 'Aquaporin' }],
     category: 'membrane',
     figure: { ref: 'Fig. 1', shows: { zh: '膜语境图：跨膜深度 + 膜界面 patch 标注', en: 'Membrane context: transmembrane span and interfacial patches' } },
     citation: { journal: 'Science', year: 2002, title: 'Structure of a glycerol-conducting channel and the basis for its selectivity', doi: '10.1126/science.1072457' },
     demo: '1FX8',
-    // 差异点：SASA 渐变表面 + 脂双层板（跨膜区灰表面嵌入橙头基之间）+ 正面侧视
-    commands: ['preset surface', 'color sasa', 'bg #f5f7fa', 'membrane 32', 'view front'],
+    // 差异点：钢蓝单色表面 + 脂双层板（跨膜区嵌入橙头基之间）+ 正面侧视。
+    // r91 打磨：原 color sasa（埋藏蓝紫→暴露橙红渐变）的暴露区与橙膜同色系
+    // 融合——膜边界视觉模糊、被误读为「膜板错位」；改钢蓝单色（冷暖分离，
+    // 橙膜边界一图清晰；SASA 梯度语义由 electrostatic/hydration 模板分工）
+    commands: ['preset surface', 'color #94a9c0', 'bg #f5f7fa', 'membrane 32', 'view front'],
     accent: 'orange',
   },
 

@@ -145,7 +145,9 @@ export interface Settings {
   spinSpeed: number
   /** 相机摇摆（ChimeraX rock）：左右正弦摆动 ±25° */
   rock: boolean
-  /** 俯仰限位：拖拽旋转限制在 ±78° 仰角内（不过顶/不过底，防无限制翻滚；view top/bottom 轴视角不受影响） */
+  /** 俯仰自由（r91 起默认全开）：true 时限位在 ±78° 仰角（不过顶/不过底）；
+   *  r91 用户指令「能无限朝一个方向旋转」——默认改为全开（PyMOL 自由翻转行为），
+   *  拖拽可全向 180° 翻转 + 水平方位无限旋转；需要限位的用户可在场景面板重新开启 */
   orbitClamp: boolean
   /** 视角过渡手感：quick=敏锐 350ms · normal=标准 650ms · cinematic=电影 1200ms（书签/正交视角/场景恢复的平滑飞行时长） */
   camTransition: 'quick' | 'normal' | 'cinematic'
@@ -218,7 +220,8 @@ export function defaultSettings(): Settings {
     spin: false,
     spinSpeed: 2,
     rock: false,
-    orbitClamp: true,
+    // r91：默认解除俯仰限位——用户指令「能无限朝一个方向旋转」；场景面板开关仍在，可随时恢复限位
+    orbitClamp: false,
     camTransition: 'normal',
     slab: false,
     slabThickness: 18,
