@@ -3656,3 +3656,6 @@ Stage Summary:
   2. 【中】mock-llm 3999 仿 devd 加守护（r88 风险项——本轮存活但无自愈）
   3. 【低】40+ 模板时分类行虚拟化 + 行内 blur-up（37 支 6 行尚流畅，r83 遗留）
   4. 【低】wire-skeleton 线宽：引擎层 Line2 双三角带渲染解锁可变线宽（r89 backlog）
+- 【cron 巡检】r90 后按例创建 15min webDevReview 任务 #423199 → 创建成功但秒级「Disabled due to exec limits exceeded」（账户级执行配额硬限第 5 次实证：r85/r86/r87/r88/r90 各一次，删除不释放配额）→ 清理两个死任务（#423199 + r88 遗留 #422872）；devd 守护继续作为巡检缺席期间的自愈防线（dev server OOM 3s 重启）
+
+（r90 段 cron 补记，2026-09-29 16:20）
