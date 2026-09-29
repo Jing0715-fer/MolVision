@@ -3659,3 +3659,30 @@ Stage Summary:
 - 【cron 巡检】r90 后按例创建 15min webDevReview 任务 #423199 → 创建成功但秒级「Disabled due to exec limits exceeded」（账户级执行配额硬限第 5 次实证：r85/r86/r87/r88/r90 各一次，删除不释放配额）→ 清理两个死任务（#423199 + r88 遗留 #422872）；devd 守护继续作为巡检缺席期间的自愈防线（dev server OOM 3s 重启）
 
 （r90 段 cron 补记，2026-09-29 16:20）
+
+---
+Task ID: r91
+Agent: main
+Task: 用户指令「继续打磨已有模板，好友有一个膜蛋白的模板有问题，另外结构的旋转好像是有一定角度限制的，需要解除限制，能无限朝一个方向旋转」——膜蛋白模板修复 + 旋转限位解除 + 模板打磨。本轮接管前次执行（commit 6cbe8d7 已落主体改动但未验证/未记档/未推送）：完整验证补全 + 两弱项模板精修 + devd 看门狗激活
+
+Work Log:
+- 【接管侦察】发现本地 HEAD=6cbe8d7（作者=用户账号，UUID 式提交信息）领先 origin 一个提交——前次执行已完成 r91 主体：①membrane-embed 钢蓝单色修正（color sasa 橙红渐变与橙膜同色系融合→膜边界被误读为「膜板错位」）②orbitClamp 默认 true→false（types.ts）③next.config.ts 补 127.0.0.1（allowedDevOrigins block 模式拒回环直连→HMR 断连 25 连败→整页 reload 循环——「模板有问题」的另一半根因）④devd.py 内存看门狗（1.5GB 阈值主动换血，r91 实测 1.4GB 已现 HMR 断连）⑤全量 37 张缩略图重产。但 worklog 无 r91 段、未推送、QA 未知 → 本轮接管验证补全
+- 【门禁复验】lint 0 · tsc src 0 · guards 289/289（前次基线）· smoke 4/4 · dev.log 零 error——前次提交完整可用
+- 【任务②旋转限位解除——三重实证】①引擎态：orbitClamp=false 时 minPolar 0°/maxPolar 180° 全开（eval 实读 controls）②拖拽实测：pointer 三连大拖拽 polar 90°→180° 完整翻过底极点（旧限位 168° 钳死处自由通过）——「无限朝一个方向旋转」达成 ③ScenePanel 开关双向：ON→[12°,168°] 重新武装 / OFF→[0°,180°] 全开（需限位用户可随时恢复；面板附 PyMOL 行为说明文案）
+- 【任务①膜蛋白模板——双模板 VLM 审】membrane-embed（1FX8 水通道）：钢蓝表面✓橙双层板✓蛋白-膜边界清晰✓零渲染错误✓四项全过；pore-analysis（1BL8 K+通道）：cartoon 螺旋✓脂双层✓HOLE 红绿蓝环带✓零错误✓四项全过——「好友的膜蛋白模板」双支实证修复（视觉融合 + reload 循环双根因）
+- 【任务③模板打磨——像素实测驱动】37 张拼版 VLM 审揭三弱项 → 像素实测裁决（r89 误报判例纪律）：①wire-skeleton 真弱（线亮度 p5=206、最暗 158 vs 健康~80——元素着色碳线在白底几不可见）→ 追加 color #3f454d 统一深墨（Kendrew 1958 黑墨白纸制图源流——风格与可读性双赢）；缩略图重产后 VLM 4→8 分、最暗 158→68；实况渲染 VLM 证「深灰近黑清晰可见」②ss-motif 真弱（bbox 宽仅 27% vs 健康 45-50%）→ zoom 1.5 收紧（r89 三连同款）③unit-cell-context 假警报（拼版微缩格 VLM 报弱→单独复鉴 8/10 蛋白清晰盒线可辨——误报第 8 判例，不改）
+- 【管线坑位】增量重产两张（gen-template-thumbs.sh 支持传 id 列表）但尾部自动 tighten 波及全量 37 张——像素比对实证 19 张额外 PNG 几何零变化（纯 PIL 重编码字节噪音 -11%）→ git checkout 还原 19 张保持 diff 最小化（只留 2 张真改动 + 1 源文件）
+- 【白名单】一次性校验脚本全量 37 支零失败（含两支新命令序列 wire 5 cmds / ss 6 cmds）
+- 【devd 换血】运行中实例是 09:59 旧版（看门狗代码未加载）→ kill 旧 devd + 进程组优雅停 → 新 devd 13:45:14 上岗（守护 pid=13557）→ 端口 200 恢复 + watchdog 生效
+- 【guards】289→296（+7：俯仰限位默认解除/引擎全开分支/限位开关 UI 保留/膜模板钢蓝/线描深墨/ss 取景收紧/跨域回环白名单）
+- 【E2E 清场】localStorage clear + 视口还原 1440×900 + 欢迎页复验（title/h1 正常）
+
+Stage Summary:
+- 交付：膜蛋白双模板修复实证（钢蓝修正 + reload 循环根因补救）+ 旋转限位全解除（默认自由翻转 + 翻转 180° 实测 + 开关双向保留）+ wire-skeleton 深墨对比度根治（VLM 4→8）+ ss-motif 取景收紧 + devd 内存看门狗激活
+- 用户指令全闭环：「膜蛋白的模板有问题」（双模板 VLM 四项全过）·「解除限制，能无限朝一个方向旋转」（polar 90°→180° 实证）·「继续打磨已有模板」（像素实测驱动两弱项精修 + 误报第 8 判例澄清）
+- 坑（新入档）：①gen-template-thumbs.sh 增量模式尾部 tighten 仍全量跑——二次 tighten 对已收紧图纯重编码噪音（几何零变化），须 git checkout 还原无关 PNG 保持 diff 卫生 ②agent-browser 异步 eval（含 await 循环）会 CDP 超时——指针事件模拟须同步派发、分步 eval 读取 ③拼版微缩格 VLM 误报第 8 判例（unit-cell-context 拼版报弱、单独复鉴 8/10）——微缩格审计结论必须全尺寸单独复鉴后才可动手
+- 下一轮建议（按优先级）：
+  1. 【中】r89/r90 遗留：自定义模板行卡接编辑直通（「我的模板」行卡 Pencil 角标 → open-template-edit 广播）
+  2. 【中】mock-llm 3999 仿 devd 加守护（r88 风险项持续未清偿）
+  3. 【低】40+ 模板时分类行虚拟化 + 行内 blur-up（37 支 6 行尚流畅）
+  4. 【低】wire-skeleton 线宽：引擎层 Line2 双三角带渲染解锁可变线宽（r89 backlog——本轮深墨已把可读性从 4 分救到 8 分，线宽属锦上添花）

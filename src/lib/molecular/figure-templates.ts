@@ -184,8 +184,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     figure: { ref: 'Fig. 1b', shows: { zh: '拓扑概览图：螺旋/折叠片布局 + 基序标注', en: 'Topology overview: helix/sheet layout with motif annotations' } },
     citation: { journal: 'Nature', year: 2024, title: 'Structural and molecular basis of choline uptake into the brain by FLVCR2', doi: '10.1038/s41586-024-57361-2' },
     demo: '1AKI',
-    // 差异点：暖象牙底（#fbf8f1）+ 斜侧视角 turn y -20（基元交叠可辨）+ 细描边
-    commands: ['preset cartoon', 'util ss', 'bg #fbf8f1', 'turn y -20', 'outline on 1.1 1.0'],
+    // 差异点：暖象牙底（#fbf8f1）+ 斜侧视角 turn y -20（基元交叠可辨）+ 细描边。
+    // r91 打磨：像素实测揭发取景过宽（bbox 宽仅 27% vs 健康 45-50%——引擎默认
+    // fit 边距吃掉近四分之三横向幅面）→ zoom 1.5 收紧（r89 线描/墨夜/系综三连同款）
+    commands: ['preset cartoon', 'util ss', 'bg #fbf8f1', 'turn y -20', 'zoom 1.5', 'outline on 1.1 1.0'],
     accent: 'amber',
   },
   {
@@ -738,8 +740,12 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Nature', year: 1958, title: 'A three-dimensional model of the myoglobin molecule obtained by x-ray analysis', doi: '10.1038/181662a0' },
     demo: '1CRN',
     // 差异点：全原子 lines（无卡通无球）——与球棍的「球+棍」不同，纯线网络读键连
-    // 拓扑；小蛋白适用（大蛋白会变发球）；1CRN 46 残基线描清晰可读
-    commands: ['preset wireframe', 'bg white', 'orient', 'zoom 1.7'],
+    // 拓扑；小蛋白适用（大蛋白会变发球）；1CRN 46 残基线描清晰可读。
+    // r91 打磨：像素实测揭发对比度塌方（线亮度 p5=206、最暗 158 vs 健康模板
+    // ~80——元素着色的碳线 #a9aeb5 级灰在白底上几不可见）→ 追加统一深墨
+    // #3f454d（Kendrew 1958 原版制图就是黑墨白纸——风格与可读性双赢；
+    // 化学元素区分语义由 cpk-spacefill 模板分工）
+    commands: ['preset wireframe', 'color #3f454d', 'bg white', 'orient', 'zoom 1.7'],
     accent: 'cyan',
   },
   {

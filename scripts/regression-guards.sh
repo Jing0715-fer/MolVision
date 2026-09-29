@@ -421,8 +421,17 @@ check "过滤网格返回入口"          "data-welcome-back-rows"        "src/c
 check "返回入口仅 <lg"            "返回分类浏览"                  "src/components/studio/WelcomeScreen.tsx" 1
 check "返回入口 ArrowLeft 图标"   "ArrowLeft"                    "src/components/studio/WelcomeScreen.tsx" 1
 
+# ---- r91：旋转限位解除（orbitClamp 默认 false + 引擎全开分支）+ 膜模板钢蓝修正 + 线描深墨 + ss 取景收紧 ----
+check "俯仰限位默认解除"          "orbitClamp: false"             "src/lib/molecular/types.ts" 1
+check "引擎限位全开分支"          "orbitClamp === false"          "src/lib/molecular/engine.ts" 1
+check "限位开关 UI 保留"          "settings.orbitClamp}"           "src/components/studio/panels/ScenePanel.tsx" 1
+check "膜模板钢蓝单色"            "color #94a9c0"                 "src/lib/molecular/figure-templates.ts" 1
+check "线描深墨对比度"            "color #3f454d"                 "src/lib/molecular/figure-templates.ts" 1
+check "ss 基元取景收紧"           "turn y -20', 'zoom 1.5"        "src/lib/molecular/figure-templates.ts" 1
+check "跨域回环白名单"            "127.0.0.1"                     "next.config.ts" 1
+
 # ---- 汇总 ----
-TOTAL=289
+TOTAL=296
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0
