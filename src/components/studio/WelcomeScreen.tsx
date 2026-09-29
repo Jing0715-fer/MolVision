@@ -43,6 +43,7 @@ import {
 import { useCustomTemplates } from '@/lib/molecular/custom-templates'
 import { ACCENT, TPL_ICONS } from './FigureTemplatesDialog'
 import { SessionResumeSlot } from './SessionResumeCard'
+import { ShareLinkLoadCard } from './ShareLinkLoadCard'
 import { AgentPanel } from './AgentPanel'
 import { LanguageToggle } from './LanguageToggle'
 import { cn } from '@/lib/utils'
@@ -412,8 +413,13 @@ export function WelcomeScreen() {
               </div>
             </div>
 
-            {/* —— 继续上次会话（dynamic ssr:false 客户端挂载：水合安全 + 存档读取） —— */}
-            <SessionResumeSlot />
+            {/* —— 会话区：恢复卡（有存档时挂载，无则 null）+ r86 分享链接粘贴卡
+                 （常显——接收侧发现性：贴入完整 URL 或裸 #s= 片段即可加载，
+                 不必知道「粘到地址栏」的隐式约定；同一 mt-9 锚 + 卡间 gap） —— */}
+            <div className="mt-9 flex w-full flex-col gap-2.5">
+              <SessionResumeSlot />
+              <ShareLinkLoadCard />
+            </div>
 
             {/* —— 加载结构（fieldset 式图例分隔；:has 自适应——恢复卡挂载后收紧间距） —— */}
             <div

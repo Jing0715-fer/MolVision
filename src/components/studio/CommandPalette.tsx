@@ -157,7 +157,9 @@ export function CommandPalette() {
     },
     {
       id: 'qa-session-share', label: { zh: '复制分享链接', en: 'Copy share link' }, desc: { zh: 'URL 片段携带会话 · 打开即恢复', en: 'URL fragment carries the session · restores on open' },
-      run: '', fill: 'session ',
+      // r86：Tab 直填完整子命令（原 'session ' 只填首词——面板 Enter 直连统一复制入口，
+      // fill 面向「改走命令行」的键盘流：session share 本身可执行，回车即复制）
+      run: '', fill: 'session share',
       icon: Share2, iconCls: 'text-emerald-500',
     },
     {

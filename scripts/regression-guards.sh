@@ -350,8 +350,23 @@ check "画廊卡管理排"             "data-welcome-tpl-edit"         "src/comp
 check "画廊编辑广播"             "open-template-edit"            "src/components/studio/WelcomeScreen.tsx" 1
 check "编辑广播监听"             "open-template-edit"            "src/components/studio/FigureTemplatesDialog.tsx" 1
 
+# ---- r86：分享链接发现性（粘贴卡 + 文本提取）+ 低优先打磨（箭头光学居中 / CommandDialog DOM 残留 / 面板直填） ----
+check "粘贴提取器"               "export function extractShareSnapshotFromText" "src/lib/molecular/share-link.ts" 1
+check "粘贴文本应用入口"         "export async function applyShareLinkFromText" "src/lib/molecular/share-link.ts" 1
+check "非锚定提取正则"           "#s=\(\[A-Za-z0-9_-\]\{16,\}\)" "src/lib/molecular/share-link.ts" 1
+check "共享解析核心"             "function parseSharePayload"      "src/lib/molecular/share-link.ts" 1
+check "粘贴卡组件"               "data-qa=\"share-load-card\""    "src/components/studio/ShareLinkLoadCard.tsx" 1
+check "粘贴卡输入钩子"           "data-qa=\"share-link-input\""   "src/components/studio/ShareLinkLoadCard.tsx" 1
+check "粘贴卡提交钩子"           "data-qa=\"share-load-apply\""   "src/components/studio/ShareLinkLoadCard.tsx" 1
+check "剪贴板降级引导"           "Ctrl\+V / ⌘V 粘贴"            "src/components/studio/ShareLinkLoadCard.tsx" 1
+check "欢迎页接线"               "ShareLinkLoadCard"              "src/components/studio/WelcomeScreen.tsx" 1
+check "会话区容器"               "mt-9 flex w-full flex-col gap-2\.5" "src/components/studio/WelcomeScreen.tsx" 1
+check "面板子命令直填"           "fill: 'session share'"          "src/components/studio/CommandPalette.tsx" 1
+check "箭头光学居中"             "-translate-y-px"                "src/components/studio/SessionResumeCard.tsx" 1
+check "CommandDialog标题入栈"   "DialogContent"                 "src/components/ui/command.tsx" 3
+
 # ---- 汇总 ----
-TOTAL=238
+TOTAL=252
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

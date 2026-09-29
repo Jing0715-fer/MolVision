@@ -205,15 +205,64 @@ export async function copyShareLinkToClipboard(): Promise<boolean> {
 
 // ---------- 接收侧 ----------
 
+/** 校验 base64url 载荷并解析为快照；无效返回 null（decodeShareLink / 粘贴文本提取共用核心）。 */
+function parseSharePayload(b64: string): ShareSnapshot | null {
+  try {
+    const snap = JSON.parse(b64UrlDecode(b64)) as ShareSnapshot
+    if (!snap || snap.format !== SHARE_FORMAT || snap.version !== 1 || !Array.isArray(snap.structures) || !snap.structures.length) return null
+    return snap
+  } catch { return null }
+}
+
 /** 解析当前（或给定）URL 片段中的分享快照；无有效片段返回 null。 */
 export function decodeShareLink(hash: string = typeof location !== 'undefined' ? location.hash : ''): ShareSnapshot | null {
   const m = /^#s=([A-Za-z0-9_-]+)$/.exec(hash)
   if (!m) return null
+  return parseSharePayload(m[1])
+}
+
+/** 从任意粘贴文本（完整 URL / 裸 #s= 片段 / 带说明文字的混杂内容）中提取分享快照。
+ *  非锚定全局匹配：多段命中时取最长且能通过协议校验的一段（载荷本体几乎必是
+ *  最长 base64url；短段多为 URL 其他参数的误命中）。{16,} 下限拦意外短串。 */
+export function extractShareSnapshotFromText(text: string): ShareSnapshot | null {
+  const matches = text.match(/#s=([A-Za-z0-9_-]{16,})/g) ?? []
+  let best: ShareSnapshot | null = null
+  let bestLen = 0
+  for (const m of matches) {
+    const b64 = m.slice(3)
+    if (b64.length <= bestLen) continue
+    const snap = parseSharePayload(b64)
+    if (snap) { best = snap; bestLen = b64.length }
+  }
+  return best
+}
+
+/** 从粘贴文本加载分享会话（欢迎页「从分享链接加载」入口）。
+ *  与 consumeShareLinkOnBoot 的差异：手动路径无 hash 可清（不触碰地址栏）、
+ *  找不到有效载荷时诚实报错而非静默退出（用户明确表达了加载意图）。 */
+export async function applyShareLinkFromText(text: string): Promise<boolean> {
+  const snap = extractShareSnapshotFromText(text.trim())
+  if (!snap) {
+    toast.error(tt({
+      zh: '未在粘贴内容中找到 MolVision 分享链接',
+      en: 'No MolVision share link found in the pasted text',
+    }), {
+      description: tt({
+        zh: '分享链接形如 …#s=…（由「复制分享链接」生成）——请粘贴完整链接',
+        en: 'A share link looks like …#s=… (from "Copy share link") — paste the full link',
+      }),
+    })
+    return false
+  }
   try {
-    const snap = JSON.parse(b64UrlDecode(m[1])) as ShareSnapshot
-    if (!snap || snap.format !== SHARE_FORMAT || snap.version !== 1 || !Array.isArray(snap.structures) || !snap.structures.length) return null
-    return snap
-  } catch { return null }
+    await applyShareSnapshot(snap)
+    return true
+  } catch (e) {
+    toast.error(tt({ zh: `分享链接加载失败：${e instanceof Error ? e.message : String(e)}`, en: `Share link failed to load: ${e instanceof Error ? e.message : String(e)}` }), {
+      description: tt({ zh: '可重试，或请分享方改用「保存会话文件」', en: 'Retry, or ask the sender to use "Save session file" instead' }),
+    })
+    return false
+  }
 }
 
 /** 按快照重拉结构并恢复会话（替换语义——同「打开会话文件」）。

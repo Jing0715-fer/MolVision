@@ -3494,3 +3494,39 @@ Stage Summary:
   1. 【中】分享链接增强：命令面板 session 组补「session share」直填（现 qa-session-share 走 copyShareLinkToClipboard 统一入口）+ 欢迎页 SessionResumeSlot 旁「从分享链接加载」说明入口（教育发现性）
   2. 【中】对照预览上传流 E2E：upload 视图 review 面板 TemplatePreview 接线已就绪（r84），真实 VLM 解析流走一遍 E2E 实证
   3. 【低】命令面板隐藏 DOM 残留体检 · SessionResume 箭头居中微调 · 40+ 模板画廊虚拟化
+
+---
+Task ID: r86
+Agent: main
+Task: 用户指令「继续下一阶段开发，完成后进行qa测试」——r85 尾部建议清单推进：主任务①分享链接发现性增强（欢迎页「从分享链接加载」粘贴卡 + 粘贴文本提取协议 + 命令面板子命令直填）+ 任务②低优先打磨三连（SessionResume 箭头光学居中 / CommandDialog sr-only DOM 残留根治 / 会话区容器化）。QA 全链路（E2E 五程含真实 VLM 解析流 + VLM 四审 + 移动端 375px）+ guards 238→252
+
+Work Log:
+- 【同步】git fetch 发现远端已推进至 r85（bb578ad，巡检轮次完成 r84 对照预览 + r85 分享链接）——本地 r72 与远端 r72 树零差异（29 文件 0 增删），git reset --hard origin/main 安全采纳远端超集（r31 并行会话和解先例）
+- 【r86-1 分享链接发现性（r85 提案①落地）】
+  · share-link.ts 接收侧重构：decodeShareLink 的 b64→JSON→协议校验抽出 parseSharePayload 共享核心；新增 extractShareSnapshotFromText（非锚定正则 /#s=([A-Za-z0-9_-]{16,})/g——完整 URL / 裸片段 / 混杂说明文字皆可提取，多段命中取最长且过校验的一段，{16,} 下限拦意外短串）
+  · 新增 applyShareLinkFromText：手动粘贴路径（不触碰地址栏 hash；无有效载荷诚实报错 toast「未在粘贴内容中找到 MolVision 分享链接」+ 教育性 description；恢复失败归因同 consumeShareLinkOnBoot）
+  · 新组件 ShareLinkLoadCard.tsx：欢迎页会话区常显粘贴卡（panel-card + 左缘翡翠刻线「通电」暗示 + 32px 图标盒 + hover 浮起——与恢复卡同视觉族，色相区分语义：恢复=主色 / 分享接收=翡翠 r85 色系）；input（mono 12px + 翡翠 focus 环）+ 剪贴板读取钮（权限拒绝诚实降级：聚焦输入框 + 「按 Ctrl+V / ⌘V 粘贴」引导 toast，不硬失败）+ 加载钮（Loader2 自旋 + 空态禁用）；busy ref 防双击
+  · WelcomeScreen 会话区容器化：mt-9 flex-col gap-2.5 包 SessionResumeSlot + ShareLinkLoadCard（恢复卡 mt-9 上收至容器——单卡/双卡布局均对齐）
+- 【r86-2 低优先打磨三连（r85 提案③落地）】
+  · SessionResumeCard 箭头光学居中：两行文本光学重心比几何中心高约 2px → 箭头 -translate-y-px（TW4 translate-y 与 group-hover:translate-x 独立 CSS 变量可叠加；transition-[transform,color] 同步改 transition-[translate,color] 适配原生 translate 属性过渡——r69 坑位知识的正确应用）
+  · ui/command.tsx DOM 残留根治：sr-only DialogHeader（DialogTitle/Description）原在 DialogContent 之外（DialogPrimitive.Root 无条件渲染 children → 关闭后 dialog-description 永久残留 DOM）→ 移入 DialogContent 内部随 portal 卸载；全仓唯一消费者 CommandPalette，E2E 实证关闭后 sr-only 清零
+  · CommandPalette qa-session-share 直填补强：fill 'session ' → 'session share'（Tab 直填完整可执行子命令，回车即复制——原只填首词还需补 sub）
+- 【E2E 五程全旅程（agent-browser r86 会话）】
+  · ①粘贴卡全旅程：欢迎页常显 ✓ · 无效文本 → 诚实报错 toast ✓ · 完整 URL 粘贴 → 加载（4HHB 工作台就位 + toast「Session loaded from share link: 1 structure」+ spectrum 卡通带白底恢复像素实证——中心彩色采样 + 纯白背景点）✓ · 裸 #s= 片段 ✓ · 混杂文本（「check out my session: <URL> (reply here!)」）提取 ✓ · 剪贴板按钮 headless 权限拒绝 → 聚焦 + 引导 toast 降级 ✓
+  · ②双卡布局：制造存档 reload → 恢复卡 + 粘贴卡同屏（gap 10px 实测 = gap-2.5）+ 箭头 computed translate「0px -1px」光学居中实证 + 零横向溢出 ✓
+  · ③命令面板：Ctrl+K → 搜「copy share link」唯一命中 → Tab → 面板关闭 + console 值「session share」全子命令实证 ✓；关闭后 [role=dialog] 与 .sr-only 双清零（DOM 残留根治）✓
+  · ④上传流真实 VLM 解析（r85 提案②补证）：工具栏开模板库 → From image → upload rainbow-overview.png → Parse figure style（真实 zai VLM 通道）→ 草案五字段实证（name「Multi-chain Rainbow Cartoon Ov」/ demo 4HHB——VLM 对四聚体彩虹图正确选血红蛋白 / 命令序列「preset cartoon | spectrum count, rainbow, polymer | bg white | outline off | view top」全部过闸）→ TemplatePreview 快路径渲染（SOURCE/RENDER 双徽记 + 114,370 字符快照 + 「4HHB · 5 cmds」元信息）→ Save as my template 入库 + toast + mine chip ✓ → 测试种子清理
+  · ⑤VLM 四审：review 面板（布局无瑕 + 「RENDER 快照成功复现 SOURCE 风格——彩虹卡通血红蛋白」）/ 深色欢迎页（对齐·和谐·无缺陷；三条建议均为设计语言级——placeholder 对比度为既有 muted-foreground 决议，r83-r85 判例延续）/ 浅色欢迎页（翡翠 accent 恰当·无缺陷·verdict sound）/ 移动端 375px（无溢出无裁切·粘贴卡 highly usable·布局 excellent）
+- 【坑（新入档）】①document.querySelector('form') 取「第一个表单」——欢迎页新增粘贴卡表单在 DOM 序先于加载表单，提交按钮误点粘贴卡 Load（空值静默无副作用但不达预期）；表单定位必须从目标 input 锚定 closest('form') ②WebGL readPixels 无 preserveDrawingBuffer 时 composer 管线读回恒零——像素证据一律用截图像素采样（r85 判例重申）③agent-browser eval 的箭头函数形式 () => {...} 返回 {} 空对象——必须 IIFE ((...) => {...})() 形式 ④agent-browser press 带反引号的组合键（Control+`）会挂起超时——避免特殊字符组合键
+- 【门禁】lint 0 · tsc src 0 · guards 238→252（+14：粘贴提取器/应用入口/非锚定正则/共享解析核心/粘贴卡组件/输入钩子/提交钩子/剪贴板降级/欢迎页接线/会话区容器/子命令直填/箭头居中/CommandDialog 标题入栈）· smoke 4/4 · dev.log 无 error · console 全会话零错误 · viewport 恢复 1440×900 + 主题还原 dark
+
+Stage Summary:
+- 交付：分享链接发现性闭环（r85 提案①——粘贴卡常显欢迎页 + 非锚定文本提取 + 剪贴板一键读取降级 + 面板子命令直填）+ 低优先打磨三连（r85 提案③——箭头光学居中 / CommandDialog DOM 残留根治 / 会话区容器化）+ 上传流真实 VLM 解析 E2E 补证（r85 提案②——VLM 草案正确性 + 对照预览 + 入库全链）
+- 用户指令全闭环：「继续下一阶段开发」（r85 三项建议全落地）·「完成后进行qa测试」（E2E 五程 + VLM 四审 + 移动端 + 门禁四链 + 零 console 错误）
+- 架构资产：parseSharePayload 共享解析核心（boot hash 与手动粘贴同源校验）；「粘贴文本 → 提取 → 恢复」为分享链接的第三条接收路径（地址栏 boot / 粘贴卡手动 / 未来可扩展命令行 session open <url>）
+- 已知边界（诚实记录）：①粘贴卡仅在欢迎页可见（有结构时进工作台——分享链接主接收场景本就是空场新用户）②ConsoleBar 仅工作台挂载——欢迎页 Tab 填入的 fill 事件在无接收者时丢失（预存行为，consoleOpen 已置 true 进场即开但值为空；影响轻微：快速动作均在结构语境下使用）
+- 下一轮建议（按优先级）：
+  1. 【中】fill 事件接收者缺失补全：ConsoleBar 挂载时回放最近的 fill 指令（cmd-history 模块暂存 lastFill，ConsoleBar useEffect 首挂消费——欢迎页 Tab 填入不再丢失）
+  2. 【中】命令行 session open <url|片段> 子命令（粘贴提取协议已就绪——applyShareLinkFromText 直接复用，命令面板/ConsoleTab 补全可达）
+  3. 【低】粘贴卡输入在 375px 仅 139px 宽（粘贴场景够用，打字场景紧）——<sm 可评估图标盒降级为 28px 或按钮行换行
+  4. 【低】40+ 模板时画廊虚拟化 + blur-up（r83 遗留）· SessionResume 箭头 hover 微弹（group-hover:translate-x 0.5→1px 增强「可点」暗示）
