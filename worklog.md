@@ -3530,3 +3530,40 @@ Stage Summary:
   2. 【中】命令行 session open <url|片段> 子命令（粘贴提取协议已就绪——applyShareLinkFromText 直接复用，命令面板/ConsoleTab 补全可达）
   3. 【低】粘贴卡输入在 375px 仅 139px 宽（粘贴场景够用，打字场景紧）——<sm 可评估图标盒降级为 28px 或按钮行换行
   4. 【低】40+ 模板时画廊虚拟化 + blur-up（r83 遗留）· SessionResume 箭头 hover 微弹（group-hover:translate-x 0.5→1px 增强「可点」暗示）
+
+---
+Task ID: r87
+Agent: main
+Task: 用户指令「窄屏幕的欢迎页需要优化一下，页面太空了。继续打磨已有模板，加入更多模板（即便是同一类型的也可以提供更多不同风格的模板），继续打磨整个项目的ui界面」——三指令全闭环：①窄屏欢迎页密度重构（DOM 实测定位 + hero 响应式收紧 + 图式速览横滚条 + chips 横滑）②同类异风模板五连（每类补一支「第二风格」+ 缩略图管线产出 + VLM 五特征验证）③全局 UI 打磨（分享卡窄输入清偿 r86 遗留 + 版本 1.5）。QA 全链路（E2E 交互四程 + VLM 双主题审 + 移动端 375px + 门禁四链）+ guards 252→268
+
+Work Log:
+- 【同步】git fetch 无新远端轮次（r86 `4e74850` 即最新已推送）；dev server 健康 200；worklog 确认 r86 已闭环 → 本轮 r87 开工
+- 【r87-1 侦察】VLM 三图审定位「太空」具体形态（首屏 40% 稀疏 hero / 模块间距大 / 底部死区）→ DOM 干净测量实证：375×720 首屏全文本表单、画廊缩略图要滚 1.3 屏（galleryHead 935px）、分享输入仅 139px；命令面侦察确认 preset putty/ballstick/stereo on/slab cap on 全在白名单且 commands.ts 有实现
+- 【r87-2 窄屏密度重构（任务①）】WelcomeScreen.tsx：
+  · hero 全链响应式收紧 <lg：px-5 py-7（原 px-6 py-10）/ 徽章 64px（原 76）+ halo -inset-7 / h1 29px（原 34）/ 各段间距 mt-4→mt-6 档位递减——logo→输入框核心流程压回一屏（输入表单 605-653px 完整可见于 720 视口）
+  · 新增「图式速览」横滚条（<lg 常显、lg:hidden 零重复）：WELCOME_TEASER_IDS 八选目（含 ink-night/stereo 两支新模板让同类异风首屏可见）+ TeaserThumb 组件（管线 PNG→强调色渐变降级同 GalleryCard 策略）+ snap-x snap-mandatory + mol-toolbar-scroll 隐滚动条 + 尾卡「32 全部图式」→ galleryRef scrollIntoView 平滑滚画廊（窄屏画廊发现性捷径）
+  · 画廊过滤 chips <lg 改横滑：mol-toolbar-scroll + overflow-x-auto（lg:flex-wrap lg:overflow-x-visible 还原桌面）——实测 335 可见/577 内容单行可滑（原换行堆叠）
+  · :has 自适应 load-sep 同步收紧（mt-7→mt-5）；版本徽章 v1.4→v1.5（顶栏+页脚）
+- 【r87-3 同类异风模板五连（任务②）】figure-templates.ts 27→32：
+  · ink-night-cover（basic·明暗对）：墨蓝夜底 #101418 + 1.4× 加宽 + turn y 25——AlphaFold 时代深底呈现风（Nature 2021 DOI 核实）
+  · ballstick-chemistry（basic·键连对）：preset ballstick + color element——与 CPK「堆积 vs 键连」两风格（Corey-Pauling 1953 复用诚实）
+  · stereo-anaglyph（basic·印刷对）：stereo on 红蓝双通道色分移——Richardson 1981 立体对图式源流（Adv. Protein Chem. DOI 核实）
+  · putty-flexibility（conform·管径对）：preset putty 管径随 B 因子胀缩——与 mobility 颜色通道互证（Frauenfelder 1979 复用）
+  · slab-cutaway（surface·剖切对）：slab 14 + slab cap on 实心封盖剖面——与 sasa 外表观察互补（Richards 1977 复用）
+  · COMMAND_GLOSSARY +5 词条（preset putty/ballstick、stereo on、slab cap on 先于 slab <数字>）；TPL_ICONS +5（Moon/Atom/Glasses/Spline/Scissors）；bunx tsx 全量 32 模板过 validateTemplateCommand 零失败
+- 【r87-4 全局 UI 打磨（任务③）】ShareLinkLoadCard <sm 图标化提交（w-9 px-0 + ArrowRight sm:hidden）——输入宽 139→168px（r86 遗留「打字场景紧」清偿）；画廊描述文案更新（提及同类多风格）；弹窗卡片视觉族不动（guards 保护）
+- 【r87-5 缩略图管线产出 + 坑档修复】gen-template-thumbs.sh SPECS +5（idx 27-31）；**首跑全 SKIP 揭发坑**：querySelector('form button[type=submit]') 命中 r86 新增分享粘贴卡表单（DOM 先序）→ 空值提交静默 no-op → 根治：从 PDB input 锚定 closest('form') 取提交钮（r86 worklog「form 锚定」判例落进脚本）；修复后 5 支全 applied:ok 产出 640×320 PNG；VLM 五特征验证全符（深底/球棍元素色/红青重影/管径粗细变化/实心剖面）
+- 【E2E 交互四程】①速览点击全链：tap ink-night teaser → demoThenApply 加载 4HHB（toast 4,779 atoms）→ 工作台深底彩虹卡通 VLM 确认 ②尾卡滚动：点「全部图式」→ scroll container 滚至 1010 → 画廊区头顶格 56px ③弹窗 32 卡 + Stereo Demo：span[role=button] 点击（真 button 是 onApply——无结构时误点会静默 no-op）→「Demo ready: Stereo anaglyph on 1AKI」+ 工作台红青偏移 VLM 实证 ④对比视图：slab-cutaway 新词条（Solid slab caps/Slab clipping thickness）+ Richards 引用全渲染
+- 【VLM 双主题审 + 判例复核】深色移动端 8.5/10（四项「缺陷」全判例澄清：FAB 悬浮=r85 Material FAB 标准语义+画廊 pb-24 余量 / 32px 触控>28px 判例线 / chips 截断即滚动暗示 / truncate+tooltip=r85 判例）；浅色移动端 9.5/10 零缺陷；桌面 1440 VLM 三问全绿（分栏正常/3 列整齐/无溢出重叠）
+- 【门禁】lint 0 · tsc src 0 · guards 252→268（+16：五新模板 id/图鉴词条/速览条五件套/hero 收紧/chips 横滑/分享卡图标化/管线规格+form 锚定修复/版本 1.5；另修 2 条被 r87 改动失效的存量守卫：会话区容器 mt-9→mt-6 sm:mt-9、示例栅格 mt-3.5→mt-3 sm:mt-3.5）· smoke 4/4 · dev.log 零 error · QA 种子清理（session/movie localStorage 还原）+ 主题还原 dark + 视口还原 1440×900
+
+Stage Summary:
+- 交付：窄屏欢迎页密度重构（DOM 实测驱动——hero 收紧 + 图式速览横滚条让引擎真渲图像上移首屏 + chips 横滑 + 尾卡画廊捷径）+ 同类异风模板五连（basic 明暗/键连/印刷三对 + conform 管径对 + surface 剖切对，32 模板全过白名单，缩略图管线产出+VLM 五特征验证）+ 全局打磨（分享卡窄输入 168px + v1.5）
+- 用户指令全闭环：「窄屏幕欢迎页优化」（密度重构三件套）·「更多模板同类异风」（五连每类第二风格）·「打磨整个项目 UI」（chips 横滑/分享卡/文案/版本）
+- 坑（新入档）：①缩略图管线的 form 提交钮选择器会被 DOM 先序的新表单截胡（r86 粘贴卡）——脚本内表单定位必须从目标 input 锚定 closest('form')（r86 判例第二次复现，已根治落脚本）②弹窗卡片的 Demo/Compare/Edit 钮是 span[role=button] 非 button——querySelectorAll('button') 枚举不到，须 querySelectorAll('span[role=\"button\"]') ③缩略图管线增量模式重跑前先确认 SPECS 索引与 FIGURE_TEMPLATES 数组序一致（新模板追加尾部 idx 27-31）
+- 架构资产：图式速览条（TeaserThumb + WELCOME_TEASER_IDS 选目协议——未来模板扩充只需往选目加 id）；「同类异风」模板设计维度库（明暗/键连/立体/管径/剖切五通道与同类存量互补）
+- 下一轮建议（按优先级）：
+  1. 【中】速览条选目策略升级：按 filter 联动（当前固定八选目——切到 surface 类时速览条可跟随显示该类模板）或加入「我的模板」自定义卡进速览
+  2. 【中】移动端画廊卡片信息条精简（375px 单列卡 name+tagline+citation 三行略密——可评估 <sm 隐藏 citation 行）
+  3. 【低】速览条边缘渐隐提示（mol-fade-r 静态版）强化「可滑动」暗示（VLM 建议项，截断暗示已够用为判例基线）
+  4. 【低】40+ 模板时画廊虚拟化 + blur-up（r83 遗留——32 卡尚不紧迫）
