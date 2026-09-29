@@ -372,7 +372,7 @@ check "红蓝立体模板（印刷对）"    "id: 'stereo-anaglyph'"         "sr
 check "胖瘦管模板（管径对）"      "id: 'putty-flexibility'"       "src/lib/molecular/figure-templates.ts" 1
 check "切层剖面模板（剖切对）"    "id: 'slab-cutaway'"            "src/lib/molecular/figure-templates.ts" 1
 check "图鉴 r87 新词条"           "红蓝立体渲染（双通道色分移）"  "src/lib/molecular/figure-templates.ts" 1
-check "hero 响应式收紧"           "px-5 pb-6 pt-7 sm:px-6 sm:pt-9" "src/components/studio/WelcomeScreen.tsx" 1
+check "hero 响应式收紧"           "px-3 pb-6 pt-7 sm:max-w-\[368px\] sm:px-6 sm:pt-9" "src/components/studio/WelcomeScreen.tsx" 1
 check "画廊 chips 横滑"           "mol-toolbar-scroll ml-auto"   "src/components/studio/WelcomeScreen.tsx" 1
 check "分享卡窄屏图标化提交"      "w-9 shrink-0"                  "src/components/studio/ShareLinkLoadCard.tsx" 1
 check "管线五新缩略图"            "ink-night-cover:11:4HHB:27"   "scripts/gen-template-thumbs.sh" 1
@@ -383,8 +383,8 @@ check "版本升级 1.6"              "v1\.6"                          "src/comp
 check0 "速览条退役（零残留）"      "WELCOME_TEASER_IDS"            "src/components/studio/WelcomeScreen.tsx"
 check0 "速览条探针零残留"          "data-welcome-teaser"            "src/components/studio/WelcomeScreen.tsx"
 check "左栏 display:contents 载体" "\[display:contents\] lg:flex" "src/components/studio/WelcomeScreen.tsx" 1
-check "part1 表单舱 order-1"      "order-1 mx-auto flex w-full max-w-\[368px\]" "src/components/studio/WelcomeScreen.tsx" 1
-check "part2 示例舱 order-3"      "order-3 mx-auto flex w-full max-w-\[368px\]" "src/components/studio/WelcomeScreen.tsx" 1
+check "part1 表单舱 order-1"      "order-1 mx-auto flex w-full flex-col items-center px-3" "src/components/studio/WelcomeScreen.tsx" 1
+check "part2 示例舱 order-3"      "order-3 mx-auto flex w-full flex-col items-center px-3" "src/components/studio/WelcomeScreen.tsx" 1
 check "画廊 order-2 上移"         "mol-scroll order-2 flex w-full" "src/components/studio/WelcomeScreen.tsx" 1
 check "分类横滚行容器"            "data-welcome-cat-rows"         "src/components/studio/WelcomeScreen.tsx" 1
 check "分类行渲染探针"            "data-welcome-cat-row"          "src/components/studio/WelcomeScreen.tsx" 2
@@ -412,8 +412,17 @@ check "管线 r89 五新规格"         "wire-skeleton:10:1CRN:32"      "scripts
 check "管线高清视口"              "set viewport 1920 960"         "scripts/gen-template-thumbs.sh" 1
 check "缩略图内容收紧脚本"        "content_bbox"                  "scripts/tighten-thumbs.py" 2
 
+# ---- r90：窄屏 hero 全宽化（解除 <sm 368px 盒宽 + px-5→px-3 六处同步）+ 过滤网格返回入口（r89 建议①） ----
+check "画廊头 <sm 收紧"          "px-3 py-3.5 sm:px-7"          "src/components/studio/WelcomeScreen.tsx" 1
+check "分类行头 <sm 收紧"        "px-3 pt-4 sm:px-7"            "src/components/studio/WelcomeScreen.tsx" 1
+check "分类横滚行 <sm 收紧"      "px-3 pb-1\.5 pt-2 sm:px-7"    "src/components/studio/WelcomeScreen.tsx" 1
+check "画廊网格容器 <sm 收紧"    "px-3 pb-6 pt-4 sm:px-7"       "src/components/studio/WelcomeScreen.tsx" 1
+check "过滤网格返回入口"          "data-welcome-back-rows"        "src/components/studio/WelcomeScreen.tsx" 1
+check "返回入口仅 <lg"            "返回分类浏览"                  "src/components/studio/WelcomeScreen.tsx" 1
+check "返回入口 ArrowLeft 图标"   "ArrowLeft"                    "src/components/studio/WelcomeScreen.tsx" 1
+
 # ---- 汇总 ----
-TOTAL=282
+TOTAL=289
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

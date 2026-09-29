@@ -46,7 +46,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  ArrowUpRight, BookOpenText, Bot, ChevronRight, FileUp, FolderOpen, Github, ImagePlus, Loader2, Moon,
+  ArrowLeft, ArrowUpRight, BookOpenText, Bot, ChevronRight, FileUp, FolderOpen, Github, ImagePlus, Loader2, Moon,
   Pencil, Play, Sun, Wand2,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
@@ -458,8 +458,9 @@ export function WelcomeScreen() {
              主容器 flex 项——画廊 order-2 插中间，r89 画廊上移地基）；lg+ 恢复实体
              左栏（独立滚动 + 右边框） —— */}
         <div className="mol-scroll w-full [display:contents] lg:flex lg:w-[400px] lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:border-r lg:border-border/60 xl:w-[448px]">
-          {/* part1：hero 加载舱（仪器语义原样；lg+ 组内上锚垂直居中；r87 <lg 密度收紧） */}
-          <div className="order-1 mx-auto flex w-full max-w-[368px] flex-col items-center px-5 pb-6 pt-7 sm:px-6 sm:pt-9 lg:order-none lg:mt-auto lg:px-7 lg:pb-0 [&:has(.panel-card)_.load-sep]:mt-5">
+          {/* part1：hero 加载舱（仪器语义原样；lg+ 组内上锚垂直居中；r87 <lg 密度收紧；
+               r90 <sm 全宽化——解除 368px 盒宽上限 + 边距 px-5→px-3，窄屏内容占满屏幅） */}
+          <div className="order-1 mx-auto flex w-full flex-col items-center px-3 pb-6 pt-7 sm:max-w-[368px] sm:px-6 sm:pt-9 lg:order-none lg:mt-auto lg:px-7 lg:pb-0 [&:has(.panel-card)_.load-sep]:mt-5">
 
             {/* —— 品牌 hero（六角芯片：弹性入场 + halo 呼吸 + 双电子巡航 + 原子核呼吸；
                  r80 主色晕染——open-design hero 焦点光；r87 <lg 缩 64px 压首屏） —— */}
@@ -621,7 +622,7 @@ export function WelcomeScreen() {
 
           {/* part2：经典示例舱（<lg 排在画廊之后——展示优先的移动流；lg+ 并回左栏
                组内下锚垂直居中；pb-24 为悬浮 AI 胶囊让位——移动端它成了页尾） */}
-          <div className="order-3 mx-auto flex w-full max-w-[368px] flex-col items-center px-5 pb-24 sm:px-6 lg:order-none lg:mb-auto lg:px-7 lg:pb-7">
+          <div className="order-3 mx-auto flex w-full flex-col items-center px-3 pb-24 sm:max-w-[368px] sm:px-6 lg:order-none lg:mb-auto lg:px-7 lg:pb-7">
 
             {/* —— 经典示例（r80 双列卡片：ID 主色等宽 + 名称 + desc 副行——启用
                 loader 中此前从未上屏的描述字段，卡片比芯片更有作品感；r87 <lg 收紧） —— */}
@@ -662,7 +663,7 @@ export function WelcomeScreen() {
           className="mol-scroll order-2 flex w-full flex-col lg:order-none lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
         >
           {/* 区头（sticky 毛玻璃常驻）：标题 + 计数 + 分类过滤 + 库入口 */}
-          <div className="gallery-head-blur welcome-in sticky top-0 z-10 border-b border-border/50 px-5 py-3.5 sm:px-7" style={{ animationDelay: '260ms' }}>
+          <div className="gallery-head-blur welcome-in sticky top-0 z-10 border-b border-border/50 px-3 py-3.5 sm:px-7" style={{ animationDelay: '260ms' }}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <BookOpenText className="h-4 w-4 shrink-0 text-primary" aria-hidden />
               <h2 className="text-[15px] font-bold leading-none tracking-[-0.01em]">
@@ -751,7 +752,7 @@ export function WelcomeScreen() {
             <div data-welcome-cat-rows className="pb-3 lg:hidden">
               {catRows.map(row => row.tpls.length > 0 && (
                 <div key={row.key} data-welcome-cat-row={row.key}>
-                  <div className="flex items-center gap-2 px-5 pt-4 sm:px-7">
+                  <div className="flex items-center gap-2 px-3 pt-4 sm:px-7">
                     <h3 className="text-[13px] font-bold leading-none tracking-[-0.01em]">{t(row.label)}</h3>
                     <span className="font-mono text-[9px] font-semibold tabular-nums text-muted-foreground">{row.tpls.length}</span>
                     <button
@@ -772,7 +773,7 @@ export function WelcomeScreen() {
                   <div
                     role="list"
                     aria-label={`${t(row.label)} · ${t({ zh: '横向滑动', en: 'swipe' })}`}
-                    className="mol-toolbar-scroll flex snap-x gap-2.5 overflow-x-auto px-5 pb-1.5 pt-2 sm:px-7"
+                    className="mol-toolbar-scroll flex snap-x gap-2.5 overflow-x-auto px-3 pb-1.5 pt-2 sm:px-7"
                   >
                     {row.tpls.map(tpl => (
                       <RowCard
@@ -790,7 +791,20 @@ export function WelcomeScreen() {
 
           {/* 画廊网格（过滤切换时 key 变化重播 stagger 入场；r89：<lg 仅在特定过滤下
                渲染——'all' 走分类横滚行去重——并收紧为 2 列紧凑卡） */}
-          <div className="px-5 pb-6 pt-4 sm:px-7 lg:pb-20">
+          <div className="px-3 pb-6 pt-4 sm:px-7 lg:pb-20">
+            {/* r90：移动端过滤网格的显式返回入口（r89 建议①——「查看全部」切进特定类后，
+                 此前只能靠 chips 行首「全部」返航；<lg 网格前给一枚「返回分类」锚点降门槛） */}
+            {filter !== 'all' && (
+              <button
+                type="button"
+                data-welcome-back-rows
+                onClick={() => setFilter('all')}
+                className="mb-3 flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 text-[11px] font-semibold text-foreground/85 transition-[border-color,background-color,color] duration-150 hover:border-primary/45 hover:bg-primary/[0.06] hover:text-foreground lg:hidden"
+              >
+                <ArrowLeft className="h-3 w-3 text-primary" aria-hidden />
+                {t({ zh: '返回分类浏览', en: 'Back to categories' })}
+              </button>
+            )}
             <div
               key={filter}
               data-welcome-gallery

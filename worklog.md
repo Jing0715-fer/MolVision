@@ -3624,3 +3624,35 @@ Stage Summary:
   2. 【中】自定义模板行卡接编辑直通（现仅 demo——「我的模板」行卡可加 Pencil 角标）
   3. 【低】40+ 模板时分类行虚拟化 + 行内 blur-up（37 支 6 行尚流畅）
   4. 【低】wire-skeleton 线宽：引擎层面评估 Line2 双三角带渲染（three.js examples 语义）解锁可变线宽——列入引擎 backlog
+
+---
+Task ID: r90
+Agent: main
+Task: 用户指令「窄屏幕上把 hero 区内容（MolVision 标题→遥测板→会话卡→加载表单→本地文件）尽量占满屏幕大部分，两侧不要留太多空白」——窄屏全宽化改造（解除 <sm 368px 盒宽上限 + px-5→px-3 六处边距同步）+ r89 建议①顺手清偿（移动端过滤网格显式返回入口）。QA 全链路（375/428px 双尺寸实测 + 桌面回归 + VLM 审 + 门禁四链）+ guards 282→289
+
+Work Log:
+- 【侦察】r89 已推送（c92b9d0）；dev server 健康（3000 监听 + HTTP 200，devd 守护在位）；worklog 确认 r89 闭环 → 本轮 r90 开工；用户粘贴内容即 part1 hero 舱全部（标题/副标题/遥测板/会话区/加载舱/本地文件钮）——诉求两侧少留白
+- 【根因定位】part1/part2 容器 max-w-[368px] 全断点生效 + px-5 双重留白：375px 视口 40px 边距（内容 89.3% 屏幅）；428px 大屏手机被盒宽截流——面板仅 368px 占 86%（两侧视觉留白 ~30px + 内 padding 20px）
+- 【r90-1 窄屏全宽化（用户主诉求）】WelcomeScreen.tsx 六处同步：
+  · part1 hero 舱（L463）：max-w-[368px] → sm:max-w-[368px]（<sm 全宽）+ px-5 → px-3（12px 边距）；sm:px-6 / lg:px-7 / lg 布局全保持原值
+  · part2 示例舱（L625）：同上双改
+  · 画廊头（L666）px-3 py-3.5 / 分类行头（L755）px-3 pt-4 / 分类横滚行（L776）px-3 pb-1.5 pt-2 / 画廊网格容器（L794）px-3 pb-6 pt-4——整条移动流（hero→画廊→示例）左右边线统一 12px，零割裂；顶栏 px-4 独立层级不动（界面 chrome 非内容流）
+- 【r90-2 过滤网格返回入口（r89 建议①清偿）】网格容器内新增 data-welcome-back-rows 按钮（<lg 条件渲染 + filter!=='all' 时显）：ArrowLeft 图标 + 「返回分类浏览」— mb-3 锚在网格顶部，替代此前唯一返航路径（chips 行首「全部」chip）降使用门槛
+- 【E2E 双尺寸实测】
+  · 375×812：hero 全宽 375（padding 12px / max-width none 实证）+ 加载舱面板占屏 93.6%（351/375；改前 89.3%）+ 表单 left 27 = 12+14+1 三层 padding 数学吻合 + 零横向溢出
+  · 428×926 大屏手机（max-w 解除最大收益场景）：面板 404px 占屏 94.4%（改前 86%——+8.4pt）+ 零溢出
+  · 返回按钮双程：basic 行「查看全部」→ 网格 + 按钮出现 → 点击 → 6 行分类恢复 + 按钮条件消隐 + activeChip「All37」（重测两轮稳定；首轮 click 报 not found 系 agent-browser 元素解析竞态，状态已正确切换）
+  · 行卡全链：wire-skeleton 点击 → demoThenApply → 工作台 canvas 375 全宽 + 1497 unique colors 渲染（白底灰线线描特征）+ 零溢出
+  · 桌面 1440 回归：hero max-width 368px / padding 28px / 左栏 448px / h1 38px 全部保持——lg+ 零变化实证
+- 【VLM 审】移动 hero 截图：水平利用率 90-95%（「margins are thin and consistent ~4% each side」）+ 零溢出零错位 + 9/10（-1 仅信息密度主观项）——用户「占满屏幕大部分」诉求 VLM 侧证达成
+- 【门禁】lint 0 · tsc src 0（examples 5 错历史存量与 r88/r89 基线一致）· guards 282→289（+7：画廊头/行头/横滚行/网格容器四处收紧 + 返回入口探针/文案/图标；-3→改 3 条存量断言：hero 收紧改写 px-3 版 + part1/part2 order 断言改写全宽类名）· smoke 4/4 · dev.log 零 error · console 全会话零错误 · localStorage 清场 + 视口还原 1440×900
+
+Stage Summary:
+- 交付：窄屏 hero 全宽化（解除 <sm 368px 盒宽 + 六处 px-3 统一——375px 面板占屏 89.3%→93.6%、428px 86%→94.4%，桌面零变化）+ 移动端过滤网格显式返回入口（r89 建议①清偿）
+- 用户指令全闭环：「内容尽量占满屏幕大部分，两侧不要留太多空白」（双尺寸实测 + VLM 90-95% 利用率三重实证）
+- 坑（新入档）：①MultiEdit 工具报「No replacement was performed」时可能已应用部分编辑（非严格原子）——失败后必须 grep 实际状态再重试，盲重试会因 old_str 已改而二次失败 ②agent-browser click 偶发「Element not found」但点击已实际派发（React 重渲染竞态）——以 eval 状态断言为准，必要时重测两轮
+- 下一轮建议（按优先级）：
+  1. 【中】r89 建议②：自定义模板行卡接编辑直通（「我的模板」行卡加 Pencil 角标 → open-template-edit 广播）
+  2. 【中】mock-llm 3999 仿 devd 加守护（r88 风险项——本轮存活但无自愈）
+  3. 【低】40+ 模板时分类行虚拟化 + 行内 blur-up（37 支 6 行尚流畅，r83 遗留）
+  4. 【低】wire-skeleton 线宽：引擎层 Line2 双三角带渲染解锁可变线宽（r89 backlog）
