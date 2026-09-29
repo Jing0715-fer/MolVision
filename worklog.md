@@ -3567,3 +3567,21 @@ Stage Summary:
   2. 【中】移动端画廊卡片信息条精简（375px 单列卡 name+tagline+citation 三行略密——可评估 <sm 隐藏 citation 行）
   3. 【低】速览条边缘渐隐提示（mol-fade-r 静态版）强化「可滑动」暗示（VLM 建议项，截断暗示已够用为判例基线）
   4. 【低】40+ 模板时画廊虚拟化 + blur-up（r83 遗留——32 卡尚不紧迫）
+
+---
+Task ID: r88
+Agent: main
+Task: 用户报障「页面没有加载出来」→ 根因确诊（next-server 被 OOM-killer 静默击杀）+ devd 守护进程热修 + allowedDevOrigins 跨域放行 + 双端 E2E 复验 + 门禁四链 + cron 巡检重建
+
+Work Log:
+- 【诊断】用户报障页面未加载 → ss 实测 3000 端口无监听（mock-llm 3999 存活）；dev.log 03:48:30 后停更且 grep 零 error 行；dmesg 实锤 OOM-killer 击杀 next-server pid 1535（anon-rss≈1.67GB / total-vm≈21.7GB）→ 根因：dev server 内存增长触顶被内核 SIGKILL 静默击杀（SIGKILL 无机会写日志——「log 无 error」≠「进程存活」新判例）
+- 【修复①】scripts/devd.py 守护进程（~100 行）：double-fork + setsid 脱离 agent bash 会话（r71/r78/r84 判例——setsid/nohup 会被收尾杀）；Popen(['bunx','next','dev','-p','3000']) 子进程 start_new_session 自成会话 + stdio → dev.log 追加；崩溃（含再 OOM）3s 自动重启循环 + [devd] 标记行落日志；防双实例：启动前/重启间隙 127.0.0.1:3000 端口探测（被外部实例抢占即守护退位）。关键细节：不走 `bun run dev`——其内嵌 `| tee dev.log` 与守护 O_APPEND 重定向双写交错（tee O_TRUNC 截断 + 偏移漂移日志错乱），直接 bunx next dev 日志单一路径
+- 【修复②】next.config.ts 新增 allowedDevOrigins（["*.space-z.ai", 精确 preview-chat host] 双写）——清 Preview Panel 网关域名跨域请求 /_next/* 的 dev 告警（Next 16 现为警告、未来大版本将直接拒绝，提前放行）
+- 【验证】devd 拉起 → 3000 监听 + HTTP 200（Ready 2.4s）；next.config 变更触发 dev server 完整重启（新 pid 13814，768s→768ms Ready）仍 200——守护存活路径与 config 热重启路径双验证；agent-browser 双端复验：桌面 1440×900 完整渲染 + console 零错误（仅 React DevTools info）；移动 375×812 h1 29px（r87 收紧在位）+ 图式速览条在位 + 零横向溢出 + console 零错误；五张 r87 新模板缩略图（ink-night/stereo-anaglyph/putty/slab/ballstick）curl 全 200（先前 404 系缩略图生成窗口期瞬时现象，文件已存在 public/templates/）；VLM 双截图审确认全渲染（桌面「app name, input fields, template gallery of 32 paper-figure styles」/ 移动「hero title, input field, horizontal template thumbnail strip」）
+- 【门禁】lint 0 · tsc src 0（全仓另有 5 错均为 examples/mini-services/skills 历史存量非 src 域，与 r87 基线一致）· guards 268/268 · smoke 4/4（dev server 存活/console 零错/应用标志/语言切换/主体 UI 骨架）· dev.log 零 error
+- 【cron 巡检】历史三个 15min 巡检（r85/r86/r87 后）均被平台「exec limits exceeded」禁用（含 r87 后新建一秒即禁）→ 本轮删除三个死任务并重建 r88 后新任务 #422872（任务描述内嵌「dev server 掉线直接 python3 scripts/devd.py」自救指令 + r88 全部判例）——但新任务同样秒级被平台禁用：账户级 cron 执行配额耗尽为平台侧硬限（删除旧任务不释放配额，r85-r88 四任务实证），本轮无法恢复；devd 守护的 OOM 自动重启能力成为巡检缺席期间的关键自愈防线
+
+Stage Summary:
+- 交付：「页面没有加载出来」故障全闭环（3000 失守 → dmesg OOM 根因确诊 → devd 守护部署 → config 跨域放行 → 双端 E2E + VLM + 门禁四链全绿）；devd.py 成为 dev server 永久自愈基础设施（崩溃 3s 重启，不再依赖人工/cron 拉起）
+- 坑（新入档）：①next-server 被 OOM SIGKILL 时 dev.log 不留任何 error——「log 无 error」不再等价于「进程存活」，健康检查须 ss 端口探测为主、日志为辅；②package.json dev script 内嵌 tee 与外部 O_APPEND 重定向双写交错——守护拉起一律 bunx next dev 直起绕开 tee；③cron「exec limits exceeded」为账户级配额硬限，删除旧任务不释放配额；④z-ai CLI 输出前有 🚀 前缀行——管道 JSON 解析须先截取首个 { 起的片段
+- 风险与建议：①cron 配额耗尽期间无巡检——devd 已覆盖最大单点（dev server），mock-llm 3999 尚无守护（本轮存活；后续轮可仿 devd 加 3999 守护）；②Next dev server 内存随编译路由数增长（击杀时 1.67GB）——长期可评估 --max-old-space-size 限额或定时优雅重启（现靠 OOM 后 3s 自愈兜底）；③功能开发下一轮建议沿用 r87 清单：速览条 filter 联动 / 移动端画廊卡 <sm 隐藏 citation / fill 事件回放 / session open <url> 子命令 / 40+ 模板虚拟化

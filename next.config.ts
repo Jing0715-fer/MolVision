@@ -36,6 +36,13 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   /* config options here */
+  // r88：Preview Panel 经 space-z.ai 网关域名跨域请求 /_next/* 资源，
+  // Next 16 dev 模式默认告警（未来大版本将直接拒绝）→ 显式放行。
+  // 精确 host + 通配 双写保险（preview-chat-<sessionId>.space-z.ai）。
+  allowedDevOrigins: [
+    "*.space-z.ai",
+    "preview-chat-10834185-7554-44e7-afcd-0c972a710c5e.space-z.ai",
+  ],
   typescript: {
     ignoreBuildErrors: true,
   },
