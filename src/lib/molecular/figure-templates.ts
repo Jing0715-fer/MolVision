@@ -1,10 +1,19 @@
 'use client'
 
-// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化 · r77 表示法经典与辅因子位扩容 · r78 构象与动力学分类落地）
+// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化 · r77 表示法经典与辅因子位扩容 · r78 构象与动力学分类落地 · r87 同类异风变体扩容）
 // ─────────────────────────────────────────────────────────────────────────────
 // 定位：把 Cell / Nature / Science 等高影响力结构生物学文章中反复出现的「图式」
 // （figure style）——表示法组合 + 配色 + 视角 + 灯光 + 轮廓 + 相机——固化为命令
 // 序列模板。一键应用到用户当前结构，快速得到 CNS 级别作图。
+//
+// r87 扩容（用户指令：同类型不同风格变体——每类补一支「第二风格」）：
+//  · basic +3：墨夜封面全景（深底 AlphaFold 时代呈现风 / 与 rainbow 的「明暗两
+//    风格」）· 球棍化学模型（键连视角 / 与 CPK 的「堆积 vs 键连」两风格）· 红蓝
+//    立体对（Richardson 1981 印刷时代立体图式——stereo on 双通道色分移）
+//  · conform +1：B 因子胖瘦管（preset putty——管径通道表柔性，与 mobility 的
+//    颜色通道互证）
+//  · surface +1：切层剖面封盖（slab 14 + cap on——剖切通道看内里，与 sasa 的
+//    外表观察互补）
 //
 // r78 扩容（用户指令：继续打磨所有模板 + 继续加入更多模板——构象与动力学分类落地）：
 //  · 新分类 conform「构象与动力学」（ensemble/mobility 迁入）——r72 起的长期欠账
@@ -626,12 +635,100 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     ],
     accent: 'amber',
   },
+
+  // ── r87 扩容（用户指令：同类型不同风格变体——每类给一支「第二风格」）──
+  // 设计维度刻意与同类存量错开：basic 三支分别占「深底封面 / 键连化学 / 立体印刷」
+  // 三个未被表示的子风格；conform 加管径通道（与颜色通道互补）；surface 加剖切通道
+  // （与外表观察互补）。全部命令沿用既有白名单语法（validateTemplateCommand 预验证）。
+  {
+    id: 'ink-night-cover',
+    name: { zh: '墨夜封面全景', en: 'Ink-night cover' },
+    tagline: { zh: '墨蓝夜底 + 加宽彩虹卡通 + 斜侧 25°：封面/图文摘要的深底风格', en: 'Ink-blue night + widened rainbow cartoon + 25° oblique: the dark-ground cover style' },
+    purpose: { zh: '封面图 · 图文摘要 · 演示汇报', en: 'Cover art · graphical abstracts · talks' },
+    tags: [{ zh: '封面', en: 'Cover' }, { zh: '图文摘要', en: 'Graphical abstract' }],
+    category: 'basic',
+    figure: { ref: '封面/图文摘要', shows: { zh: '深底彩色结构呈现：期刊封面与图文摘要的视觉惯例', en: 'Dark-ground colored structures: the journal-cover and graphical-abstract convention' } },
+    citation: { journal: 'Nature', year: 2021, title: 'Highly accurate protein structure prediction with AlphaFold', doi: '10.1038/s41586-021-03819-2' },
+    demo: '4HHB',
+    // 差异点：墨蓝夜底（#101418——AlphaFold 时代论文深底呈现风）+ 卡通 1.4× 加宽
+    // （远距投屏可读）+ 斜侧 25°（封面动感构图）；无描边（深底上轮廓线反而收束
+    // 色块——与白底 rainbow-overview 构成同类型「明暗两风格」）
+    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg #101418', 'set cartoon_width 1.4', 'turn y 25'],
+    accent: 'cyan',
+  },
+  {
+    id: 'ballstick-chemistry',
+    name: { zh: '球棍化学模型', en: 'Ball-and-stick chemistry' },
+    tagline: { zh: '全结构球棍 + 元素配色 + 白底细描边：化学教科书经典模型图式', en: 'Full ball-and-stick + element colors + white hairlines: the chemistry-textbook classic' },
+    purpose: { zh: '化学骨架 · 键连拓扑 · 教学示意', en: 'Chemical skeleton · bonding topology · teaching' },
+    tags: [{ zh: '球棍', en: 'Ball & stick' }, { zh: '元素色', en: 'Element colors' }],
+    category: 'basic',
+    figure: { ref: '模型图版', shows: { zh: '球棍模型版式：原子球与键棍的化学骨架呈现', en: 'Ball-and-stick plates: chemical skeletons as atom spheres and bond rods' } },
+    citation: { journal: 'Rev. Sci. Instrum.', year: 1953, title: 'Molecular models of amino acids, peptides, and proteins', doi: '10.1063/1.1770803' },
+    demo: '1CRN',
+    // 差异点：与 CPK 空间填充同源（Corey-Pauling-Koltun 模型体系）——那支看「堆积」，
+    // 这支看「键连」：球小棍出、键拓扑可读；1CRN 46 残基小蛋白全原子不糊
+    commands: ['preset ballstick', 'color element', 'bg white', 'orient', 'outline on 1.1 1.0'],
+    accent: 'emerald',
+  },
+  {
+    id: 'stereo-anaglyph',
+    name: { zh: '红蓝立体对', en: 'Stereo anaglyph' },
+    tagline: { zh: '彩虹卡通 + 红蓝立体通道分移：戴红蓝眼镜即得深度感知的印刷图式', en: 'Rainbow cartoon + red-cyan channel offset: print-era stereo depth with 3D glasses' },
+    purpose: { zh: '立体深度 · 印刷插图 · 教学演示', en: 'Stereo depth · print figures · teaching demos' },
+    tags: [{ zh: '立体图', en: 'Stereo' }, { zh: '印刷图式', en: 'Print figure' }],
+    category: 'basic',
+    figure: { ref: '立体对图版', shows: { zh: '红蓝立体对结构图：印刷时代的深度感知惯例（配红蓝眼镜）', en: 'Anaglyph stereo plates: the print-era depth convention (with red-cyan glasses)' } },
+    // 图式源流：Richardson 1981 蛋白解剖与分类图集（ribbon 图谱以立体对呈现——
+    // 印刷时代结构生物学家的「3D 眼镜」，DOI 经 crossref 核实）
+    citation: { journal: 'Adv. Protein Chem.', year: 1981, title: 'The anatomy and taxonomy of protein structure', doi: '10.1016/S0065-3233(08)60520-3' },
+    demo: '1AKI',
+    // 差异点：stereo on 红蓝立体（渲染管线双通道色分移——左右眼色偏移即深度线索，
+    // 观看需红蓝眼镜）；白底 + 彩虹保证两通道都有色彩可分；GTAO 在立体模式自动
+    // 暂停（引擎既有语义）
+    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg white', 'stereo on', 'orient'],
+    accent: 'rose',
+  },
+  {
+    id: 'putty-flexibility',
+    name: { zh: 'B 因子胖瘦管', en: 'Putty B-factor tube' },
+    tagline: { zh: '管径随 B 因子胀缩 + 蓝→红渐变：柔性在几何上「看得见」', en: 'Tube radius swells with B-factor + blue→red: flexibility made visible in geometry' },
+    purpose: { zh: '局部柔性 · 环区定位 · 动力学解读', en: 'Local flexibility · loop mapping · dynamics reading' },
+    tags: [{ zh: 'putty 管', en: 'Putty tube' }, { zh: 'B 因子', en: 'B-factor' }],
+    category: 'conform',
+    figure: { ref: 'Fig. 1', shows: { zh: '温度因子胖瘦管图：柔性区段沿链胀缩呈现', en: 'Temperature-factor putty: flexible segments swelling along the chain' } },
+    citation: { journal: 'Nature', year: 1979, title: 'Temperature-dependent X-ray diffraction as a probe of protein structural dynamics', doi: '10.1038/280558a0' },
+    demo: '3INS',
+    // 差异点：与 mobility-bfactor（卡通热图）同为 B 因子动力学图式——那支用「颜色」
+    // 表柔性，这支用「管径」：胖瘦即振幅，几何通道与颜色通道互证；preset putty 原生
+    // bfactor 渐变配色 + 管径映射；冷雾底无描边（渐变面自明，与 mobility 同底色）
+    commands: ['preset putty', 'bg #eef1f5', 'orient'],
+    accent: 'amber',
+  },
+  {
+    id: 'slab-cutaway',
+    name: { zh: '切层剖面封盖', en: 'Slab cutaway' },
+    tagline: { zh: '表面切层 14Å + 实心封盖剖面：内部空腔与核心分区一图剖开', en: '14Å slabbed surface with solid caps: internal cavities and cores cut wide open' },
+    purpose: { zh: '内部空腔 · 核心分区 · 剖面图式', en: 'Internal cavities · core layout · cutaway figures' },
+    tags: [{ zh: '剖面', en: 'Cutaway' }, { zh: '切层', en: 'Slab' }],
+    category: 'surface',
+    figure: { ref: 'Fig. 2', shows: { zh: '剖面图：切层揭示内部空腔与埋藏核心', en: 'Cutaway plates: slabbed views revealing cavities and buried cores' } },
+    citation: { journal: 'Annu. Rev. Biophys. Bioeng.', year: 1977, title: 'Areas, volumes, packing, and protein structure', doi: '10.1146/annurev.bb.06.060177.001055' },
+    demo: '4HHB',
+    // 差异点：表面图式的「第二风格」——sasa-surface 看外表 patch，这支 slab 14 切层
+    // + cap on 实心封盖剖开内里（Richards 1977 areas/volumes/packing 正是剖面所
+    // 揭示的量）；正面视角 + 冷雾底与 sasa-surface 同族；封盖色可用 set cap_color 改
+    commands: ['preset surface', 'color sasa', 'bg #eef1f5', 'slab 14', 'slab cap on', 'view front'],
+    accent: 'teal',
+  },
 ]
 
 /** 命令图鉴（r75：「对比」视图把命令序列翻成双语图式解剖；未命中退回原命令）。
  *  规则序：具体在前（contacts (resn ASP… 先于 contacts；show sticks, nucleic 先于 show sticks） */
 export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^preset cartoon\b/i, label: { zh: '卡通带表示', en: 'Cartoon ribbons' } },
+  { re: /^preset putty\b/i, label: { zh: 'B 因子胖瘦管表示', en: 'Putty B-factor tube' } },
+  { re: /^preset ballstick\b/i, label: { zh: '球棍全结构表示', en: 'Ball-and-stick model' } },
   { re: /^preset surface\b/i, label: { zh: '分子表面表示', en: 'Molecular surface' } },
   { re: /^preset bindingsite\b/i, label: { zh: '结合位点特写（球棍）', en: 'Binding-site close-up (ball & stick)' } },
   { re: /^preset publication\b/i, label: { zh: '出版级互作预设', en: 'Publication preset' } },
@@ -678,6 +775,10 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^hbonds on .*within/i, label: { zh: '范围氢键虚线', en: 'Scoped H-bond dashes' } },
   { re: /^hbonds on/i, label: { zh: '全局氢键虚线', en: 'Global H-bond dashes' } },
   { re: /^symmetry \d+/i, label: { zh: '晶体对称伙伴', en: 'Symmetry mates' } },
+  // r87 新词条（具体锚定先于泛匹配：slab cap on 必须先于 slab <数字>）
+  { re: /^stereo on/i, label: { zh: '红蓝立体渲染（双通道色分移）', en: 'Red-cyan anaglyph stereo' } },
+  { re: /^slab cap on/i, label: { zh: '剖面实心封盖', en: 'Solid slab caps' } },
+  { re: /^slab \d+/i, label: { zh: '切层裁剪厚度（Å）', en: 'Slab clipping thickness (Å)' } },
   { re: /^ensemble play/i, label: { zh: 'NMR 构象系综动画', en: 'NMR ensemble animation' } },
   { re: /^membrane \d+/i, label: { zh: '脂双层板语境', en: 'Bilayer slab context' } },
   { re: /^pore\b/i, label: { zh: 'HOLE 孔道剖面环带', en: 'HOLE pore rings' } },

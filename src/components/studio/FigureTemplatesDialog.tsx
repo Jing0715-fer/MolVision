@@ -18,8 +18,8 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Dna, Download, ExternalLink, Film,
-  Gauge, Gem, Ghost, GitCompareArrows, Grid3x3, Hexagon, ImagePlus, Layers, Link2, Loader2, Magnet, MapPin, Network, Orbit, Palette,
-  Pencil, Play, Ruler, Shapes, Sparkles, Target, Trash2, Upload, Waves, Wand2, Cylinder, Zap, type LucideIcon,
+  Gauge, Gem, Ghost, GitCompareArrows, Glasses, Grid3x3, Hexagon, ImagePlus, Layers, Link2, Loader2, Magnet, MapPin, Moon, Network, Orbit, Palette,
+  Pencil, Play, Ruler, Scissors, Shapes, Sparkles, Spline, Target, Trash2, Upload, Waves, Wand2, Cylinder, Zap, type LucideIcon,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -90,6 +90,14 @@ export const TPL_ICONS: Record<string, LucideIcon> = {
   'two-state-comparison': GitCompareArrows,
   'ghost-surface': Ghost,
   'catalytic-residues': Ruler,
+  // r87 五新模板（同类异风变体）：Moon（墨夜深底）/ Atom（球棍化学——与 metal-center
+  // 同为原子语义，卡片语境可区分）/ Glasses（红蓝眼镜——立体对图式的观看器具）/ Spline
+  // （胖瘦管——样条曲线语义，与 Gauge 的仪表盘语义区分）/ Scissors（切层剖开）
+  'ink-night-cover': Moon,
+  'ballstick-chemistry': Atom,
+  'stereo-anaglyph': Glasses,
+  'putty-flexibility': Spline,
+  'slab-cutaway': Scissors,
 }
 
 function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete, onEdit }: {

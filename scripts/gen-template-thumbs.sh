@@ -37,6 +37,9 @@ mkdir -p "$OUT"
 # orient + ensemble play 后稳定帧）；two-state 20s（load 5p21 + superpose + SASA 表面
 # worker + 幽灵透明）；ghost 14s（表面计算 + 透明 + 卡通叠加）；catalytic 12s（sticks +
 # measure 标注 + 缓冲取景）
+# r87 新增五模板（27-31）：ink-night 11s（深底 + 加宽卡通 + turn）；ballstick 10s（全
+# 结构球棍）；stereo 10s（红蓝立体后处理即成）；putty 10s（胖瘦管几何 + bfactor 归一）；
+# slab 15s（SASA 表面 worker + 切层封盖——与 sasa 13s 同基线加余量）
 SPECS=(
   rainbow-overview:10:4HHB:0
   chain-assembly:10:4HHB:1
@@ -65,6 +68,11 @@ SPECS=(
   two-state-comparison:20:4Q21:24
   ghost-surface:14:4HHB:25
   catalytic-residues:12:1AKI:26
+  ink-night-cover:11:4HHB:27
+  ballstick-chemistry:10:1CRN:28
+  stereo-anaglyph:10:1AKI:29
+  putty-flexibility:10:3INS:30
+  slab-cutaway:15:4HHB:31
 )
 
 # r75：可选增量模式——命令行传模板 id 列表则只生成指定项（缺省全量）
@@ -80,7 +88,10 @@ gen_one() {
   local id="$1" wait="$2" demo="$3" idx="$4"
   agent-browser open "$BASE" >/dev/null 2>&1 && sleep 4
   # 1) 欢迎页加载 demo 结构（缩略图取材 = 模板代表结构）
-  agent-browser eval "(() => { const i = document.querySelector('input[aria-label=\"PDB 编号\"], input[aria-label=\"PDB ID\"]'); if (!i) return 'NOINPUT'; const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; setter.call(i, '$demo'); i.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('form button[type=\"submit\"]').click(); return 'submitted' })()"
+  # 【r87 坑档修复】querySelector('form button[type=submit]') 会命中 DOM 在先的
+  # 分享链接粘贴卡表单（r86 新增——空值提交静默 no-op，结构永不上载 → 全量 SKIP）。
+  # 根治：从 PDB input 锚定 closest('form') 再取提交钮（r86 worklog 同款判例）
+  agent-browser eval "(() => { const i = document.querySelector('input[aria-label=\"PDB 编号\"], input[aria-label=\"PDB ID\"]'); if (!i) return 'NOINPUT'; const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; setter.call(i, '$demo'); i.dispatchEvent(new Event('input', { bubbles: true })); const btn = i.closest('form')?.querySelector('button[type=\"submit\"]'); if (!btn) return 'NOBTN'; btn.click(); return 'submitted' })()"
   sleep 7
   local loaded
   loaded=$(agent-browser eval "window.__molData ? window.__molData.size : 0" 2>/dev/null | tr -d '"')

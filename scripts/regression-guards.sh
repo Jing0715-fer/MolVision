@@ -286,7 +286,7 @@ check "遥测读数板（动态模板数）" "\{allTemplates.length\}"       "sr
 check "遥测读数板标签"           "图式模板.*Figure styles"        "src/components/studio/WelcomeScreen.tsx" 1
 check "加载舱面板"               "或本地文件.*or local file"      "src/components/studio/WelcomeScreen.tsx" 1
 check "示例卡 desc 副行上屏"     "t\(ex\.desc\)"                  "src/components/studio/WelcomeScreen.tsx" 1
-check "示例双列卡片栅格"         "mt-3.5 grid w-full grid-cols-2" "src/components/studio/WelcomeScreen.tsx" 1
+check "示例双列卡片栅格（r87 收紧）" "mt-3 grid w-full grid-cols-2 gap-2 sm:mt-3\.5" "src/components/studio/WelcomeScreen.tsx" 1
 
 # ---- r81：全面代码审查缺口修复——路由级错误边界 ----
 check "路由错误边界文件"         "RouteError"                     "src/app/error.tsx"                 2
@@ -360,13 +360,31 @@ check "粘贴卡输入钩子"           "data-qa=\"share-link-input\""   "src/co
 check "粘贴卡提交钩子"           "data-qa=\"share-load-apply\""   "src/components/studio/ShareLinkLoadCard.tsx" 1
 check "剪贴板降级引导"           "Ctrl\+V / ⌘V 粘贴"            "src/components/studio/ShareLinkLoadCard.tsx" 1
 check "欢迎页接线"               "ShareLinkLoadCard"              "src/components/studio/WelcomeScreen.tsx" 1
-check "会话区容器"               "mt-9 flex w-full flex-col gap-2\.5" "src/components/studio/WelcomeScreen.tsx" 1
+check "会话区容器"               "mt-6 flex w-full flex-col gap-2\.5 sm:mt-9" "src/components/studio/WelcomeScreen.tsx" 1
 check "面板子命令直填"           "fill: 'session share'"          "src/components/studio/CommandPalette.tsx" 1
 check "箭头光学居中"             "-translate-y-px"                "src/components/studio/SessionResumeCard.tsx" 1
 check "CommandDialog标题入栈"   "DialogContent"                 "src/components/ui/command.tsx" 3
 
+# ---- r87：窄屏密度重构（速览条 + 响应式收紧 + chips 横滑）+ 同类异风模板五连 + 分享卡窄输入 + 管线表单锚定修复 ----
+check "墨夜封面模板（明暗对）"    "id: 'ink-night-cover'"         "src/lib/molecular/figure-templates.ts" 1
+check "球棍化学模板（键连对）"    "id: 'ballstick-chemistry'"     "src/lib/molecular/figure-templates.ts" 1
+check "红蓝立体模板（印刷对）"    "id: 'stereo-anaglyph'"         "src/lib/molecular/figure-templates.ts" 1
+check "胖瘦管模板（管径对）"      "id: 'putty-flexibility'"       "src/lib/molecular/figure-templates.ts" 1
+check "切层剖面模板（剖切对）"    "id: 'slab-cutaway'"            "src/lib/molecular/figure-templates.ts" 1
+check "图鉴 r87 新词条"           "红蓝立体渲染（双通道色分移）"  "src/lib/molecular/figure-templates.ts" 1
+check "速览条选目"               "WELCOME_TEASER_IDS"            "src/components/studio/WelcomeScreen.tsx" 2
+check "速览条渲染"               "data-welcome-teaser-strip"     "src/components/studio/WelcomeScreen.tsx" 1
+check "速览条尾卡滚动锚"         "data-welcome-teaser-all"       "src/components/studio/WelcomeScreen.tsx" 1
+check "速览图组件（降级占位）"    "TeaserThumb"                   "src/components/studio/WelcomeScreen.tsx" 2
+check "hero 响应式收紧"           "px-5 py-7 sm:px-6 sm:py-9"     "src/components/studio/WelcomeScreen.tsx" 1
+check "画廊 chips 横滑"           "mol-toolbar-scroll ml-auto"   "src/components/studio/WelcomeScreen.tsx" 1
+check "分享卡窄屏图标化提交"      "w-9 shrink-0"                  "src/components/studio/ShareLinkLoadCard.tsx" 1
+check "管线五新缩略图"            "ink-night-cover:11:4HHB:27"   "scripts/gen-template-thumbs.sh" 1
+check "管线表单锚定修复"          "closest\('form'\)"            "scripts/gen-template-thumbs.sh" 1
+check "版本升级 1.5"              "v1\.5"                          "src/components/studio/WelcomeScreen.tsx" 2
+
 # ---- 汇总 ----
-TOTAL=252
+TOTAL=268
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

@@ -8,7 +8,7 @@
 // 副作用诚实：与「打开分享链接」同替换语义（欢迎页本就是空场景，无覆盖风险）；
 // 剪贴板读取按钮在权限拒绝时降级为聚焦输入框引导手动 Ctrl+V，不硬失败。
 import { useRef, useState, type FormEvent } from 'react'
-import { ClipboardPaste, Link2, Loader2 } from 'lucide-react'
+import { ArrowRight, ClipboardPaste, Link2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt } from '@/i18n'
@@ -90,10 +90,14 @@ export function ShareLinkLoadCard() {
         type="submit"
         disabled={!canSubmit}
         data-qa="share-load-apply"
-        className="flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 text-[12px] font-medium leading-none text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_1px_3px_oklch(0.5_0.12_160/0.3)] transition-[background-color,box-shadow,translate] duration-150 hover:bg-emerald-500 active:translate-y-px disabled:pointer-events-none disabled:opacity-40 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400 dark:shadow-none"
+        aria-label={t({ zh: '加载分享会话', en: 'Load the shared session' })}
+        className="flex h-8 w-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-0 text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_1px_3px_oklch(0.5_0.12_160/0.3)] transition-[background-color,box-shadow,translate] duration-150 hover:bg-emerald-500 active:translate-y-px disabled:pointer-events-none disabled:opacity-40 sm:w-auto sm:px-3.5 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400 dark:shadow-none"
       >
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
-        {t({ zh: '加载', en: 'Load' })}
+        {/* r87：<sm 图标化提交（释放约 36px 给输入框——r86 遗留的 139px 窄输入问题）；
+            sm+ 恢复文字钮（剪贴板钮 + 文字钮的完整语义在桌面并全） */}
+        {!loading && <ArrowRight className="h-3.5 w-3.5 sm:hidden" aria-hidden />}
+        <span className="hidden text-[12px] font-medium leading-none sm:inline">{t({ zh: '加载', en: 'Load' })}</span>
       </button>
     </form>
   )
