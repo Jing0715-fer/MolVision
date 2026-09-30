@@ -745,8 +745,15 @@ export function buildSurface(
     side: THREE.DoubleSide,
   })
   const mc = new MarchingCubes(resolution, material, false, true, 400000)
-  mc.scale.set(L, L, L)
-  mc.position.set(min[0], min[1], min[2])
+  // r92 根因修复（表面 2× 镜像偏移）：three 的 MarchingCubes 有两个坐标域——
+  // addBall 的球心域是 [0,1]（grid/size），而发射的几何顶点域是 [-1,1]
+  // （(z-halfsize)/halfsize = 2n-1）。原 scale=L/position=min 把 [-1,1] 映到
+  // [min-L, min+L]——原子 p 的表面落点成了 2p-min-L（2 倍放大+镜像+平移），
+  // 表面从未与原子对齐（膜板等锚定真实原子坐标的元素立刻暴露「没包住蛋白」；
+  // 表面拾取 hover 同病）。正确映射：scale=L/2 + position=min+L/2，
+  // 球 n=(p-min)/L → 几何 l=2n-1 → 世界 (2n-1)L/2+min+L/2 = p ✓ 逐原子对位
+  mc.scale.set(L / 2, L / 2, L / 2)
+  mc.position.set(min[0] + L / 2, min[1] + L / 2, min[2] + L / 2)
   mc.isolation = isolation
   const col = new THREE.Color()
   for (let k = 0; k < n; k++) {

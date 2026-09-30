@@ -3688,3 +3688,37 @@ Stage Summary:
   4. 【低】wire-skeleton 线宽：引擎层 Line2 双三角带渲染解锁可变线宽（r89 backlog——本轮深墨已把可读性从 4 分救到 8 分，线宽属锦上添花）
 
 （r91 段 cron 补记，2026-09-29 21:49）15min webDevReview 巡检任务 #423844 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 6 次实证（r85/r86/r87/r88/r90/r91），删除清理。注：本轮表达式坑——6 段式 cron 周位必须写 `?`（`0 */15 * * * ?` 过，`* *` 尾两个 400/500 连环拒）。devd 看门狗（已换血至 1.5GB 内存阈值版）继续作为巡检缺席期间的自愈防线。
+
+---
+Task ID: r92
+Agent: main
+Task: 用户双指令「①CommandPalette hydration mismatch（radix ID 不一致）②旋转仍朝一个方向转到一定程度就转不动了，必须修复」+ r92 前置指令（膜蛋白模板几何「蛋白没在膜中间」打磨 + 新模板）——全链闭环
+
+Work Log:
+- 【接管侦察】本地 HEAD=bb578ad(r85) 落后 origin/main 六提交（a60ce52 r91）+ 75 脏 PNG——**沙箱机器曾被整体回滚到 r85**：dev server 一直跑的是 r86 修复前代码。git reset --hard origin/main 恢复 r91 态 + devd 看门狗重新上岗
+- 【hydration 根因（指令①）】用户报错树的 DialogHeader 直接挂在 DialogProvider 下（r86 前 CommandDialog 的 sr-only 标题在 DialogContent 外、无条件渲染进 SSR）——与 bb578ad 版 command.tsx 逐字吻合 = 报错来自回滚期旧代码。当前 r91 代码：SSR HTML 零 radix ID（curl 实证）+ 全用户态播种（session/history/pins/custom-templates/views/scenes/movie）重载 console 零错误——r86 修复本就根治此面，回滚复位即愈，无需新代码
+- 【旋转根因（指令②）】双层：①用户跑的是 r85 旧码（orbitClamp 默认 true）；②**旧档毒化**——session.ts 恢复合并 `...data.settings` 让 r91 前存档的 orbitClamp:true 复活限位（E2E 实证：带 true 旧档恢复后引擎 [12°,168°] 重新武装）。修：restoreSessionData 强制 orbitClamp:false（showHBonds 同款先例）；复测旧档恢复→[0°,180°] 全开 + 相机摆 175° 稳驻 + ScenePanel 开关双向（ON→钳回 168°/OFF→179° 自由）
+- 【旋转 E2E 硬证据】setPointerCapture 合成指针坑（NotFoundError 杀 OrbitControls 监听）→ 猴子补丁 no-op 后真实拖拽三连：限位关 polar 90°→180° 翻过底极点；同力度对照限位开精确钳停 168°
+- 【膜模板几何（前置指令）五层根因链】用户「蛋白没在膜中间」（1FX8 GlpF，用户记成 1fxb）：
+  ①view front 正对 1FX8 沉积坐标 Z 向 TM 轴→看到膜板正面大矩形（非侧视）
+  ②orient 全原子 PCA vs membrane 聚合物 PCA 域不一致（1FX8 富水结构轴被带偏 45°）→ 修：两支膜模板 orient→orient polymer（与膜轴同源，E2E 屏幕投影 (0,-1,0) 纯竖直）
+  ③preset surface 的 ligand 球棍层画晶体学去污剂云（散布 ~180Å）→ 修：+ hide ballstick
+  ④**终极根因：buildSurface 的 MarchingCubes 域映射错误**——three 的 MC addBall 球心域 [0,1] 而几何顶点域 [-1,1]（l=2n-1），原 scale=L/position=min 使原子 p 的表面落点=2p-min-L（2 倍放大+镜像+平移，全 App 表面从未与原子对齐、表面拾取同病）→ 修：scale=L/2 + position=min+L/2（逐原子对位，surfScale 35.8=L/2 实证）
+  ⑤膜板 (u,v) 质心定心 vs 包围盒尺寸不匹配（1FX8 外挑 ~17Å 板缘不对称）→ 修：updateMembrane 盒中定心（uc/vc）
+  终审 VLM 五项全过（水平双板/跨膜嵌入/竖直居中/对称板缘/零几何错误）
+- 【取景一致性】collectFitPoints 尊重 hideWater/hideHydrogens（r55 隐藏链同哲学）——4HHB hide waters 后 zoom 不再按含水包围球取景（slab-cutaway 构图过宽主因）
+- 【slab-cutaway 重造】原「表面+slab」几何不可能实心（metaball 薄壳切层=环带+透明内腔，封盖无背面可填）→ spacefill 实体切层 + 尾 zoom 收景
+- 【缩略图管线三坑】①尾部 tighten 全量跑→git checkout 还原无关 PNG（判例沿用）；②**截图 CDP 超时被 >/dev/null 2>&1 静默吞掉→PIL 反复裁剪陈旧 raw 伪造「新图」**（04:17/04:29 两轮「新图」全是 03:01 旧环壳再裁剪实锤）→ 修：rm 旧 raw + 三次重试 + 三败 SKIP；③无头 Chrome SwiftShader 软光栅下重渲染（spacefill 2.9M 双面三角+裁剪）每帧数秒→per-template 视口档（slab-cutaway 降 1280×720 + 30s 等待；真 GPU 用户端无此问题）
+- 【缩略图重产 7+1 支】膜对（membrane-embed VLM 4/4 + pore-analysis 4/4）+ 表面系 5 支（ghost 紧致包裹/sasa/elec/two-state 过审；slab-cutaway 旧环壳→实心剖面场+cap 签名，内容/构图过、剖面戏剧性受软光栅环境所限）；ghost-surface 旧图「宽松壳」病灶随域映射修复自愈
+- 【门禁】lint 0 · tsc src 0（examples 5 错历史存量基线一致）· guards 296→305（+9：存档恢复解限/膜确定性侧视对/隐藏配体云/盒中定心/MC 域映射根治/取景尊重隐藏水/剖面重造/管线防陈旧重试/每模板视口档）· smoke 4/4 · dev.log 零 error · 白名单 37/37（新命令 hide ballstick/orient polymer/hide waters/zoom 全在册）
+- 【E2E 清场】localStorage clear + 视口还原 1440×900 + 欢迎页复验（h1 正常 + console 零错误）
+
+Stage Summary:
+- 交付：旋转毒化根治（存档恢复强制解限，旧档→恢复→[0°,180°] 全链实证）+ hydration 根因闭环（r85 回滚旧码所致，r91 代码本就干净）+ 膜模板几何五层修复（VLM 五项全过）+ **buildSurface MC 域映射根治（全 App 表面对齐/拾取级修复）** + 取景可见性一致性 + slab-cutaway 重造 + 缩略图管线防陈旧/重试/视口档三重加固
+- 用户指令全闭环：「旋转必须修复」（双根因+三重实证）·「hydration mismatch」（根因=机器回滚跑旧码，复位即愈+全态压测零错误）·前置「蛋白没在膜中间」（五层根因链+VLM 终审优秀）
+- 坑（新入档）：①沙箱机器可整体回滚到旧提交——开工必须 git fetch + HEAD 核对 + reset（本轮 75 脏文件实锤）②agent-browser 截图 CDP 超时会静默失败——管线截图必须删旧文件+重试+失败可见（陈旧 raw 反复伪装新图两周级潜伏）③three.js MarchingCubes 双坐标域（ball [0,1] vs 几何 [-1,1]）——scale/position 必须按 L/2 映射 ④`$` 在 rg 正则是锚点——守卫模式含 shell 变量时用 `.` 通配 ⑤控制台条会压缩画布且 overlay 变体并存——读引擎状态前先确认画布 rect 非 NaN ⑥console 条开合改变 canvas 高度（311 vs 614）——性能/布局诊断时固定一个形态
+- 下一轮建议（按优先级）：
+  1. 【中】r92 前置指令③未清偿：新增模板（表面对齐修复后 surface 系视觉全面升级，扩容正当时——白名单/缩略图管线/guards 已就绪）
+  2. 【中】表面拾取 E2E（域映射修复后 surface pick 语义待实证——hover/点击口袋残基）
+  3. 【低】slab-cutaway 缩略图「剖面戏剧性」：cap_color 对比度/更厚窗口（slab 20）在真 GPU 环境复验
+  4. 【低】SwiftShader 管线性能：autoPerf 降档在软光栅环境的振荡行为观察

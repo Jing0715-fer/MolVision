@@ -75,7 +75,7 @@ SPECS=(
   ballstick-chemistry:10:1CRN:28
   stereo-anaglyph:10:1AKI:29
   putty-flexibility:10:3INS:30
-  slab-cutaway:15:4HHB:31
+  slab-cutaway:30:4HHB:31:1280x720
   wire-skeleton:10:1CRN:32
   grayscale-print:10:4HHB:33
   electrostatic-surface:13:4HHB:34
@@ -97,8 +97,18 @@ fi
 # 默认 944×471 画布下 ~350px 内容放大 1.7× 后发虚）。视口只影响本 session。
 agent-browser set viewport 1920 960 >/dev/null 2>&1
 
+# r92：每模板可选视口（SPECS 第 5 字段 vp，如 slab-cutaway:20:4HHB:31:1280x720）——
+# 无头 Chrome 走 SwiftShader 软件光栅化，spacefill 2.9M 双面三角 + slab 裁剪在
+# 1920×960（1.27M px）下主线程饱和（r92 实测：slab 14 后 eval >120s 无响应、
+# 截图捕获残帧=「空心环」伪影）；1280×720 实测响应正常（真 GPU 用户不受影响）。
+# 默认仍 1920×960（r89 高清收紧收益），重渲染模板按需降档
 gen_one() {
-  local id="$1" wait="$2" demo="$3" idx="$4"
+  local id="$1" wait="$2" demo="$3" idx="$4" vp="${5:-}"
+  if [ -n "$vp" ]; then
+    agent-browser set viewport "${vp%x*}" "${vp#*x}" >/dev/null 2>&1
+  else
+    agent-browser set viewport 1920 960 >/dev/null 2>&1
+  fi
   agent-browser open "$BASE" >/dev/null 2>&1 && sleep 4
   # 1) 欢迎页加载 demo 结构（缩略图取材 = 模板代表结构）
   # 【r87 坑档修复】querySelector('form button[type=submit]') 会命中 DOM 在先的
@@ -130,7 +140,25 @@ gen_one() {
   agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) window.__molEngine.settings.showAxes = false; return 'hidden:' + n })()"
   sleep 0.5
   agent-browser eval "(() => { const c = document.querySelector('canvas'); const r = c.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }) })()" > /tmp/r72-canvas.json 2>/dev/null
-  agent-browser screenshot "/tmp/r72-$id.raw.png" >/dev/null 2>&1
+  # r92 截图重试 + 陈旧防护：无头 Chrome SwiftShader 下重渲染模板（spacefill/slab+cap）
+  # 每帧可达数秒——CDP Page.captureScreenshot 超时被旧版 >/dev/null 2>&1 静默吞掉，
+  # PIL 便反复裁剪上一轮的陈旧 raw（r92 实锤：slab-cutaway 04:17/04:29 两轮「新图」
+  # 全是 03:01 旧环壳的再裁剪）。根治：先删旧 raw，失败可见 + 三次重试（间隔 5s
+  # 让渲染追帧），三次全败则 SKIP 该模板而非用残帧伪造
+  rm -f "/tmp/r72-$id.raw.png"
+  local shot_ok=0
+  for attempt in 1 2 3; do
+    if agent-browser screenshot "/tmp/r72-$id.raw.png" >/dev/null 2>&1 && [ -s "/tmp/r72-$id.raw.png" ]; then
+      shot_ok=1
+      break
+    fi
+    echo "  RETRY shot $id (attempt $attempt failed)"
+    sleep 5
+  done
+  if [ "$shot_ok" = "0" ]; then
+    echo "SKIP $id (screenshot failed 3x — render saturation)"
+    return 1
+  fi
   # 4) PIL 裁剪 canvas 区 → 640×320 LANCZOS
   python3 - "$id" <<'PY'
 import json, sys
@@ -151,8 +179,8 @@ PY
 }
 
 for spec in "${SPECS[@]}"; do
-  IFS=':' read -r id wait demo idx <<< "$spec"
-  gen_one "$id" "$wait" "$demo" "$idx"
+  IFS=':' read -r id wait demo idx vp <<< "$spec"
+  gen_one "$id" "$wait" "$demo" "$idx" "$vp"
 done
 
 # r89：内容感知收紧（bbox 检测 + 裁剪 + 16:10 重排）——管线产出后自动跑一遍，

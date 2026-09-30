@@ -409,7 +409,7 @@ check "图鉴晶胞词条"              "晶胞盒线框（a红 b绿 c蓝）"   
 check "图标 r89 五新键"           "'wire-skeleton': Waypoints"    "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "图标水合键"                "'hydration-shell': Droplets"   "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "管线 r89 五新规格"         "wire-skeleton:10:1CRN:32"      "scripts/gen-template-thumbs.sh" 1
-check "管线高清视口"              "set viewport 1920 960"         "scripts/gen-template-thumbs.sh" 1
+check "管线高清视口"              "set viewport 1920 960"         "scripts/gen-template-thumbs.sh" 2
 check "缩略图内容收紧脚本"        "content_bbox"                  "scripts/tighten-thumbs.py" 2
 
 # ---- r90：窄屏 hero 全宽化（解除 <sm 368px 盒宽 + px-5→px-3 六处同步）+ 过滤网格返回入口（r89 建议①） ----
@@ -430,8 +430,19 @@ check "线描深墨对比度"            "color #3f454d"                 "src/li
 check "ss 基元取景收紧"           "turn y -20', 'zoom 1.5"        "src/lib/molecular/figure-templates.ts" 1
 check "跨域回环白名单"            "127.0.0.1"                     "next.config.ts" 1
 
+# ---- r92：旋转毒化根治（存档恢复强制解限）+ 膜模板几何五层修复 + 表面引擎域映射根治 + 取景一致性 + 剖面模板重造 + 管线防陈旧 ----
+check "存档恢复解除俯仰限位"      "orbitClamp: false"             "src/lib/molecular/session.ts" 1
+check "膜模板确定性侧视对"        "'orient polymer', 'turn z 90'" "src/lib/molecular/figure-templates.ts" 2
+check "膜模板隐藏配体云"          "'preset surface', 'hide ballstick'" "src/lib/molecular/figure-templates.ts" 1
+check "膜板盒中定心（对称板缘）"  "const uc = \(uLo \+ uHi\) / 2" "src/lib/molecular/engine.ts" 1
+check "表面 MC 域映射根治（2×镜像偏移）" "mc.scale.set\(L / 2, L / 2, L / 2\)" "src/lib/molecular/representations.ts" 1
+check "取景尊重隐藏水"            "skipWater"                     "src/lib/molecular/engine.ts" 3
+check "剖面模板空间填充重造"      "'preset spacefill', 'hide waters'" "src/lib/molecular/figure-templates.ts" 1
+check "管线截图防陈旧重试"        "rm -f ..tmp/r72-.id.raw.png"   "scripts/gen-template-thumbs.sh" 1
+check "管线每模板视口档"          "slab-cutaway:30:4HHB:31:1280x720" "scripts/gen-template-thumbs.sh" 1
+
 # ---- 汇总 ----
-TOTAL=296
+TOTAL=305
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

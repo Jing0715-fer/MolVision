@@ -301,7 +301,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Science', year: 1998, title: 'The Structure of the Potassium Channel: Molecular Basis of K+ Conduction and Selectivity', doi: '10.1126/science.280.5360.69' },
     demo: '1BL8',
     // 差异点（分析模板）：membrane 34 脂双层 + pore 计算环带（红/绿/蓝）+ 主轴对齐竖排视角
-    commands: ['preset cartoon', 'util cbc', 'bg white', 'membrane 34', 'pore', 'orient', 'turn z 90', 'outline on 1.1 1.0'],
+    // r92：orient → orient polymer——膜板/孔道轴的 PCA 只算聚合物原子，裸 orient 连
+    // 晶体水/配体一起算（1FX8 类富水结构轴被带偏 ~45°，膜板斜跨屏幕）；同源原子集
+    // 才能保证 turn z 90 后膜法线纯竖直（环带纯竖排）
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'membrane 34', 'pore', 'orient polymer', 'turn z 90', 'outline on 1.1 1.0'],
     accent: 'slate',
   },
   {
@@ -318,7 +321,14 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // r91 打磨：原 color sasa（埋藏蓝紫→暴露橙红渐变）的暴露区与橙膜同色系
     // 融合——膜边界视觉模糊、被误读为「膜板错位」；改钢蓝单色（冷暖分离，
     // 橙膜边界一图清晰；SASA 梯度语义由 electrostatic/hydration 模板分工）
-    commands: ['preset surface', 'color #94a9c0', 'bg #f5f7fa', 'membrane 32', 'view front'],
+    // r92 几何修复：view front → orient polymer + turn z 90。1FX8 沉积坐标 TM 轴
+    // 近 Z 向，front 视角正对膜法线——看到的是膜板正面大矩形（「蛋白没在膜中间」
+    // 的视觉根因）；orient polymer 与 membrane 命令同源（仅聚合物 PCA）+ turn z 90
+    // 竖排法线 → 膜板纯水平双板、蛋白跨膜居中（E2E 实测屏幕投影 (0,-1,0)）。
+    // r92 构图修复：+ hide ballstick——preset surface 的 ligand 球棍层把晶体学
+    // 去污剂/甘油云（散布 ~180Å）也画进来，蓝色团块远大于聚合物本体、膜板
+    // 显得「没包住蛋白」且视口裁切；语境图要的是蛋白+膜，隐藏配体层
+    commands: ['preset surface', 'hide ballstick', 'color #94a9c0', 'bg #f5f7fa', 'membrane 32', 'orient polymer', 'turn z 90'],
     accent: 'orange',
   },
 
@@ -713,17 +723,22 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
   {
     id: 'slab-cutaway',
     name: { zh: '切层剖面封盖', en: 'Slab cutaway' },
-    tagline: { zh: '表面切层 14Å + 实心封盖剖面：内部空腔与核心分区一图剖开', en: '14Å slabbed surface with solid caps: internal cavities and cores cut wide open' },
+    tagline: { zh: '空间填充切层 14Å + 实心封盖剖面：内部空腔与核心分区一图剖开', en: '14Å slabbed spacefill with solid caps: internal cavities and cores cut wide open' },
     purpose: { zh: '内部空腔 · 核心分区 · 剖面图式', en: 'Internal cavities · core layout · cutaway figures' },
     tags: [{ zh: '剖面', en: 'Cutaway' }, { zh: '切层', en: 'Slab' }],
     category: 'surface',
     figure: { ref: 'Fig. 2', shows: { zh: '剖面图：切层揭示内部空腔与埋藏核心', en: 'Cutaway plates: slabbed views revealing cavities and buried cores' } },
     citation: { journal: 'Annu. Rev. Biophys. Bioeng.', year: 1977, title: 'Areas, volumes, packing, and protein structure', doi: '10.1146/annurev.bb.06.060177.001055' },
     demo: '4HHB',
-    // 差异点：表面图式的「第二风格」——sasa-surface 看外表 patch，这支 slab 14 切层
-    // + cap on 实心封盖剖开内里（Richards 1977 areas/volumes/packing 正是剖面所
-    // 揭示的量）；正面视角 + 冷雾底与 sasa-surface 同族；封盖色可用 set cap_color 改
-    commands: ['preset surface', 'color sasa', 'bg #eef1f5', 'slab 14', 'slab cap on', 'view front'],
+    // 差异点：剖面图式的 PyMOL interior 经典形态——r92 重造：原「表面 + slab」组合
+    // 几何上不可能实心（metaball 表面是薄壳，slab 窗口切壳只见环带+透明内腔，
+    // 窗口外的远侧壳被裁掉、封盖无背面可填——VLM 三审「空心破壳」实锤）；
+    // 空间填充球是闭合实体，切层即得原子截面 + cap 实心封盖（1280 实测实心色场✓）。
+    // 缩略图管线侧配套：无头 Chrome SwiftShader 软光栅下重渲染每帧数秒——截图
+    // CDP 超时曾静默吞掉并用除旧 raw 反复伪造「空心环」（r92 实锤）；管线已加
+    // 截图三次重试+陈旧防护，本模板降 1280 视口 + 30s 等待让渲染落定（真 GPU 用户
+    // 端无此问题）。Richards 1977 areas/volumes/packing 正是剖面所揭示的量
+    commands: ['preset spacefill', 'hide waters', 'color sasa', 'bg #eef1f5', 'slab 14', 'slab cap on', 'view front', 'zoom'],
     accent: 'teal',
   },
   // ── r89 扩容（用户指令：继续添加新模板——多风格再五连：线描/灰度占 basic 未覆盖

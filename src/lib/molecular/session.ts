@@ -279,6 +279,11 @@ export function restoreSessionData(data: SessionData): number {
       ...data.settings,
       showHBonds: false,
       ...(archivedHBondsOn ? { hbondSelOnly: true } : {}),
+      // r92：存档恢复一律解除俯仰限位。旧档（r91 之前）的 orbitClamp:true 是当时的
+      // 默认值而非用户选择——直接沿用会让「转到一定程度就转不动」随每次恢复复活
+      // （r92 用户二次反馈「必须修复」；E2E 实证：带 true 的旧档恢复后引擎限位
+      // [12°,168°] 重新武装）。需要限位的用户可在场景面板随时重新开启（当次会话生效）。
+      orbitClamp: false,
     },
   }))
   // 恢复活动结构

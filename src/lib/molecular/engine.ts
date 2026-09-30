@@ -2177,10 +2177,19 @@ export class MolEngine {
     const pad = 8
     const w = (uHi - uLo) + pad * 2
     const h = (vHi - vLo) + pad * 2
+    // r92：板心 (u,v) 取包围盒中点而非质心——板尺寸按包围盒+pad 定，质心偏一侧时
+    // 板缘不对称（一侧贴边、另一侧大幅外挑，E2E 实测 1FX8 外挑 ~17Å）；盒中定心
+    // 让蛋白两侧板缘对称。沿 n 仍取 tc=盒中（跨膜区居中嵌入的双板语义）
     const tc = (tLo + tHi) / 2
+    const uc = (uLo + uHi) / 2
+    const vc = (vLo + vHi) / 2
     const T = state.settings.membraneThickness
     const HEAD = 4
-    const center = new THREE.Vector3(origin[0] + n.x * tc, origin[1] + n.y * tc, origin[2] + n.z * tc)
+    const center = new THREE.Vector3(
+      origin[0] + n.x * tc + u.x * uc + v.x * vc,
+      origin[1] + n.y * tc + u.y * uc + v.y * vc,
+      origin[2] + n.z * tc + u.z * uc + v.z * vc,
+    )
     const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n)
     const mk = (thickness: number, offset: number, color: string, opacity: number, order: number, edge?: string) => {
       const geo = new THREE.BoxGeometry(w, h, thickness)
@@ -4234,6 +4243,11 @@ export class MolEngine {
   private collectFitPoints(refs?: { structureId: string; indices?: number[] }[]): number[][] {
     const state = useMolStore.getState()
     const pts: number[][] = []
+    // r92：取景尊重 hideWater/hideHydrogens——「fit 可见内容」与渲染所见一致
+    // （r55 隐藏链组同哲学）。实例：4HHB hide waters 后 zoom 仍按含水包围球取景
+    // → 剖面构图过宽（slab-cutaway 缩略图主因之一）；refs 路径按显式索引不受影响
+    const skipWater = !refs && !!state.settings?.hideWater
+    const skipH = !refs && !!state.settings?.hideHydrogens
     if (refs && refs.length) {
       for (const ref of refs) {
         const data = dataRegistry.get(ref.structureId)
@@ -4258,10 +4272,16 @@ export class MolEngine {
           }
           for (let i = 0; i < data.atoms.count; i++) {
             if (hiddenRes.has(data.atomResidue[i])) continue
+            if (skipWater && data.residues[data.atomResidue[i]]?.water) continue
+            if (skipH && (data.atoms.elements[i] === 'H' || data.atoms.elements[i] === 'D')) continue
             pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
           }
         } else {
-          for (let i = 0; i < data.atoms.count; i++) pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+          for (let i = 0; i < data.atoms.count; i++) {
+            if (skipWater && data.residues[data.atomResidue[i]]?.water) continue
+            if (skipH && (data.atoms.elements[i] === 'H' || data.atoms.elements[i] === 'D')) continue
+            pts.push([data.atoms.positions[i * 3], data.atoms.positions[i * 3 + 1], data.atoms.positions[i * 3 + 2]])
+          }
         }
       }
     }
