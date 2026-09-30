@@ -3809,3 +3809,5 @@ Stage Summary:
   2. 【中】表面拾取 hover 性能第二层：BVH（three-mesh-bvh）或 surface pick 降采样代理——40 万三角无 BVH 求交在非拖拽 hover 仍是毫秒级/次
   3. 【低】膜板入盒后的描边线框仍可见（LineSegments 不受 side 剔除）—— Wireframe 充当「笼」提供空间语境，暂判为特性；若用户报告「入膜后有线框漂浮」再评估淡出
   4. 【低】cron 执行配额（第 7 次 Disabled）——观察配额窗口期
+
+（r95 段 cron 补记，2026-09-30 23:02）15min webDevReview 巡检任务 #426418 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 8 次实证（r85/r86/r87/r88/r90/r91/r94 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
