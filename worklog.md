@@ -3784,3 +3784,28 @@ Stage Summary:
   2. 【中】多结构叠加时 orient polymer 全可见结构 PCA 会随残留结构偏轴（本轮实测两轮 up 不同）——模板应用前隐藏非演示结构或 orient 限 active 结构值得评估
   3. 【低】表面拾取 E2E（r92 遗留②）
   4. 【低】cron 执行配额：#425777 调度/载荷就位但 exec Disabled（第 7 次）——观察配额窗口期，恢复即自动值守
+
+---
+Task ID: r95
+Agent: main
+Task: 用户主诉「有膜的结构转起来还是有些奇怪，有时会卡一下，有时感觉膜有变形？不知道是不是错觉」——旋转手感双主诉根因定位与根治（拖拽期 hover 拾取停顿 + 膜板近平面切片/双面混合伪影）
+
+Work Log:
+- 【根因①「卡一下」——拖拽期 hover 拾取】agent-browser 真实指针插桩（包 pickAt 计数 + tick 帧间隔）：membrane-embed（1FX8 表面 rep，全网格 40 万三角、无 BVH 暴力求交）单次水平拖拽期间 pickAt 触发 16 次（40ms 节流满频）——OrbitControls 拖拽中 pointermove 持续派发，onPointerMove 无拖拽态检查，旋转全程背着重网格 Raycast 跑 = 周期性主线程停顿。SwiftShader 环境实测单次 2.4ms，真机大表面单次数毫秒级 × 25 次/秒
+- 【根因②「膜变形」——近平面切片（非错觉）】VLM 实证：dist=55（膜盒包围球半径 ~64 内）旋转中橙板出现「sharp clean diagonal edge 切片」（近平面 0.5 切入薄盒硬块）；次要源：DoubleSide 透明薄盒同 draw call 前后面无序混合，旋转中斑块状透明度抖晃。fitView/orient 只取原子点不含膜板——默认机位 dist=124 已在膜盒包围球边缘，用户一缩放即入切片区
+- 【修复A 拖拽期 hover 抑制】pointerDragging 窗口标记（pointerdown 开窗 / pointerup+pointerleave+pointercancel 关窗，dispose 同步摘监听）：窗口内 onPointerMove 直接 return（PyMOL/ChimeraX 同行为），hoverShown 转换语义防重复派发；E2E 复测同力度拖拽 pickAt 16→0（唯一 1 次为按下前合法 hover）
+- 【修复B 膜板 FrontSide】DoubleSide→FrontSide：盒外恒见外表面（单层稳定混合，同 renderOrder 内物理排序正确）；相机入盒整体背面剔除——薄板干净消隐而非被近平面切出硬块。盒外视角渲染结果与旧版一致（模板缩略图无需重产）
+- 【修复C 取景并入膜盒】updateMembrane 落档 membraneBox（世界 AABB，膜关/无数据/ dispose 三路置 null）；fitView 全景分支（refs 特写不含膜——口袋视角不应因膜后退）+ orient 半径计算并入膜盒——membrane-embed 默认 dist 124→172.2（机位稳居膜盒域外，板完整入画）
+- 【修复D 拖拽期冻结视口可见性】updateViewportVisibility 在 pointerDragging 时 early-return（每 150ms 全残基投影 + 序列条重渲——旋转中周期性微卡第二源）；松手后签名仍异、下一帧立即追上
+- 【E2E 全链】①膜夹心深处（dist=20）三轮大角度连旋 VLM 终审：零平面切片/零横切线/零中空剖面（「smooth, continuous planes」）②正典模板视角 VLM 四项全过（双板水平平行✓蛋白跨膜居中✓板缘对称✓无渲染缺陷）③r94 膜复位回归：切 wire-skeleton 模板后 children 5→0 + membraneBox null + showMembrane false ④混合方向拖拽相机全有限、console 全会话零错误（agent-browser errors 空）⑤纯 hover（无拖拽）拾取正常（pickCalls=2）
+- 【门禁】lint 0 · tsc src 0（examples 5 错历史基线）· guards 322→334（+12：拖拽窗口字段/抑制分支/转换派发/开窗/取消监听×3/膜AABB字段/FrontSide/AABB落档/膜关清null×3/全景并入/orient并入/视口冻结；坑：ERE 花括号 `{` 必须转义、开窗计数核实际）· smoke 4/4 · dev.log 零 error · E2E 清场（localStorage clear + 视口 1440×900 + 欢迎页 h1 复验）
+
+Stage Summary:
+- 交付：「卡一下」根因（拖拽期 40 万三角全网格 Raycast 满频轰击）+「膜变形」双根因（近平面切片 VLM 实证非错觉 + 双面透明无序混合）四件套根治：拖拽期 hover 抑制 / 膜板 FrontSide / fitView+orient 取景并入膜盒（默认机位出膜盒域，dist 124→172）/ 拖拽期视口可见性冻结
+- 用户指令闭环：「有时会卡一下」（pickAt 16→0 实证）·「感觉膜有变形」（夹心深处连旋零切片 + 正典视角 VLM 四项全过——变形确为真伪影已根除，非错觉）
+- 坑（新入档）：①E2E 复核「模板正典视角」必须重载模板重跑命令序列——用 fitView 沿任意拖拽后方向取景会得到俯视向等非正典机位，VLM 结论误导（本轮「单板蛋白在上」误报教训）②「屏幕边缘截断」与「屏中平面切片」在 VLM 语义里易混——提问必须显式区分（近距特写板越屏缘是正常几何）③守卫正则 `{` 是 ERE 元字符（r93 判例 +1）④模板卡片点击 vs Demo 子按钮：卡体按钮不可靠，Demo 子按钮才是 demoThenApply 入口
+- 下一轮建议（按优先级）：
+  1. 【中】r92 遗留③持续未清偿：新增模板（管线就绪，MC 域映射修复后表面系视觉全面升级）
+  2. 【中】表面拾取 hover 性能第二层：BVH（three-mesh-bvh）或 surface pick 降采样代理——40 万三角无 BVH 求交在非拖拽 hover 仍是毫秒级/次
+  3. 【低】膜板入盒后的描边线框仍可见（LineSegments 不受 side 剔除）—— Wireframe 充当「笼」提供空间语境，暂判为特性；若用户报告「入膜后有线框漂浮」再评估淡出
+  4. 【低】cron 执行配额（第 7 次 Disabled）——观察配额窗口期

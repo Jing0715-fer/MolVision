@@ -462,8 +462,23 @@ check "膜复位load汇点"            "showMembrane: false"          "src/lib/m
 check "书签栏指针穿透容器"        "pointer-events-none absolute right-3 top-1/2" "src/components/studio/ViewBar.tsx" 1
 check "书签可交互件恢复指针"      "pointer-events-auto"          "src/components/studio/ViewBar.tsx" 3
 
+
+# ---- r95：膜结构旋转手感双修（拖拽期 hover 拾取抑制 + 膜板 FrontSide/取景并入膜盒）----
+check "拖拽窗口标记字段"          "private pointerDragging"      "src/lib/molecular/engine.ts" 1
+check "拖拽期hover抑制分支"      "if \(this.pointerDragging\) \{" "src/lib/molecular/engine.ts" 1
+check "hover转换才派发null"      "else if \(this.hoverShown\)" "src/lib/molecular/engine.ts" 1
+check "按下开窗拖拽窗口"          "this.pointerDragging = true"  "src/lib/molecular/engine.ts" 1
+check "指针取消收尾监听"          "onPointerCancelDrag"          "src/lib/molecular/engine.ts" 3
+check "膜板AABB字段"             "private membraneBox"           "src/lib/molecular/engine.ts" 1
+check "膜板FrontSide材质"        "side: THREE.FrontSide"         "src/lib/molecular/engine.ts" 1
+check "膜AABB落档更新"            "setFromObject\(this.membraneGroup\)" "src/lib/molecular/engine.ts" 1
+check "膜关清AABB"                "this.membraneBox = null"       "src/lib/molecular/engine.ts" 3
+check "全景取景并入膜盒"          "if \(!refs \|\| !refs.length\)" "src/lib/molecular/engine.ts" 1
+check "orient取景并入膜盒"        "const mb = this.membraneBox"   "src/lib/molecular/engine.ts" 2
+check "拖拽期冻结视口可见性"      "if \(this.pointerDragging\) return" "src/lib/molecular/engine.ts" 1
+
 # ---- 汇总 ----
-TOTAL=322
+TOTAL=334
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

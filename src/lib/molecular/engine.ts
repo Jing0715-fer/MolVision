@@ -263,6 +263,13 @@ export class MolEngine {
   private raf = 0
   private disposed = false
   private lastHoverTime = 0
+  /** r95：拖拽交互窗口标记（OrbitControls 旋转/平移/推拉期间）——期间抑制 hover 拾取：
+   *  表面 rep 全网格 Raycast（1FX8 表面 40 万三角，无 BVH 暴力求交）单次毫秒级，
+   *  拖拽路径每 40ms 一次 = 周期性主线程停顿 =「有膜的结构转起来卡一下」根因（E2E 实测
+   *  单次水平拖拽 pickAt 触发 16 次）。PyMOL/ChimeraX 同行为：拖拽中无 hover。 */
+  private pointerDragging = false
+  /** hover 提示在屏标记（状态转换才派发 null——拖拽开始清一次，不逐 move 重复清） */
+  private hoverShown = false
   private downPos = { x: 0, y: 0, t: 0, button: -1 }
   /** 橡皮带框选进行中（Ctrl/Cmd+拖拽） */
   private boxSelecting: { x0: number; y0: number; x1: number; y1: number; additive: boolean; subtractive: boolean; active: boolean } | null = null
@@ -282,6 +289,9 @@ export class MolEngine {
   private poreGroup = new THREE.Group()
   // 脂双层板（membrane 命令：橙头基双板 + 灰疏水核心；沿活动结构主轴定向，sync 键控重建）
   private membraneGroup = new THREE.Group()
+  /** r95：膜板世界 AABB（供全景取景并入 fitView/orient——膜在屏时默认机位置于膜盒域外，
+ *  旋转中近平面不再切入薄板产生「膜变形」切片；膜关/无活动结构时置 null） */
+  private membraneBox: THREE.Box3 | null = null
   private membraneKey = ''
   // 氢键检测 Web Worker（大结构异步计算）
   private hbondWorker: Worker | null = null
@@ -503,6 +513,7 @@ export class MolEngine {
     this.canvas.addEventListener('pointermove', this.onPointerMove)
     this.canvas.addEventListener('pointerdown', this.onPointerDown)
     this.canvas.addEventListener('pointerup', this.onPointerUp)
+    this.canvas.addEventListener('pointercancel', this.onPointerCancelDrag)
     this.canvas.addEventListener('wheel', this.onCancelCamAnim, { passive: true })
     this.canvas.addEventListener('contextmenu', this.onContextMenu)
     this.canvas.addEventListener('dblclick', this.onDoubleClick)
@@ -902,6 +913,9 @@ export class MolEngine {
       this.lastVisSig = ''
       return
     }
+    // r95：拖拽交互中冻结视口可见性重算（每 150ms 全残基投影 + 序列条重渲——旋转中的
+    // 周期性微卡源之一；松手后签名仍异，下一帧立即追上）
+    if (this.pointerDragging) return
     const state = useMolStore.getState()
     const id = state.activeId
     const cam = this.activeCamera
@@ -1365,10 +1379,20 @@ export class MolEngine {
     }
     this.ndcFromEvent(e)
     const now = performance.now()
+    // r95：拖拽交互中抑制 hover 拾取（旋转/平移/推拉全程）——重表面全网格求交的
+    // 周期性停顿源；松手（pointerup/leave/cancel）即恢复。拖拽开始时把残留提示清一次
+    if (this.pointerDragging) {
+      if (this.hoverShown) {
+        this.hoverShown = false
+        this.callbacks.onHover?.(null)
+      }
+      return
+    }
     if (now - this.lastHoverTime < 40) return
     this.lastHoverTime = now
     const hit = this.pickAt(this.mouse)
     if (hit) {
+      this.hoverShown = true
       this.callbacks.onHover?.({
         structureId: hit.structureId,
         atomIdx: hit.atomIdx,
@@ -1376,13 +1400,21 @@ export class MolEngine {
         x: this.mouseClient.x,
         y: this.mouseClient.y,
       })
-    } else {
+    } else if (this.hoverShown) {
+      this.hoverShown = false
       this.callbacks.onHover?.(null)
     }
   }
 
   private onPointerLeave = () => {
+    this.pointerDragging = false
+    this.hoverShown = false
     this.callbacks.onHover?.(null)
+  }
+
+  private onPointerCancelDrag = () => {
+    // 指针取消（触摸干扰/窗口切换）与离场同语义：结束拖拽窗口
+    this.pointerDragging = false
   }
 
   private onPointerDown = (e: PointerEvent) => {
@@ -1398,6 +1430,8 @@ export class MolEngine {
     if (this.camAnim || this.camPath) this.camAnimCancelCount++
     this.camAnim = null
     this.camPath = null
+    // r95：拖拽交互窗口开启（旋转/平移/推拉——hover 拾取抑制至松手）
+    this.pointerDragging = true
     // rock 摇摆中用户拖动：以拖动后视角为新基准
     if (this.rockBase) this.rockBase = null
     // r93：极点带宽内开始旋转拖拽 → 微推解除奇点死区（普通左键旋转拖拽路径）
@@ -1417,6 +1451,8 @@ export class MolEngine {
   }
 
   private onPointerUp = (e: PointerEvent) => {
+    // r95：拖拽交互窗口结束（hover 拾取恢复）
+    this.pointerDragging = false
     // 橡皮带框选收尾：松手提交选择并清除覆盖层
     if (this.boxSelecting?.active) {
       const bs = this.boxSelecting
@@ -2183,9 +2219,9 @@ export class MolEngine {
     if (key === this.membraneKey) return
     this.membraneKey = key
     this.clearGroupChildren(this.membraneGroup)
-    if (!state.settings.showMembrane || !active) return
+    if (!state.settings.showMembrane || !active) { this.membraneBox = null; return }
     const data = dataRegistry.get(state.activeId!)
-    if (!data) { this.membraneKey = 'off'; return }
+    if (!data) { this.membraneKey = 'off'; this.membraneBox = null; return }
     const { origin, dir } = principalAxis(data)
     const n = new THREE.Vector3(dir[0], dir[1], dir[2])
     const up = Math.abs(n.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
@@ -2230,7 +2266,11 @@ export class MolEngine {
     const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n)
     const mk = (thickness: number, offset: number, color: string, opacity: number, order: number, edge?: string) => {
       const geo = new THREE.BoxGeometry(w, h, thickness)
-      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide })
+      // r95：DoubleSide→FrontSide——透明薄盒双面同 draw call 内前后面无序混合，旋转中
+      // 呈斑块状透明度据晃（「膜变形」错觉之一）；相机进盒后 DoubleSide 还会被近平面切出
+      // 硬边硬块（VLM 实证「斜切硬边」）。FrontSide：盒外恒见外表面（单层稳定混合），
+      // 盒内整体背面剔除——薄板干净消隐而非被切片
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, side: THREE.FrontSide })
       const mesh = new THREE.Mesh(geo, mat)
       mesh.position.copy(center).addScaledVector(n, offset)
       mesh.quaternion.copy(quat)
@@ -2250,6 +2290,8 @@ export class MolEngine {
     mk(T - HEAD * 2, 0, '#8b98a8', 0.13, 2)
     mk(HEAD, +(T / 2 - HEAD / 2), '#e0913c', 0.42, 3, '#b4772f')
     mk(HEAD, -(T / 2 - HEAD / 2), '#e0913c', 0.42, 3, '#b4772f')
+    // r95：膜板 AABB 落档（全景取景用；setFromObject 自带世界矩阵更新）
+    this.membraneBox = new THREE.Box3().setFromObject(this.membraneGroup)
   }
 
   // ---------- 氢键 Web Worker ----------
@@ -4025,6 +4067,17 @@ export class MolEngine {
         if (p[d] > max[d]) max[d] = p[d]
       }
     }
+    // r95：全景取景（无 refs）并入膜板 AABB——膜在屏时板完整入画且默认机位置于膜盒域外
+    // （旋转中近平面不再切入薄板）；refs 选择特写不含膜（口袋视角不应因膜后退）
+    if (!refs || !refs.length) {
+      const mb = this.membraneBox
+      if (mb && state.settings.showMembrane) {
+        for (let d = 0; d < 3; d++) {
+          if (mb.min.getComponent(d) < min[d]) min[d] = mb.min.getComponent(d)
+          if (mb.max.getComponent(d) > max[d]) max[d] = mb.max.getComponent(d)
+        }
+      }
+    }
     const center = new THREE.Vector3((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2)
     const radius = Math.max(2, 0.5 * Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]))
     const dir = new THREE.Vector3().subVectors(this.activeCamera.position, this.controls.target)
@@ -4152,6 +4205,14 @@ export class MolEngine {
       for (let d = 0; d < 3; d++) {
         if (p[d] < rmin[d]) rmin[d] = p[d]
         if (p[d] > rmax[d]) rmax[d] = p[d]
+      }
+    }
+    // r95：主轴对齐取景并入膜板 AABB（膜模板 orient 后板完整入画；与 fitView 同语义）
+    const mb = this.membraneBox
+    if (mb && this.settings?.showMembrane) {
+      for (let d = 0; d < 3; d++) {
+        if (mb.min.getComponent(d) < rmin[d]) rmin[d] = mb.min.getComponent(d)
+        if (mb.max.getComponent(d) > rmax[d]) rmax[d] = mb.max.getComponent(d)
       }
     }
     const radius = Math.max(2, 0.5 * Math.hypot(rmax[0] - rmin[0], rmax[1] - rmin[1], rmax[2] - rmin[2]))
@@ -4707,6 +4768,7 @@ export class MolEngine {
     this.canvas.removeEventListener('pointermove', this.onPointerMove)
     this.canvas.removeEventListener('pointerdown', this.onPointerDown)
     this.canvas.removeEventListener('pointerup', this.onPointerUp)
+    this.canvas.removeEventListener('pointercancel', this.onPointerCancelDrag)
     this.canvas.removeEventListener('wheel', this.onCancelCamAnim)
     this.canvas.removeEventListener('contextmenu', this.onContextMenu)
     this.canvas.removeEventListener('dblclick', this.onDoubleClick)
@@ -4720,6 +4782,7 @@ export class MolEngine {
     this.symmetryGroups.clear()
     this.clearGroupChildren(this.poreGroup)
     this.clearGroupChildren(this.membraneGroup)
+    this.membraneBox = null
     this.disposeMapGeometry()
     this.stereoEffect?.dispose()
     this.stereoEffect = null
