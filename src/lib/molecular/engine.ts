@@ -125,6 +125,17 @@ const UP_VECTOR = new THREE.Vector3(0, 1, 0)
 const ORBIT_CLAMP_RAD = THREE.MathUtils.degToRad(12)
 /** 俯仰限位动态评估复用向量（每帧分配避免） */
 const TMP_ORBIT_V = new THREE.Vector3()
+/** r93 极点穿越评估复用球坐标（每帧分配避免） */
+const TMP_ORBIT_S = new THREE.Spherical()
+/** r93 极点穿越判定带宽（距极点 ~0.4°，钉死带）：相机被 update() 钉在极点且动量仍朝极点 →
+ * 过极翻转。带宽取窄：极带内（≥1e-6，makeSafe 保证）水平拖拽的原生 basis 旋转
+ * ((cosθ,0,−sinθ) 随 θ 满幅转) 本就是正确的唱机自旋——只有「钉死+朝极动量」才需要翻转；
+ * 带宽过宽会在远未到极点时提前翻转（θ+π 跳变可见） */
+const POLE_CROSS_RAD = THREE.MathUtils.degToRad(0.4)
+/** r93 极点穿越单帧最大步长（~7°）：大惯性甩动过极时节流，位置轨迹仍连续 */
+const POLE_CROSS_MAX_STEP = THREE.MathUtils.degToRad(7)
+/** r93 拖拽起始极点微推（0.4°）：解除极点奇点处水平旋转的视觉死区 */
+const POLE_NUDGE_RAD = THREE.MathUtils.degToRad(0.4)
 const TMP_Q_IDENTITY = new THREE.Quaternion()
 const TMP_Q_SLERP = new THREE.Quaternion()
 const TMP_V_UP = new THREE.Vector3()
@@ -465,6 +476,23 @@ export class MolEngine {
     this.controls.minDistance = 2
     this.controls.maxDistance = 4000
 
+    // r93 极点穿越输入奇偶：_rotateUp/_rotateLeft 实例方法包一层 parity 乘子——
+    // 过极翻转后视图相对世界翻滚 180°，屏幕拖拽方向与世界系 φ/θ 耦合脱钩（继续同向
+    // 拖拽会把相机拉回极点，形成 6↔102° 的反弹振荡——E2E 真实指针实测）；parity 随每次
+    // 过极翻转，恢复「屏幕拖拽方向 = 视图旋转方向」的轨迹球语义（PyMOL 同感）。
+    // 非拖拽相机写入（书签/飞行/turn/set_view/fit）统一归位 +1（飞行分支每帧评估）。
+    // 键盘方向键旋转同走此通道（屏幕语义一致）；autoRotate 过极后方向翻转属良性边界。
+    const ctlPole = this.controls as unknown as {
+      _rotateUp?: (a: number) => void
+      _rotateLeft?: (a: number) => void
+    }
+    if (typeof ctlPole._rotateUp === 'function' && typeof ctlPole._rotateLeft === 'function') {
+      const origUp = ctlPole._rotateUp.bind(this.controls)
+      const origLeft = ctlPole._rotateLeft.bind(this.controls)
+      ctlPole._rotateUp = (a: number) => { origUp(a * this.poleParity) }
+      ctlPole._rotateLeft = (a: number) => { origLeft(a * this.poleParity) }
+    }
+
     // 裁剪平面常开（slab 关闭时设置为无穷远 → 不裁剪）
     this.setClippingInfinite()
 
@@ -549,6 +577,9 @@ export class MolEngine {
     // 俯仰限位动态生效后紧接 update；camAnim 块在其后覆盖位置，外部动画安全。
     this.updateOrbitClampDynamic()
     this.controls.update()
+    // r93 极点穿越：紧随 update 之后、渲染之前——钳制帧永不落屏（wrap 把相机直接挪到
+    // 极点另一侧的连续位置 P(-δ,θ)=P(δ,θ+π)，无视觉跳变）
+    this.wrapPoleGuard()
     // 视角书签平滑过渡：easeInOutCubic 插值 pos/target/fov（放在 controls.update 之后，
     // 无用户输入时 OrbitControls 每帧以当前位置重算球坐标，外部修改可安全生效）
     if (this.camAnim) {
@@ -1365,6 +1396,8 @@ export class MolEngine {
     this.camPath = null
     // rock 摇摆中用户拖动：以拖动后视角为新基准
     if (this.rockBase) this.rockBase = null
+    // r93：极点带宽内开始旋转拖拽 → 微推解除奇点死区（普通左键旋转拖拽路径）
+    if (e.button === 0) this.nudgeOffPoleOnRotateStart()
   }
 
   /** 滚轮缩放同样取消书签过渡/巡航（passive：不阻断 OrbitControls） */
@@ -3751,6 +3784,9 @@ export class MolEngine {
   private orbitExempt = false
   /** 豁免登记时间：动画飞行途中（≤900ms，覆盖 650ms 过渡+落位）不因短暂入界而解除；之后回到范围内才重新武装 */
   private orbitExemptT = 0
+  /** r93 极点穿越奇偶：±1。过极翻转后视图相对世界翻滚 180°——输入耦合乘 parity 恢复屏幕语义；
+  * 非拖拽相机写入（飞行/turn/set_view/fit 直写）归位 +1 */
+  private poleParity = 1
   private updateOrbitClampDynamic() {
     const c = this.controls
     if (this.settings?.orbitClamp === false) {
@@ -3769,6 +3805,9 @@ export class MolEngine {
         c.minPolarAngle = 0
         c.maxPolarAngle = Math.PI
       }
+      // r93：飞行拥有相机（落位为规范位姿）——输入奇偶归位（用户拖拽会先取消飞行，
+      // 取消时刻的冻结位姿也是规范系，归位同样正确）
+      if (this.poleParity !== 1) this.poleParity = 1
       return
     }
     const off = TMP_ORBIT_V.subVectors(this.activeCamera.position, c.target)
@@ -3800,6 +3839,66 @@ export class MolEngine {
       this.orbitExempt = true
       this.orbitExemptT = performance.now()
     }
+  }
+
+  /** r93 极点穿越（trackball 式过极翻转）：orbitClamp=false 全开模式下，球坐标极点是
+  * 「转不动」死区的双重来源——①朝极点方向拖拽被 [0,π] 钳制钉死（r91 只把墙从 12° 挪到
+  * 极点，墙仍在：连续同向拖拽的累积俯仰最终撞上 0°/180°）②钉在极点后水平拖拽只改 θ，
+  * 相机位置 (0,±r,0) 与 θ 无关 → 视觉完全冻结（E2E 实证：极点处 900px 水平拖拽画面
+  * 零变化）。修法 = 过极翻转：动量仍朝极点时把相机翻到极点另一侧——φ←镜像小步、
+  * θ←θ+π；由 P(-δ,θ)=P(δ,θ+π)（sin 负角镜像，南北两极同证）位置轨迹连续无跳变，
+  * 模型如 PyMOL 轨迹球般翻滚过顶，任意方向无限旋转。
+  * 动力学细节：r186 OrbitControls damping 下 update() 每帧只应用 delta×dampingFactor
+  * 且 delta 按 (1-damping) 衰减——过极后残差 delta 会把相机再推回极点来回摆，故翻转
+  * 时同步清零 _sphericalDelta.phi（消耗该方向动量；θ 分量保留，水平惯性不受影响）。
+  * _sphericalDelta 为 r186 实例属性（下划线非真私有）：结构变更时静默退化为旧钳制行为。 */
+  private wrapPoleGuard() {
+    if (this.settings?.orbitClamp !== false) return // 限位模式（用户显式开启）保持墙语义
+    if (this.camAnim || this.camPath) return       // 飞行动画拥有相机，不越权
+    const c = this.controls
+    const delta = (c as unknown as { _sphericalDelta?: { phi: number } })._sphericalDelta
+    if (!delta || typeof delta.phi !== 'number') return
+    const cam = this.activeCamera
+    TMP_ORBIT_V.subVectors(cam.position, c.target)
+    TMP_ORBIT_S.setFromVector3(TMP_ORBIT_V)
+    const north = TMP_ORBIT_S.phi <= POLE_CROSS_RAD
+    const south = TMP_ORBIT_S.phi >= Math.PI - POLE_CROSS_RAD
+    if (!north && !south) return
+    const pushing = north ? delta.phi < -1e-7 : delta.phi > 1e-7 // 动量仍朝极点推进
+    if (pushing) {
+      // 本帧自然步长 = |delta|×dampingFactor（update() 每帧应用量）+ 地板步（防 0 步滞留极点）
+      const applied = Math.abs(delta.phi) * (c.enableDamping ? c.dampingFactor : 1)
+      const step = Math.min(applied + 0.002, POLE_CROSS_MAX_STEP)
+      TMP_ORBIT_S.phi = north ? step : Math.PI - step
+      TMP_ORBIT_S.theta += Math.PI
+      cam.position.setFromSpherical(TMP_ORBIT_S).add(c.target)
+      cam.lookAt(c.target)
+      this.syncCameraPeer()
+      if (cam === this.orthoCamera) this.updateOrthoFrustum()
+      delta.phi = 0 // 消耗朝极动量：防过极后残差把相机推回极点来回翻转（θ 动量保留）
+      this.poleParity *= -1 // r93：视图翻滚 180°——后续同向拖拽继续沿远侧下行（反弹根治）
+    }
+  }
+
+  /** r93 极点微推：极点带宽内开始旋转拖拽时轻推 0.4°——极点是球坐标奇点，相机位置
+  * 与 θ 无关，纯水平拖拽视觉冻结（「转不动」的第二形态）；0.4° 俯仰不可察觉，
+  * 但足以让 θ 旋转在屏幕上生效（top 视角原地自旋语义）。 */
+  private nudgeOffPoleOnRotateStart() {
+    if (this.settings?.orbitClamp !== false) return
+    if (this.camAnim || this.camPath) return
+    const c = this.controls
+    const cam = this.activeCamera
+    TMP_ORBIT_V.subVectors(cam.position, c.target)
+    TMP_ORBIT_S.setFromVector3(TMP_ORBIT_V)
+    if (TMP_ORBIT_S.phi > POLE_CROSS_RAD && TMP_ORBIT_S.phi < Math.PI - POLE_CROSS_RAD) return
+    const north = TMP_ORBIT_S.phi <= Math.PI / 2
+    TMP_ORBIT_S.phi = north
+      ? Math.max(TMP_ORBIT_S.phi + POLE_NUDGE_RAD, 0.01)
+      : Math.min(TMP_ORBIT_S.phi - POLE_NUDGE_RAD, Math.PI - 0.01)
+    cam.position.setFromSpherical(TMP_ORBIT_S).add(c.target)
+    cam.lookAt(c.target)
+    this.syncCameraPeer()
+    if (cam === this.orthoCamera) this.updateOrthoFrustum()
   }
 
   /** 高光开关：遍历场景材质（粗糙度→1 且环境贴图贡献→0 消除镜面高光） */
@@ -3889,6 +3988,7 @@ export class MolEngine {
     }
     this.controls.target.copy(center)
     this.activeCamera.position.copy(dest)
+    this.poleParity = 1 // r93：fit 直写规范位姿——输入奇偶归位
     if (this.activeCamera === this.orthoCamera) {
       // r63-fix-c #2：正交取景——zoom 重置（取景语义）+ frustum 按新距离重建；
       // 位姿已写入 orthoCamera（frustum 距离以其为准），旧版此处会被透视机位覆盖回去
@@ -4032,6 +4132,7 @@ export class MolEngine {
     // 显式相机操作接管：停掉飞行中动画
     this.camAnim = null
     this.camPath = null
+    this.poleParity = 1 // r93：显式位姿写入是规范系——输入奇偶归位
     if (Array.isArray(s.pos) && s.pos.length === 3) this.activeCamera.position.fromArray(s.pos)
     if (Array.isArray(s.target) && s.target.length === 3) this.controls.target.fromArray(s.target)
     if (Array.isArray(s.up) && s.up.length === 3) {
@@ -4091,6 +4192,7 @@ export class MolEngine {
     offset.applyQuaternion(q)
     this.activeCamera.position.copy(this.controls.target).add(offset)
     this.activeCamera.up.applyQuaternion(q).normalize()
+    this.poleParity = 1 // r93：turn 直写规范位姿——输入奇偶归位
     this.syncCameraPeer()
     this.controls.update()
   }

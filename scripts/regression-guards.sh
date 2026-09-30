@@ -441,8 +441,18 @@ check "剖面模板空间填充重造"      "'preset spacefill', 'hide waters'" 
 check "管线截图防陈旧重试"        "rm -f ..tmp/r72-.id.raw.png"   "scripts/gen-template-thumbs.sh" 1
 check "管线每模板视口档"          "slab-cutaway:30:4HHB:31:1280x720" "scripts/gen-template-thumbs.sh" 1
 
+# ---- r93：极点钉死死区根治（过极翻转 wrap + 输入奇偶 parity + 极点微推）——「转到一定程度转不动」终修 ----
+check "过极翻转守卫方法"          "private wrapPoleGuard"        "src/lib/molecular/engine.ts" 1
+check "翻转位置连续数学"          "TMP_ORBIT_S.theta \+= Math.PI" "src/lib/molecular/engine.ts" 1
+check "输入奇偶补丁安装"          "origUp\(a \* this.poleParity\)"  "src/lib/molecular/engine.ts" 1
+check "穿越翻转奇偶取反"          "this.poleParity \*= -1"       "src/lib/molecular/engine.ts" 1
+check "钉死带窄带宽 0.4°"         "degToRad\(0.4\)"                "src/lib/molecular/engine.ts" 1
+check "显式位姿奇偶归位"          "this.poleParity = 1"          "src/lib/molecular/engine.ts" 3
+check "极点微推方法"              "nudgeOffPoleOnRotateStart"    "src/lib/molecular/engine.ts" 2
+check "翻转紧随 update 防钳制帧"  "this.wrapPoleGuard()"         "src/lib/molecular/engine.ts" 1
+
 # ---- 汇总 ----
-TOTAL=305
+TOTAL=313
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0
