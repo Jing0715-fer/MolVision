@@ -575,6 +575,9 @@ export class MolEngine {
     // （此前仅在一次性方法中调用——自动旋转(S)实际不动、拖拽无惯性尾巴）；
     // 无输入时 update 近似 no-op（change 事件仅在相机位移超 EPS 时派发）。
     // 俯仰限位动态生效后紧接 update；camAnim 块在其后覆盖位置，外部动画安全。
+    // r94 轨道基随 up：up 变更即重建 OrbitControls._quat（构造器一次性锁 +Y 的限制由
+    // 此解除——模板 orient/turn 写入非规范 up 后拖拽轴不再与世界 Y 脱钩）
+    this.syncOrbitFrame()
     this.updateOrbitClampDynamic()
     this.controls.update()
     // r93 极点穿越：紧随 update 之后、渲染之前——钳制帧永不落屏（wrap 把相机直接挪到
@@ -674,7 +677,8 @@ export class MolEngine {
       }
       this.rockT += dt * (this.settings.spinSpeed || 2) * 0.45
       const angle = Math.sin(this.rockT) * (Math.PI / 7) // ±≈25.7°
-      const off = this.rockBase.clone().applyAxisAngle(UP_VECTOR, angle)
+      // r94：绕「视角 up」摆动（up 基随 orient/turn 滚转后，世界 Y 摆动在屏幕上呈斜摆）
+      const off = this.rockBase.clone().applyAxisAngle(cam.up, angle)
       cam.position.copy(this.controls.target).add(off)
       cam.lookAt(this.controls.target)
     }
@@ -3787,6 +3791,29 @@ export class MolEngine {
   /** r93 极点穿越奇偶：±1。过极翻转后视图相对世界翻滚 180°——输入耦合乘 parity 恢复屏幕语义；
   * 非拖拽相机写入（飞行/turn/set_view/fit 直写）归位 +1 */
   private poleParity = 1
+  /** r94 轨道基追踪：上次同步进 OrbitControls._quat 的 up（每帧 3 次浮点比较的变更检测） */
+  private orbitFrameUp = new THREE.Vector3(0, 1, 0)
+
+  /** r94 轨道基随 up：OrbitControls r186 的 _quat 在构造器里一次性锁 up=(0,1,0)——而模板的
+   *  orient（up=主轴 v2）/ turn z（滚转 up）会写入非规范 up，此后拖拽的球坐标基仍钉在
+   *  世界 Y：水平拖绕「屏幕斜轴」转、极点悬在屏幕地平线、视线转到 ±up 时 lookAt 退化翻面
+   *  ——「打开模板有转动限制、单独开结构没有」的引擎级根因（裸结构走 fitView 不写 up，
+   *  恒为规范基；模板几乎都以 orient/turn 收尾）。修法：up 一变即重建 _quat/_quatInverse
+   *  （与构造器同式 setFromUnitVectors(up, +Y)）——update() 每帧从 position 重导球坐标，
+   *  换基零瞬移；拖拽语义在任意 up 下恒为「水平=绕屏幕竖轴、竖直=奔屏幕天地极」，
+   *  极点机件（wrap/nudge/clamp/exempt）同帧换用 _quat 基。 */
+  private syncOrbitFrame() {
+    const c = this.controls as unknown as { _quat?: THREE.Quaternion; _quatInverse?: THREE.Quaternion }
+    if (!c._quat || !c._quatInverse) return
+    // 飞行中 up 由动画驱动（透视相机为权威，落位同步双机）——取驱动源；否则取活动相机
+    const up = (this.camAnim || this.camPath) ? this.camera.up : this.activeCamera.up
+    if (up.lengthSq() < 1e-12) return
+    if (Math.abs(up.x - this.orbitFrameUp.x) + Math.abs(up.y - this.orbitFrameUp.y) + Math.abs(up.z - this.orbitFrameUp.z) < 1e-9) return
+    c._quat.setFromUnitVectors(up, UP_VECTOR)
+    c._quatInverse.copy(c._quat).invert()
+    this.orbitFrameUp.copy(up)
+  }
+
   private updateOrbitClampDynamic() {
     const c = this.controls
     if (this.settings?.orbitClamp === false) {
@@ -3813,6 +3840,10 @@ export class MolEngine {
     const off = TMP_ORBIT_V.subVectors(this.activeCamera.position, c.target)
     const r = off.length()
     if (r < 1e-6) return
+    // r94：phi 在「up 基」里读（与 OrbitControls._quat 同源）——up 被模板 orient/turn
+    // 滚转后，限位语义随视角走（天顶=屏幕正上）而非钉死世界 Y
+    const frameQ = (c as unknown as { _quat?: THREE.Quaternion })._quat
+    if (frameQ) off.applyQuaternion(frameQ)
     const phi = Math.acos(THREE.MathUtils.clamp(off.y / r, -1, 1))
     const inRange = phi >= ORBIT_CLAMP_RAD && phi <= Math.PI - ORBIT_CLAMP_RAD
     if (this.orbitExempt && inRange && !this.camAnim && performance.now() - this.orbitExemptT > 900) {
@@ -3834,7 +3865,14 @@ export class MolEngine {
     const dy = py - ty
     const r = Math.hypot(px - tx, dy, pz - tz)
     if (r < 1e-6) return
-    const phi = Math.acos(THREE.MathUtils.clamp(dy / r, -1, 1))
+    // r94：up 基内测角（同 updateOrbitClampDynamic）——极点豁免跟着视角天顶走
+    const frameQ = (this.controls as unknown as { _quat?: THREE.Quaternion })._quat
+    let vy = dy
+    if (frameQ) {
+      TMP_ORBIT_V.set(px - tx, dy, pz - tz).applyQuaternion(frameQ)
+      vy = TMP_ORBIT_V.y
+    }
+    const phi = Math.acos(THREE.MathUtils.clamp(vy / r, -1, 1))
     if (phi < THREE.MathUtils.degToRad(10) || phi > Math.PI - THREE.MathUtils.degToRad(10)) {
       this.orbitExempt = true
       this.orbitExemptT = performance.now()
@@ -3860,6 +3898,11 @@ export class MolEngine {
     if (!delta || typeof delta.phi !== 'number') return
     const cam = this.activeCamera
     TMP_ORBIT_V.subVectors(cam.position, c.target)
+    // r94：球坐标进「up 基」（与 controls.update 同一变换链）——up 滚转后极点在 ±up
+    // （屏幕天地极）而非世界 ±Y；守世界 Y 极点＝守空。写入侧对称用 _quatInverse 还原。
+    const frameQ = (c as unknown as { _quat?: THREE.Quaternion })._quat
+    const frameQInv = (c as unknown as { _quatInverse?: THREE.Quaternion })._quatInverse
+    if (frameQ) TMP_ORBIT_V.applyQuaternion(frameQ)
     TMP_ORBIT_S.setFromVector3(TMP_ORBIT_V)
     const north = TMP_ORBIT_S.phi <= POLE_CROSS_RAD
     const south = TMP_ORBIT_S.phi >= Math.PI - POLE_CROSS_RAD
@@ -3871,7 +3914,9 @@ export class MolEngine {
       const step = Math.min(applied + 0.002, POLE_CROSS_MAX_STEP)
       TMP_ORBIT_S.phi = north ? step : Math.PI - step
       TMP_ORBIT_S.theta += Math.PI
-      cam.position.setFromSpherical(TMP_ORBIT_S).add(c.target)
+      TMP_ORBIT_V.setFromSpherical(TMP_ORBIT_S)
+      if (frameQInv) TMP_ORBIT_V.applyQuaternion(frameQInv)
+      cam.position.copy(c.target).add(TMP_ORBIT_V)
       cam.lookAt(c.target)
       this.syncCameraPeer()
       if (cam === this.orthoCamera) this.updateOrthoFrustum()
@@ -3889,13 +3934,19 @@ export class MolEngine {
     const c = this.controls
     const cam = this.activeCamera
     TMP_ORBIT_V.subVectors(cam.position, c.target)
+    // r94：up 基内测极点带（同 wrapPoleGuard 变换链）
+    const frameQ = (c as unknown as { _quat?: THREE.Quaternion })._quat
+    const frameQInv = (c as unknown as { _quatInverse?: THREE.Quaternion })._quatInverse
+    if (frameQ) TMP_ORBIT_V.applyQuaternion(frameQ)
     TMP_ORBIT_S.setFromVector3(TMP_ORBIT_V)
     if (TMP_ORBIT_S.phi > POLE_CROSS_RAD && TMP_ORBIT_S.phi < Math.PI - POLE_CROSS_RAD) return
     const north = TMP_ORBIT_S.phi <= Math.PI / 2
     TMP_ORBIT_S.phi = north
       ? Math.max(TMP_ORBIT_S.phi + POLE_NUDGE_RAD, 0.01)
       : Math.min(TMP_ORBIT_S.phi - POLE_NUDGE_RAD, Math.PI - 0.01)
-    cam.position.setFromSpherical(TMP_ORBIT_S).add(c.target)
+    TMP_ORBIT_V.setFromSpherical(TMP_ORBIT_S)
+    if (frameQInv) TMP_ORBIT_V.applyQuaternion(frameQInv)
+    cam.position.copy(c.target).add(TMP_ORBIT_V)
     cam.lookAt(c.target)
     this.syncCameraPeer()
     if (cam === this.orthoCamera) this.updateOrthoFrustum()
@@ -4139,6 +4190,7 @@ export class MolEngine {
       this.activeCamera.up.fromArray(s.up).normalize()
       this.orthoCamera.up.copy(this.activeCamera.up)
     }
+    this.syncOrbitFrame() // r94：up 恢复非规范位——轨道基即时换新
     if (typeof s.fov === 'number' && s.fov > 5 && s.fov < 120) {
       this.camera.fov = s.fov
       this.camera.updateProjectionMatrix()
@@ -4173,7 +4225,14 @@ export class MolEngine {
   /** 相机屏幕坐标系基向量（x=屏幕右 y=屏幕上 z=视线向外） */
   private cameraBasis() {
     const dir = new THREE.Vector3().subVectors(this.activeCamera.position, this.controls.target).normalize()
-    const right = new THREE.Vector3().crossVectors(dir, this.activeCamera.up).normalize()
+    const right = new THREE.Vector3().crossVectors(dir, this.activeCamera.up)
+    // r94：视线与 up 平行（极点邻域直写 turn/move）时叉积退化——回退水平面正交基，
+    // 防 setFromAxisAngle(零轴) 产出 NaN 四元数永久毒化相机
+    if (right.lengthSq() < 1e-8) {
+      right.set(-dir.z, 0, dir.x)
+      if (right.lengthSq() < 1e-8) right.set(1, 0, 0)
+    }
+    right.normalize()
     const up = new THREE.Vector3().crossVectors(right, dir).normalize()
     return { dir, right, up }
   }
@@ -4193,6 +4252,7 @@ export class MolEngine {
     this.activeCamera.position.copy(this.controls.target).add(offset)
     this.activeCamera.up.applyQuaternion(q).normalize()
     this.poleParity = 1 // r93：turn 直写规范位姿——输入奇偶归位
+    this.syncOrbitFrame() // r94：up 被滚转——轨道基即时换新（尾部 controls.update 用新基）
     this.syncCameraPeer()
     this.controls.update()
   }

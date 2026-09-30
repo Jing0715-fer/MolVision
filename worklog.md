@@ -3759,3 +3759,28 @@ Stage Summary:
 
 （r93 段 cron 补记）
 - 【cron 巡检历史勘误】r85-r91 期间 6 次「创建即 Disabled due to exec limits exceeded」曾被判为账户配额硬限——本轮实证真凶之一是 6 段式 cron 字段位序：首位=秒，`*/15 * * * * ?` 会被判 15 秒间隔（400 interval must be >= 300s）；改 `0 */15 * * * ?`（秒=0/分=*/15）后创建成功（job #425777）。后续观察其是否存活执行——若再 Disabled 则配额结论恢复成立
+
+---
+Task ID: r94
+Agent: main
+Task: 用户指令「现在无论打开哪个模板或结构都会出现双层膜，好像是膜会限制视角转动？打开的模板有转动限制，单独打开结构就不会」——膜残留根治 + 轨道基随 up（旋转限位第四层根因）+ 书签栏指针死区顺手修
+
+Work Log:
+- 【侦察】r93 已推送（208a6b6）；dev server 健康；cron #425777 创建成功但执行态 Disabled（exec limits 第 7 次实证——r93 勘误「字段位序是真凶」只对了一半：位序修对后创建成功，执行仍被账户配额拦截；不重复造死任务，devd 看门狗继续值守）
+- 【主诉①双层膜到处出现——根因】showMembrane 是粘性设置：membrane 命令置 true（commands.ts:1784）后无任何复位点——loadStructureText（fetchPdbId/loadFiles/paste/json 全汇点）只 addStructure 不碰 settings → 膜跟随每个新激活结构自动重建（updateMembrane 键含 activeId+rev）=「无论打开哪个模板或结构都出现双层膜」。修：loadStructureText 在 addStructure 后 reset showMembrane:false——膜是「膜蛋白结构特定」分析语境层，换结构自动解除；膜模板命令序列（membrane 32/34 在 load 之后）与 membrane 命令随时可重新开启（E2E 实证重开 children=5）
+- 【主诉②模板有转动限制——第四层根因（r91 限位/r92 存档毒化/r93 极点死区之后的最后一层）】agent-browser 实机复现链：加载 membrane-embed 后 camera.up=(0.147,0.399,-0.905)（orient 写 up=主轴 v2 + turn z 滚转 up）——而 OrbitControls r186 的 _quat 在构造器一次性锁 up=(0,1,0)（源码 405 行实锤），此后拖拽球坐标基恒在世界 Y：①水平拖绕「屏幕斜轴」转（up 偏 Y 达 66°）②极点悬在屏幕地平线 ③视线转到 ±up 时 lookAt 退化（Matrix4 叉积零向量 → nudge → 翻面跳变）= 用户手感「撞墙转不动」。裸结构走 fitView 不写 up 恒规范基——「单独打开结构就没有」的完整解释。修：syncOrbitFrame()——up 变更即重建 _quat/_quatInverse（setFromUnitVectors(up,+Y)，与构造器同式），tick 每帧变更检测（3 次浮点比较）+ turnCamera/setCameraState 直写点即时换基；update() 每帧从 position 重导球坐标 → 换基零瞬移；拖拽语义在任意 up 下恒为「水平=绕屏幕竖轴、竖直=奔屏幕天地极」
+- 【极点机件同步换基】wrapPoleGuard/nudgeOffPoleOnRotateStart/updateOrbitClampDynamic/maybeExemptOrbit 四处球坐标读取全部改走 _quat 变换链（读侧 applyQuaternion(frameQ)、写侧 setFromSpherical+applyQuaternion(frameQInv)）——守世界 Y 极点＝守空，现守真极点（±up）
+- 【顺手修①书签栏指针死区】E2E 意外揭发：ViewBar 空态提示卡（w-28「暂无书签」）盖在画布右缘 x1325-1415——从右往左拖拽的自然起点落在卡上，pointerdown 被截 → 「转不动」死区（本人测试 8 次满幅左扫零位移的元凶）。修：轨道容器 pointer-events-none + 可交互子件（保存按钮组/折叠徽章/书签卡）单独 pointer-events-auto——空态提示卡永穿透，elementFromPoint(1380,384) 实证 P→CANVAS
+- 【顺手修②】cameraBasis 视线∥up 极点邻域叉积退化守卫（回退水平正交基，防 setFromAxisAngle(零轴) NaN 毒化相机）+ rock 摇摆轴世界 Y→视角 up（滚转帧内不再斜摆）
+- 【E2E 全链（agent-browser 真实指针）】①膜模板→基础模板：showMembrane true/false + membraneGroup 5→0（VLM 终审：橙板在位嵌蛋白✓/切走后零橙板仅蛋白✓）②膜模板→load 4hhb：children 5→0 ③膜模板重开：children 回 5 ④穿过书签死区 6 连扫全位移 ⑤混合方向 8 轮压力：偏移每轮全变 + rightUpDot≈0（屏幕右⊥up 零退化帧）+ 全有限无 NaN ⑥全新周期 up 基极点穿越 6 轮：upFramePhi 48~132 自由往返 + parity 翻转（过极事件）+ 无钉死 ⑦console/errors 全会话零
+- 【门禁】lint 0 · tsc src 0（examples 5 错历史基线）· guards 313→322（+9：同步方法/三调用点/追踪字段/四机件换基≥10/基向量退化守卫/rock 视角轴/膜复位汇点/穿透容器/可交互件≥3）· smoke 4/4 · dev.log 零 error · E2E 清场（localStorage clear + 视口 1440×900 + 欢迎页复验）
+
+Stage Summary:
+- 交付：膜残留根治（loadStructureText 汇点复位——模板/结构/文件/粘贴全路径覆盖，膜模板可重开）+ 轨道基随 up（OrbitControls 构造器锁基限制解除——任意滚转视角下拖拽语义恒屏幕正确，极点机件同步换基）+ 书签栏指针穿透 + cameraBasis 退化守卫 + rock 视角轴
+- 用户指令全闭环：「无论打开哪个模板或结构都会出现双层膜」（粘性设置复位，双路径 E2E+VLM 实证）·「模板有转动限制，单独打开结构就没有」（第四层根因=轨道基与视角 up 脱钩，实机复现+修复+混合压力全过）
+- 坑（新入档）：①OrbitControls r186 _quat 构造器一次性锁 up——外部写 up 后必须手动重建 _quat/_quatInverse，否则球坐标基与世界脱钩（up 偏 Y 66° 时水平拖绕屏幕斜轴转）②书签栏等悬浮 UI 盖画布会静默吞 pointerdown——拖拽死区排查先 elementFromPoint 起点坐标③E2E 读引擎态要避开模板命令序列执行窗（SwiftShader 表面构建慢，15s 仍可能在途——瞬态 up/quat 读数会误导，等 settle 后复核）
+- 下一轮建议（按优先级）：
+  1. 【中】r92 遗留③：新增模板（表面系视觉已随 MC 域映射修复全面升级，管线就绪）
+  2. 【中】多结构叠加时 orient polymer 全可见结构 PCA 会随残留结构偏轴（本轮实测两轮 up 不同）——模板应用前隐藏非演示结构或 orient 限 active 结构值得评估
+  3. 【低】表面拾取 E2E（r92 遗留②）
+  4. 【低】cron 执行配额：#425777 调度/载荷就位但 exec Disabled（第 7 次）——观察配额窗口期，恢复即自动值守

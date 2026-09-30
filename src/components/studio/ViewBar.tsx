@@ -63,9 +63,11 @@ export function ViewBar() {
   const collapsed = userCollapsed ?? isMobile
 
   return (
-    <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col items-end gap-1.5">
-      {/* 头部：保存 + 折叠开关 */}
-      <div className="flex items-center gap-1">
+    <div className="pointer-events-none absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col items-end gap-1.5">
+      {/* 头部：保存 + 折叠开关（r94：轨道容器 pointer-events-none——拖拽旋转穿透到画布，
+          此前空态提示卡盖在画布右缘：从右往左拖拽的起点落在卡上 = 「转不动」死区；
+          可交互子元素单独 pointer-events-auto 恢复） */}
+      <div className="pointer-events-auto flex items-center gap-1">
         <button
           onClick={save}
           title={t({ zh: '保存当前视角为书签 (V)', en: 'Save the current view as a bookmark (V)' })}
@@ -91,7 +93,7 @@ export function ViewBar() {
         <button
           onClick={() => setUserCollapsed(false)}
           title={t({ zh: `视角书签 × ${bookmarks.length}`, en: `View bookmarks × ${bookmarks.length}` })}
-          className="mol-elevate relative flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition hover:text-foreground"
+          className="mol-elevate pointer-events-auto relative flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition hover:text-foreground"
         >
           <Bookmark className="h-4 w-4" />
           <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[9px] font-bold text-primary-foreground">
@@ -157,7 +159,7 @@ function BookmarkCard({
   return (
     <div
       className={cn(
-        'group relative shrink-0 overflow-hidden rounded-lg border bg-card mol-elevate transition-all duration-200',
+        'group pointer-events-auto relative shrink-0 overflow-hidden rounded-lg border bg-card mol-elevate transition-all duration-200',
         compact ? 'w-20' : 'w-28',
         active
           ? 'border-primary/70 ring-1 ring-primary/40'

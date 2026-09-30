@@ -120,6 +120,14 @@ export function loadStructureText(text: string, name: string, format?: 'pdb' | '
       const id = store.addStructure(data, displayName.toUpperCase() === displayName ? displayName : name, ms)
       // 会话持久化：登记源文本并立即保存
       textRegistry.set(id, text)
+      // r94：脂双层板是「膜蛋白结构特定」的分析语境层——换任何新结构（模板演示 / 裸
+      // PDB / 本地文件）自动解除：膜板沿新结构主轴自动重建，对非膜蛋白是无意义装饰且
+      // 遮挡取景（旧档毒化：membrane 模板置位后 showMembrane 粘滞，之后每个模板/结构
+      // 都「凭空出现双层膜」）。膜模板命令序列的 membrane 32/34 在 load 之后执行不受
+      // 影响；membrane 命令 / 膜模板随时可重新开启。
+      if (useMolStore.getState().settings.showMembrane) {
+        useMolStore.getState().updateSettings({ showMembrane: false })
+      }
       setTimeout(() => saveSession(), 600)
       useMolStore.setState({ loading: false, loadingMsg: '' })
       // 视角适配（欢迎页首发时引擎晚于结构就位——入队，引擎挂载后冲刷）

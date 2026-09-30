@@ -451,8 +451,19 @@ check "显式位姿奇偶归位"          "this.poleParity = 1"          "src/li
 check "极点微推方法"              "nudgeOffPoleOnRotateStart"    "src/lib/molecular/engine.ts" 2
 check "翻转紧随 update 防钳制帧"  "this.wrapPoleGuard()"         "src/lib/molecular/engine.ts" 1
 
+# ---- r94：膜残留根治 + 轨道基随 up（「模板有转动限制/双层膜到处出现」双主诉终修） ----
+check "轨道基随up同步方法"        "private syncOrbitFrame"       "src/lib/molecular/engine.ts" 1
+check "同步三调用点"              "this.syncOrbitFrame()"        "src/lib/molecular/engine.ts" 3
+check "轨道基追踪字段"            "orbitFrameUp"                 "src/lib/molecular/engine.ts" 3
+check "极点机件换up基"            "frameQ"                       "src/lib/molecular/engine.ts" 10
+check "基向量退化守卫"            "right.set\(-dir.z, 0, dir.x\)" "src/lib/molecular/engine.ts" 1
+check "rock绕视角up摆动"          "applyAxisAngle\(cam.up"       "src/lib/molecular/engine.ts" 1
+check "膜复位load汇点"            "showMembrane: false"          "src/lib/molecular/loader.ts" 1
+check "书签栏指针穿透容器"        "pointer-events-none absolute right-3 top-1/2" "src/components/studio/ViewBar.tsx" 1
+check "书签可交互件恢复指针"      "pointer-events-auto"          "src/components/studio/ViewBar.tsx" 3
+
 # ---- 汇总 ----
-TOTAL=313
+TOTAL=322
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0
