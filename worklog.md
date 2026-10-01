@@ -3833,4 +3833,5 @@ Stage Summary:
 - 核心设计决策：轨道交互永远世界 Y 转盘；自定义 up 视角（膜语境/主轴对齐）仅在飞行与静观期保留构图，用户上手 160ms 微动画归位；膜几何按结构生命周期管理（加载/切换即复位，命令一条重开）
 - guards 307/307 · 用户实测路径（膜模板→拖拽→切结构）全链路 agent-browser 验证通过
 - 未尽事项：垂直过顶穿越（已由 r93 过极翻转 wrap 解决——变基后纳入）；模板缩略图无需重产（无视觉配方变更）
-- 【变基后全链复验】engine.ts=origin r95（syncOrbitFrame+过极 wrap+hover 抑制+膜板 FrontSide+取景并入膜盒全数在位）；store.ts=本段 activate 路径复位；CommandPalette=本段 mounted 守卫；guards 338/338；lint 0；smoke 4/4；E2E（膜模板→拖拽 420° 方位角无冻结→load 切结构膜即消→activate 切换膜即消→VLM 居中复鉴）——待变基完成后的 dev server 重启复测
+- 【变基后全链复验（已完成）】dev server 重启（r95 引擎+r92 增量合并态）：①膜模板落位 up=(0.15,0.40,-0.91) 倾斜构图保留（turn z 90 序列产物）+膜 5 子对象+membraneBox 就位 ②倾斜帧下水平连续拖拽累计 453°（10→75→145→171→233→328→356→453）每批推进无冻结，up 全程恒定（syncOrbitFrame 屏幕正确语义实证——构图不随旋转丢失，优于本段独立方案的归位式）③load 4hhb 后膜 children=0（r94 loader 汇点）④activate 1FX8 后膜 children=0（本段独有增量——r94 不覆盖的切换路径）⑤membrane 32 手动重开 children=5 正常 ⑥VLM 全尺寸复鉴：蛋白垂直居膜/单一连续双层/无 glitch（「1 Issue」角标 DOM 无对应=VLM 微缩文字误报第 9 判例）⑦reload 后控制台零 error/hydration/mismatch ⑧Ctrl+K 面板开/关正常（含 Radix 淡出动画窗口）——合并态门禁：lint 0 · tsc src 0 · guards 338/338 · smoke 4/4 · dev.log 零 error
+- 【变基工程教训】git rebase 重放 docs-only 提交时以 --ours 批量解冲突，但重放基选择了陈旧树——静默回退 r93-95 源码 85 文件（tsc 暴露 setMembraneView 断裂为信号）；修正法：暂存目标 4 文件 → reset --hard origin/main → 选择性恢复 → 干净单提交。多 agent 并行开发（cron 巡检 vs 主会话）推送前必须 fetch 比对，变基冲突解法优先「重放最小 diff」而非整树取侧
