@@ -3837,3 +3837,55 @@ Stage Summary:
 - 【变基工程教训】git rebase 重放 docs-only 提交时以 --ours 批量解冲突，但重放基选择了陈旧树——静默回退 r93-95 源码 85 文件（tsc 暴露 setMembraneView 断裂为信号）；修正法：暂存目标 4 文件 → reset --hard origin/main → 选择性恢复 → 干净单提交。多 agent 并行开发（cron 巡检 vs 主会话）推送前必须 fetch 比对，变基冲突解法优先「重放最小 diff」而非整树取侧
 
 （r92 段 cron 补记，2026-10-01 20:42）15min webDevReview 巡检任务 #428430 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 9 次实证（r85/r86/r87/r88/r90/r91/r94/r95 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
+
+---
+Task ID: 4-a
+Agent: Explore
+Task: 调研 hydration mismatch（Radix Dialog useId 偏移）根因，仅调研不改码
+
+Work Log:
+- 读 worklog 尾部（r85-r95 段）掌握项目态：r92 已记录该报错（radix-_R_1qatmlbH1_ vs radix-_R_eindlbH1_）并有 mounted 守卫修复；r91 段已有「报错来自回滚期旧代码」结论——本轮独立复核验证
+- 定位 CommandPalette（src/components/studio/CommandPalette.tsx）：确认 r92 挂载守卫在位（L110-114 useSyncExternalStore 三参 + L327 `{mounted && <CommandDialog>}`），history/pinned 订阅同为三参模式（L101-102）；AlertDialog（L383）未门控但关闭态零 DOM
+- 追踪首载渲染链：layout.tsx(RootLayout/detectLocale/I18nProvider/ThemeProvider/Toaster) → page.tsx(Home, empty=true) → WelcomeScreen（含 AgentPanel float）→ LoadDialog → HelpDialog → FigureTemplatesDialog → HistoryDialog → CommandPalette
+- 全链水合风险模式扫描（typeof window / Math.random / Date.now / new Date / localStorage / useSyncExternalStore / mounted 门控 / suppressHydrationWarning / dynamic ssr:false）并逐一核实上下文（渲染期 vs 事件期 vs effect 期）
+- git 考古：bb578ad（r85）的 command.tsx 实锤 sr-only DialogHeader 挂在 Dialog.Root 直接子级（Radix Root 无条件渲染 children → SSR HTML 携带 radix id）；4e74850（r86）diff 证实修复（12 行移入 DialogContent）；5e05f04（r92）为 CommandPalette 挂载守卫；工作树与 HEAD 一致（关键文件零 diff，排除变基回退复发）
+- node_modules 实证：@radix-ui/react-dialog@1.1.15 的 DialogRoot 无条件调用 useId()×3（contentId/titleId/descriptionId，dist L44-48）——关闭态不产 DOM 但占用树位 id 槽
+- 活体验证：curl localhost:3000 首页 SSR HTML（293KB）——radix id 零命中、sr-only h2/p 零命中（id="_R_" 仅为 Next RSC payload script 标签）
+
+Stage Summary:
+- 根因排序（结论：当前代码已根治，报错为历史 r85→r86 过渡期产物）：
+  ①【实锤·历史】r85（bb578ad）command.tsx 的 sr-only DialogHeader 在 DialogContent 外、Dialog.Root 直接子级——Radix Root 无条件渲染 children + DialogTitle/Description 携 useId id → SSR HTML 恒含 radix-_R_* id（open=false 也不例外）；客户端水合树位哈希与之错位（radix-_R_1qatmlbH1_ ≠ radix-_R_eindlbH1_）= r91 已证的「回滚期旧码 SSR + 新码客户端 bundle」混合态水合（同期 127.0.0.1 跨域 HMR reload 循环为其温床；r92 注释「HMR 双模块实例树哈希漂移」为同一机制的另一种表述）。r86 移入 DialogContent（portal 随关卸载）根治此面，r92 挂载守卫为纵深防御
+  ②【潜伏·休眠】HistoryDialog.tsx:96-97 `useState(() => loadCmdHistory()/loadPinnedCmds())` 渲染期惰性读 localStorage——服务端[]/客户端真值；现无害仅因内容被关闭态 portal 门控，一旦 forceMount/前置渲染即成真错配
+  ③【潜伏·休眠】chat-store.ts:169-177 zustand 模块初始化即读 localStorage（sessions/activeId/msgs/visualOn 含 typeof window 三元）——zustand v5 水合取 getInitialState() → 客户端初始态≠服务端；现无害仅因 AgentPanel 关闭态 return null（AgentPanel.tsx:648）；与 i18n/index.tsx:24-26 明文否决的反模式同型
+  ④【结构性放大器】5 个常挂 Radix Dialog Root（LoadDialog/HelpDialog/FigureTemplatesDialog/HistoryDialog/CommandPalette-AlertDialog）+ CommandPalette 守卫外 AlertDialog 均在首载树内各自消耗 useId×3——任何前序树位错配都会级联偏移全部后续 id
+- 验证干净面（本轮实测/复核）：SSR HTML 零 radix id（curl 实证）；SessionResumeCard dynamic ssr:false（L73-75）+ relTime Date.now() 因 ssr:false 安全；ShareLinkLoadCard 零渲染期浏览器 API；custom-templates 三参快照（L151-153 EMPTY_SNAPSHOT 稳定引用）；LeftPanel.useMounted 三参（L57-63）；i18n LocaleCtx+initialLocale prop（L96-118）；use-mobile undefined-态；MolViewer dynamic ssr:false；suppressHydrationWarning 三处（layout.tsx:74 html、Toolbar.tsx:690、WelcomeScreen.tsx:427 主题钮）均属已知/防御性
+- 建议最小修复（未实施）：无需新代码——r86 结构修复+r92 挂载守卫已在位且活体验证通过；若报错复现，第一检查点是陈旧 dev-server/混合版本水合（重启 dev + 硬刷新），第二梯队为加固休眠隐患：HistoryDialog 惰性初始化改三参 useSyncExternalStore（复用 subscribeCmdHistory/cmdHistorySnapshot/emptyCmdSnapshot 现成协议）、chat-store 初始态改「恒定默认 + 挂载后 hydrated 回填」（movie.ts:113/views-store.ts:121/scene-store.ts:193 同款已验证模式）
+
+---
+Task ID: r96
+Agent: main
+Task: 用户主诉「1fx8 转到一个位置后会突然偏转 180 度（右上的坐标轴也是突然偏转了 180 度）」——r93 过极翻转的固定 up 屏幕滚转副作用终修（刚体化）+ 过极动量黑洞修复
+
+Work Log:
+- 【侦察】git log 核对 r92-r95 全部已推送（双层膜 r94 / 手感 r95 / hydration r92 均闭环）；hydration Explore 调研（Task 4-a）实证当前 SSR 零 radix id，无需新码；本轮唯一新主诉 = 过极 180° 突翻
+- 【根因】r93 wrapPoleGuard 只保位置连续（θ←θ+π 镜像），姿态仍用固定 up lookAt——轨道相机过极瞬间屏幕内容（含右上方位轴 gizmo，随相机四元数）滚转 180°。E2E 铁证：φ=6° 处 40px 下拖，155 帧采样第 142 帧四元数单帧跳 180.0°、up 恒 (0,1,0)、位置连续（offset (7.1,67.5,0)→(-1.2,67.9,0)）
+- 【修复 A 刚体化】wrapPoleGuard / nudgeOffPoleOnRotateStart 翻转时捕获前后偏移方向（TMP_POLE_DIR_A/B），构造最小旋转 R_min（TMP_POLE_Q.setFromUnitVectors），up←R_min·up 后再 lookAt——由 lookAt(P₂,T,R·up)=R·lookAt(P₁,T,up) 恒等式，位置与姿态刚体同转，视图只转亚度级物理步长；syncOrbitFrame() 即时换基（r94 管线复用）——新基球坐标读数与翻转前精确相等，拖拽语义天然连续
+- 【修复 B 输入奇偶退役】r93 poleParity 全套移除（字段 / _rotateUp/_rotateLeft 猴补丁 / 飞行分支 / fit / set_view / turn 四处归位）——刚体化后屏幕语义恒自洽，奇偶补偿反而会反向输入
+- 【修复 C 过极动量黑洞（E2E 揭发第二层）】持续 300px 下拖仅净推进 10.4°（应 ~135°）——r93 的 delta.phi=0 清零在刚体表述下变成「每事件只放行 |delta|×damping 一步」的 92% 输入黑洞（r93 时代靠 parity 翻输入符号快速逃逸极点；刚体化后相机持续追赶滚动极点，清零反而节流）。修：保留动量不清零——基随相机同滚，残差沿大圆同向推进，过极翻滚恢复全速轨迹球手感
+- 【E2E 全链（agent-browser 真实指针 + rAF 逐帧四元数采样器）】
+  · 单次过极（φ=6° + 40px）：修复前单帧 180.0° → 修复后 1.7°/2.3°，up 刚体小滚转 ~1.2°，零 NaN
+  · 持续 300px 翻滚：净推进 10.4°→84°（含动量修复），视图与位置刚体同步 84°，max 单帧 3.4°，零翻转
+  · membrane-embed（1FX8）用户场景：滚转 up (0.147,0.399,-0.905) 极点单次过极 max 2.0°；混合方向 8 轮持续拖拽 max 10°（快速对角拖拽正常速度）零翻转零 NaN；VLM 双帧复鉴均判「蛋白嵌膜、构图 upright」——视觉连续无颠倒
+  · 回归：Pitch clamp ON→[12°,168°] / OFF→[0°,180°] 双向 ✓ · 膜 5 子对象在位 ✓ · console/errors 全会话零 ✓ · 清场（localStorage clear + 欢迎页 h1 复验）✓
+- 【门禁】lint 0 · tsc src 0（examples/skills 5 错历史基线）· guards 338/338（r93 块 3 条 parity 断言退役 → r96 新增 3 条刚体断言 + syncOrbitFrame 计数 3→5，总数不变）· smoke 4/4 · dev.log 零 error
+
+Stage Summary:
+- 交付：「转到一个位置突然偏转 180°（坐标轴 gizmo 同翻）」终修——刚体过极三件套：up 随 R_min 滚转（lookAt 恒等式保证位置姿态同转）+ 输入奇偶退役（刚体化后屏幕语义天然连续）+ 过极动量保留（92% 输入黑洞根除，全速轨迹球）
+- 用户指令闭环：「1fx8 转到某个位置后突然偏转 180°」（单帧 180°→2° 数值铁证 + VLM 视觉连续复鉴 + 模板滚转 up / 规范 up 双场景全过）
+- 核心数学：lookAt(P₂,T,R·up)=R·lookAt(P₁,T,up)（P₂=T+R(P₁−T)）——固定 up 轨道相机的过极滚转 180° 与刚体轨迹球语义只差一个 up 滚转
+- 坑（新入档）：①MultiEdit 大批量编辑非原子——中间失配留下部分应用态（本轮 10 处编辑 #1-6 已入 #7 起未入实锤），编辑后必须 grep 校验完整性 ②极点动量语义随表述而变：非刚体（parity 翻符号）需清零防反弹，刚体（基随动量同滚）需保留防黑洞——「清零残差」不是普适正确 ③VLM 判定「构图 upright」是过极连续性的低成本复鉴面
+- 下一轮建议（按优先级）：
+  1. 【中】r92 遗留③持续未清偿：新增模板（管线就绪，MC 域映射修复后表面系视觉全面升级）
+  2. 【中】极点邻域 up↔视线夹角 ~φ_cur 数值敏感性（<1e-4 才抖，nudge 已兜底）——构造极端用例（精确停极点+高频水平扫）观察
+  3. 【低】表面拾取 hover 性能第二层：BVH 或降采样代理（40 万三角无 BVH 求交毫秒级/次）
+  4. 【低】cron 执行配额（第 9 次 Disabled）——观察配额窗口期

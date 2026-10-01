@@ -441,19 +441,21 @@ check "剖面模板空间填充重造"      "'preset spacefill', 'hide waters'" 
 check "管线截图防陈旧重试"        "rm -f ..tmp/r72-.id.raw.png"   "scripts/gen-template-thumbs.sh" 1
 check "管线每模板视口档"          "slab-cutaway:30:4HHB:31:1280x720" "scripts/gen-template-thumbs.sh" 1
 
-# ---- r93：极点钉死死区根治（过极翻转 wrap + 输入奇偶 parity + 极点微推）——「转到一定程度转不动」终修 ----
+# ---- r93：极点钉死死区根治（过极翻转 wrap + 极点微推）——「转到一定程度转不动」终修（r96 输入奇偶随刚体化退役）----
 check "过极翻转守卫方法"          "private wrapPoleGuard"        "src/lib/molecular/engine.ts" 1
 check "翻转位置连续数学"          "TMP_ORBIT_S.theta \+= Math.PI" "src/lib/molecular/engine.ts" 1
-check "输入奇偶补丁安装"          "origUp\(a \* this.poleParity\)"  "src/lib/molecular/engine.ts" 1
-check "穿越翻转奇偶取反"          "this.poleParity \*= -1"       "src/lib/molecular/engine.ts" 1
 check "钉死带窄带宽 0.4°"         "degToRad\(0.4\)"                "src/lib/molecular/engine.ts" 1
-check "显式位姿奇偶归位"          "this.poleParity = 1"          "src/lib/molecular/engine.ts" 3
 check "极点微推方法"              "nudgeOffPoleOnRotateStart"    "src/lib/molecular/engine.ts" 2
 check "翻转紧随 update 防钳制帧"  "this.wrapPoleGuard()"         "src/lib/molecular/engine.ts" 1
 
+# ---- r96：刚体过极（up 随 R_min 滚转 + 轨道基即时换新）——「转到一个位置突然偏转 180°（坐标轴 gizmo 同翻）」终修 ----
+check "刚体过极 up 滚转"          "up.applyQuaternion\(TMP_POLE_Q\)" "src/lib/molecular/engine.ts" 2
+check "刚体最小旋转构造"          "TMP_POLE_Q.setFromUnitVectors"    "src/lib/molecular/engine.ts" 2
+check0 "输入奇偶全退役"           "poleParity"                        "src/lib/molecular/engine.ts"
+
 # ---- r94：膜残留根治 + 轨道基随 up（「模板有转动限制/双层膜到处出现」双主诉终修） ----
 check "轨道基随up同步方法"        "private syncOrbitFrame"       "src/lib/molecular/engine.ts" 1
-check "同步三调用点"              "this.syncOrbitFrame()"        "src/lib/molecular/engine.ts" 3
+check "同步调用点（r96 增 wrap/nudge）" "this.syncOrbitFrame()"   "src/lib/molecular/engine.ts" 5
 check "轨道基追踪字段"            "orbitFrameUp"                 "src/lib/molecular/engine.ts" 3
 check "极点机件换up基"            "frameQ"                       "src/lib/molecular/engine.ts" 10
 check "基向量退化守卫"            "right.set\(-dir.z, 0, dir.x\)" "src/lib/molecular/engine.ts" 1
