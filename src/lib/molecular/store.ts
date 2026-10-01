@@ -365,6 +365,12 @@ export const useMolStore = create<MolState>()((set, get) => ({
       visualRev: s.visualRev + 1,
       selection: { structureId: null, indices: [], rev: s.selection.rev + 1 },
       hbondScope: null,
+      // r92：膜几何是「结构语境」（疏水带扫描定轴定心于新结构）——旧结构的膜
+      // 跟随到新结构上只余主轴回退示意板（可溶蛋白被切出 bogus 双橙板 → 用户实测
+      // 「无论打开哪个模板或结构都出现双层膜」）。加载新结构时复位；模板/命令路径
+      // 在 load 之后重新 membrane <厚度> 开启（顺序执行器保证）；会话恢复在
+      // addStructure 之后统一应用存档 settings（此处复位会被存档值覆盖，安全）。
+      settings: { ...s.settings, showMembrane: false },
     }))
     return id
   },
@@ -417,7 +423,13 @@ export const useMolStore = create<MolState>()((set, get) => ({
 
   // r63-fix-c #3：活动结构切换时 bump visualRev——引擎视觉中随 activeId 的部分（晶胞盒 show cell）
   // 需要重新 sync 才会跟随（MolViewer 的 sync effect 仅依赖 visualRev）；同 id 重复调用不 bump
-  setActive: (id) => set(s => s.activeId === id ? {} : { activeId: id, visualRev: s.visualRev + 1 }),
+  // r92：切换活动结构同样复位膜（同 addStructure 注——防旧结构膜残留到下一个结构；
+  // 会话恢复用 setState 直写 activeId 不经此处，存档 showMembrane 不受影响）
+  setActive: (id) => set(s => s.activeId === id ? {} : {
+    activeId: id,
+    visualRev: s.visualRev + 1,
+    settings: s.settings.showMembrane ? { ...s.settings, showMembrane: false } : s.settings,
+  }),
 
   addRep: (structureId, rep) => {
     set(s => ({

@@ -3811,3 +3811,26 @@ Stage Summary:
   4. 【低】cron 执行配额（第 7 次 Disabled）——观察配额窗口期
 
 （r95 段 cron 补记，2026-09-30 23:02）15min webDevReview 巡检任务 #426418 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 8 次实证（r85/r86/r87/r88/r90/r91/r94 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
+
+---
+Task ID: r92
+Agent: main
+Task: 用户指令「有膜的蛋白还是旋转受限」（叠加历轮症状：膜模板后水平转到某方向卡死、有时卡一下、膜似变形、无论打开哪个模板/结构都出现双层膜、hydration mismatch 报错）——三症状统一根因定位与根修。⚠️ 变基调和：本段基于 r91 基座独立完成，推送时发现 origin 已被 cron 轮 r93/r94/r95 并行推进（r93 过极翻转 wrap+parity、r94 syncOrbitFrame 轨道基随 up+loader 膜复位、r95 拖拽期 hover 抑制+膜板 FrontSide+取景并入膜盒）——engine 侧根因（倾斜 up 三症状）与 r94 syncOrbitFrame 独立同源发现，r94 实现更优（保留滚转构图而非归位世界 Y），变基后 engine.ts 全取远程；本段独有保留：①store.ts addStructure/setActive 膜复位（r94 loader 汇点不覆盖 activate 切换已载结构路径）②CommandPalette mounted 守卫（Radix hydration）③E2E 方法论与实证记录（叠加历轮症状：膜模板后水平转到某方向卡死、有时卡一下、膜似变形、无论打开哪个模板/结构都出现双层膜、hydration mismatch 报错）——三症状统一根因定位与根修
+
+Work Log:
+- 【根因定位·转动受限】engine.ts camAnim 落位后 camera.up 永久保持 up1：view membrane side 把 up 设为膜法线 n（沉积位姿任意倾斜，1FX8 实测 (0.14,0.14,0.98)）→ OrbitControls 以 up 为轨道极轴：(a) 视方向接近 ±n 时 makeSafe() 极点硬钳=「转到某方向转不动」；(b) 绕倾斜轴公转=画面滚动=「膜变形」错觉+转起来发怪；(c) updateOrbitClampDynamic 硬编码世界 Y 极角与倾斜帧互吸=「卡一下」。agent-browser 实测复现：模板加载后 up=(0.14,0.14,0.98) 实锤
+- 【根因定位·双层膜】membrane 32 置 showMembrane:true 后跨结构残留（store 无复位）——切任意可溶蛋白按主轴回退画 bogus 示意板=「无论打开哪个模板或结构都出现双层膜」；单开结构不受限=新会话 up 默认 (0,1,0)，模板路径污染后全 session 受害
+- 【Fix A·up 归位机制】（⚠️ 变基后弃用——r94 syncOrbitFrame 优胜：保留滚转构图+屏幕正确拖拽语义，归位世界 Y 属次优解；以下为独立发现过程存档）engine.ts：controls 'change' 监听（onCameraUserMove）——用户驱动相机首个位移帧启动 beginUpLevel()：160ms easeOutCubic slerp up→±Y（就近极向）；tick 内 upAnim 块双相机同步+各自 lookAt。构图仅在飞行与静观期保留（点击/选择无位移不触发），交互永远世界轴转盘（PyMOL 手感）。防误触甄别：userCamT（pointerdown/wheel 时间戳，≤400ms 新鲜）或 spin/rock 自动驱动才归位——camAnim 落位后首帧残留 change（末步 lerp 位移超 EPS 也派发一次）不会无用户输入就归位
+- 【Fix A2·限位同帧】updateOrbitClampDynamic 极角改按 activeCamera.up 帧计算（OrbitControls 内部球坐标同源）；maybeExemptOrbit 增 up 参数（animateCameraTo 传 up1、camPath 传 k.up、setCameraState 传已应用的 activeCamera.up）——彻底消除双帧互吸
+- 【Fix B·膜复位】store.ts addStructure/setActive 复位 showMembrane:false（膜几何是结构语境）。顺序安全验证：会话恢复在 addStructure 之后统一应用存档 settings（复位被存档值覆盖）且 activeId 走 setState 直写不经 setActive；场景快照不存膜；模板路径 load 后重跑 membrane <厚度> 重新开启
+- 【Fix C·hydration】CommandPalette mounted 守卫（useSyncExternalStore 三参模式，与 LeftPanel.useMounted 同构——服务端快照 false，避开 react-hooks/set-state-in-effect 禁令）：CommandDialog 客户端挂载后才渲染，Radix useId 树位 id 永远客户端单源生成，水合阶段零参与
+- 【E2E 实测·agent-browser】①膜模板加载→up=(0.14,0.14,0.98) 倾斜实锤→拖拽后 up=(0,1,0) 归位 ✓ ②干净基线（orient 后 up 倾斜 0.79）水平连续拖拽：upY 首拍归位 1.0000，方位角累计 420°（15→53→104→162→224→288→354→420）每批 +60° 无冻结 ✓（azimuth limits ±Infinity、polar [0,π] 复核）③垂直拖拽 phi 58°→0° 到极点停驻=转盘标准语义（PyMOL 同款）④load 4hhb 后 membraneGroup.children=0（膜消失）✓ activate 1FX8 切换同样复位 ✓ membrane 32 手动重开 children=5 ✓ ⑤view membrane 落位 up 倾斜（构图保留）+ membraneChildren=5 ✓ ⑥VLM 全尺寸单图复鉴：蛋白垂直居膜/单一连续双层（双橙头基+灰核心）/无 glitch 变形 ✓ ⑦reload 后控制台零 error/warning/hydration ✓ ⑧Ctrl+K 面板开/关正常（mounted 守卫后）✓。合成指针事件坑：setPointerCapture 对合成 pointerId 抛异常→stub 后 OrbitControls 正常吃事件；异步 eval await 循环 CDP 超时→分批同步 eval
+- 【门禁链（变基后）】lint 0 · tsc src 0 · guards 334→338（r92 保留 4 断言：store 膜复位×2+面板守卫×2；engine 侧 7 断言随 up 归位机制一并弃用）· smoke 4/4 · dev.log 零 error——变基后全套复跑见下
+- 【PDB ID 澄清】用户写「1fxb」——模板实际用 1FX8（GlpF 甘油通道，Science 2002 Fu et al.），1fxb 系笔误；membrane-embed 模板 demo 字段与引文一致无需改
+
+Stage Summary:
+- 三症状统一根因闭环：倾斜 up（转动受限/卡顿/膜变形）+ showMembrane 跨结构残留（双层膜）+ Radix useId 树哈希漂移（hydration）——全部根修并 E2E 实证
+- 核心设计决策：轨道交互永远世界 Y 转盘；自定义 up 视角（膜语境/主轴对齐）仅在飞行与静观期保留构图，用户上手 160ms 微动画归位；膜几何按结构生命周期管理（加载/切换即复位，命令一条重开）
+- guards 307/307 · 用户实测路径（膜模板→拖拽→切结构）全链路 agent-browser 验证通过
+- 未尽事项：垂直过顶穿越（已由 r93 过极翻转 wrap 解决——变基后纳入）；模板缩略图无需重产（无视觉配方变更）
+- 【变基后全链复验】engine.ts=origin r95（syncOrbitFrame+过极 wrap+hover 抑制+膜板 FrontSide+取景并入膜盒全数在位）；store.ts=本段 activate 路径复位；CommandPalette=本段 mounted 守卫；guards 338/338；lint 0；smoke 4/4；E2E（膜模板→拖拽 420° 方位角无冻结→load 切结构膜即消→activate 切换膜即消→VLM 居中复鉴）——待变基完成后的 dev server 重启复测

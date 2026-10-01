@@ -477,8 +477,17 @@ check "全景取景并入膜盒"          "if \(!refs \|\| !refs.length\)" "src/
 check "orient取景并入膜盒"        "const mb = this.membraneBox"   "src/lib/molecular/engine.ts" 2
 check "拖拽期冻结视口可见性"      "if \(this.pointerDragging\) return" "src/lib/molecular/engine.ts" 1
 
+# ---- r92（变基调和版）：双层膜 activate 路径复位（r94 loader 汇点复位的结构切换补全）+ Radix hydration 挂载守卫 ----
+# r92 独立发现与 r93-95 并行：engine 侧倾斜 up 根修由 r94 syncOrbitFrame 优胜实现（保留滚转构图，
+# 拖拽语义恒屏幕正确）——本侧保留 r94 未覆盖的两件：①activate 切换已载结构时膜残留（updateMembrane
+# key 含 activeId，切到可溶蛋白按主轴回退 bogus 双板）②CommandPalette Radix useId SSR/CSR 错位
+check "加载复位膜开关"          "settings: \{ \.\.\.s\.settings, showMembrane: false \}" "src/lib/molecular/store.ts" 1
+check "切换复位膜开关"          "s\.settings\.showMembrane \? \{ \.\.\.s\.settings, showMembrane: false \}" "src/lib/molecular/store.ts" 1
+check "面板挂载守卫"            "const mounted = useSyncExternalStore" "src/components/studio/CommandPalette.tsx" 1
+check "面板挂载条件渲染"        "\{mounted && \("               "src/components/studio/CommandPalette.tsx" 1
+
 # ---- 汇总 ----
-TOTAL=334
+TOTAL=338
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

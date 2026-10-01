@@ -102,6 +102,16 @@ export function CommandPalette() {
   const pinned = useSyncExternalStore(subscribeCmdHistory, pinnedCmdsSnapshot, emptyCmdSnapshot)
 
   const [confirmNewSession, setConfirmNewSession] = useState(false)
+  // r92 hydration 根修：用户实测 Radix Dialog useId 树位 id SSR/CSR 错位
+  // （radix-_R_1qatmlbH1_ vs radix-_R_eindlbH1_，HMR 双模块实例下树哈希漂移）。
+  // 客户端挂载后才渲染 CommandDialog——水合阶段零参与，id 永远客户端单源生成；
+  // Ctrl+K 本就是纯客户端交互，无任何 UX 损失（与 LeftPanel.useMounted 同构：
+  // useSyncExternalStore 三参模式，服务端快照 false，避开 set-state-in-effect 禁令）
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
 
   // Ctrl/Cmd+K 全局开关（输入框聚焦时同样生效——浏览器标准快捷键语义）
   useEffect(() => {
@@ -314,6 +324,7 @@ export function CommandPalette() {
 
   return (
     <>
+      {mounted && (
       <CommandDialog
         open={open}
         onOpenChange={setOpen}
@@ -366,6 +377,7 @@ export function CommandPalette() {
           </span>
         </div>
       </CommandDialog>
+      )}
 
       {/* 新建会话确认（有结构时二次确认，防误触——文案与 Toolbar 同源） */}
       <AlertDialog open={confirmNewSession} onOpenChange={setConfirmNewSession}>
