@@ -3835,3 +3835,5 @@ Stage Summary:
 - 未尽事项：垂直过顶穿越（已由 r93 过极翻转 wrap 解决——变基后纳入）；模板缩略图无需重产（无视觉配方变更）
 - 【变基后全链复验（已完成）】dev server 重启（r95 引擎+r92 增量合并态）：①膜模板落位 up=(0.15,0.40,-0.91) 倾斜构图保留（turn z 90 序列产物）+膜 5 子对象+membraneBox 就位 ②倾斜帧下水平连续拖拽累计 453°（10→75→145→171→233→328→356→453）每批推进无冻结，up 全程恒定（syncOrbitFrame 屏幕正确语义实证——构图不随旋转丢失，优于本段独立方案的归位式）③load 4hhb 后膜 children=0（r94 loader 汇点）④activate 1FX8 后膜 children=0（本段独有增量——r94 不覆盖的切换路径）⑤membrane 32 手动重开 children=5 正常 ⑥VLM 全尺寸复鉴：蛋白垂直居膜/单一连续双层/无 glitch（「1 Issue」角标 DOM 无对应=VLM 微缩文字误报第 9 判例）⑦reload 后控制台零 error/hydration/mismatch ⑧Ctrl+K 面板开/关正常（含 Radix 淡出动画窗口）——合并态门禁：lint 0 · tsc src 0 · guards 338/338 · smoke 4/4 · dev.log 零 error
 - 【变基工程教训】git rebase 重放 docs-only 提交时以 --ours 批量解冲突，但重放基选择了陈旧树——静默回退 r93-95 源码 85 文件（tsc 暴露 setMembraneView 断裂为信号）；修正法：暂存目标 4 文件 → reset --hard origin/main → 选择性恢复 → 干净单提交。多 agent 并行开发（cron 巡检 vs 主会话）推送前必须 fetch 比对，变基冲突解法优先「重放最小 diff」而非整树取侧
+
+（r92 段 cron 补记，2026-10-01 20:42）15min webDevReview 巡检任务 #428430 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 9 次实证（r85/r86/r87/r88/r90/r91/r94/r95 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
