@@ -40,6 +40,8 @@ mkdir -p "$OUT"
 # r87 新增五模板（27-31）：ink-night 11s（深底 + 加宽卡通 + turn）；ballstick 10s（全
 # 结构球棍）；stereo 10s（红蓝立体后处理即成）；putty 10s（胖瘦管几何 + bfactor 归一）；
 # slab 15s（SASA 表面 worker + 切层封盖——与 sasa 13s 同基线加余量）
+# r97 新增九模板（37-45）：风格六连（影院/黑板/马卡龙/双色/棕印/霓虹）即成 10s；
+# 教科书 12s（标签 + 取景动画）；核小体 12s（1AOI 1MB 下载 + 核酸谱着色）；GFP 12s（CRO 特写飞行）
 # r89 新增五模板（32-36）：wire 10s（线框即成）；grayscale 10s（灰化即成）；electrostatic
 # 13s（SASA 表面 worker 基线）；hydration 11s（水 rep 转小球 + orient）；unit-cell 10s
 # （CRYST1 盒线框即成）
@@ -81,6 +83,15 @@ SPECS=(
   electrostatic-surface:13:4HHB:34
   hydration-shell:11:4HHB:35
   unit-cell-context:10:4HHB:36
+  cinematic-spotlight:10:4HHB:37
+  chalk-wireframe:10:1AKI:38
+  pastel-macaron:10:3INS:39
+  duotone-poster:10:4HHB:40
+  sepia-vintage:10:1MBO:41
+  neon-night:10:1CRN:42
+  textbook-annotated:12:1AKI:43
+  nucleosome-dna:12:1AOI:44
+  gfp-chromophore:12:1EMA:45
 )
 
 # r75：可选增量模式——命令行传模板 id 列表则只生成指定项（缺省全量）

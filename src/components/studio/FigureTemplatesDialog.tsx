@@ -17,17 +17,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, Atom, BookOpenText, Boxes, Camera, CircleDot, Component, Contrast, Dna, Download, ExternalLink, Film,
-  Gauge, Gem, Ghost, GitCompareArrows, Glasses, Grid3x3, Hexagon, ImagePlus, Layers, Link2, Loader2, Magnet, MapPin, Moon, Network, Orbit, Palette,
-  Pencil, Play, Ruler, Scissors, Shapes, Sparkles, Spline, Target, Trash2, Upload, Waves, Wand2, Waypoints, Cylinder, Droplets, Box, Zap, type LucideIcon,
+  ArrowLeft, Atom, BookOpenText, Boxes, Camera, Candy, CircleDot, Component, Contrast, Disc, Dna, Download, Drama, ExternalLink, Film,
+  FlaskConical, Gauge, Gem, Ghost, GitCompareArrows, Glasses, GraduationCap, Grid3x3, Hexagon, History, ImagePlus, Layers, Lightbulb, Link2, Loader2, Magnet, MapPin, Moon, Network, Orbit, Palette,
+  Pencil, Play, Ruler, ScanSearch, Scissors, Shapes, Sparkles, Spline, SwatchBook, Target, Trash2, Upload, Waves, Wand2, Waypoints, Cylinder, Droplets, Box, Zap, Check, type LucideIcon,
 } from 'lucide-react'
-import { useMolStore } from '@/lib/molecular/store'
+import { useMolStore, engineRef } from '@/lib/molecular/store'
 import { useI18n, tt, type DualText } from '@/i18n'
 import {
   demoThenApply, explainCommand, FIGURE_CATEGORIES, FIGURE_TEMPLATES, runTemplateCommands,
-  adaptTemplateCommands, logAdaptNotes,
+  adaptTemplateCommands, logAdaptNotes, isStructureInStore, waitForCameraIdle, waitForStructureInStore,
   type FigureCategory, type FigureTemplate,
 } from '@/lib/molecular/figure-templates'
+import { fetchPdbId } from '@/lib/molecular/loader'
+import { whenEngineReady } from '@/lib/molecular/engine-ready'
 import {
   addCustomTemplate, exportCustomTemplates, importCustomTemplates, removeCustomTemplate,
   updateCustomTemplate, useCustomTemplates, type CustomTemplate,
@@ -106,6 +108,18 @@ export const TPL_ICONS: Record<string, LucideIcon> = {
   'electrostatic-surface': Zap,
   'hydration-shell': Droplets,
   'unit-cell-context': Box,
+  // r97 九新模板：Drama（影院聚光——舞台剧面具）/ Pencil（黑板粉笔——板书笔）/ Candy
+  // （马卡龙——糖果）/ SwatchBook（双色海报——色板书）/ History（复古棕印——历史）/ Disc
+  // （核小体——盘面形状）/ GraduationCap（教科书——学位帽）/ Lightbulb（赛博霓虹——灯泡）/ FlaskConical（GFP 荧光——烧瓶）
+  'cinematic-spotlight': Drama,
+  'chalk-wireframe': Pencil,
+  'pastel-macaron': Candy,
+  'duotone-poster': SwatchBook,
+  'sepia-vintage': History,
+  'neon-night': Lightbulb,
+  'textbook-annotated': GraduationCap,
+  'nucleosome-dna': Disc,
+  'gfp-chromophore': FlaskConical,
 }
 
 function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete, onEdit }: {
@@ -319,12 +333,104 @@ async function fileToImages(file: File): Promise<{ dataUrl: string; thumb: strin
   return { dataUrl, thumb, w, h }
 }
 
-/** 解析阶段提示轮播（进度剧场——VLM 实需 10-60s，静态转轮无信息量） */
+/** r97：客观色彩证据提取（送 VLM 的「采样锚」——bg/主题色不再靠目测）。
+ *  · 背景：四角 + 四边中点 8 个 patch 采样，量子化（每通道 >>4）众数簇均值
+ *  · 主色板：降采样（长边≤96px）后全像素量子化 top 簇（剔离背景色 <ΔRGB 30）取 top5
+ *  · 亮度：背景色相对亮度（深/浅底语境判读）——全部纯客户端 canvas，零网络成本 */
+export interface ParseImageHints {
+  background: string
+  backgroundLuma: number
+  palette: { hex: string; share: number }[]
+  width: number
+  height: number
+}
+
+async function extractImageHints(dataUrl: string): Promise<ParseImageHints> {
+  const el = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('decode failed'))
+    img.src = dataUrl
+  })
+  const W = el.naturalWidth || 1
+  const H = el.naturalHeight || 1
+  const s = Math.min(1, 96 / Math.max(W, H))
+  const cw = Math.max(8, Math.round(W * s))
+  const ch = Math.max(8, Math.round(H * s))
+  const canvas = document.createElement('canvas')
+  canvas.width = cw
+  canvas.height = ch
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('canvas 2d unavailable')
+  ctx.drawImage(el, 0, 0, cw, ch)
+  const data = ctx.getImageData(0, 0, cw, ch).data
+  const hex = (r: number, g: number, b: number) =>
+    '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('')
+  const luma = (r: number, g: number, b: number) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+
+  // 背景采样：四角 + 四边中点 patch（4×4 窗口）→ 量子化众数簇
+  const patches: [number, number][] = [
+    [0, 0], [cw - 4, 0], [0, ch - 4], [cw - 4, ch - 4],
+    [(cw >> 1) - 2, 0], [(cw >> 1) - 2, ch - 4], [0, (ch >> 1) - 2], [cw - 4, (ch >> 1) - 2],
+  ]
+  type Cluster = { n: number; r: number; g: number; b: number }
+  const bgClusters = new Map<string, Cluster>()
+  const px = (x: number, y: number) => {
+    const i = (y * cw + x) * 4
+    return [data[i], data[i + 1], data[i + 2]] as const
+  }
+  for (const [ox, oy] of patches) {
+    for (let dy = 0; dy < 4; dy++) {
+      for (let dx = 0; dx < 4; dx++) {
+        const [r, g, b] = px(Math.min(cw - 1, ox + dx), Math.min(ch - 1, oy + dy))
+        const key = `${r >> 4}:${g >> 4}:${b >> 4}`
+        const c = bgClusters.get(key) ?? { n: 0, r: 0, g: 0, b: 0 }
+        c.n++; c.r += r; c.g += g; c.b += b
+        bgClusters.set(key, c)
+      }
+    }
+  }
+  let bgBest: Cluster | null = null
+  for (const c of bgClusters.values()) if (!bgBest || c.n > bgBest.n) bgBest = c
+  const bgR = bgBest ? bgBest.r / bgBest.n : 255
+  const bgG = bgBest ? bgBest.g / bgBest.n : 255
+  const bgB = bgBest ? bgBest.b / bgBest.n : 255
+
+  // 主色板：全像素量子化（剔背景色），top5 簇均值
+  const pal = new Map<string, Cluster>()
+  let total = 0
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2]
+    // 剔除背景色（±30/通道均值），半透明边缘像素也会被剔除——足够近似
+    if (Math.abs(r - bgR) + Math.abs(g - bgG) + Math.abs(b - bgB) < 90) continue
+    const key = `${r >> 4}:${g >> 4}:${b >> 4}`
+    const c = pal.get(key) ?? { n: 0, r: 0, g: 0, b: 0 }
+    c.n++; c.r += r; c.g += g; c.b += b
+    pal.set(key, c)
+    total++
+  }
+  const palette = [...pal.values()]
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 5)
+    .map(c => ({ hex: hex(c.r / c.n, c.g / c.n, c.b / c.n), share: total ? c.n / total : 0 }))
+
+  return {
+    background: hex(bgR, bgG, bgB),
+    backgroundLuma: luma(bgR, bgG, bgB),
+    palette,
+    width: W,
+    height: H,
+  }
+}
+
+/** 解析阶段提示轮播（进度剧场——VLM 实需 10-60s，静态转轮无信息量；
+ *  r97 两段式：末段新增复检精修） */
 const PARSING_STAGES: DualText[] = [
   { zh: '识别表示法（卡通带 / 球棍 / 表面 / CPK 球）…', en: 'Identifying representations (cartoon / sticks / surface / CPK)…' },
   { zh: '还原配色方案（彩虹 / 逐链 / 元素色 / SASA 渐变）…', en: 'Recovering the color scheme (rainbow / per-chain / element / SASA)…' },
   { zh: '估读视角与景别（全景 / 位点特写 / 正交）…', en: 'Reading camera & framing (overview / site close-up / orthogonal)…' },
   { zh: '翻译为命令序列并过白名单校验…', en: 'Translating to a command sequence and validating…' },
+  { zh: '复检精修：逐维对照原图修正命令…', en: 'Self-check refinement: verifying each dimension against the image…' },
 ]
 
 /** r82：CustomTemplate → TemplateDraft（编辑模式复用审核表单——analysis 换编辑说明） */
@@ -343,6 +449,262 @@ function templateToDraft(tpl: CustomTemplate): TemplateDraft {
     },
     commands: tpl.commands,
   }
+}
+
+// ── r97：渲染校准回路（原图 vs 引擎渲染 → AI 逐维比对 → 采纳修正命令） ──────────
+// 「准确还原」闭环：r84 对照预览让人眼看差距，本面板让 AI 自己看——按当前表单
+// 命令真实渲染（TemplatePreview 同款管线：demo 入 store → 引擎就绪 → 相机落地
+// → runTemplateCommands → capture）→ 截图与原图一起送 /api/templates/calibrate
+// → 展示六维比对结论与修正序列（行级差异高亮）→ 一键采纳回写命令表单。
+const CALIB_STAGES: DualText[] = [
+  { zh: '加载演示结构并应用当前命令…', en: 'Loading the demo & applying current commands…' },
+  { zh: '截取引擎渲染…', en: 'Capturing the engine render…' },
+  { zh: 'AI 逐维比对原图与渲染…', en: 'The AI compares source vs render…' },
+]
+
+/** dataURL → ≤maxW 像素 JPEG（VLM 上行省流——与 AgentPanel shrinkImage 同模式） */
+async function shrinkDataUrl(dataUrl: string, maxW: number): Promise<string> {
+  const el = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('decode failed'))
+    img.src = dataUrl
+  })
+  const s = Math.min(1, maxW / Math.max(1, el.naturalWidth))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(el.naturalWidth * s))
+  canvas.height = Math.max(1, Math.round(el.naturalHeight * s))
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas 2d unavailable')
+  ctx.drawImage(el, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.72)
+}
+
+function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
+  sourceUrl: string
+  /** 当前表单的「有效」命令行（逐行过闸后的） */
+  commands: string[]
+  demo: string
+  /** 采纳修正序列 → 回写命令表单 */
+  onAccept: (next: string[]) => void
+}) {
+  const { t } = useI18n()
+  const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [stage, setStage] = useState(0)
+  const [errMsg, setErrMsg] = useState('')
+  const [renderShot, setRenderShot] = useState<string | null>(null)
+  const [result, setResult] = useState<{ verdict: 'close' | 'adjusted'; critique: DualText; suggested: string[] | null } | null>(null)
+  const [accepted, setAccepted] = useState(false)
+
+  useEffect(() => {
+    if (phase !== 'running') return
+    const iv = setInterval(() => setStage(s => Math.min(s + 1, CALIB_STAGES.length - 1)), 5000)
+    return () => clearInterval(iv)
+  }, [phase])
+
+  const run = async () => {
+    if (phase === 'running' || commands.length < 2) return
+    setPhase('running')
+    setStage(0)
+    setErrMsg('')
+    setAccepted(false)
+    try {
+      // ① 演示结构落地（TemplatePreview 同拍——已入 store 免拉取）
+      if (!isStructureInStore(demo)) {
+        await fetchPdbId(demo)
+        const ok = await waitForStructureInStore(demo, 9000)
+        if (!ok) throw new Error('LOAD_TIMEOUT')
+      }
+      await new Promise<void>(res => whenEngineReady(() => res()))
+      await new Promise(r => setTimeout(r, 80))
+      await waitForCameraIdle(2600)
+      await new Promise(r => setTimeout(r, 100))
+      // ② 应用当前命令（表单实况——含用户手改）
+      await runTemplateCommands(commands)
+      await new Promise(r => setTimeout(r, 450))
+      // ③ 截取视口 + 缩流送 VLM
+      const eng = engineRef.current
+      if (!eng) throw new Error('NO_ENGINE')
+      setStage(1)
+      await new Promise(r => setTimeout(r, 60))
+      const shot = eng.capture({ scale: 1.5 })
+      setRenderShot(shot)
+      setStage(2)
+      const [targetJ, renderJ] = await Promise.all([
+        shrinkDataUrl(sourceUrl, 768),
+        shrinkDataUrl(shot, 768),
+      ])
+      const res = await fetch('/api/templates/calibrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: targetJ, render: renderJ, commands }),
+      })
+      const data = (await res.json()) as {
+        ok?: boolean
+        verdict?: 'close' | 'adjusted'
+        critique?: DualText
+        commands?: string[] | null
+        error?: string
+      }
+      if (!res.ok || !data.ok || !data.verdict || !data.critique) {
+        throw new Error(data.error ?? 'CALIB_FAILED')
+      }
+      setResult({ verdict: data.verdict, critique: data.critique, suggested: data.commands ?? null })
+      setPhase('done')
+    } catch (e) {
+      setPhase('error')
+      setErrMsg(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const currentSet = new Set(commands)
+  const changedLines = result?.suggested?.filter(c => !currentSet.has(c)) ?? []
+  const removedCount = result ? commands.filter(c => !result.suggested?.includes(c)).length : 0
+
+  return (
+    <div data-calibration-panel className="relative overflow-hidden rounded-lg border border-border bg-muted/30">
+      {/* idle：CTA */}
+      {phase === 'idle' && (
+        <button
+          type="button"
+          onClick={() => void run()}
+          disabled={commands.length < 2}
+          data-calibration-cta
+          className="group flex w-full cursor-pointer flex-col items-center justify-center gap-2 px-4 py-4 text-center transition-colors hover:bg-primary/[0.05] disabled:pointer-events-none disabled:opacity-55"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
+            <ScanSearch className="h-5 w-5" aria-hidden />
+          </span>
+          <span className="text-[12px] font-semibold">{t({ zh: '渲染校准 · AI 比对原图', en: 'Render calibration · AI vs source' })}</span>
+          <span className="max-w-[40ch] text-[10.5px] leading-relaxed text-muted-foreground">
+            {commands.length < 2
+              ? t({ zh: '命令不足 2 条——先让解析产出或手写至少两条有效命令', en: 'Fewer than 2 commands — parse an image or write at least two valid ones first' })
+              : t({
+                  zh: `将按当前 ${commands.length} 条命令真实渲染（结构 ${demo}），截屏后由 AI 与原图逐维比对（景别/视角/配色/背景），自动修正命令序列`,
+                  en: `Renders with the current ${commands.length} commands (${demo}), then the AI compares against the source (framing / camera / colors / background) and proposes corrections`,
+                })}
+          </span>
+        </button>
+      )}
+
+      {/* running：阶段剧场 */}
+      {phase === 'running' && (
+        <div className="flex w-full flex-col items-center justify-center gap-2.5 px-4 py-5">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden />
+          <span className="text-[11.5px] font-medium text-foreground/85">{t(CALIB_STAGES[stage])}</span>
+          <span className="flex items-center gap-1 font-mono text-[9px] text-muted-foreground">
+            {CALIB_STAGES.map((_, i) => (
+              <span key={i} className={`h-1 w-5 rounded-full transition-colors ${i <= stage ? 'bg-primary/70' : 'bg-border'}`} />
+            ))}
+          </span>
+        </div>
+      )}
+
+      {/* done：渲染快照 + 比对结论 + 修正序列（行级差异高亮） */}
+      {phase === 'done' && result && (
+        <div className="flex flex-col gap-2.5 p-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            <figure className="relative overflow-hidden rounded-md border border-border">
+              <img src={sourceUrl} alt={t({ zh: '目标原图', en: 'Target source' })} className="aspect-[16/10] w-full object-contain" />
+              <figcaption className="absolute bottom-1 left-1 rounded bg-background/85 px-1 py-px font-mono text-[8.5px] font-semibold text-muted-foreground backdrop-blur-sm">
+                {t({ zh: '原图', en: 'SOURCE' })}
+              </figcaption>
+            </figure>
+            <figure className="relative overflow-hidden rounded-md border border-border">
+              {renderShot && <img src={renderShot} alt={t({ zh: '引擎渲染快照', en: 'Engine render' })} className="aspect-[16/10] w-full object-contain" />}
+              <figcaption className="absolute bottom-1 left-1 rounded bg-background/85 px-1 py-px font-mono text-[8.5px] font-semibold text-muted-foreground backdrop-blur-sm">
+                {t({ zh: '渲染', en: 'RENDER' })}
+              </figcaption>
+            </figure>
+          </div>
+          <div className={cn(
+            'rounded-md border p-2',
+            result.verdict === 'close' ? 'border-emerald-500/40 bg-emerald-500/[0.06]' : 'border-amber-500/40 bg-amber-500/[0.07]',
+          )}>
+            <span className={cn(
+              'rounded px-1.5 py-px text-[9.5px] font-semibold',
+              result.verdict === 'close'
+                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                : 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+            )}>
+              {result.verdict === 'close'
+                ? t({ zh: '比对通过 · 已高度还原', en: 'Close match · well reproduced' })
+                : t({ zh: '发现差距 · 建议修正', en: 'Gaps found · corrections proposed' })}
+            </span>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-foreground/85">{t(result.critique)}</p>
+          </div>
+          {result.suggested && (
+            <div className="rounded-md border border-border bg-background/60 p-2">
+              <span className="mol-micro text-muted-foreground">
+                {t({ zh: `修正序列（${changedLines.length} 条新命令 · ${removedCount} 条移除）`, en: `Proposed sequence (${changedLines.length} new · ${removedCount} removed)` })}
+              </span>
+              <ol className="mt-1.5 flex flex-col gap-0.5">
+                {result.suggested.map((c, i) => (
+                  <li key={i} className={cn(
+                    'rounded px-1.5 py-px font-mono text-[9.5px] leading-snug',
+                    currentSet.has(c) ? 'text-foreground/70' : 'bg-emerald-500/10 font-semibold text-emerald-700 dark:text-emerald-400',
+                  )} title={currentSet.has(c) ? undefined : t({ zh: '新命令', en: 'New command' })}>
+                    {currentSet.has(c) ? c : `+ ${c}`}
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-2 flex items-center gap-2">
+                {accepted ? (
+                  <span className="flex items-center gap-1 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    <Check className="h-3 w-3" aria-hidden />
+                    {t({ zh: '已采纳——命令表单已更新', en: 'Adopted — commands updated' })}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { onAccept(result.suggested!); setAccepted(true) }}
+                    data-calibration-accept
+                    className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15"
+                  >
+                    <Check className="h-3 w-3" aria-hidden />
+                    {t({ zh: '采纳修正序列', en: 'Adopt corrections' })}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void run()}
+                  data-calibration-rerun
+                  className="flex h-7 cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title={t({ zh: '按当前命令重新校准（采纳后可复验）', en: 'Re-calibrate with current commands (re-verify after adopting)' })}
+                >
+                  {t({ zh: '重新校准', en: 'Re-calibrate' })}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* error：诚实归因 + 重试 */}
+      {phase === 'error' && (
+        <div className="flex w-full flex-col items-center justify-center gap-2 px-6 py-4 text-center">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/10 text-red-500">
+            <ScanSearch className="h-4.5 w-4.5" aria-hidden />
+          </span>
+          <p className="text-[11px] leading-relaxed text-red-600 dark:text-red-400" role="alert">
+            {errMsg === 'LOAD_TIMEOUT'
+              ? t({ zh: `演示结构 ${demo} 加载超时——检查网络后重试`, en: `Timed out loading demo ${demo} — check the network and retry` })
+              : errMsg === 'NO_ENGINE'
+                ? t({ zh: '渲染引擎尚未就绪——稍候重试', en: 'Render engine not ready yet — retry shortly' })
+                : t({ zh: `校准失败：${errMsg || '请重试'}`, en: `Calibration failed: ${errMsg || 'please retry'}` })}
+          </p>
+          <button
+            type="button"
+            onClick={() => void run()}
+            className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Play className="h-3 w-3" aria-hidden />
+            {t({ zh: '重试', en: 'Retry' })}
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
@@ -367,6 +729,8 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
   const [stage, setStage] = useState(0)
   const [error, setError] = useState('')
   const [dropped, setDropped] = useState<{ cmd: string; reason: string }[]>([])
+  // r97：复检精修产物（两段式第二轮）：applied = 是否采纳了修正序列
+  const [refine, setRefine] = useState<{ applied: boolean; verdict: 'accurate' | 'adjusted'; critique: { zh: string; en: string } } | null>(null)
   // 审核表单（当前语言值可改；另一语言保留 AI 原稿）
   const [draft, setDraft] = useState<TemplateDraft | null>(editTarget ? templateToDraft(editTarget) : null)
   const [nameVal, setNameVal] = useState(editTarget ? (locale === 'en' ? editTarget.name.en : editTarget.name.zh) : '')
@@ -423,6 +787,7 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
     setError('')
     setDropped([])
     setDraft(null)
+    setRefine(null)
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -432,12 +797,20 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
     setPhase('parsing')
     setError('')
     try {
+      // r97：客观色彩证据（客户端采样——失败退纯目测，不阻断解析）
+      const hints = await extractImageHints(img.dataUrl).catch(() => null)
       const res = await fetch('/api/templates/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: img.dataUrl }),
+        body: JSON.stringify({ image: img.dataUrl, hints }),
       })
-      const data = (await res.json()) as { ok?: boolean; draft?: TemplateDraft; dropped?: { cmd: string; reason: string }[]; error?: string }
+      const data = (await res.json()) as {
+        ok?: boolean
+        draft?: TemplateDraft
+        dropped?: { cmd: string; reason: string }[]
+        refine?: { applied: boolean; verdict: 'accurate' | 'adjusted'; critique: { zh: string; en: string } } | null
+        error?: string
+      }
       if (!res.ok || !data.ok || !data.draft) {
         setError(data.error ?? tt({ zh: '解析失败，请稍后重试或换一张图', en: 'Parsing failed — retry later or try another image' }))
         setPhase('picked')
@@ -446,17 +819,26 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
       const d = data.draft
       setDraft(d)
       setDropped(data.dropped ?? [])
+      setRefine(data.refine ?? null)
       setNameVal(locale === 'en' ? d.name.en : d.name.zh)
       setTaglineVal(locale === 'en' ? d.tagline.en : d.tagline.zh)
       setCategoryVal(d.category)
       setDemoVal(d.demo)
       setCommandsVal(d.commands.join('\n'))
       setPhase('review')
+      // r97：两段式结果反馈（精修采纳 / 已核实 / 仅首轮）
+      const refineNotePair = data.refine
+        ? (data.refine.applied
+          ? { zh: '复检精修已采纳：命令序列经第二轮逐维对照修正', en: 'Refinement adopted: commands corrected in a second pass against the image' }
+          : { zh: '复检通过：第二轮逐维对照确认命令序列准确', en: 'Re-check passed: the command sequence was verified dimension by dimension' })
+        : { zh: '单轮解析（复检不可用，不影响入库）', en: 'Single-pass parse (re-check unavailable; still saveable)' }
       toast.success(tt({ zh: `图式解析完成：${d.commands.length} 条命令`, en: `Figure style parsed: ${d.commands.length} commands` }), {
-        description: tt({
-          zh: data.dropped?.length ? `${data.dropped.length} 条不受支持的命令已剔除（详见表单下方）` : '全部命令通过白名单校验',
-          en: data.dropped?.length ? `${data.dropped.length} unsupported commands dropped (see below the form)` : 'All commands passed the whitelist check',
-        }),
+        description: data.dropped?.length
+          ? tt({
+            zh: `${data.dropped.length} 条不受支持的命令已剔除（详见表单下方）· ${refineNotePair.zh}`,
+            en: `${data.dropped.length} unsupported commands dropped (see below the form) · ${refineNotePair.en}`,
+          })
+          : tt(refineNotePair),
       })
     } catch (e) {
       const msg = e instanceof Error && e.name === 'AbortError' ? tt({ zh: '请求已取消', en: 'Request aborted' }) : ''
@@ -686,6 +1068,39 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
                   <span className="rounded bg-foreground/[0.06] px-1.5 py-px font-mono text-[9.5px] font-semibold text-foreground/70">{draft.demo}</span>
                 </div>
               </div>
+              {/* r97 复检精修卡：两段式第二轮结论（采纳修正 / 复核通过）——用户看得到改了什么 */}
+              {refine && !editMode && (
+                <div className={cn(
+                  'rounded-lg border p-2.5',
+                  refine.applied
+                    ? 'border-emerald-500/40 bg-emerald-500/[0.06]'
+                    : 'border-primary/35 bg-primary/[0.05]',
+                )}>
+                  <span className="flex items-center gap-1.5">
+                    {refine.applied ? (
+                      <span className="rounded bg-emerald-500/15 px-1.5 py-px text-[9.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        {t({ zh: '复检精修 · 已采纳修正', en: 'Refined · corrections adopted' })}
+                      </span>
+                    ) : (
+                      <span className="rounded bg-primary/12 px-1.5 py-px text-[9.5px] font-semibold text-primary">
+                        {t({ zh: '复检通过 · 逐维已核实', en: 'Verified · dimension-checked' })}
+                      </span>
+                    )}
+                  </span>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-foreground/85">{t(refine.critique)}</p>
+                </div>
+              )}
+              {/* r97 渲染校准回路：AI 比对原图 vs 引擎渲染 → 修正命令序列（编辑模式
+                  无高分辨原图，不开放——缩略图比对会误导；命令只送有效行——
+                  无效行在 runCommand 里只会报错干扰渲染） */}
+              {img && !editMode && (
+                <CalibrationPanel
+                  sourceUrl={img.dataUrl}
+                  commands={commandLines.filter(x => validateTemplateCommand(x).ok)}
+                  demo={demoVal}
+                  onAccept={next => setCommandsVal(next.join('\n'))}
+                />
+              )}
               {dropped.length > 0 && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/[0.07] p-2.5">
                   <span className="mol-micro text-amber-600 dark:text-amber-400">{t({ zh: `已剔除 ${dropped.length} 条不受支持的命令`, en: `${dropped.length} unsupported commands dropped` })}</span>

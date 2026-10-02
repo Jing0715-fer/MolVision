@@ -488,8 +488,43 @@ check "切换复位膜开关"          "s\.settings\.showMembrane \? \{ \.\.\.s\
 check "面板挂载守卫"            "const mounted = useSyncExternalStore" "src/components/studio/CommandPalette.tsx" 1
 check "面板挂载条件渲染"        "\{mounted && \("               "src/components/studio/CommandPalette.tsx" 1
 
+# ---- r97：风格九连模板（风格矩阵六 + 实用三）+ 图片解析精度三件套（色彩证据 + 两段式精修 + 渲染校准回路） ----
+check "影院聚光模板"            "id: 'cinematic-spotlight'"     "src/lib/molecular/figure-templates.ts" 1
+check "黑板粉笔模板"            "id: 'chalk-wireframe'"         "src/lib/molecular/figure-templates.ts" 1
+check "马卡龙柔色模板"          "id: 'pastel-macaron'"          "src/lib/molecular/figure-templates.ts" 1
+check "双色海报模板"            "id: 'duotone-poster'"          "src/lib/molecular/figure-templates.ts" 1
+check "复古棕印模板"            "id: 'sepia-vintage'"           "src/lib/molecular/figure-templates.ts" 1
+check "赛博霓虹模板"            "id: 'neon-night'"              "src/lib/molecular/figure-templates.ts" 1
+check "教科书标注模板"          "id: 'textbook-annotated'"      "src/lib/molecular/figure-templates.ts" 1
+check "核小体模板"              "id: 'nucleosome-dna'"          "src/lib/molecular/figure-templates.ts" 1
+check "GFP荧光模板"             "id: 'gfp-chromophore'"         "src/lib/molecular/figure-templates.ts" 1
+check "影院聚光灯光三连"        "set direct 0\.9"               "src/lib/molecular/figure-templates.ts" 1
+check "黑板板书底色"            "bg #20362c"                    "src/lib/molecular/figure-templates.ts" 1
+check "马卡龙链对色"            "color #eeb1c4, chain A\+C"     "src/lib/molecular/figure-templates.ts" 1
+check "核酸彩虹选择域"          "spectrum count, rainbow, nucleic" "src/lib/molecular/figure-templates.ts" 1
+check "GFP色素直选"             "zoom \(resn CRO\), 12"         "src/lib/molecular/figure-templates.ts" 1
+check "图鉴r97灯光词条"         "定向主光增强"                  "src/lib/molecular/figure-templates.ts" 1
+check "图鉴r97链对词条"         "链对主题色分配"                "src/lib/molecular/figure-templates.ts" 1
+check "图标r97九新键"           "'cinematic-spotlight': Drama"  "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "图标核小体键"            "'nucleosome-dna': Disc"        "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "图标GFP键"               "'gfp-chromophore': FlaskConical" "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "管线r97九新规格"          "nucleosome-dna:12:1AOI:44"     "scripts/gen-template-thumbs.sh" 1
+check "色彩证据类型"            "export interface ParseImageHints" "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "色彩证据提取函数"        "async function extractImageHints" "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "解析上行hints"            "body: JSON\.stringify\(\{ image: img\.dataUrl, hints \}\)" "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "复检精修卡渲染"          "复检精修 · 已采纳修正"          "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "解析阶段精修轮播"        "复检精修：逐维对照原图修正命令" "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "服务端hints清洗"         "function sanitizeHints"        "src/app/api/templates/parse/route.ts" 1
+check "服务端两段式精修"        "function sanitizeRefine"       "src/app/api/templates/parse/route.ts" 1
+check "服务端精修提示词"        "复检精修"                      "src/app/api/templates/parse/route.ts" 2
+check "校准路由存在"            "渲染校准"                      "src/app/api/templates/calibrate/route.ts" 2
+check "校准组件"                "function CalibrationPanel"     "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "校准面板挂载"            "data-calibration-panel"        "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "校准采纳回写"            "data-calibration-accept"       "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "校准双图上行"            "target: targetJ, render: renderJ" "src/components/studio/FigureTemplatesDialog.tsx" 1
+
 # ---- 汇总 ----
-TOTAL=338
+TOTAL=371
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

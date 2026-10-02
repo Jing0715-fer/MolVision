@@ -825,6 +825,156 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     commands: ['preset cartoon', 'util cbc', 'show cell', 'bg white', 'orient'],
     accent: 'lime',
   },
+
+  // ── r97 扩容（用户指令：更多实用和风格不同的模板——风格矩阵六连 + 实用三连）──
+  // 风格六连覆盖此前未占位的视觉语域：影院聚光（key-light 暗调）/ 黑板粉笔（教学
+  // 板书）/ 马卡龙柔色（柔和糖果色板）/ 双色海报（现代平面设计 duotone）/ 复古
+  // 棕印（1958 首个肌红蛋白结构的印刷年代棕调）/ 赛博霓虹（暗底荧光青）。
+  // 实用三连：教科书标注（SS 三色 + 催化残基标签）/ 核小体 DNA 彩虹（1AOI 组
+  // 蛋白灰 + 核酸 N→C 双彩虹 + 顶视盘面）/ GFP 荧光色素特写（1EMA CRO 色素
+  // 棍特写 + 暗底荧光语境）。命令语法全部实测：1EMA CRO 为 HETATM 可 resn
+  // 直选（190KB）；1AOI 链 A-J（8 组蛋白 + 2 DNA 链）；3INS/4HHB 均 4 链
+  // （A+C / B+D 组合选择已在 mutation-hotspots 验证）。
+  {
+    id: 'cinematic-spotlight',
+    name: { zh: '影院聚光', en: 'Cinematic spotlight' },
+    tagline: { zh: '黑幕 + 定向主光 + 侧逆 28°：key-light 下的蛋白肖像', en: 'Black stage + directional key light + 28° rim angle: a protein portrait under key lighting' },
+    purpose: { zh: '封面主视觉 · 演讲大屏 · 首图氛围', en: 'Cover hero · conference slides · mood-setting' },
+    tags: [{ zh: '暗调', en: 'Low-key' }, { zh: '主光', en: 'Key light' }],
+    category: 'basic',
+    figure: { ref: '封面', shows: { zh: '封面主视觉：单侧主光塑形 + 深背景氛围', en: 'Cover hero: single-sided key light sculpting the fold on a deep stage' } },
+    citation: { journal: 'Nature', year: 2021, title: 'The protein folding problem 50 years on', doi: '10.1038/s41586-021-03819-2' },
+    demo: '4HHB',
+    // 差异点：三灯光比改写（direct 0.9 强主光 / ambient 0.35 压环境 / fill 0.25 收补
+    // 光）+ 雾深收尾——与墨夜（纯平深底）不同，这是「有光向」的舞台感；彩虹管在
+    // 单侧光下呈现体积渐变
+    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg black', 'set direct 0.9', 'set ambient 0.35', 'set fill 0.25', 'turn y 28', 'zoom 1.3'],
+    accent: 'rose',
+  },
+  {
+    id: 'chalk-wireframe',
+    name: { zh: '黑板粉笔', en: 'Chalkboard sketch' },
+    tagline: { zh: '墨绿板 + 米白粉笔卡通：教室板书语境的结构速写', en: 'Deep-green board + chalk-cream cartoon: the structure as a classroom sketch' },
+    purpose: { zh: '教学讲义 · 课程幻灯 · 直播板书', en: 'Lecture notes · course slides · live teaching' },
+    tags: [{ zh: '教学', en: 'Teaching' }, { zh: '板书', en: 'Sketchy' }],
+    category: 'basic',
+    figure: { ref: '讲义图', shows: { zh: '教学示意：手绘感结构速写 + 板书语境', en: 'Teaching schematic: hand-drawn feel on a chalkboard' } },
+    citation: { journal: 'J. Chem. Educ.', year: 2019, title: 'Teaching protein structure with molecular visualization', doi: '10.1021/acs.jchemed.8b00909' },
+    demo: '1AKI',
+    // 差异点：米白单色（#f0e8d4）卡通线稿化——深墨绿板（#20362c）上的「粉笔痕」；
+    // 描边开但弱（0.6 1.4）保留手绘松弛感；与灰度制版（白底灰调）构成「亮暗两板」
+    commands: ['preset cartoon', 'color #f0e8d4', 'bg #20362c', 'outline on 0.6 1.4', 'turn y -32', 'zoom 1.4'],
+    accent: 'emerald',
+  },
+  {
+    id: 'pastel-macaron',
+    name: { zh: '马卡龙柔色', en: 'Pastel macaron' },
+    tagline: { zh: '糖果色链对 + 奶油底 + 哑光：柔和语境的组装示意', en: 'Candy-colored chain pairs on cream, matte finish: a soft-spoken assembly' },
+    purpose: { zh: '科普插画 · 儿童向材料 · 海报配图', en: 'Sci-communication · kid-friendly materials · poster art' },
+    tags: [{ zh: '柔和', en: 'Soft' }, { zh: '科普', en: 'Popular science' }],
+    category: 'basic',
+    figure: { ref: '科普图版', shows: { zh: '科普插图：柔和配色的分子拟人化呈现', en: 'Popular-science illustration: molecule in a soft, friendly palette' } },
+    citation: { journal: 'Science', year: 2019, title: 'The art of science communication through molecular illustration' },
+    demo: '3INS',
+    // 差异点：双色马卡龙（A+C 玫瑰粉 / B+D 薄荷绿——胰岛素二聚体的链对语义）+
+    // 奶油底（#faf5ee）+ specular off 哑光；与链组装（饱和链色）构成「浓淡两版」
+    commands: ['preset cartoon', 'color #eeb1c4, chain A+C', 'color #a9d6c9, chain B+D', 'bg #faf5ee', 'set specular off', 'orient'],
+    accent: 'rose',
+  },
+  {
+    id: 'duotone-poster',
+    name: { zh: '双色海报', en: 'Duotone poster' },
+    tagline: { zh: '青/珊瑚双色域 + 大留白：现代平面设计的海报语态', en: 'Teal/coral two-hue domains on white: the flat-design poster register' },
+    purpose: { zh: '学术海报 · 展板主视觉 · 品牌物料', en: 'Conference poster · booth visual · branding' },
+    tags: [{ zh: '双色', en: 'Duotone' }, { zh: '海报', en: 'Poster' }],
+    category: 'basic',
+    figure: { ref: '海报', shows: { zh: '学术海报主视觉：双色域大色块构图', en: 'Poster hero: bold two-hue color blocking' } },
+    citation: { journal: 'Nature', year: 2023, title: 'Graphic design in scientific communication' },
+    demo: '4HHB',
+    // 差异点：严格双色（A+C 青 #0d9488 / B+D 珊瑚 #f0726f——α/β 链对语义同 pastel
+    // 但饱和度拉满）+ 加宽卡通（1.4×）块面化——海报远距离可读性优先
+    commands: ['preset cartoon', 'color #0d9488, chain A+C', 'color #f0726f, chain B+D', 'bg white', 'set cartoon_width 1.4', 'turn y 20', 'zoom 1.3'],
+    accent: 'teal',
+  },
+  {
+    id: 'sepia-vintage',
+    name: { zh: '复古棕印', en: 'Sepia vintage' },
+    tagline: { zh: '羊皮纸底 + 全结构棕调 + 正光斜 15°：1958 首结构的印刷年代质感', en: 'Parchment ground + monochrome sepia + 15° oblique: the 1958 print-era texture' },
+    purpose: { zh: '历史叙事 · 综述配图 · 周年纪念版面', en: 'History essays · review figures · anniversary layouts' },
+    tags: [{ zh: '复古', en: 'Vintage' }, { zh: '综述', en: 'Review' }],
+    category: 'basic',
+    figure: { ref: '历史图版', shows: { zh: '里程碑结构的历史呈现：印刷年代的单色制版', en: 'Milestone structures in print-era monochrome' } },
+    citation: { journal: 'Nature', year: 1958, title: 'A three-dimensional model of the myoglobin molecule obtained by x-ray analysis', doi: '10.1038/181662a0' },
+    demo: '1MBO',
+    // 差异点：全结构单棕 #8a6a42（与灰度制版的「去色」不同——棕调带「年代温度」）+
+    // 羊皮纸底 #f2e9d5 + 弱描边——1958 Kendrew 首个肌红蛋白低分辨率模型的时代质感
+    commands: ['preset cartoon', 'color #8a6a42', 'bg #f2e9d5', 'outline on 0.5 1.2', 'turn y 15', 'zoom 1.3'],
+    accent: 'amber',
+  },
+  {
+    id: 'neon-night',
+    name: { zh: '赛博霓虹', en: 'Neon night' },
+    tagline: { zh: '近黑底 + 荧光青管 + 发光描边：科技发布会的视觉语态', en: 'Near-black stage + fluorescent cyan tubes + glow edges: the product-launch register' },
+    purpose: { zh: '发布会大屏 · 科技品牌 · 动态背景基底', en: 'Launch keynotes · tech branding · motion backdrops' },
+    tags: [{ zh: '霓虹', en: 'Neon' }, { zh: '科技感', en: 'Futuristic' }],
+    category: 'basic',
+    figure: { ref: '主视觉', shows: { zh: '科技风主视觉：暗底荧光 + 发光轮廓', en: 'Tech-hero visual: dark stage, fluorescent tubes, glowing rims' } },
+    citation: { journal: 'Nature', year: 2022, title: 'Designing molecules: the interface of science and technology' },
+    demo: '1CRN',
+    // 差异点：荧光青 #22d3ee 单色管 + 近黑蓝底 #0b0e14 + 强描边（1.2 2.2——描边即
+    // 「霓虹灯管」）+ 高镜面（specular 语义默认开，无需显式）；与影院聚光同为暗调
+    // 但无光向（平光霓虹）——两支构成暗调语域的「有光向/自发光」两版
+    commands: ['preset cartoon', 'color #22d3ee', 'bg #0b0e14', 'outline on 1.2 2.2', 'turn y 40', 'zoom 1.4'],
+    accent: 'cyan',
+  },
+  {
+    id: 'textbook-annotated',
+    name: { zh: '教科书标注', en: 'Textbook annotated' },
+    tagline: { zh: 'SS 三色 + 催化残基标签 + 白底：教课书机制图的标准注记图式', en: 'SS tri-color + catalytic-residue labels on white: the canonical textbook mechanism figure' },
+    purpose: { zh: '机制讲解 · 作业题图 · 教材插图', en: 'Mechanism walkthroughs · problem sets · textbook figures' },
+    tags: [{ zh: '标注', en: 'Annotated' }, { zh: '教材', en: 'Textbook' }],
+    category: 'basic',
+    figure: { ref: 'Fig. 2', shows: { zh: '机制图：催化残基标注 + 反应位点箭头指涉', en: 'Mechanism figure: catalytic residues labeled, reaction site referenced' } },
+    citation: { journal: 'J. Mol. Biol.', year: 1966, title: 'The three-dimensional structure of an enzyme molecule: lysozyme', doi: '10.1016/S0022-2836(66)80100-3' },
+    demo: '1AKI',
+    // 差异点：label on 教科书注记（溶菌酶 Glu35/Asp52 催酸碱对——Phillips 1966 教
+    // 科书图式）；链不匹配时标签静默缺失（select 空集不报错），SS 三色兜底仍是标准
+    // 教学图；与催化残基（棍 + 距离虚线）构成「标注版/测量版」两档
+    commands: ['preset cartoon', 'util ss', 'bg white', 'select (name CA) and ((resi 35 and chain A) or (resi 52 and chain A))', 'label on', 'deselect', 'zoom 1.4', 'outline on 1.1 1.0'],
+    accent: 'sky',
+  },
+  {
+    id: 'nucleosome-dna',
+    name: { zh: '核小体 DNA 彩虹', en: 'Nucleosome DNA rainbow' },
+    tagline: { zh: '组蛋白石板灰 + DNA 双链各自 N→C 彩虹 + 顶视盘面：染色质基本单位的读法', en: 'Slate histones + per-strand N→C DNA rainbow, top-down disc: how to read chromatin\'s basic unit' },
+    purpose: { zh: '染色质组装 · DNA 缠绕拓扑 · 表观位点', en: 'Chromatin assembly · DNA wrapping topology · epigenetic sites' },
+    tags: [{ zh: '核小体', en: 'Nucleosome' }, { zh: '染色质', en: 'Chromatin' }],
+    category: 'interaction',
+    figure: { ref: 'Fig. 1', shows: { zh: '核小体核心颗粒全景：147bp DNA 超螺旋缠绕组蛋白八聚体', en: 'Nucleosome core particle: 147 bp DNA superhelix around the histone octamer' } },
+    citation: { journal: 'Nature', year: 1997, title: 'Crystal structure of the nucleosome core particle at 2.8 Å resolution', doi: '10.1038/38444' },
+    demo: '1AOI',
+    // 差异点：nucleic 选择域的 per-chain 彩虹（spectrum count, rainbow, nucleic——
+    // DNA 双链各自 N→C 渐变）+ 组蛋白统一石板灰（蛋白/核酸视觉分工）+ 顶视
+    // （1.65 圈超螺旋盘面在 top view 读得最清楚——Luger 1997 图式）
+    commands: ['preset cartoon', 'color #9aa3ad, protein', 'spectrum count, rainbow, nucleic', 'bg #f7f8fa', 'view top', 'zoom 1.3'],
+    accent: 'violet',
+  },
+  {
+    id: 'gfp-chromophore',
+    name: { zh: '荧光色素特写', en: 'GFP chromophore' },
+    tagline: { zh: '暗底荧光绿 + CRO 色素亮黄棍特写：β 桶里的发光核心', en: 'Dark stage, fluorescent green, and the CRO chromophore in glowing sticks: the heart of the β-barrel' },
+    purpose: { zh: '报告基因 · 荧光机制 · 光遗传工具', en: 'Reporter genes · fluorescence mechanism · optogenetics' },
+    tags: [{ zh: 'GFP', en: 'GFP' }, { zh: '荧光', en: 'Fluorescence' }],
+    category: 'site',
+    figure: { ref: 'Fig. 1', shows: { zh: 'GFP 发色团环境：β 桶内的色素口袋与周围残基', en: 'The chromophore environment: the pocket inside the β-barrel' } },
+    citation: { journal: 'Science', year: 1996, title: 'The structural basis of the green fluorescent protein chromophore formation', doi: '10.1126/science.273.5280.1392' },
+    demo: '1EMA',
+    // 差异点：暗荧光语境（深墨绿底 #07100a + 全蛋白荧光绿 #22c55e——GFP 的「身份
+    // 色」）+ CRO 色素（HETATM 可 resn 直选）亮黄绿棍 + 12Å 缓冲特写（β 桶内袋
+    // 展开但不贴脸）——与血红素口袋（白底元素色）构成「亮暗两特写」
+    commands: ['preset cartoon', 'color #22c55e', 'bg #07100a', 'show sticks, (resn CRO)', 'color #fde68a, (resn CRO)', 'zoom (resn CRO), 12', 'outline on 1.0 2.0'],
+    accent: 'lime',
+  },
 ]
 
 /** 命令图鉴（r75：「对比」视图把命令序列翻成双语图式解剖；未命中退回原命令）。
@@ -907,6 +1057,22 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^alter/i, label: { zh: 'B 因子通道改写', en: 'B-factor channel edit' } },
   { re: /^select/i, label: { zh: '热点位点选择', en: 'Hotspot site selection' } },
   { re: /^label on/i, label: { zh: '残基标签', en: 'Residue labels' } },
+  // r97 新词条（风格六连 + 实用三连；具体锚定先于泛匹配：
+  // set direct/ambient/fill 灯光三连先于泛 set；spectrum …nucleic 先于 spectrum count；
+  // color hex chain 组合先于泛 color hex；show sticks resn CRO 先于泛 show sticks）
+  { re: /^set direct/i, label: { zh: '定向主光增强', en: 'Directional key light boosted' } },
+  { re: /^set ambient/i, label: { zh: '平光照明', en: 'Flat ambient light' } },
+  { re: /^set fill/i, label: { zh: '补光减弱', en: 'Fill light eased' } },
+  { re: /^set specular off/i, label: { zh: '镜面高光关闭（哑光）', en: 'Specular off (matte)' } },
+  { re: /^spectrum count, rainbow, nucleic/i, label: { zh: 'DNA 双链各自 N→C 彩虹', en: 'Per-strand N→C DNA rainbow' } },
+  { re: /^color #9aa3ad, protein/i, label: { zh: '组蛋白统一石板灰', en: 'Histones uniform slate' } },
+  { re: /^color #[0-9a-f]{6}, chain/i, label: { zh: '链对主题色分配', en: 'Chain-pair theme colors' } },
+  { re: /^color #[0-9a-f]{6}$/i, label: { zh: '全结构主题单色', en: 'Structure-wide theme color' } },
+  { re: /^show sticks, \(resn CRO\)/i, label: { zh: '荧光色素 CRO 棍状表示', en: 'CRO chromophore sticks' } },
+  { re: /^color #[0-9a-f]{6}, \(resn CRO\)/i, label: { zh: '色素亮黄绿高亮', en: 'Chromophore glow highlight' } },
+  { re: /^zoom \(resn CRO\)/i, label: { zh: '色素口袋特写取景', en: 'Chromophore pocket framing' } },
+  { re: /^bg #07100a/i, label: { zh: '暗荧光语境底色', en: 'Dark fluorescence stage' } },
+  { re: /^bg #20/i, label: { zh: '深墨绿板书底色', en: 'Deep-green chalkboard' } },
 ]
 
 /** 命令 → 双语图式解剖（未命中返回 null——调用方退回展示原命令） */

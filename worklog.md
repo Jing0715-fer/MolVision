@@ -3891,3 +3891,31 @@ Stage Summary:
   4. 【低】cron 执行配额（第 9 次 Disabled）——观察配额窗口期
 
 （r96 段 cron 补记，2026-10-01 21:48）15min webDevReview 巡检任务 #428544 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 10 次实证（r85/r86/r87/r88/r90/r91/r94/r95/r92 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
+
+---
+Task ID: r97
+Agent: main
+Task: 用户指令「添加更多实用和风格不同的模板，增加图片解析的能力，争取准确还原成模板」——风格九连扩容 + 图片解析精度三件套（客户端色彩证据 / 两段式复检精修 / 渲染校准回路）
+
+Work Log:
+- 【侦察】Explore 全链调研（Task 1-a）：runTemplateCommands 顺序执行器 / engine.capture() 截图 API（window.__molEngine QA 钩子）/ UploadPanel 三态流与 parse() 协议 / visionWithProvider 供应商分派（无自定义供应商→ZAI glm-4.6v 兜底）/ PDB 代理任意 4 位 ID 可拉（1EMA 190KB·CRO 为 HETATM、1AOI 1.05MB·链 A-J 实测 200）/ selection 支持 nucleic 谓词与 spectrum 选择域
+- 【风格九连（figure-templates.ts 148→1626 行）】风格矩阵六连补此前未占位视觉语域：cinematic-spotlight（影院聚光——direct 0.9/ambient 0.35/fill 0.25 三灯比改写）/ chalk-wireframe（黑板粉笔——墨绿板 #20362c + 米白 #f0e8d4）/ pastel-macaron（马卡龙——3INS 链对 A+C 玫瑰/B+D 薄荷 + specular off 哑光）/ duotone-poster（双色海报——青 #0d9488/珊瑚 #f0726f + 1.4× 加宽）/ sepia-vintage（复古棕印——1958 Kendrew 1MBO 羊皮纸语境）/ neon-night（赛博霓虹——荧光青 #22d3ee + 近黑底 + 强描边）；实用三连：textbook-annotated（教科书标注——1AKI Glu35/Asp52 催酸碱对 label on）/ nucleosome-dna（核小体 DNA 彩虹——1AOI 组蛋白石板灰 + spectrum count, rainbow, nucleic 双链各自 N→C + view top 盘面）/ gfp-chromophore（GFP 荧光色素特写——1EMA CRO 色素 resn 直选 + 暗荧光语境 + 12Å 缓冲特写）
+- 【图鉴与图标】COMMAND_GLOSSARY +15 词条（灯光三连/核酸彩虹域/链对主题色/CRO 三连/板书底色——具体锚定先于泛匹配）；TPL_ICONS +9 键（Drama/Pencil/Candy/SwatchBook/History/Lightbulb/GraduationCap/Disc/FlaskConical——node require 实测存在性后入列）；一次性白名单校验 46 支全过（0 失效命令）
+- 【解析精度三件套①色彩证据】客户端 extractImageHints()：四角+四边中点 8 patch 量子化众数→背景 hex+亮度；96px 降采样全像素量子化（剔背景色 ΔRGB<90）→主色板 top5 占比；parse() 上行 { image, hints }（失败退纯目测不阻断）
+- 【②两段式复检精修（parse/route.ts 重构）】sanitizeHints 防注入白名单清洗（hex 正则/luma clamp/palette ≤5）→ hintsBlock 注入两轮提示词（「bg 命令必须直接采用背景采样值；主题色从主色板就近取」）；第二轮 REFINE_PROMPT：原图+草案回炉→六维复检（表示法/着色/背景/景别/视角/专业元素）→修正完整序列；sanitizeRefine 过闸（adjusted 且实质变化才采纳；accurate 保留草案一防降级改写）；精修失败静默降级（refine 字段缺省 UI 不展示）；响应增 refine 协议（verdict/critique 双语）
+- 【③渲染校准回路（新 API + 新组件）】/api/templates/calibrate：target+render 双图 + 当前命令 → CALIBRATE_PROMPT 六维比对 → 修正完整序列过闸（close 或无实质变化→commands:null 不给采纳）；CalibrationPanel 组件（FigureTemplatesDialog 内）：TemplatePreview 同拍管线（demo 入 store→引擎就绪→相机落地→runTemplateCommands→capture 1.5×）→ 双图缩 768px JPEG → POST → done 态双图并排 + verdict 卡 + 修正序列行级差异高亮（+ 前缀新命令/移除计数）+ 采纳回写命令表单 + 重新校准复验；审核表单左栏挂载（编辑模式无高分辨原图不开放）
+- 【UI 反馈层】复检精修卡（emerald 已采纳/primary 已核实 + critique 文案）；PARSING_STAGES +1 轮播段（「复检精修：逐维对照原图修正命令…」）；toast description 增两段式结果说明
+- 【缩略图管线】SPECS +9 规格（37-45 序号；textbook/nucleosome/gfp 12s 余量）；批量生成 + tighten 全量 46 张 + git checkout 还原 37 张无关重编码（r91 教训复用）；VLM 视觉复鉴 5+2 张全过：核小体「DNA 双螺旋环绕蛋白盘顶视图」实锤、GFP「绿卡通+米黄棍+黑底特写」实锤、教科书「残基文本标签可见」实锤、马卡龙「青/粉+奶油底」、粉笔「米白带+墨绿板」、影院「彩虹+黑底」
+- 【E2E 全链（agent-browser r97-parse 真实 UI 流）】上传 nucleosome-dna.png（已知配方原图）→ 解析 24s 两段完成 → 命令序列质量实证：bg #f7f8fa 与采样值精确相等（色彩证据生效）+ 灰蛋白 #abb3b8 + spectrum rainbow (not protein)（核酸彩虹语义等价复现）→ refine 卡「Refined · corrections adopted」+ critique 实锤第二轮修正了首轮的蛋白/核酸配色角色反转（两段式价值直接实证）→ 校准 48s done：双图并排 + verdict adjusted + 13 条修正序列（4 新：show lines (not protein)/提亮蛋白/set line_width/zoom 1.4；正确项原样保留）→ 采纳回写 13 行 → 保存入库 localStorage（custom-muqqsa6qojw8「链色卡通全景」13 cmds）→ All 47 计数（46 内置+1 自定义）→ My templates 分区卡显示 → 清场零残留；gfp-chromophore 演示路径（span[role=button] Demo 钮）1EMA 加载 + VLM 判「GFP 色素特写（绿蛋白/黄棍/黑底）」✓；全会话 agent-browser errors 空
+- 【门禁】lint 0 · tsc src 0（examples/skills 历史基线）· guards 338→371/371（r97 块 33 条：模板 9+命令特征 6+图鉴 2+图标 3+管线 1+解析三件套 12）· smoke 4/4 · dev.log 零 error
+
+Stage Summary:
+- 交付一（模板扩容）：46 支内置模板——风格六连补齐视觉语域矩阵（暗调「有光向/自发光」两版、板书/马卡龙/双色/棕印此前全空位）+ 实用三连（核小体 DNA 彩虹 = nucleic 选择域首个内置用例、GFP 色素特写 = HETATM resn 直选特写、教科书标注 = label 教学图式）
+- 交付二（解析精度）：「准确还原」三层递进——①程序采样色彩证据锚定（bg 精确命中实证）②两段式复检（配色角色反转被第二轮揪出的实锤案例）③渲染校准回路（AI 看两图差距直接改命令，采纳后可复验）——r84 对照预览「人眼看」升级为「AI 看并修」
+- E2E 铁证：nucleosome-dna.png 全链 24s 解析+48s 校准，修正序列合理（正确项保留/差距项对症），入库→分区显示→计数全通
+- 坑（新入档）：①agent-browser upload 的 'input[type=file]' 宽选择器在弹窗多视图下可能命中错误 input——用 accept^="image" 属性锚定 ②TemplateCard 的 Demo/Compare 是 span[role=button]（嵌在 apply button 的 textContent 里），querySelectorAll('button') 找不到——按 role 属性定位 ③tt() 返回 string 非 DualText——模板字符串拼接双语时须自持 {zh,en} 对 ④对话框 DialogHeader 标题跨视图恒显——「首 200 字符判视图」会误判 grid/upload
+- 下一轮建议（按优先级）：
+  1. 【中】health-check-templates.sh SPECS 仍停在 27 支（r75 后未同步）——与 guards/缩略图管线三处 SPECS 的单一事实源重构
+  2. 【中】校准回路多轮迭代（采纳后自动复验直至 close/达到 3 轮上限）与「校准历史」可视化（每轮 verdict 时间线）
+  3. 【低】色彩证据扩展：边缘梯度检测（渐变背景）+ 色相直方图（彩虹 vs 单色判别置信度上行）
+  4. 【低】cron 执行配额（第 10 次 Disabled）——继续观察配额窗口期
