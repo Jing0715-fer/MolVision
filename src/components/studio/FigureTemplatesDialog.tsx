@@ -19,7 +19,7 @@ import { toast } from 'sonner'
 import {
   ArrowLeft, Atom, BookOpenText, Boxes, Camera, Candy, CircleDot, Component, Contrast, Disc, Dna, Download, Drama, ExternalLink, Film,
   FlaskConical, Gauge, Gem, Ghost, GitCompareArrows, Glasses, GraduationCap, Grid3x3, Hexagon, History, ImagePlus, Layers, Lightbulb, Link2, Loader2, Magnet, MapPin, Moon, Network, Orbit, Palette,
-  Pencil, Play, Ruler, ScanSearch, Scissors, Shapes, Sparkles, Spline, SwatchBook, Target, Trash2, Upload, Waves, Wand2, Waypoints, Cylinder, Droplets, Box, Zap, Check, type LucideIcon,
+  Pencil, Play, Ruler, ScanSearch, Scissors, Shapes, Sparkles, Spline, SwatchBook, Target, Trash2, Upload, Waves, Wand2, Waypoints, Cylinder, Droplets, Box, Zap, Check, XCircle, type LucideIcon,
 } from 'lucide-react'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -521,10 +521,17 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
       await new Promise(r => setTimeout(r, 100))
       // ② 应用当前命令（表单实况——含用户手改）
       await runTemplateCommands(commands)
-      await new Promise(r => setTimeout(r, 450))
+      // r98：旧版固定 450ms < 序列收尾相机飞行时长（normal 650ms / cinematic 1200ms）
+      // ——capture 拿到半途构图，VLM 六维比对失真。等引擎动画真正落地再截
+      await waitForCameraIdle(1800)
+      await new Promise(r => setTimeout(r, 120))
       // ③ 截取视口 + 缩流送 VLM
       const eng = engineRef.current
       if (!eng) throw new Error('NO_ENGINE')
+      if (eng.isCameraAnimating()) {
+        // 兑底：极端长动画（cinematic 1200ms）后仍在飞——再等一轮
+        await waitForCameraIdle(1800)
+      }
       setStage(1)
       await new Promise(r => setTimeout(r, 60))
       const shot = eng.capture({ scale: 1.5 })
@@ -746,6 +753,10 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
     return () => clearInterval(iv)
   }, [phase])
 
+  // r98：解析请求中止句柄（取消按钮/换图/重置时 abort——服务端已接 req.signal，
+  // 中止链路现成；旧版 AbortError 分支是不可达死代码，fetch 从未接 signal）
+  const abortRef = useRef<AbortController | null>(null)
+
 
   const acceptFile = async (f: File) => {
     if (!/^image\/(png|jpe?g|webp)$/.test(f.type)) {
@@ -767,9 +778,11 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
     }
   }
 
-  // 粘贴通道（Ctrl+V 论文截图直入；编辑模式不注册——粘贴新图会打断编辑流）
+  // 粘贴通道（Ctrl+V 论文截图直入；编辑模式不注册——粘贴新图会打断编辑流）。
+  // r98：parsing/review 态同样不接管——误贴一张截图会静默清掉 draft 与手改的
+  // 命令表单退回 picked（review 态），或与在途 fetch 的旧图闭包产生状态错位（parsing 态）
   useEffect(() => {
-    if (editMode) return
+    if (editMode || phase !== 'idle' && phase !== 'picked') return
     const onPaste = (e: ClipboardEvent) => {
       const f = e.clipboardData?.files?.[0]
       if (f && f.type.startsWith('image/')) {
@@ -779,9 +792,10 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
     }
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [editMode])
+  }, [editMode, phase])
 
   const reset = () => {
+    abortRef.current?.abort() // r98：在途解析随重置中止
     setPhase('idle')
     setImg(null)
     setError('')
@@ -791,11 +805,22 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  // r98：取消在途解析（parsing 态唯一逃生口——旧版挂起请求 = 无限转轮）
+  const cancelParse = () => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setPhase(img ? 'picked' : 'idle')
+    setError('')
+  }
+
   const parse = async () => {
     if (!img) return
     setStage(0)
     setPhase('parsing')
     setError('')
+    // r98：挂 AbortController（取消按钮/重置/换图可中止；服务端 req.signal 联动）
+    const ac = new AbortController()
+    abortRef.current = ac
     try {
       // r97：客观色彩证据（客户端采样——失败退纯目测，不阻断解析）
       const hints = await extractImageHints(img.dataUrl).catch(() => null)
@@ -803,6 +828,7 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: img.dataUrl, hints }),
+        signal: ac.signal,
       })
       const data = (await res.json()) as {
         ok?: boolean
@@ -841,9 +867,12 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
           : tt(refineNotePair),
       })
     } catch (e) {
+      // r98：AbortError 分支现在可达（fetch 已接 signal）
       const msg = e instanceof Error && e.name === 'AbortError' ? tt({ zh: '请求已取消', en: 'Request aborted' }) : ''
       setError(msg || tt({ zh: '网络异常——解析请求失败', en: 'Network error — the parse request failed' }))
-      setPhase('picked')
+      setPhase(img ? 'picked' : 'idle')
+    } finally {
+      if (abortRef.current === ac) abortRef.current = null
     }
   }
 
@@ -1025,14 +1054,25 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
                 {phase === 'parsing' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" aria-hidden />}
                 {phase === 'parsing' ? t({ zh: '解析中…', en: 'Parsing…' }) : t({ zh: 'AI 解析图式', en: 'Parse figure style' })}
               </button>
-              <button
-                type="button"
-                onClick={reset}
-                disabled={phase === 'parsing'}
-                className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
-              >
-                {t({ zh: '换一张图', en: 'Another image' })}
-              </button>
+              {/* r98：parsing 态取消口——旧版两个按钮全 disabled，挂起请求 = 无限转轮 */}
+              {phase === 'parsing' ? (
+                <button
+                  type="button"
+                  onClick={cancelParse}
+                  className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <XCircle className="h-3.5 w-3.5" aria-hidden />
+                  {t({ zh: '取消解析', en: 'Cancel' })}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
+                >
+                  {t({ zh: '换一张图', en: 'Another image' })}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1097,7 +1137,7 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
                 <CalibrationPanel
                   sourceUrl={img.dataUrl}
                   commands={commandLines.filter(x => validateTemplateCommand(x).ok)}
-                  demo={demoVal}
+                  demo={demoVal.trim().toUpperCase()}
                   onAccept={next => setCommandsVal(next.join('\n'))}
                 />
               )}
@@ -1292,7 +1332,9 @@ function ComparePanel({ tpl, onBack, onApply, onDemo, busy, hasStructure }: {
           <div className="relative aspect-[16/10] w-full overflow-hidden bg-muted/40">
             {imgOk ? (
               <img
-                src={`/templates/${tpl.id}.png`}
+                /* r98：自定义模板 id 必 404 于 /templates/*.png——复用卡片本体的
+                   thumbSrc 三元（custom && thumb 走 dataURL），否则左栏恒占位渐变 */
+                src={tpl.custom && tpl.thumb ? tpl.thumb : `/templates/${tpl.id}.png`}
                 alt={t(tpl.tagline)}
                 loading="lazy"
                 decoding="async"
@@ -1473,8 +1515,12 @@ export function FigureTemplatesDialog() {
   const demo = async (tpl: FigureTemplate) => {
     setBusyId(tpl.id)
     try {
-      await demoThenApply(tpl)
-      toast.success(tt({ zh: `演示就绪：「${t(tpl.name)}」on ${tpl.demo}`, en: `Demo ready: "${t(tpl.name)}" on ${tpl.demo}` }))
+      // r98：返回值感知——失败/超时不再弹「演示就绪」假成功
+      // （fetch 失败已由 fetchPdbId 内部 toast，此处沉默不重复报错）
+      const ok = await demoThenApply(tpl)
+      if (ok) {
+        toast.success(tt({ zh: `演示就绪：「${t(tpl.name)}」on ${tpl.demo}`, en: `Demo ready: "${t(tpl.name)}" on ${tpl.demo}` }))
+      }
     } finally {
       setBusyId(null)
     }
@@ -1539,7 +1585,11 @@ export function FigureTemplatesDialog() {
 
   return (
     <Dialog open={open} onOpenChange={v => setUi({ templateOpen: v })}>
-      <DialogContent className="max-w-3xl">
+      {/* r98：高度约束——审核视图（原图+预览+精修卡+校准面板 ≈ 700-950px，移动端
+          单列再叠表单 ≈ 1300px+）此前无任何滚动路径，Radix 锁 body 滚动后保存
+          按钮在手机/矮桌面视口下不可达。max-h + overflow-y-auto 让对话框自身可滚
+          （网格视图 62vh 内滚不受影响——外层永不超限） */}
+      <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookOpenText className="h-4 w-4 text-primary" />

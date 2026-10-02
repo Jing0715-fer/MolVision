@@ -1129,17 +1129,24 @@ export function isStructureInStore(pdbId: string): boolean {
  *  会把琥珀色 halo 留在终帧上——罩住刚渲染的视觉锚点；命令级 color/spectrum
  *  泄漏已在 commands.ts 根治，此处兜底所有 select 型模板） */
 /** 按命令序列逐条应用（对外 fire-and-forget 语义保持；r84 返回 Promise 供
- *  对照预览分屏等待序列完成后再截屏——三个既有调用方不 await 不受影响） */
+ *  对照预览分屏等待序列完成后再截屏——三个既有调用方不 await 不受影响）。
+ *  r98：代际 token——新序列启动时旧序列自动中止（两个模板 Demo 并行点击时命令
+ *  交错执行产出错乱混合视觉；CalibrationPanel 渲染回路与用户手动点模板同样竞争） */
+let templateSeqToken = 0
 export function runTemplateCommands(commands: string[]): Promise<void> {
-  return runTemplateCommandsSeq(commands)
+  const token = ++templateSeqToken
+  return runTemplateCommandsSeq(commands, token)
 }
 
 /** 顺序执行器本体（load 等结构落地 / 相机等飞行——r84 起由 runTemplateCommands
- *  返回 Promise，fire-and-forget 调用方与可等待调用方（对照预览）共用） */
-async function runTemplateCommandsSeq(commands: string[]): Promise<void> {
+ *  返回 Promise，fire-and-forget 调用方与可等待调用方（对照预览）共用；
+ *  r98 每步检查 token——已被新序列取代时静默退出（末启者胜语义） */
+async function runTemplateCommandsSeq(commands: string[], token: number): Promise<void> {
   for (let i = 0; i < commands.length; i++) {
+    if (token !== templateSeqToken) return // r98：已被更新的序列取代，中止
     const cmd = commands[i].trim()
     if (i > 0) await new Promise(r => setTimeout(r, 120))
+    if (token !== templateSeqToken) return // r98：等待窗内被取代，中止
     const loadM = cmd.match(LOAD_CMD_RE)
     if (loadM) {
       runCommand(cmd)
@@ -1148,12 +1155,14 @@ async function runTemplateCommandsSeq(commands: string[]): Promise<void> {
       await waitForStructureInStore(loadM[2], 15000)
     } else if (CAMERA_CMD_RE.test(cmd)) {
       await waitForCameraIdle(1800)
+      if (token !== templateSeqToken) return // r98：相机等待窗内被取代，中止
       runCommand(cmd)
     } else {
       runCommand(cmd)
     }
   }
   // 兜底清选择（旧版按 commands.length*120+2800 估时；顺序版循环天然吸收相机等待）
+  if (token !== templateSeqToken) return // r98：收尾前被取代，不清新序列的选择
   const s = useMolStore.getState()
   if (s.selection.indices.length) s.setSelection(null, [])
 }
@@ -1479,14 +1488,27 @@ export function logAdaptNotes(notes: DualText[]): void {
  *  650ms 动画，三者叠加时 turn/view 命令会在 fit 半途把相机打断在 partial pose
  *  （1D3Z NMR 演示「结构不在屏幕中心」的根因）。新序列：结构入 store →
  *  引擎就绪 → 自动 fit 落地 → 才开始命令序列（runTemplateCommands 内部再对
- *  相机命令串行等飞行，见上） */
-export async function demoThenApply(tpl: FigureTemplate): Promise<void> {
-  await fetchPdbId(tpl.demo)
+ *  相机命令串行等飞行，见上）。
+ *  r98 三修：①返回 boolean——调用方仅在成功时弹「演示就绪」（旧版 fetch 失败/
+ *  超时静默 return，用户先看到错误 toast 又收到成功 toast 的假成功）；②重复
+ *  Demo 同 ID 去重（isStructureInStore 先查再拉——堆叠重复结构 + orient 全可见
+ *  结构 PCA 偏轴）；③whenEngineReady 无界等待包 15s 兑底（WebGL 初始化失败
+ *  时旧版永久 running 无错误路径） */
+export async function demoThenApply(tpl: FigureTemplate): Promise<boolean> {
+  // r98：演示结构已在 store（重复点 Demo）→ 跳过拉取（堆叠重复结构 + orient PCA 偏轴）
+  if (!isStructureInStore(tpl.demo)) {
+    await fetchPdbId(tpl.demo)
+  }
   const loaded = await waitForStructureInStore(tpl.demo, 8000)
-  if (!loaded) return // fetch 失败已 toast；兑底防僵死
+  if (!loaded) return false // fetch 失败已 toast；兑底防僵死
   // 引擎挂载（欢迎页首发：结构入 store 后 MolViewer 才开始挂载；fitView 已在
   // whenEngineReady 队列里，先于本 resolver 入队 → 冲刷时先起飞）
-  await new Promise<void>(res => whenEngineReady(() => res()))
+  // r98：无界等待包 15s 兑底——WebGL 初始化失败时旧版永久 running 无错误路径
+  const engineReady = await Promise.race([
+    new Promise<void>(res => whenEngineReady(() => res())),
+    new Promise<null>(res => setTimeout(() => res(null), 15000)),
+  ])
+  if (engineReady === null && !(window as unknown as Record<string, unknown>).__molEngine) return false // 引擎缺席且兑底超时
   // 冲刷后 fit 起飞还差一拍 rAF（loader 的入队体是 rAF(fitView)）——先过两帧
   // 再等飞行，否则 waitForCameraIdle 首检时动画尚未起飞会假性「立即落地」
   await new Promise(r => setTimeout(r, 80))
@@ -1494,4 +1516,5 @@ export async function demoThenApply(tpl: FigureTemplate): Promise<void> {
   await waitForCameraIdle(2600)
   await new Promise(r => setTimeout(r, 100)) // 落位后一拍余量
   runTemplateCommands(tpl.commands)
+  return true
 }

@@ -104,6 +104,12 @@ export async function POST(req: Request) {
   const errText = (zh: string, en: string, status: number) =>
     NextResponse.json({ ok: false, error: locale === 'en' ? en : zh }, { status })
 
+  // r98：体积预检先行（与 parse 路由同修——await req.json() 先缓冲后校验的内存炸弹）
+  const declaredLen = Number(req.headers.get('content-length') ?? '0')
+  if (Number.isFinite(declaredLen) && declaredLen > 12 * 1024 * 1024) {
+    return errText('请求体超过 12MB 上限（图片应 ≤ 5MB，客户端会缩放）', 'Request body exceeds the 12MB limit (images ≤ 5MB; the client downscales)', 413)
+  }
+
   // ---------- 请求体校验 ----------
   let body: { target?: unknown; render?: unknown; commands?: unknown }
   try {
@@ -120,15 +126,25 @@ export async function POST(req: Request) {
     return errText('图片超过 5MB 上限（前端已缩放，异常直达时拦截）', 'An image exceeds the 5MB limit (the client downscales; direct hits are blocked here)', 413)
   }
   const commands = Array.isArray(body.commands)
-    ? body.commands.filter((x): x is string => typeof x === 'string').slice(0, 20)
+    ? body.commands
+        .filter((x): x is string => typeof x === 'string')
+        // r98：单条长度上限——旧版仅限条数与类型，单条字符串可携任意长度原文
+        // 注入 VLM 提示词（提示词膨胀面 + 成本放大器）
+        .map(x => x.slice(0, 200))
+        .slice(0, 20)
     : []
   if (commands.length < 1) return errText('commands 不能为空', 'commands must not be empty', 400)
+  // r98：用户 commands 服务端先过闸（客户端有预过滤但直连 API 可绕；与 parse
+  // 精修轮的 draft1.commands 全过闸对称——提示词面只送合法命令）
+  const gated = sanitizeTemplateCommands(commands)
+  if (gated.commands.length < 1) return errText('commands 无合法条目', 'commands has no valid entries', 400)
+  const cmdSeq = gated.commands
 
   // ---------- VLM 比对（provider 直连优先，ZAI 兜底；1 次尝试 90s） ----------
   const userParts: ContentPart[] = [
     {
       type: 'text',
-      text: `当前命令序列（校准基准）：\n${JSON.stringify(commands, null, 1)}\n\n第一张图 = 目标原图（target）；第二张图 = 引擎按上述命令的当前渲染（render）。请逐维比对并输出修正后的完整命令序列。`,
+      text: `当前命令序列（校准基准）：\n${JSON.stringify(cmdSeq, null, 1)}\n\n第一张图 = 目标原图（target）；第二张图 = 引擎按上述命令的当前渲染（render）。请逐维比对并输出修正后的完整命令序列。`,
     },
     { type: 'image_url', image_url: { url: target } },
     { type: 'image_url', image_url: { url: render } },
@@ -145,15 +161,22 @@ export async function POST(req: Request) {
     try {
       text = await visionWithProvider(messages, { signal: req.signal, timeoutMs: 90_000 })
     } catch (e) {
+      // r98：客户端已断开不再烧兑底 VLM 轮次（与 parse 同修）
+      if (req.signal.aborted) throw new Error('aborted')
       providerErr = e instanceof Error ? e.message : 'vision provider call failed'
     }
     if (text === null) {
+      if (req.signal.aborted) throw new Error('aborted')
       const zai = await ZAI.create()
-      const completion = await zai.chat.completions.createVision({
-        model: 'glm-4.6v',
-        messages,
-        thinking: { type: 'disabled' },
-      })
+      // r98：SDK createVision 不收 signal/timeout——Promise.race 包同款 90s
+      const completion = await Promise.race([
+        zai.chat.completions.createVision({
+          model: 'glm-4.6v',
+          messages,
+          thinking: { type: 'disabled' },
+        }),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('VLM 兑底调用超时（90000ms）')), 90_000)),
+      ])
       text = String(completion.choices[0]?.message?.content ?? '')
     }
     const raw = extractJsonObject(text) as Record<string, unknown> | null
@@ -166,7 +189,10 @@ export async function POST(req: Request) {
     if (refined.length < 2) {
       return errText('修正后有效命令不足 2 条（详见剔除明细）', 'Fewer than 2 valid commands after refinement (see dropped list)', 422)
     }
-    const changed = refined.join('\n') !== commands.join('\n')
+    // r98：对称判定——旧版 refined（已过 normalize：trim/空白折叠/等号剥离）与
+    // 原始 commands 比较，`set ambient = 0.4` 回显被归一化成 `set ambient 0.4` 即
+    // changed=true，UI 报「N 条新命令」实为语义零变化。两侧同过闸后比较
+    const changed = refined.join('\n') !== cmdSeq.join('\n')
     return NextResponse.json({
       ok: true,
       verdict,

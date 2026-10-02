@@ -40,9 +40,12 @@ export async function GET(
     return NextResponse.json({ error: errText(locale, '无效的 PDB ID（4 位：数字+字母/数字，如 4HHB）', 'Invalid PDB ID (4 characters: digit + alphanumeric, e.g. 4HHB)') }, { status: 400 })
   }
   const headers = { 'User-Agent': 'MolVision/1.0 (molecular viewer)' }
+  // r98：出站 fetch 超时——旧版两个 RCSB fetch 均不带中止信号，上游停响应时挂到
+  // undici 默认 ~300s（被调用最多的代理反而是全 API 面唯一没设超时的出站请求）
+  const UPSTREAM_TIMEOUT = 20_000
   try {
     // 优先 PDB 传统格式（含 HELIX/SHEET 二级结构记录）
-    let res = await fetch(`https://files.rcsb.org/download/${pdbId}.pdb`, { headers, next: { revalidate: 604800 } })
+    let res = await fetch(`https://files.rcsb.org/download/${pdbId}.pdb`, { headers, next: { revalidate: 604800 }, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) })
     if (res.ok) {
       // 体积预检：content-length 命中即拒（不读 body）；无头时读完再验
       const cl = Number(res.headers.get('content-length') ?? '0')
@@ -60,7 +63,7 @@ export async function GET(
       })
     }
     // 回退 mmCIF（超大结构）
-    res = await fetch(`https://files.rcsb.org/download/${pdbId}.cif`, { headers, next: { revalidate: 604800 } })
+    res = await fetch(`https://files.rcsb.org/download/${pdbId}.cif`, { headers, next: { revalidate: 604800 }, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) })
     if (res.ok) {
       const cl = Number(res.headers.get('content-length') ?? '0')
       if (cl > MAX_BYTES) {
@@ -78,6 +81,10 @@ export async function GET(
     }
     return NextResponse.json({ error: errText(locale, `RCSB 上未找到 ${pdbId}`, `PDB ${pdbId} not found on RCSB`) }, { status: 404 })
   } catch (e) {
-    return NextResponse.json({ error: errText(locale, `上游错误：${e instanceof Error ? e.message : '未知'}`, `Upstream error: ${e instanceof Error ? e.message : 'unknown'}`) }, { status: 502 })
+    // r98：超时中止给出可读文案（TimeoutError 不是网络错误，旧版透传英文底息）
+    const isTimeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')
+    return NextResponse.json({ error: errText(locale,
+      isTimeout ? `RCSB 响应超时（${UPSTREAM_TIMEOUT / 1000}s）——请稍后重试` : `上游错误：${e instanceof Error ? e.message : '未知'}`,
+      isTimeout ? `RCSB timed out (${UPSTREAM_TIMEOUT / 1000}s) — please retry` : `Upstream error: ${e instanceof Error ? e.message : 'unknown'}`) }, { status: 502 })
   }
 }

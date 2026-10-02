@@ -103,13 +103,17 @@ function persist(next: CustomTemplate[]): void {
     localStorage.setItem(KEY, JSON.stringify(next))
   } catch {
     // 配额韧性：①去 thumb（大头是 dataURL）重试 ②仍超→逐张丢最旧（thumb 在前）
+    // r98：降级成功后 cache 同步为实际持久化形态——旧版 cache 仍持有含 thumb 的
+    // 完整版，本会话 UI 显示缩略图、刷新后消失（所见非所存）
     try {
-      localStorage.setItem(KEY, JSON.stringify(next.map(x => ({ ...x, thumb: undefined }))))
+      const noThumb = next.map(x => ({ ...x, thumb: undefined }))
+      localStorage.setItem(KEY, JSON.stringify(noThumb))
+      cache = noThumb
     } catch {
       let shrink = [...next]
       while (shrink.length > 1) {
         shrink = shrink.slice(1)
-        try { localStorage.setItem(KEY, JSON.stringify(shrink)); break } catch { /* 继续丢 */ }
+        try { localStorage.setItem(KEY, JSON.stringify(shrink)); cache = shrink; break } catch { /* 继续丢 */ }
       }
     }
   }

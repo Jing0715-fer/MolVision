@@ -144,6 +144,9 @@ const TMP_POLE_Q = new THREE.Quaternion()
 const TMP_Q_IDENTITY = new THREE.Quaternion()
 const TMP_Q_SLERP = new THREE.Quaternion()
 const TMP_V_UP = new THREE.Vector3()
+// r98：tick 热路径复用向量（rock/slab 每帧分配 GC 压力）
+const TMP_ROCK_OFF = new THREE.Vector3()
+const TMP_SLAB_DIR = new THREE.Vector3()
 /** 视角过渡手感 → 默认飞行时长（ms）；camTransition 设置驱动（ScenePanel 可调） */
 const CAM_TRANSITION_MS: Record<'quick' | 'normal' | 'cinematic', number> = {
   quick: 350,
@@ -682,7 +685,8 @@ export class MolEngine {
       this.rockT += dt * (this.settings.spinSpeed || 2) * 0.45
       const angle = Math.sin(this.rockT) * (Math.PI / 7) // ±≈25.7°
       // r94：绕「视角 up」摆动（up 基随 orient/turn 滚转后，世界 Y 摆动在屏幕上呈斜摆）
-      const off = this.rockBase.clone().applyAxisAngle(cam.up, angle)
+      // r98：复用 TMP 向量（原 clone() 每帧分配）
+      const off = TMP_ROCK_OFF.copy(this.rockBase).applyAxisAngle(cam.up, angle)
       cam.position.copy(this.controls.target).add(off)
       cam.lookAt(this.controls.target)
     }
@@ -699,7 +703,8 @@ export class MolEngine {
     }
     // 裁剪（slab）：中心 = 环绕目标沿视线偏移 slabOffset（PyMOL clip 风格切层）
     if (this.settings?.slab) {
-      const dir = new THREE.Vector3().subVectors(this.controls.target, cam.position).normalize()
+      // r98：复用 TMP 向量（原 new Vector3() 每帧分配）
+      const dir = TMP_SLAB_DIR.subVectors(this.controls.target, cam.position).normalize()
       const half = this.settings.slabThickness / 2
       // 基准点 = 相机沿视线前进 |target-cam|（即环绕目标），再叠加偏移
       const base = dir.dot(cam.position) + dist + (this.settings.slabOffset ?? 0)
@@ -1783,6 +1788,9 @@ export class MolEngine {
         this.hbondCache.delete(id)
         this.hbondPending.delete(id)
         this.sasaPending.delete(id)
+        // r98：repAtomCache 只 set 不 delete——长会话反复载删单调增长（GC 无法回收，
+        // registry 已断链但缓存仍持 Int32Array 引用）
+        this.repAtomCache.delete(id)
         if (this.pendingSasaBake === id) this.pendingSasaBake = null
         // SASA 结果归属结构被移除 → 清空面板数据
         const ss = useSasaStore.getState()
@@ -1805,8 +1813,10 @@ export class MolEngine {
     this.updateCellBox(state)
     // 脂双层板（membrane 命令：键控重建）
     this.updateMembrane(state)
-    // 标签
+    // 标签（r98：键并入结构可见性 + 隐藏链签名——隐藏结构期间在结构 B 上增删标签
+    // 会触发重建并跳过隐藏视图的绘制，若键不含可见性，重新显示时标签永久丢失）
     const labelsKey = state.labels.map(l => l.id + l.atomIdx).join(',') + '#' + state.labels.length
+      + '@' + state.structures.map(s => s.id + (s.visible ? 'v' : 'h') + (s.hiddenChains?.length ? 'c' + s.hiddenChains.join('.') : '')).join('|')
     if (labelsKey !== this.lastLabelsKey) {
       this.lastLabelsKey = labelsKey
       this.updateLabels(state.labels)
@@ -2241,6 +2251,12 @@ export class MolEngine {
       }
     }
     const pad = 8
+    // r98：零聚合物结构（纯配体/纯水文件）上 tLo..vHi 保持 ±Infinity → w/h NaN、
+    // BoxGeometry(Inf, Inf, T) 产出废几何 + GL 告警。早退（膜板依赖聚合物主轴）
+    if (!Number.isFinite(tLo) || !Number.isFinite(tHi) || tHi <= tLo) {
+      this.membraneBox = null
+      return
+    }
     const w = (uHi - uLo) + pad * 2
     const h = (vHi - vLo) + pad * 2
     // r92：板心 (u,v) 取包围盒中点而非质心——板尺寸按包围盒+pad 定，质心偏一侧时
@@ -3322,6 +3338,9 @@ export class MolEngine {
   /** 移除密度图层 */
   removeDensityMap() {
     this.disposeMapGeometry()
+    // r98 P0：仅清几何不清 layer 会让整张 CCP4 体数据（最高 256MB）常驻内存，
+    // 且残留 layer 上 getMapInfo 返回陈旧信息、setMapAppearance 可从残留 grid 重建出已「移除」的图
+    this.mapLayer = null
   }
 
   /** 密度图信息（UI 镜像用） */
@@ -3656,7 +3675,12 @@ export class MolEngine {
     for (const label of labels) {
       const data = dataRegistry.get(label.structureId)
       const view = this.views.get(label.structureId)
-      if (!data || !view || !view.group.visible) continue
+      if (!data || !view) continue
+      // r98：隐藏结构/隐藏链只跳过「本帧绘制」而非丢弃——旧版 labelsKey 不含可见性，
+      // 隐藏结构 A 期间在结构 B 上增删标签会触发重建（A 的标签被清空且被跳过），
+      // 重新显示 A 时键无变化、标签永久丢失。现 labelsKey 并入可见性+隐藏链签名
+      //（sync 内），恢复显示时本函数重跑重建。
+      if (!view.group.visible) continue
       // 链隔离：隐藏链组上的标签同步隐藏（否则悬浮文字指向空白处）
       const entry = useMolStore.getState().structures.find(x => x.id === label.structureId)
       if (entry?.hiddenChains?.length && entry.hiddenChains.includes(atomChainGroups(data)[label.atomIdx])) continue
@@ -4394,7 +4418,10 @@ export class MolEngine {
       ? new THREE.Vector3().fromArray(s.up).normalize()
       : up0.clone()
     // up0→up1 旋转（无变化时 null：跳过每帧插值）
-    const upQ = Math.abs(up0.dot(up1)) < 0.99999
+    // r98：判「近似相同」用 dot > 阈值而非 |dot|——up0 与 up1 精确反向（view top→bottom
+    // 书签即触发）时 |dot|≈1 被误判为无变化跳过插值，落位帧 up 直写引发 180° 滚转跳变；
+    // setFromUnitVectors 对 antiparallel 自带正交回退轴，反向情形走插值才是连续的
+    const upQ = up0.dot(up1) < 0.99999
       ? new THREE.Quaternion().setFromUnitVectors(up0, up1)
       : null
     // 目标极点位姿（view top/bottom / 极点书签）→ 豁免俯仰限位（动画全程啠开，精确落位）
@@ -4449,7 +4476,9 @@ export class MolEngine {
     }
     const upQ: (THREE.Quaternion | null)[] = []
     for (let i = 0; i < nSeg; i++) {
-      upQ.push(Math.abs(keys[i].up.dot(keys[i + 1].up)) < 0.99999
+      // r98：同 animateCameraTo——dot > 阈值判「近似相同」，antiparallel（|dot|≈1）
+      // 必须走插值（setFromUnitVectors 正交回退轴），否则段末 up 直写 180° 跳变
+      upQ.push(keys[i].up.dot(keys[i + 1].up) < 0.99999
         ? new THREE.Quaternion().setFromUnitVectors(keys[i].up, keys[i + 1].up)
         : null)
     }
@@ -4785,14 +4814,37 @@ export class MolEngine {
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave)
     this.clearRubberBand()
     this.controls.dispose()
+    // r98：label/measure/pickMarker/hbond/contact 组卫生收尾——Sprite 材质与
+    // 测量线几何是引擎分配的资源，与其他清理路径的严谨度对齐（renderer.dispose
+    // 销毁上下文后主要靠 GC，此处释放防边缘复用路径泄漏）。label 清理须在
+    // views.clear() 之前（labelGroup 挂在 view 上）
     for (const view of this.views.values()) {
       for (const rv of view.reps.values()) rv.build.dispose()
+      for (const child of [...view.labelGroup.children]) {
+        view.labelGroup.remove(child)
+        disposeSprite(child as THREE.Sprite)
+      }
     }
     this.views.clear()
     this.symmetryGroups.clear()
     this.clearGroupChildren(this.poreGroup)
     this.clearGroupChildren(this.membraneGroup)
     this.membraneBox = null
+    // r98：measureGroup 含 Sprite（值标签）——Sprite 几何是 three 模块级共享资源，
+    // clearGroupChildren 的 geometry.dispose 会误伤；照 updateMeasurements 的
+    // 安全模式：Sprite 仅释放材质，Mesh 释放几何+材质
+    for (const child of [...this.measureGroup.children]) {
+      this.measureGroup.remove(child)
+      if ((child as THREE.Sprite).isSprite) disposeSprite(child as THREE.Sprite)
+      else {
+        const m = child as THREE.Mesh
+        m.geometry?.dispose()
+        ;(m.material as THREE.Material)?.dispose()
+      }
+    }
+    this.clearGroupChildren(this.pickMarkerGroup)
+    this.clearGroupChildren(this.hbondGroup)
+    this.clearGroupChildren(this.contactGroup)
     this.disposeMapGeometry()
     this.stereoEffect?.dispose()
     this.stereoEffect = null

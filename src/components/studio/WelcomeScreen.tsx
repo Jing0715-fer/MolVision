@@ -114,10 +114,12 @@ function RowCard({ tpl, busy, onDemo }: {
   return (
     <button
       type="button"
-      role="listitem"
       data-welcome-row-card={tpl.id}
       onClick={onDemo}
       disabled={busy}
+      /* r98：移除 role="listitem"——显式 role 会压掉隐式 button 角色，读屏器丢失
+         可操作语义；父容器 role="list" 的条目改由 ARIA 包裹（listbox/listitem 在
+         button 上均非法）。键盘/焦点行为由原生 button 语义承担 */
       title={t({
         zh: `加载演示结构 ${tpl.demo} 并应用「${t(tpl.name)}」图式`,
         en: `Load demo structure ${tpl.demo} with the "${t(tpl.name)}" style applied`,
@@ -346,13 +348,17 @@ export function WelcomeScreen() {
   }
 
   // 画廊卡片 → 演示加载（demoThenApply：加载代表结构 + 应用图式命令序列；
-  // 成功后结构就位，欢迎页整体卸载交棒工作台）
+  // 成功后结构就位，欢迎页整体卸载交棒工作台）。
+  // r98：返回值感知——失败/超时不再弹「演示就绪」假成功（fetch 失败已由
+  // fetchPdbId 内部 toast，此处不重复报错只沉默不报成功）
   const demo = async (tpl: FigureTemplate) => {
     if (busyId || loading) return
     setBusyId(tpl.id)
     try {
-      await demoThenApply(tpl)
-      toast.success(tt({ zh: `演示就绪：「${t(tpl.name)}」on ${tpl.demo}`, en: `Demo ready: "${t(tpl.name)}" on ${tpl.demo}` }))
+      const ok = await demoThenApply(tpl)
+      if (ok) {
+        toast.success(tt({ zh: `演示就绪：「${t(tpl.name)}」on ${tpl.demo}`, en: `Demo ready: "${t(tpl.name)}" on ${tpl.demo}` }))
+      }
     } catch {
       toast.error(tt({ zh: '演示加载失败——请稍后重试', en: 'Demo failed to load — please retry' }))
     } finally {

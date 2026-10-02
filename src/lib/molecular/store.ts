@@ -381,6 +381,10 @@ export const useMolStore = create<MolState>()((set, get) => ({
     set(s => {
       const structures = s.structures.filter(x => x.id !== id)
       const activeId = s.activeId === id ? (structures[0]?.id ?? null) : s.activeId
+      // r98：被移除的是活动结构且膜开启时，活动权移交剩余结构——膜几何同样
+      // 是「结构语境」，必须随结构一起走（r92/r94 只覆盖了 add/activate/loader 路径，
+      // remove 路径漏网 → 关闭膜蛋白后可溶蛋白长出 bogus 双橙板，E2E 实锤）
+      const dropMembrane = s.activeId === id && s.settings.showMembrane
       return {
         structures,
         activeId,
@@ -391,6 +395,11 @@ export const useMolStore = create<MolState>()((set, get) => ({
           ? { structureId: null, indices: [], rev: s.selection.rev + 1 }
           : s.selection,
         hbondScope: s.hbondScope?.structureId === id ? null : s.hbondScope,
+        // r98：拾取标记球由 measurePicks.structureId 驱动烘焙坐标——结构移除后
+        // picksKey 不变 → 标记球悬浮残留（幽灵球）；测量线会随 measurements 过滤
+        // 消失，标记球必须同步清空
+        measurePicks: s.measurePicks?.structureId === id ? null : s.measurePicks,
+        ...(dropMembrane ? { settings: { ...s.settings, showMembrane: false } } : {}),
         visualRev: s.visualRev + 1,
       }
     })

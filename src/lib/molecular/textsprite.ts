@@ -1,12 +1,19 @@
 // 文本精灵（标签、测量值）
 import * as THREE from 'three'
 
+// 缓存上限：测量值/标签文本是无限键空间（数值字符串），无淘汰会单调累积 GPU 纹理（r98 P0）
+const TEXTURE_CACHE_MAX = 128
 const textureCache = new Map<string, { tex: THREE.CanvasTexture; w: number; h: number }>()
 
 function makeTexture(text: string, opts: { color?: string; outline?: string; fontSize?: number }) {
   const key = `${text}|${opts.color ?? ''}|${opts.outline ?? ''}|${opts.fontSize ?? 40}`
   const cached = textureCache.get(key)
-  if (cached) return cached
+  if (cached) {
+    // LRU 触碰：移到 Map 尾部（最新）
+    textureCache.delete(key)
+    textureCache.set(key, cached)
+    return cached
+  }
   const fontSize = opts.fontSize ?? 40
   const pad = fontSize * 0.35
   const canvas = document.createElement('canvas')
@@ -33,6 +40,15 @@ function makeTexture(text: string, opts: { color?: string; outline?: string; fon
   tex.colorSpace = THREE.SRGBColorSpace
   tex.anisotropy = 4
   const rec = { tex, w, h }
+  // LRU 淘汰：超上限时逐出最旧条目并释放其 GPU 纹理（Map 迭代序=插入序，首项即最旧）
+  if (textureCache.size >= TEXTURE_CACHE_MAX) {
+    const oldest = textureCache.keys().next().value
+    if (oldest !== undefined) {
+      const evicted = textureCache.get(oldest)
+      evicted?.tex.dispose()
+      textureCache.delete(oldest)
+    }
+  }
   textureCache.set(key, rec)
   return rec
 }

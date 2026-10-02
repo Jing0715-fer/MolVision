@@ -244,6 +244,14 @@ export async function POST(req: Request) {
   const errText = (zh: string, en: string, status: number) =>
     NextResponse.json({ ok: false, error: locale === 'en' ? en : zh }, { status })
 
+  // r98：体积预检先行——旧版 await req.json() 把任意大小 body 完整缓冲进内存后
+  // 才校验 5MB 上限（App Router route handler 无框架级 body 上限，直连数百 MB
+  // JSON 即可打内存）。content-length 头在解析前可得，异常直达直接拒
+  const declaredLen = Number(req.headers.get('content-length') ?? '0')
+  if (Number.isFinite(declaredLen) && declaredLen > 12 * 1024 * 1024) {
+    return errText('请求体超过 12MB 上限（图片应 ≤ 5MB，客户端会缩放）', 'Request body exceeds the 12MB limit (image ≤ 5MB; the client downscales)', 413)
+  }
+
   // ---------- 请求体校验 ----------
   let body: { image?: unknown; hints?: unknown }
   try {
@@ -261,21 +269,30 @@ export async function POST(req: Request) {
   const evidence = hints ? hintsBlock(hints) : ''
 
   // ---------- VLM 调用小汇（provider 直连优先，ZAI SDK 兜底） ----------
+  // r98：兜底路径三修——①SDK createVision 不收 signal/timeout（类型就是裸 Promise），
+  // 上游挂起时整个解析无限挂起；②客户端已断开（req.signal aborted）时不再烧 VLM
+  // 轮次（provider 路径抛 AbortError 落 catch 后旧版仍继续走兜底）；③复用同一超时
   const callVision = async (messages: VisionMessage[], timeoutMs: number): Promise<string> => {
     let providerErr = ''
     try {
       const text = await visionWithProvider(messages, { signal: req.signal, timeoutMs })
       if (text !== null) return text
     } catch (e) {
+      // 客户端主动取消：不再进入兜底（为已断开的连接烧 VLM 轮次无意义）
+      if (req.signal.aborted) throw new Error('aborted')
       providerErr = e instanceof Error ? e.message : 'vision provider call failed'
     }
+    if (req.signal.aborted) throw new Error('aborted')
     const zai = await ZAI.create()
     try {
-      const completion = await zai.chat.completions.createVision({
-        model: 'glm-4.6v',
-        messages,
-        thinking: { type: 'disabled' },
-      })
+      const completion = await Promise.race([
+        zai.chat.completions.createVision({
+          model: 'glm-4.6v',
+          messages,
+          thinking: { type: 'disabled' },
+        }),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`VLM 兜底调用超时（${timeoutMs}ms）`)), timeoutMs)),
+      ])
       return String(completion.choices[0]?.message?.content ?? '')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'VLM 调用异常'
