@@ -111,7 +111,8 @@ export function MeasurePanel() {
               </div>
               <button
                 onClick={() => removeMeasurement(m.id)}
-                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                aria-label={t({ zh: `删除${label}测量 ${m.type === 'distance' ? `${m.value.toFixed(2)} Å` : `${m.value.toFixed(1)}°`}`, en: `Delete ${label.toLowerCase()} measurement ${m.type === 'distance' ? `${m.value.toFixed(2)} Å` : `${m.value.toFixed(1)}°`}` })}
+                className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
               >
                 <Trash2 className="h-3 w-3" />
               </button>

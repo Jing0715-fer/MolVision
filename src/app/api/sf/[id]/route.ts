@@ -34,9 +34,13 @@ export async function GET(
     return NextResponse.json({ error: errText(locale, '无效的 PDB 编号', 'Invalid PDB ID') }, { status: 400 })
   }
   const headers_ = { 'User-Agent': 'MolVision/1.0 (molecular viewer)' }
+  // r98-f2：出站 fetch 超时（与 pdb 路由同款修法）——旧版 RCSB fetch 不带中止信号，
+  // 上游停响应时挂到 undici 默认 ~300s；SF mmCIF 普遍 >2MB（大衍射数据集可数十 MB，
+  // 下载耗时长于坐标文件），给 30s（pdb 路由 20s 基础上按文件体量放宽）
+  const UPSTREAM_TIMEOUT = 30_000
   try {
     // SF 文件普遍 >2MB，超出 Next.js data cache 上限会刷警告 —— 显式 no-store（走 OS 级 fetch 缓存语义）
-    const res = await fetch(`https://files.rcsb.org/download/${pdbId}-sf.cif`, { headers: headers_, cache: 'no-store' })
+    const res = await fetch(`https://files.rcsb.org/download/${pdbId}-sf.cif`, { headers: headers_, cache: 'no-store', signal: AbortSignal.timeout(UPSTREAM_TIMEOUT) })
     if (res.ok) {
       // 体积预检：content-length 命中即拒（不读 body）；无头时读完再验
       const cl = Number(res.headers.get('content-length') ?? '0')
@@ -58,6 +62,11 @@ export async function GET(
     }
     return NextResponse.json({ error: errText(locale, `RCSB 返回 ${res.status}`, `RCSB returned ${res.status}`) }, { status: res.status })
   } catch (e) {
-    return NextResponse.json({ error: errText(locale, `上游错误：${e instanceof Error ? e.message : '未知'}`, `Upstream error: ${e instanceof Error ? e.message : 'unknown'}`) }, { status: 502 })
+    // r98-f2：超时中止给出可读文案（TimeoutError 不是网络错误，旧版透传英文底息）——
+    // 与 pdb 路由同款 TimeoutError/AbortError 判别 + 中英双语超时文案
+    const isTimeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')
+    return NextResponse.json({ error: errText(locale,
+      isTimeout ? `RCSB 结构因子响应超时（${UPSTREAM_TIMEOUT / 1000}s）——请稍后重试` : `上游错误：${e instanceof Error ? e.message : '未知'}`,
+      isTimeout ? `RCSB structure-factor download timed out (${UPSTREAM_TIMEOUT / 1000}s) — please retry` : `Upstream error: ${e instanceof Error ? e.message : 'unknown'}`) }, { status: 502 })
   }
 }

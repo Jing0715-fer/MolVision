@@ -213,6 +213,12 @@ export function runPore(opts: Partial<PoreOptions> = {}): PoreRunResult {
   if (!s.activeId) return { ok: false, message: tt({ zh: '当前没有结构——先加载离子通道（如 load 1bl8 KcsA）', en: 'No structure loaded — load an ion channel first (e.g. load 1bl8 KcsA)' }) }
   const data = dataRegistry.get(s.activeId)
   if (!data) return { ok: false, message: tt({ zh: '结构数据不存在', en: 'Structure data not found' }) }
+  // r98-f1：零聚合物残基（纯配体/HETATM-only 文件）——tMin=+Inf/tMax=-Inf 走到底
+  // 全部采样 NaN、span=-Infinity 进环带几何与剖面卡（updateMembrane 同款守卫哲学：
+  // 诚实报错而非废几何）
+  if (!data.residues.some(r => r.polymer && !r.water)) {
+    return { ok: false, message: tt({ zh: '该结构没有聚合物链（孔道剖面需要蛋白/核酸聚合物）', en: 'This structure has no polymer chains (pore profiles need protein/nucleic polymers)' }) }
+  }
   const maxR = Math.max(3, Math.min(opts.maxR ?? 8, 16))
   const samples = Math.max(60, Math.min(opts.samples ?? 160, 400))
   const result = computePoreProfile(data, { maxR, samples })

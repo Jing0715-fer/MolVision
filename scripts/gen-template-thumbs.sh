@@ -26,7 +26,7 @@ BASE=http://localhost:3000
 OUT=/home/z/my-project/public/templates
 mkdir -p "$OUT"
 
-# 模板id:等待秒数:demo结构:grid序号（FIGURE_TEMPLATES 顺序 0-22）
+# 模板id:等待秒数:demo结构:grid序号（顺序即 FIGURE_TEMPLATES——见 template-specs.sh）
 # density-map 22s：SF 拉取 + Worker FFT + 38 万三角等值面 marching cubes 紧凑（r72 实测
 # 16s 截图会漏网格——密度缩略图无 mesh 实锤后补拍验证的教训）；publication 18s（ray 1920）
 # r75 新增五模板（12-16）：mutation 12s（12 条命令 × 120ms + 标签精灵 + 相机动画）
@@ -45,54 +45,10 @@ mkdir -p "$OUT"
 # r89 新增五模板（32-36）：wire 10s（线框即成）；grayscale 10s（灰化即成）；electrostatic
 # 13s（SASA 表面 worker 基线）；hydration 11s（水 rep 转小球 + orient）；unit-cell 10s
 # （CRYST1 盒线框即成）
-SPECS=(
-  rainbow-overview:10:4HHB:0
-  chain-assembly:10:4HHB:1
-  ss-motif:10:1AKI:2
-  ligand-pocket:11:6LU7:3
-  sasa-surface:13:4HHB:4
-  density-map:22:3EKJ:5
-  interface-contacts:11:6LU7:6
-  symmetry-assembly:11:1CRN:7
-  ensemble-dynamics:10:1D3Z:8
-  publication-ready:18:4HHB:9
-  pore-analysis:14:1BL8:10
-  membrane-embed:15:1FX8:11
-  salt-bridge-network:11:1AKI:12
-  hbond-network:12:6LU7:13
-  dna-protein-complex:12:1LMB:14
-  domain-coloring:10:6LU7:15
-  mutation-hotspots:12:4HHB:16
-  disulfide-bonds:11:3INS:17
-  metal-center:12:2CBA:18
-  cpk-spacefill:10:1CRN:19
-  mobility-bfactor:10:3INS:20
-  heme-pocket:12:1MBO:21
-  cation-pi:11:1AKI:22
-  conformational-morph:24:4AKE:23
-  two-state-comparison:20:4Q21:24
-  ghost-surface:14:4HHB:25
-  catalytic-residues:12:1AKI:26
-  ink-night-cover:11:4HHB:27
-  ballstick-chemistry:10:1CRN:28
-  stereo-anaglyph:10:1AKI:29
-  putty-flexibility:10:3INS:30
-  slab-cutaway:30:4HHB:31:1280x720
-  wire-skeleton:10:1CRN:32
-  grayscale-print:10:4HHB:33
-  electrostatic-surface:13:4HHB:34
-  hydration-shell:11:4HHB:35
-  unit-cell-context:10:4HHB:36
-  cinematic-spotlight:10:4HHB:37
-  chalk-wireframe:10:1AKI:38
-  pastel-macaron:10:3INS:39
-  duotone-poster:10:4HHB:40
-  sepia-vintage:10:1MBO:41
-  neon-night:10:1CRN:42
-  textbook-annotated:12:1AKI:43
-  nucleosome-dna:12:1AOI:44
-  gfp-chromophore:12:1EMA:45
-)
+# r98-f4：SPECS 抽离为 scripts/template-specs.sh 单一事实源（与 health-check 共用；
+# 数量与 figure-templates.ts 有 source 时断言强制对齐）——新增模板只改那一份
+# shellcheck source=template-specs.sh
+source "$(dirname "${BASH_SOURCE[0]}")/template-specs.sh"
 
 # r75：可选增量模式——命令行传模板 id 列表则只生成指定项（缺省全量）
 if [ $# -gt 0 ]; then
@@ -176,17 +132,34 @@ import json, sys
 from PIL import Image
 tid = sys.argv[1]
 raw = open('/tmp/r72-canvas.json').read().strip()
+# r98-f4：rect 缺失/损坏显式失败（旧版 json.loads('') 直接崩且无 set -e——
+# 外层继续 echo SHOT 假成功，缩略图静默缺失由旧图顶包）
+if not raw:
+    print(f'RECTFAIL {tid} (canvas rect eval empty)')
+    sys.exit(1)
 # agent-browser eval 输出带 shell 引号壳（'"{\"x\":..}"'）——剥壳后再 parse
 if raw.startswith('"'):
     raw = json.loads(raw)
-rect = json.loads(raw) if isinstance(raw, str) else raw
+try:
+    rect = json.loads(raw) if isinstance(raw, str) else raw
+    assert rect.get('w', 0) > 50 and rect.get('h', 0) > 50, f"canvas-tiny {rect.get('w')}x{rect.get('h')}"
+except Exception as exc:
+    print(f'RECTFAIL {tid} ({exc})')
+    sys.exit(1)
 im = Image.open(f'/tmp/r72-{tid}.raw.png').convert('RGB')
 im = im.crop((rect['x'], rect['y'], rect['x'] + rect['w'], rect['y'] + rect['h']))
 im = im.resize((640, 320), Image.LANCZOS)
 im.save(f'/home/z/my-project/public/templates/{tid}.png')
 print(f'CROP {tid} canvas={rect["w"]}x{rect["h"]}')
 PY
-  echo "SHOT $id ($demo idx=$idx)"
+  python_ok=$?
+  # r98-f4：PIL 裁剪失败（rect 缺失/canvas 过小）不再假成功——SHOT 只在真落盘后打
+  if [ "$python_ok" = "0" ] && [ -s "/home/z/my-project/public/templates/$id.png" ]; then
+    echo "SHOT $id ($demo idx=$idx)"
+  else
+    echo "RECTFAIL-CAUGHT $id (crop skipped — see above)"
+    return 1
+  fi
 }
 
 for spec in "${SPECS[@]}"; do

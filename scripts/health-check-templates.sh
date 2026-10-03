@@ -1,25 +1,22 @@
 #!/usr/bin/env bash
 # r78 全模板体检：欢迎页画廊逐卡点击（demoThenApply 全链路）→ 等命令序列完成 →
 # 截图画布 → 像素级内容验证（非底色占比>0.5%）→ 记录结果。
-# 用法：bash scripts/health-check-templates.sh [起idx] [止idx]（缺省全量 0-26）
+# r98-f4：SPECS 改 source scripts/template-specs.sh（单一事实源——本脚本 r75 后
+# 停更导致 27/46 漂移、19 支模板体检盲区；现与缩略图管线共用一份规格，数量与
+# figure-templates.ts 由 specs 文件内断言强制对齐）。
+# 用法：bash scripts/health-check-templates.sh [起idx] [止idx]（缺省全量 0-N-1 动态）
 set -u
 export AGENT_BROWSER_SESSION=r78-health
 BASE=http://localhost:3000
-SPECS=(
-  rainbow-overview:10  chain-assembly:10  ss-motif:10        ligand-pocket:11
-  sasa-surface:13      density-map:22     interface-contacts:11  symmetry-assembly:11
-  ensemble-dynamics:12 publication-ready:18 pore-analysis:14  membrane-embed:15
-  salt-bridge-network:13 hbond-network:13 dna-protein-complex:14 domain-coloring:11
-  mutation-hotspots:14 disulfide-bonds:12 metal-center:13   cpk-spacefill:11
-  mobility-bfactor:11  heme-pocket:13     cation-pi:12
-  conformational-morph:18 two-state-comparison:18 ghost-surface:15 catalytic-residues:13
-)
+# shellcheck source=template-specs.sh
+source "$(dirname "${BASH_SOURCE[0]}")/template-specs.sh"
 START=${1:-0}
-END=${2:-26}
+END=${2:-$(( ${#SPECS[@]} - 1 ))}
 mkdir -p /tmp/r78-health
 for i in $(seq "$START" "$END"); do
   spec="${SPECS[$i]}"
-  id="${spec%%:*}"; wait="${spec##*:}"
+  # r98-f4：template-specs.sh 全字段（id:wait:demo:idx[:vp]）——取前两字段
+  id="${spec%%:*}"; wait="$(printf '%s' "$spec" | cut -d: -f2)"
   agent-browser open "$BASE" >/dev/null 2>&1
   sleep 4
   # 点击画廊第 i 张卡的演示按钮（卡片内首个 button）

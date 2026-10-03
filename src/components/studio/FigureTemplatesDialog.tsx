@@ -461,6 +461,8 @@ const CALIB_STAGES: DualText[] = [
   { zh: '截取引擎渲染…', en: 'Capturing the engine render…' },
   { zh: 'AI 逐维比对原图与渲染…', en: 'The AI compares source vs render…' },
 ]
+/** r98-f5：自动复验轮数上限（采纳→回写→复验直至 close 或达上限） */
+const CALIB_MAX_ROUNDS = 3
 
 /** dataURL → ≤maxW 像素 JPEG（VLM 上行省流——与 AgentPanel shrinkImage 同模式） */
 async function shrinkDataUrl(dataUrl: string, maxW: number): Promise<string> {
@@ -495,6 +497,18 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
   const [renderShot, setRenderShot] = useState<string | null>(null)
   const [result, setResult] = useState<{ verdict: 'close' | 'adjusted'; critique: DualText; suggested: string[] | null } | null>(null)
   const [accepted, setAccepted] = useState(false)
+  // r98-f5：多轮迭代状态——round 当前轮次（1 起）、history 每轮结论时间线、
+  // autoNext 采纳后自动复验开关、autoPending 采纳→命令回写→自动续轮的中间态
+  const [round, setRound] = useState(0)
+  const [history, setHistory] = useState<{ round: number; verdict: 'close' | 'adjusted'; added: number; removed: number }[]>([])
+  const [autoNext, setAutoNext] = useState(true)
+  const [autoPending, setAutoPending] = useState(false)
+
+  // r98-f3：卸载守卫——run 内多 await 点后检查，卸载后不再回写组件状态；
+  // 校准 fetch 挂 AbortController，卸载时一并中止（对话框关闭/视图切走时请求不悬挂）
+  const disposedRef = useRef(false)
+  const calibAbortRef = useRef<AbortController | null>(null)
+  useEffect(() => () => { disposedRef.current = true; calibAbortRef.current?.abort() }, [])
 
   useEffect(() => {
     if (phase !== 'running') return
@@ -502,25 +516,50 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
     return () => clearInterval(iv)
   }, [phase])
 
+  // r98-f5：采纳后自动复验——onAccept 回写表单后 commands prop 更新，此处触发下一轮
+  // （收敛条件：verdict close / 达到 MAX 轮 / 用户关掉自动开关；定时器起步避开
+  // set-state-in-effect 同步路径，与 react-hooks 新规则兼容）
+  const lastCmdsRef = useRef(commands)
+  useEffect(() => {
+    if (!autoPending) return
+    if (commands === lastCmdsRef.current) return
+    lastCmdsRef.current = commands
+    setAutoPending(false)
+    if (commands.length < 2 || disposedRef.current) return
+    const tm = setTimeout(() => { if (!disposedRef.current) void run() }, 150)
+    return () => clearTimeout(tm)
+  }, [commands, autoPending])
+
   const run = async () => {
     if (phase === 'running' || commands.length < 2) return
+    const myRound = round + 1 // r98-f5：本轮序号（历史时间线用；setRound 异步不可靠）
+    setRound(myRound)
     setPhase('running')
     setStage(0)
     setErrMsg('')
     setAccepted(false)
+    // r98-f3：本轮回写句柄——重跑/重试时先中止旧轮，迟到响应不再覆盖新轮状态
+    calibAbortRef.current?.abort()
+    const ac = new AbortController()
+    calibAbortRef.current = ac
     try {
       // ① 演示结构落地（TemplatePreview 同拍——已入 store 免拉取）
       if (!isStructureInStore(demo)) {
         await fetchPdbId(demo)
+        if (disposedRef.current) return
         const ok = await waitForStructureInStore(demo, 9000)
+        if (disposedRef.current) return
         if (!ok) throw new Error('LOAD_TIMEOUT')
       }
       await new Promise<void>(res => whenEngineReady(() => res()))
+      if (disposedRef.current) return
       await new Promise(r => setTimeout(r, 80))
       await waitForCameraIdle(2600)
+      if (disposedRef.current) return
       await new Promise(r => setTimeout(r, 100))
       // ② 应用当前命令（表单实况——含用户手改）
       await runTemplateCommands(commands)
+      if (disposedRef.current) return
       // r98：旧版固定 450ms < 序列收尾相机飞行时长（normal 650ms / cinematic 1200ms）
       // ——capture 拿到半途构图，VLM 六维比对失真。等引擎动画真正落地再截
       await waitForCameraIdle(1800)
@@ -532,20 +571,25 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
         // 兑底：极端长动画（cinematic 1200ms）后仍在飞——再等一轮
         await waitForCameraIdle(1800)
       }
+      if (disposedRef.current) return
       setStage(1)
       await new Promise(r => setTimeout(r, 60))
       const shot = eng.capture({ scale: 1.5 })
+      if (disposedRef.current) return
       setRenderShot(shot)
       setStage(2)
       const [targetJ, renderJ] = await Promise.all([
         shrinkDataUrl(sourceUrl, 768),
         shrinkDataUrl(shot, 768),
       ])
+      if (disposedRef.current) return
       const res = await fetch('/api/templates/calibrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target: targetJ, render: renderJ, commands }),
+        signal: ac.signal,
       })
+      if (disposedRef.current) return
       const data = (await res.json()) as {
         ok?: boolean
         verdict?: 'close' | 'adjusted'
@@ -556,9 +600,20 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
       if (!res.ok || !data.ok || !data.verdict || !data.critique) {
         throw new Error(data.error ?? 'CALIB_FAILED')
       }
-      setResult({ verdict: data.verdict, critique: data.critique, suggested: data.commands ?? null })
+      const suggested = data.commands ?? null
+      const verdict = data.verdict
+      setResult({ verdict, critique: data.critique, suggested })
+      // r98-f5：时间线记录——added = 建议序列相对当前命令的新增数，removed = 移除数
+      setHistory(h => [...h.slice(-4), {
+        round: myRound,
+        verdict,
+        added: suggested ? suggested.filter(c => !commands.includes(c)).length : 0,
+        removed: suggested ? commands.filter(c => !suggested.includes(c)).length : 0,
+      }])
       setPhase('done')
     } catch (e) {
+      // r98-f3：卸载触发的 AbortError 静默吞掉——已卸载组件不回写错误态
+      if (disposedRef.current) return
       setPhase('error')
       setErrMsg(e instanceof Error ? e.message : String(e))
     }
@@ -598,7 +653,14 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
       {phase === 'running' && (
         <div className="flex w-full flex-col items-center justify-center gap-2.5 px-4 py-5">
           <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden />
-          <span className="text-[11.5px] font-medium text-foreground/85">{t(CALIB_STAGES[stage])}</span>
+          <span className="text-[11.5px] font-medium text-foreground/85">
+            {t(CALIB_STAGES[stage])}
+            {round > 1 && (
+              <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-px font-mono text-[9px] font-semibold text-primary" data-calibration-round>
+                {t({ zh: `第 ${round}/${CALIB_MAX_ROUNDS} 轮`, en: `Round ${round}/${CALIB_MAX_ROUNDS}` })}
+              </span>
+            )}
+          </span>
           <span className="flex items-center gap-1 font-mono text-[9px] text-muted-foreground">
             {CALIB_STAGES.map((_, i) => (
               <span key={i} className={`h-1 w-5 rounded-full transition-colors ${i <= stage ? 'bg-primary/70' : 'bg-border'}`} />
@@ -610,6 +672,25 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
       {/* done：渲染快照 + 比对结论 + 修正序列（行级差异高亮） */}
       {phase === 'done' && result && (
         <div className="flex flex-col gap-2.5 p-2.5">
+          {/* r98-f5：校准历史时间线——每轮 verdict 与增删计数一目了然（收敛可视化） */}
+          {history.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5" data-calibration-history>
+              <span className="text-[9.5px] font-semibold text-muted-foreground">{t({ zh: '校准历史', en: 'Rounds' })}</span>
+              {history.map(h => (
+                <span key={h.round} className={cn(
+                  'rounded px-1.5 py-px font-mono text-[9px] font-semibold',
+                  h.verdict === 'close'
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
+                )} title={h.verdict === 'close' ? t({ zh: '收敛：比对通过', en: 'Converged: close match' }) : t({ zh: `第 ${h.round} 轮修正：+${h.added} 新增 / -${h.removed} 移除`, en: `Round ${h.round}: +${h.added} new / -${h.removed} removed` })}>
+                  {h.verdict === 'close' ? `R${h.round} ✓` : `R${h.round} +${h.added}/-${h.removed}`}
+                </span>
+              ))}
+              {result.verdict !== 'close' && round >= CALIB_MAX_ROUNDS && (
+                <span className="text-[9px] text-muted-foreground">{t({ zh: '已达轮数上限', en: 'round cap reached' })}</span>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <figure className="relative overflow-hidden rounded-md border border-border">
               <img src={sourceUrl} alt={t({ zh: '目标原图', en: 'Target source' })} className="aspect-[16/10] w-full object-contain" />
@@ -655,16 +736,24 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
                   </li>
                 ))}
               </ol>
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 {accepted ? (
                   <span className="flex items-center gap-1 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
                     <Check className="h-3 w-3" aria-hidden />
-                    {t({ zh: '已采纳——命令表单已更新', en: 'Adopted — commands updated' })}
+                    {autoPending
+                      ? t({ zh: '已采纳——自动复验下一轮…', en: 'Adopted — auto re-verifying…' })
+                      : t({ zh: '已采纳——命令表单已更新', en: 'Adopted — commands updated' })}
                   </span>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => { onAccept(result.suggested!); setAccepted(true) }}
+                    onClick={() => {
+                      onAccept(result.suggested!)
+                      setAccepted(true)
+                      // r98-f5：自动续轮条件——verdict 有差距 + 未达轮数上限 + 开关开。
+                      // 命令回写后 commands prop 更新→autoPending effect 触发下一轮
+                      setAutoPending(autoNext && result.verdict === 'adjusted' && round < CALIB_MAX_ROUNDS)
+                    }}
                     data-calibration-accept
                     className="flex h-7 cursor-pointer items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/15"
                   >
@@ -681,6 +770,16 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
                 >
                   {t({ zh: '重新校准', en: 'Re-calibrate' })}
                 </button>
+                {/* r98-f5：采纳后自动复验开关（≤CALIB_MAX_ROUNDS 轮直至 close） */}
+                <label className="ml-auto flex cursor-pointer select-none items-center gap-1.5 text-[10px] font-medium text-muted-foreground" data-calibration-auto>
+                  <input
+                    type="checkbox"
+                    checked={autoNext}
+                    onChange={e => setAutoNext(e.target.checked)}
+                    className="h-3 w-3 cursor-pointer accent-primary"
+                  />
+                  {t({ zh: '采纳后自动复验', en: 'Auto re-verify' })}
+                </label>
               </div>
             </div>
           )}
@@ -756,6 +855,9 @@ function UploadPanel({ onBack, onSaved, onPreviewApply, editTarget }: {
   // r98：解析请求中止句柄（取消按钮/换图/重置时 abort——服务端已接 req.signal，
   // 中止链路现成；旧版 AbortError 分支是不可达死代码，fetch 从未接 signal）
   const abortRef = useRef<AbortController | null>(null)
+  // r98-f3：卸载守卫——对话框关闭/视图切走时中止在途解析：旧版只在按钮路径
+  //（取消/重置）abort，卸载路径无按钮可达，请求悬挂直至超时
+  useEffect(() => () => { abortRef.current?.abort() }, [])
 
 
   const acceptFile = async (f: File) => {
@@ -1522,7 +1624,9 @@ export function FigureTemplatesDialog() {
         toast.success(tt({ zh: `演示就绪：「${t(tpl.name)}」on ${tpl.demo}`, en: `Demo ready: "${t(tpl.name)}" on ${tpl.demo}` }))
       }
     } finally {
-      setBusyId(null)
+      // r98-f3：仅当 busyId 仍指向本模板时才清空——A 卡 demo 未完成时用户点 B 卡，
+      // setBusyId(B) 后 A 的 finally 会连 B 的 spinner 一起误清（闭包比较防竞态）
+      setBusyId(prev => (prev === tpl.id ? null : prev))
     }
   }
 

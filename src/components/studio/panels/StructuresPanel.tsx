@@ -186,6 +186,9 @@ export function StructuresPanel() {
   const [spRefChain, setSpRefChain] = useState('')                // ''=自动
   // 对称伴侣半径（本地输入值，生成时才提交）
   const [symRadius, setSymRadius] = useState(20)
+  // r98-f3：对称伴侣半径拖动态——拖动中只显示本地值，松手（onValueCommit）才提交
+  // 并重建晶格伴侣（旧版 onValueChange 每 tick 调 apply → updateSymmetry 每 tick 重建，拖动全程卡顿）
+  const [symDrag, setSymDrag] = useState<number | null>(null)
   // 全部关闭确认
   const [confirmCloseAll, setConfirmCloseAll] = useState(false)
   // 折叠的结构名集合（按名持久化：会话恢复/合并后仍生效）
@@ -305,7 +308,7 @@ export function StructuresPanel() {
                       description: tt({ zh: `链 ${res.mobileChain} ↔ 链 ${res.refChain} · 匹配 ${res.matched} 对 CA · RMSD ${res.rmsd.toFixed(2)} Å`, en: `Chains ${res.mobileChain} ↔ ${res.refChain} · ${res.matched} CA pairs matched · RMSD ${res.rmsd.toFixed(2)} Å` }),
                     })
                   }}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-primary/10 hover:text-primary group-hover:opacity-100 focus-visible:opacity-100"
                   title={t({ zh: `叠合到 ${structures.find(x => x.id === activeId)?.name ?? '活动结构'}（序列比对 + 刚体拟合）`, en: `Superpose onto ${structures.find(x => x.id === activeId)?.name ?? 'the active structure'} (sequence alignment + rigid-body fit)` })}
                 >
                   <Combine className="h-3.5 w-3.5" />
@@ -319,7 +322,7 @@ export function StructuresPanel() {
                     if (!r.ok) return toast.error(tt({ zh: '重置失败', en: 'Reset failed' }), { description: r.message })
                     toast.success(r.message, { description: tt({ zh: 'untransform 命令可撤销指定结构的叠合', en: 'The untransform command undoes this structure’s superposition' }) })
                   }}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-primary/10 hover:text-primary group-hover:opacity-100"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-primary/10 hover:text-primary group-hover:opacity-100 focus-visible:opacity-100"
                   title={t({ zh: '撤销叠合变换，回到原始位姿（untransform）', en: 'Undo the superposition transform and restore the original pose (untransform)' })}
                 >
                   <Undo2 className="h-3.5 w-3.5" />
@@ -625,13 +628,15 @@ export function StructuresPanel() {
                       <div>
                         <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
                           <span>{t({ zh: '搜索半径', en: 'Search radius' })}</span>
-                          <span className="font-mono tabular-nums">{symRadius} Å</span>
+                          <span className="font-mono tabular-nums">{symDrag ?? symRadius} Å</span>
                         </div>
+                        {/* r98-f3：本地拖动态 + 松手提交（与 RepsPanel CommitSlider 同模式） */}
                         <Slider
-                          value={[symRadius]}
+                          value={[symDrag ?? symRadius]}
                           min={5} max={80} step={1}
                           aria-label={t({ zh: '对称伴包搜索半径', en: 'Symmetry mate search radius' })}
-                          onValueChange={v => { setSymRadius(v[0]); apply(v[0]) }}
+                          onValueChange={v => setSymDrag(v[0])}
+                          onValueCommit={v => { setSymDrag(null); setSymRadius(v[0]); apply(v[0]) }}
                         />
                       </div>
                     ) : (

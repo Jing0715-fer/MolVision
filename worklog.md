@@ -3921,3 +3921,75 @@ Stage Summary:
   4. 【低】cron 执行配额（第 10 次 Disabled）——继续观察配额窗口期
 
 （r97 段 cron 补记，2026-10-02 17:20）15min webDevReview 巡检任务 #430472 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 11 次实证（r85/r86/r87/r88/r90/r91/r94/r95/r92/r96 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
+
+---
+Task ID: r98-f2
+Agent: api-fix-subagent
+Task: agent/sf 路由 r98 同构修复（体积预检/dataURL 校验/VLM 超时/scene 截断/出站超时）
+
+Work Log:
+- 【侦察】读 worklog 尾部 + 三个参考实现（parse/calibrate/pdb r98 修法）+ protocol.ts/providers.ts 签名；参考实现与任务描述差异记录：agent 路由 errText 是 (locale, zh, en): string 返回裸字符串（非 parse 的 (zh, en, status) 返回 Response）——按 agent 既有错误风格落地；parse 的 callVision 超时三件套（provider timeoutMs 传递 + req.signal.aborted 断开熔断 + ZAI Promise.race 兜底）不止清单一项，全件同构照搬
+- 【agent/route.ts ①体积预检 L293-300】await req.json() 前复制 parse 同款 content-length 预检，上限 16MB（vision 模式带双图 image+imageBefore，单图 ≤5MB，parse 12MB + 双图余量）；413 双语文案
+- 【agent/route.ts ②dataURL 校验 L283-285+L313-330】视觉自查分支入口（try 前）对 body.image 与可选 body.imageBefore 各做 DATAURL_RE（/^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/，以 parse 实际正则为准）+ 载荷长度 ×0.75 ≤ 5MB 折算；非法 400 / 超限 413——旧版零校验直接拼进 VLM 消息（提示词注入面 + 体积放大器）
+- 【agent/route.ts ③VLM 兜底超时 L358-380】visionWithProvider 增传 timeoutMs: 90s；provider 抛错与 text===null 两处加 req.signal.aborted → throw（客户端断开不再烧兜底 VLM 轮次，与 parse 同修）；ZAI createVision 裸 await 改 Promise.race([createVision, 90s reject])——超时位于重试循环体内，每次调用均受约束
+- 【agent/route.ts ④chat 分支 scene 截断 L429-432】消息构造处 sceneWithMemory(...).slice(0, 3600)，与 vision 分支同款——旧版仅校验 truthy，直连 API 可携任意长度 scene 灌满 LLM 上下文
+- 【sf/[id]/route.ts ①出站超时 L37-40+L43】UPSTREAM_TIMEOUT = 30_000（常量注释说明：SF mmCIF 普遍 >2MB、大衍射数据集可数十 MB，下载耗时长于坐标文件，pdb 20s 基础上按体量放宽）；RCSB fetch 增 signal: AbortSignal.timeout(...)
+- 【sf/[id]/route.ts ②超时文案区分 L64-71】catch 分支 TimeoutError/AbortError 判别（与 pdb 同款）→ 中英双语「RCSB 结构因子响应超时（30s）——请稍后重试」；非超时保留原上游错误文案
+- 【门禁】bunx eslint 两文件零输出（exit 0）· bunx tsc --noEmit 过滤 ^src/app/api 零输出 · dev.log 尾部零 error · git diff --stat 净改动仅两目标文件（工作区 scripts/regression-guards.sh 改动为先前轮遗留，非本任务触碰）
+- 【坑（自纠）】多字节编辑时「兜底」误写「兑底」×3——grep 校验发现（r96 MultiEdit 后必须 grep 校验教训复用）后 sed 统一修正并复跑全套验证
+
+Stage Summary:
+- 交付：r98 三路由（parse/calibrate/pdb）同构修法补全到漏网的 agent 与 sf 两路由六处——agent 视觉自查链路四件套（16MB content-length 预检 / 双图 dataURL 白名单+5MB 折算 / VLM 全链路 90s 超时含断开熔断 / chat 分支 scene 3600 截断）+ SF 代理出站 30s 超时与双语超时文案；API 面的内存炸弹、无限挂起、提示词注入三个暴露面就此闭合
+- 验证：eslint 零输出 · tsc src/app/api 零错误 · dev.log 零 error；本任务净改动仅两目标文件（未 commit，遵守指令）
+- 汇报差异点：agent errText 与 parse 签名不同（返回裸 string），错误返回按 agent 既有风格 `NextResponse.json({ ok:false, error: errText(locale, zh, en) }, { status })` 落地；dataURL 正则以 parse 路由实际为准（含 jpe?g 变体与 base64 字符集锚定）
+
+---
+Task ID: r98-f3
+Agent: ui-fix-subagent
+Task: UI 组件层修复（滑杆 commit-on-release/mapData memo/卸载 abort/a11y 批量）
+
+Work Log:
+- 【RepsPanel·滑杆秒级重建根治（P1）】新增 CommitSlider 组件（L45-80）：「本地拖动态 + 松手提交」模式——drag: number | null 本地态，onValueChange 只写本地（拇指与数值标签即时跟手），onValueCommit（Radix 在 pointerup/键盘 keyup 派发）才调 onUpdate 提交 store。与 MapsPanel useIsoThrottle 的 drag 回落语义同族，全文件统一。五个重建代价高的参数滑杆全量替换：ballScale/stickRadius/cartoonWidth/puttyRange（0=auto 显示映射保留在 value 传入侧）/probe+opacity（surface 双滑杆）。visible 开关、删除按钮等轻量操作保持即时（未动）
+- 【RepsPanel·选择表达式】L277-292：Input 每字符直写 store（rep 选择变化即全量重建）改 selDraft 本地草稿态——onBlur/Enter（IME isComposing 守卫）提交、Escape 丢弃回落 store 值；预设 Select onValueChange 同步清草稿防旧草稿覆盖预设值
+- 【StructuresPanel·对称伴侣滑杆同族】L630-641：symRadius 滑杆 onValueChange 每 tick 调 apply→updateSymmetry 重建晶格伴侣——顶层加 symDrag 本地态，onValueCommit 才 setSymRadius+apply；标签显示 symDrag ?? symRadius 跟手
+- 【AnalysisPanel·mapData 身份稳定化（P1）】L187-193：渲染体裸构造 `data && ... ? { data, pairs } : null` 每次渲染新对象身份→下游 axis useMemo/canvas effect 全链失效（hover 移动即全量重算+canvas 整幅重绘）——useMemo 包住，deps [data, structureId, activeId, pairs]（真实输入；dataRegistry 同结构引用稳定）
+- 【FigureTemplatesDialog·三条异步链卸载缺口（P1）】①UploadPanel L783：abortRef 补 useEffect 卸载 cleanup（`abortRef.current?.abort()`）——旧版只有按钮路径（取消/重置）可达 abort，对话框关闭/视图切走时请求悬挂至超时 ②CalibrationPanel L499-503：disposedRef + calibAbortRef 双守卫——run 内 10 个关键 await 点后检查 `if (disposedRef.current) return`（覆盖结构加载/引擎就绪/相机落地×2/runTemplateCommands/capture 前后/shrink/fetch 前后），校准 fetch 接 ac.signal，卸载 abort 的 AbortError 在 catch 内静默吞掉（不向已卸载组件回写 error 态）；重跑/重试入口先 abort 旧轮防迟到响应覆盖新轮状态 ③busyId 竞态 L1549-1553：demo 的 finally `setBusyId(null)` 改函数式 `setBusyId(prev => (prev === tpl.id ? null : prev))`——A 卡 demo 未完成时点 B 卡，A 的 finally 不再误清 B 的 spinner
+- 【SelectionPanel·stats memo（P2）】L43-58：选择统计 IIFE（每渲染全量遍历选中原子填 Set）改 useMemo，deps [selection]
+- 【a11y 批量（P2）】StructuresPanel L311/L325 + SelectionPanel L201 + MeasurePanel L115 四处 hover 才显形的图标按钮追加 focus-visible:opacity-100（键盘聚焦可见）；SelectionPanel 删除钮与 MeasurePanel 删除钮顺手补 aria-label（无文本图标按钮，MeasurePanel 单位随类型 Å/°）；ConsoleBar L329-335 关闭按钮补 aria-label「关闭命令行」；RepsPanel L249-253 与 MapsPanel L343-348 无文本 Switch 补 aria-label（「表示法可见」/「密度图可见」）；AnalysisPanel L1081/L1168 两处 role="listbox" 容器移除 role+aria-label、行按钮移除 role="option"+aria-selected={false}——button 嵌 listbox 不合 ARIA（listbox 子元素必须是 option），行实为点击操作非选择列表，按钮内容文本已构成可访问名称
+- 【门禁】eslint（panels/ + ConsoleBar + FigureTemplatesDialog）零输出零 error · tsc --noEmit 全量 src/components 零错误（examples/mini-services/skills 5 错为历史基线不变）· dev.log 零 error（HMR 编译全过）· 未运行 dev server、未 git commit、未改清单外文件
+
+Stage Summary:
+- 交付四类 UI 层修复：①重建代价高的参数滑杆全部改「本地拖动态+onValueCommit 松手提交」（RepsPanel 五滑杆 CommitSlider 组件化 + StructuresPanel 对称伴侣滑杆同款——拖动全程零重建，松手一次生效）②AnalysisPanel mapData 身份稳定化（hover 不再触发整幅 canvas 重绘链）③FigureTemplatesDialog 三条异步链卸载守卫补全（UploadPanel 卸载 abort / CalibrationPanel disposedRef 十点守卫+fetch signal+abort 静默 / busyId 函数式清空防跨卡竞态）④a11y 批量九处（focus-visible 显形×4、aria-label×4、role=listbox/option ARIA 合法化×2）
+- 滑杆模式说明：选「本地拖动态非空时显示本地态」（drag ?? store）而非拖动态标志模式——与 MapsPanel useIsoThrottle 既有 drag 回落语义同族，全项目滑杆交互心智一致；受控显示未拖动时跟随 store 值，松手后 store 终值即显示值无跳变
+- 与代码现状的差异说明：任务书行号基本命中（RepsPanel 滑杆实际分散在 L143-216 的类型条件分支而非集中 L243-251——L243 是选择表达式 Input，已按实际结构全量处理；MeasurePanel L114 命中；AnalysisPanel role=option 实际在 L1081/L1167 两处子组件内而非 L1073/L1161 本行——L1073/L1161 是 listbox 容器行）
+
+---
+Task ID: r98
+Agent: main
+Task: 用户指令「继续」+ 常设指令「继续打磨整个项目，进行完整代码审查和e2e测试」——收编 cron 中断会话的 r98 审查批次 + 三区并行全项目代码审查（30+ 新发现全修）+ 模板规格单一事实源重构 + 校准回路多轮迭代 + 全量 E2E
+
+Work Log:
+- 【接管侦察】本地 HEAD=a3f787f（UUID 式提交 = cron webDevReview 会话产物）领先 origin 1 提交：pdb 代理 20s 出站超时、parse/calibrate 12MB 体积预检+命令服务端过闸+VLM Promise.race、解析取消逃生口、demoThenApply 去重+15s 兜底、store remove 路径膜复位、textsprite LRU、engine 反平行 up 插值等 15 文件 +267 行——有码无档（worklog 无 r98 段、未推送、门禁未跑）。另有 94 个纯 mode 位脏文件（644→755 环境噪音，git checkout 还原清零）
+- 【收编验证·静态】lint 0 · tsc src 0 · smoke 4/4；guards 370→371：守卫「编辑模式禁粘贴」正则同步 r98 增强条件（`editMode || phase !== 'idle' && phase !== 'picked'`——功能超集：编辑模式+parsing/review 态均禁粘贴）
+- 【收编验证·E2E 六项】①remove 路径膜复位：membrane-embed 加载（膜 5 子对象）→UI 关闭结构→膜 0+membraneBox null→回欢迎页（remove 路径漏网终修实证）②演示去重：同模板二次 Demo→__molData.size 恒 1（旧版堆叠重复结构）③解析取消：parsing 态 Cancel 按钮出现→点击→干净回退 picked 态（旧版挂起请求无限转轮）④刚体过极回归：phi=0.1° 处 40px 下拖，rAF 逐帧四元数采样 max 单帧 1.9°（r96 判据 <5°，180° 突跳零回归）⑤水平 8 批拖拽每批位移无冻结 ⑥reload+Resume last session：结构+膜完整复原、零 hydration 错误
+- 【三区并行代码审查】Explore×3（UI 组件/引擎数据层/API 脚本）产出 30+ 新发现（已排除 r92-r98 已修项），按严重度分派四路修复
+- 【r98-f1 引擎层（自任）】①dispose 尾部清 window.__molEngine（引擎卸载不重挂时整只引擎经 window 强引用滞留含 mapLayer 残留最高 256MB 密度体数据——disposeMapGeometry 只清 meshes/wires 不置空 layer）②sasaPending 复合键 `id|kind`（旧版同结构 full/buried/xburied 三路在飞互相顶替→被顶替者静默丢弃→SASA 面板 computing 永不复位）③xbsaMeta 单槽改随请求键 Map（旧版第二个跨结构请求覆盖元信息→首个 delta 按错误结构对拆分数值静默错乱）④cancelBoxSelect()（pointercancel/pointerleave 中途收尾橡皮带——旧版 boxSelecting 残留+controls.enabled 停 false→轨道交互死锁到下次完整点击）⑤录制 captureStream 轨道 onstop 停止（旧版从不 stop 反复录制累积存活轨道）⑥pore.ts 零聚合物守卫（纯配体/HETATM-only 文件 tMin=+Inf→全 NaN 进环带几何——updateMembrane 同款诚实报错哲学）
+- 【r98-f2 API 路由（子代理 full-stack-developer）】agent 路由 r98 漏网三连+一：16MB 体积预检（vision 双图放宽）、image/imageBefore dataURL 正则+5MB 折算（直连注入面封堵）、ZAI createVision Promise.race 90s（SDK 挂起路由无限挂起+重试再挂）、chat 分支 scene slice(0,3600)；sf 路由 30s 出站超时+TimeoutError 区分文案（与 pdb 同类 bug 修一半对齐）
+- 【r98-f3 UI 组件（子代理 full-stack-developer）】①RepsPanel CommitSlider（本地拖动态 `drag ?? store` 模式+onValueCommit 松手提交——旧版每 tick updateRep→buildRep 秒级重建「拖 opacity 卡死」根修）+表达式 selDraft 草稿态 onBlur 提交 ②StructuresPanel 对称伴侣滑杆同款 ③AnalysisPanel mapData useMemo（旧版渲染体裸构造→下游 memo/effect 全链失效 hover 即全量重算+canvas 整幅重绘）④CalibrationPanel disposedRef 十点 await 守卫+calibAbortRef 卸载中止+UploadPanel abortRef 卸载 cleanup+busyId 竞态 prev 比较修 ⑤SelectionPanel stats useMemo ⑥a11y 批量：focus-visible:opacity-100×4（键盘可见性）、ConsoleBar X/RepsPanel·MapsPanel Switch aria-label、AnalysisPanel role=listbox/option 误用移除
+- 【r98-f4 脚本单一事实源】template-specs.sh 新建（46 支全字段规格+source 时断言 SPECS 数量==figure-templates.ts id 数量，漂移即 fail-fast）；gen-template-thumbs.sh/health-check-templates.sh 双双 source 化（后者 r75 后停更 27/46 漂移、19 支模板体检盲区 41% 根治；END 动态 `SPECS#-1`）；gen-thumbs rect 失败显式 RECTFAIL（旧版 json.loads('') 崩且无 set -e→echo SHOT 假成功→缩略图静默缺失旧图顶包）；8 条规格行守卫重定向+5 条新守卫
+- 【r98-f5 校准回路多轮迭代】CALIB_MAX_ROUNDS=3：采纳→onAccept 回写表单→commands prop 更新→autoPending effect（定时器起步避开 set-state-in-effect）自动续轮直至 close/达上限；历史时间线 chips（R1 +4/-1 → R2 ✓ 收敛可视化+轮数上限提示）；「采纳后自动复验」开关；running 态轮次徽标
+- 【E2E 全量（agent-browser r98v 会话）】①SASA 全路径：4HHB full 24087 Å² worker 落库 ②ΔSASA 埋藏路径：interface A B（84 残基对接触）→ΔSASA complete 2012 Å²(A 978+B 1035) ③**分型键碰撞实测**：full 在飞时同拍发起 buried→双路均完成、零 stuck 指示（旧版此场景 full 结果静默丢弃 computing 永久卡死——正是本次修复的 bug 场景）④滑杆 commit-on-release 探针实测：patch buildRep 计数器+CDP 真实鼠标拖动（1.05→2）——**拖动期间 0 重建**、松手才提交（旧版每 tick 3 rep 全量重建）；键盘路径 3 步进 3 次离散提交值正确 ⑤47 模板卡/上传/校准面板元素在位 ⑥API 冒烟：pdb 200(473KB)/400、agent 413(16MB 预检)/400(http URL 注入拦)/413(超 5MB 图)、sf 400/404 ⑦console/errors 全会话零
+- 【发现·记录】updateRep bump 结构级 rev→rep 哈希 `[rep, entry.rev, filtersKey]` 全体失效：单次滑杆提交=3 rep 全量重建（3 rep 结构）。r98-f3 已把 N tick×3 降为 1 提交×3（10-50× 改善）；剩余粒度为既有失效链设计（colorOverrides 烘焙进几何+对称伴侣克隆 rev 失效链+hbond detKey 依赖）——细拆需 colorRev/repRev 分离，高风险记下轮
+- 【门禁】lint 0 · tsc src 0 · guards 371→412/412（r98 块 41 条：f4 单一源 5+cron 收编 17+f1 引擎 6+f2 API 6+f3 UI 8+f5 校准 5，另有 1 条正则同步）· smoke 4/4 · dev.log 零 error
+
+Stage Summary:
+- 交付一（收编闭环）：cron 中断会话的 r98 审查批次（15 文件 API 超时/预检/取消口/去重/膜复位/LRU）完整收编——静态门禁+守卫同步+E2E 六项行为验证全过
+- 交付二（全项目代码审查）：三区并行 30+ 新发现全部修复——引擎 6 项（window 钩子滞留 256MB/sasaPending 分型键碰撞/xbsa 元信息错配/橡皮带死锁/录制轨道泄漏/pore NaN 守卫）、API 6 项（agent 路由漏网三连+sf 超时）、UI 10 项（滑杆秒级重建根修/mapData 全链失效/卸载 abort 缺口/a11y 批量）
+- 交付三（架构资产）：template-specs.sh 单一事实源（27/46 体检盲区根治+数量断言 fail-fast）；校准回路多轮迭代+收敛时间线（r97 建议②落地）
+- E2E 铁证：SASA 碰撞场景双路完成零卡死（正是修复的 bug 场景实测）、滑杆拖动 0 重建探针数值、1 提交=3 重建的失效链量化发现
+- 坑（新入档）：①sourced 脚本里 `$0` 是调用方——路径解析必须 BASH_SOURCE[0] ②bash 双引号内 `\$` 传给 rg 变行尾锚点——守卫正则避开 `$` 字面量 ③Radix Slider 合成 PointerEvent 不被 Thumb 吃（CDP 原生 mouse 命令才生效）④React 18 批处理下同步派发多个 keydown 读 aria-valuenow 恒旧值（渲染未 flush）⑤agent-browser eval 持久上下文变量重声明 SyntaxError——IIFE 包裹
+- 下一轮建议（按优先级）：
+  1. 【中】updateRep 失效链细拆：colorRev（colorOverrides/preset/transform）与 rep 自身 JSON 变化分离——1 提交=1 rep 重建（当前 3）；对称伴侣 symKey 改挂 rep hash 指纹
+  2. 【中】rayRender await 窗口（SSAA 解码期间 live tick 以超采样+阴影逐帧渲染 50-300ms 卡顿窗口——先恢复现场再解码）+ seqFocus 每帧签名串分配（r98 清了 rock/slab 漏了这条）
+  3. 【低】色彩证据扩展（边缘梯度+色相直方图，r97 建议③顺延）④Caddyfile XTransformPort 端口约束（平台侧语义确认后加）
+  4. 【低】agent 路由流式读取 idle timer（120s 无活动超时——undici 300s 兜底之上再加一层）

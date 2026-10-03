@@ -222,8 +222,8 @@ check "模板收尾清选择"             "s\.setSelection\(null, \[\]\)" "src/l
 check "B 因子百分位归一"           "polyB\.sort\(\(a, b\) => a - b\)" "src/lib/molecular/colors.ts" 1
 check "图鉴新词条（阳离子-π/CPK）" "阳离子-π 接触虚线|全原子空间填充球" "src/lib/molecular/figure-templates.ts" 2
 check "期刊类型拓宽"               "journal: string"            "src/lib/molecular/figure-templates.ts" 1
-check "管线四新缩略图"             "cpk-spacefill:10:1CRN:19"   "scripts/gen-template-thumbs.sh" 1
-check "mobility 演示换 3INS"       "mobility-bfactor:10:3INS:20" "scripts/gen-template-thumbs.sh" 1
+check "规格 cpk-spacefill"          "cpk-spacefill:10:1CRN:19"   "scripts/template-specs.sh" 1
+check "规格 mobility 3INS"          "mobility-bfactor:10:3INS:20" "scripts/template-specs.sh" 1
 
 # ---- r78：构象与动力学分类 + 两态对比落地 + 幽灵表面 + 催化测量 + 顺序执行器 ----
 check "conform 新分类"              "category: 'conform'"           "src/lib/molecular/figure-templates.ts" 4
@@ -241,8 +241,8 @@ check "⑬ 构象对补齐降级"            "构象对已按演示结构补齐"
 check "⑭ 催化位点跳过"              "催化位点按溶菌酶演示"            "src/lib/molecular/figure-templates.ts" 2
 check "图鉴新词条（morph/测量）"    "构象插值轨迹生成|催化距离虚线标注" "src/lib/molecular/figure-templates.ts" 2
 check "幽灵表面无 orient（负向）"   "util cbc', 'bg #eef1f5'\],"      "src/lib/molecular/figure-templates.ts" 1
-check "管线四新缩略图"              "conformational-morph:24:4AKE:23" "scripts/gen-template-thumbs.sh" 1
-check "管线 two-state 规格"         "two-state-comparison:20:4Q21:24" "scripts/gen-template-thumbs.sh" 1
+check "规格 conformational-morph"   "conformational-morph:24:4AKE:23" "scripts/template-specs.sh" 1
+check "规格 two-state"              "two-state-comparison:20:4Q21:24" "scripts/template-specs.sh" 1
 check "体检脚本资产"                "health-check-templates.sh"      "scripts/health-check-templates.sh" 1
 check "体检状态翻转等待"            "backgroundPinned"               "scripts/health-check-templates.sh" 1
 
@@ -304,7 +304,7 @@ check "导入脏条目跳过"           "skipped\+\+"                    "src/li
 check "卡片编辑入口"             "data-open-edit"                 "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "编辑模式预填"             "templateToDraft"                "src/components/studio/FigureTemplatesDialog.tsx" 2
 check "保存修改文案"             "保存修改.*Save changes"         "src/components/studio/FigureTemplatesDialog.tsx" 1
-check "编辑模式禁粘贴"           "if \(editMode\) return"         "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "编辑模式禁粘贴"           "editMode \|\| phase !== 'idle' && phase !== 'picked'\) return"  "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "编辑视图接线"             "view === 'edit' && editTpl"     "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "导入入口按钮"             "data-import-templates"          "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "导出入口按钮"             "data-export-templates"          "src/components/studio/FigureTemplatesDialog.tsx" 1
@@ -375,7 +375,7 @@ check "图鉴 r87 新词条"           "红蓝立体渲染（双通道色分移�
 check "hero 响应式收紧"           "px-3 pb-6 pt-7 sm:max-w-\[368px\] sm:px-6 sm:pt-9" "src/components/studio/WelcomeScreen.tsx" 1
 check "画廊 chips 横滑"           "mol-toolbar-scroll ml-auto"   "src/components/studio/WelcomeScreen.tsx" 1
 check "分享卡窄屏图标化提交"      "w-9 shrink-0"                  "src/components/studio/ShareLinkLoadCard.tsx" 1
-check "管线五新缩略图"            "ink-night-cover:11:4HHB:27"   "scripts/gen-template-thumbs.sh" 1
+check "规格 ink-night-cover"        "ink-night-cover:11:4HHB:27"   "scripts/template-specs.sh" 1
 check "管线表单锚定修复"          "closest\('form'\)"            "scripts/gen-template-thumbs.sh" 1
 check "版本升级 1.6"              "v1\.6"                          "src/components/studio/WelcomeScreen.tsx" 2
 
@@ -408,7 +408,7 @@ check "图鉴水合词条"              "水分子小球显示"                "
 check "图鉴晶胞词条"              "晶胞盒线框（a红 b绿 c蓝）"    "src/lib/molecular/figure-templates.ts" 1
 check "图标 r89 五新键"           "'wire-skeleton': Waypoints"    "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "图标水合键"                "'hydration-shell': Droplets"   "src/components/studio/FigureTemplatesDialog.tsx" 1
-check "管线 r89 五新规格"         "wire-skeleton:10:1CRN:32"      "scripts/gen-template-thumbs.sh" 1
+check "规格 wire-skeleton"          "wire-skeleton:10:1CRN:32"      "scripts/template-specs.sh" 1
 check "管线高清视口"              "set viewport 1920 960"         "scripts/gen-template-thumbs.sh" 2
 check "缩略图内容收紧脚本"        "content_bbox"                  "scripts/tighten-thumbs.py" 2
 
@@ -439,7 +439,7 @@ check "表面 MC 域映射根治（2×镜像偏移）" "mc.scale.set\(L / 2, L /
 check "取景尊重隐藏水"            "skipWater"                     "src/lib/molecular/engine.ts" 3
 check "剖面模板空间填充重造"      "'preset spacefill', 'hide waters'" "src/lib/molecular/figure-templates.ts" 1
 check "管线截图防陈旧重试"        "rm -f ..tmp/r72-.id.raw.png"   "scripts/gen-template-thumbs.sh" 1
-check "管线每模板视口档"          "slab-cutaway:30:4HHB:31:1280x720" "scripts/gen-template-thumbs.sh" 1
+check "规格 slab-cutaway 视口档"    "slab-cutaway:30:4HHB:31:1280x720" "scripts/template-specs.sh" 1
 
 # ---- r93：极点钉死死区根治（过极翻转 wrap + 极点微推）——「转到一定程度转不动」终修（r96 输入奇偶随刚体化退役）----
 check "过极翻转守卫方法"          "private wrapPoleGuard"        "src/lib/molecular/engine.ts" 1
@@ -508,7 +508,7 @@ check "图鉴r97链对词条"         "链对主题色分配"                "sr
 check "图标r97九新键"           "'cinematic-spotlight': Drama"  "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "图标核小体键"            "'nucleosome-dna': Disc"        "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "图标GFP键"               "'gfp-chromophore': FlaskConical" "src/components/studio/FigureTemplatesDialog.tsx" 1
-check "管线r97九新规格"          "nucleosome-dna:12:1AOI:44"     "scripts/gen-template-thumbs.sh" 1
+check "规格 nucleosome-dna"         "nucleosome-dna:12:1AOI:44"     "scripts/template-specs.sh" 1
 check "色彩证据类型"            "export interface ParseImageHints" "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "色彩证据提取函数"        "async function extractImageHints" "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "解析上行hints"            "body: JSON\.stringify\(\{ image: img\.dataUrl, hints \}\)" "src/components/studio/FigureTemplatesDialog.tsx" 1
@@ -523,8 +523,62 @@ check "校准面板挂载"            "data-calibration-panel"        "src/compo
 check "校准采纳回写"            "data-calibration-accept"       "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "校准双图上行"            "target: targetJ, render: renderJ" "src/components/studio/FigureTemplatesDialog.tsx" 1
 
+# ---- r98 批次（代码审查修复防线：cron r98 收编 + f1 引擎 + f2 API + f3 UI + f4 脚本单一源）----
+# f4：模板规格单一事实源（health-check 27/46 漂移根治）
+check "SPECS单一源-缩略图管线"    "source.*template-specs"         "scripts/gen-template-thumbs.sh"    1
+check "SPECS单一源-体检脚本"      "source.*template-specs"         "scripts/health-check-templates.sh" 1
+check "SPECS对齐断言"             "数量漂移"                       "scripts/template-specs.sh"         1
+check "体检动态范围"              "SPECS\[@\]\} - 1 \)\)\}"  "scripts/health-check-templates.sh" 1
+check "管线rect失败显式"          "RECTFAIL"                       "scripts/gen-template-thumbs.sh"    2
+# cron r98 收编批次（PDB 超时 / parse·calibrate 预检与 race / 取消口 / 代际 token / 去重 / remove 膜复位 / LRU / layer 清空）
+check "PDB出站超时"               "AbortSignal.timeout\(UPSTREAM_TIMEOUT\)" "src/app/api/pdb/[id]/route.ts" 2
+check "PDB超时文案"               "TimeoutError"                   "src/app/api/pdb/[id]/route.ts"    1
+check "parse体积预检"             "declaredLen > 12"               "src/app/api/templates/parse/route.ts" 1
+check "calibrate体积预检"         "declaredLen > 12"               "src/app/api/templates/calibrate/route.ts" 1
+check "VLM兜底race-parse"         "Promise.race"                   "src/app/api/templates/parse/route.ts" 1
+check "VLM兜底race-calibrate"     "Promise.race"                   "src/app/api/templates/calibrate/route.ts" 1
+check "calibrate命令过闸"         "sanitizeTemplateCommands\(commands\)" "src/app/api/templates/calibrate/route.ts" 1
+check "解析取消口"                "cancelParse"                    "src/components/studio/FigureTemplatesDialog.tsx" 2
+check "序列代际token"             "templateSeqToken"               "src/lib/molecular/figure-templates.ts" 4
+check "演示去重"                  "isStructureInStore\(tpl.demo\)" "src/lib/molecular/figure-templates.ts" 1
+check "remove路径膜复位"          "dropMembrane"                   "src/lib/molecular/store.ts"        1
+check "remove路径picks清"         "measurePicks: s.measurePicks"   "src/lib/molecular/store.ts"        1
+check "纹理LRU上限"               "TEXTURE_CACHE_MAX"              "src/lib/molecular/textsprite.ts"   2
+check "反平行up插值"              "\.dot\(.*up.*\) < 0\.99999" "src/lib/molecular/engine.ts"       2
+check "膜零聚合物早退"            "Number.isFinite\(tLo\)"       "src/lib/molecular/engine.ts"       1
+# f1：引擎层（sasa 分型键 / xbsa 随请求 / 橡皮带取消 / 录制轨道 / dispose 卫生）
+check "sasa分型键"                "sasaPendingKey"                 "src/lib/molecular/engine.ts"       6
+check "xbsa元信息随请求"          "xbsaMeta.set"                   "src/lib/molecular/engine.ts"       1
+check "橡皮带取消收尾"            "cancelBoxSelect"                "src/lib/molecular/engine.ts"       3
+check "录制轨道停止"              "recorderStream"                 "src/lib/molecular/engine.ts"       3
+check "dispose清window钩子"       "__molEngine === this"           "src/lib/molecular/engine.ts"       1
+check "pore零聚合物守卫"          "没有聚合物链"                   "src/lib/molecular/pore.ts"         1
+# f2：agent/sf 路由 r98 同构修复
+check "agent体积预检"             "declaredLen"                    "src/app/api/agent/route.ts"        1
+check "agent图片dataURL闸"        "DATAURL_RE"                     "src/app/api/agent/route.ts"        1
+check "agent VLM兜底race"         "Promise.race"                   "src/app/api/agent/route.ts"        1
+check "agent scene截断"           "slice\(0, 3600\)"             "src/app/api/agent/route.ts"        2
+check "sf出站超时"                "AbortSignal.timeout"            "src/app/api/sf/[id]/route.ts"     1
+check "sf超时文案"                "TimeoutError"                   "src/app/api/sf/[id]/route.ts"     1
+# f3：UI 层（滑杆松手提交 / 草稿态 / mapData memo / 卸载守卫 / busyId 竞态 / 键盘可见 / a11y）
+check "滑杆松手提交组件"          "CommitSlider"                   "src/components/studio/panels/RepsPanel.tsx" 3
+check "表达式草稿态"              "selDraft"                       "src/components/studio/panels/RepsPanel.tsx" 3
+check "伴侣滑杆松手提交"          "symDrag"                        "src/components/studio/panels/StructuresPanel.tsx" 2
+check "mapData记忆化"             "const mapData = useMemo"       "src/components/studio/panels/AnalysisPanel.tsx" 1
+check "stats记忆化"               "const stats = useMemo"         "src/components/studio/panels/SelectionPanel.tsx" 1
+check "校准卸载守卫"              "disposedRef"                    "src/components/studio/FigureTemplatesDialog.tsx" 2
+check "busyId竞态修"              "prev === tpl.id"               "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "解析卸载中止"              "abortRef.current\?\.abort"    "src/components/studio/FigureTemplatesDialog.tsx" 1
+
+# f5：校准回路多轮迭代 + 历史时间线
+check "校准轮数上限"                "CALIB_MAX_ROUNDS"               "src/components/studio/FigureTemplatesDialog.tsx" 2
+check "校准历史时间线"              "data-calibration-history"       "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "校准自动续轮"                "autoPending"                    "src/components/studio/FigureTemplatesDialog.tsx" 4
+check "校准采纳续轮条件"            "setAutoPending\(autoNext"      "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "校准自动开关"                "data-calibration-auto"          "src/components/studio/FigureTemplatesDialog.tsx" 1
+
 # ---- 汇总 ----
-TOTAL=371
+TOTAL=412
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

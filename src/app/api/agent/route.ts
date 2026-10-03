@@ -280,8 +280,24 @@ function sceneWithMemory(scene: string, memory?: string): string {
     : scene
 }
 
+/** r98-f2：dataURL 形状校验（image/imageBefore 均须 image/(png|jpeg|webp) ≤ 5MB）——
+ *  与 parse/calibrate 路由同款正则（第二捕获组为 base64 载荷，长度 ×0.75 折算体积） */
+const DATAURL_RE = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/
+
+/** r98-f2：VLM 调用超时（provider 直连与 ZAI SDK 兜底同档）——视觉自查重试循环里
+ *  每次调用都受此约束（与 parse 路由 90s 同档） */
+const VLM_TIMEOUT_MS = 90_000
+
 export async function POST(req: Request) {
   const locale = await detectReqLocale()
+  // r98-f2：体积预检先行——旧版 await req.json() 把任意大小 body 完整缓冲进内存后
+  // 才做字段校验（App Router route handler 无框架级 body 上限，直连数百 MB JSON 即可
+  // 打内存）。content-length 头在解析前可得，异常直达直接拒。agent 视觉自查模式带
+  // 双图（image + imageBefore，单图 ≤5MB），上限放宽到 16MB（parse 路由 12MB + 双图余量）
+  const declaredLen = Number(req.headers.get('content-length') ?? '0')
+  if (Number.isFinite(declaredLen) && declaredLen > 16 * 1024 * 1024) {
+    return NextResponse.json({ ok: false, error: errText(locale, '请求体超过 16MB 上限（视觉自查双图应 ≤5MB/张，客户端会缩放）', 'Request body exceeds the 16MB limit (visual-review images ≤ 5MB each; the client downscales)') }, { status: 413 })
+  }
   let body: AgentRequestBody
   try {
     body = (await req.json()) as AgentRequestBody
@@ -294,6 +310,24 @@ export async function POST(req: Request) {
 
   // ---------- 视觉自查分支（VLM 看截图，可选前后对比） ----------
   if (body.image && body.goal) {
+    // r98-f2：图片 dataURL 校验（与 parse/calibrate 路由同款）——旧版对 body.image/
+    // imageBefore 零校验直接拼进 VLM 消息，任意字符串可直达上游（提示词注入面 + 体积放大器）
+    const mImg = DATAURL_RE.exec(body.image)
+    if (!mImg) {
+      return NextResponse.json({ ok: false, error: errText(locale, 'image 必须是 data:image/(png|jpeg|webp) 的 base64 data URL', 'image must be a base64 data URL of image/(png|jpeg|webp)') }, { status: 400 })
+    }
+    if (mImg[2].length * 0.75 > 5 * 1024 * 1024) {
+      return NextResponse.json({ ok: false, error: errText(locale, '图片超过 5MB 上限（前端已缩放，异常直达时拦截）', 'Image exceeds the 5MB limit (the client downscales; direct hits are blocked here)') }, { status: 413 })
+    }
+    if (body.imageBefore) {
+      const mBefore = DATAURL_RE.exec(body.imageBefore)
+      if (!mBefore) {
+        return NextResponse.json({ ok: false, error: errText(locale, 'imageBefore 必须是 data:image/(png|jpeg|webp) 的 base64 data URL', 'imageBefore must be a base64 data URL of image/(png|jpeg|webp)') }, { status: 400 })
+      }
+      if (mBefore[2].length * 0.75 > 5 * 1024 * 1024) {
+        return NextResponse.json({ ok: false, error: errText(locale, 'imageBefore 超过 5MB 上限（前端已缩放，异常直达时拦截）', 'imageBefore exceeds the 5MB limit (the client downscales; direct hits are blocked here)') }, { status: 413 })
+      }
+    }
     try {
       // 视觉消息组装（provider 直连与 ZAI SDK 兜底共用同一份）：assistant 位评审提示词 +
       // user 位多模态内容片（场景/目标文本在前，可选 imageBefore 在中，当前截图在后）
@@ -321,17 +355,27 @@ export async function POST(req: Request) {
           // 同样回退 ZAI——两条路产出统一走 sanitizeDecision 协议解析与降级打捞
           let text: string | null = null
           try {
-            text = await visionWithProvider(vlmMessages, { signal: req.signal })
+            text = await visionWithProvider(vlmMessages, { signal: req.signal, timeoutMs: VLM_TIMEOUT_MS })
           } catch (e) {
+            // r98-f2：客户端已断开不再烧兜底 VLM 轮次（与 parse 路由同修——provider 抛
+            // AbortError 落 catch 后旧版仍继续走兜底）；超时/上游故障照常记入 providerErr
+            if (req.signal.aborted) throw new Error('aborted')
             providerErr = e instanceof Error ? e.message : errText(locale, '视觉供应商调用异常', 'vision provider call failed')
           }
           if (text === null) {
+            if (req.signal.aborted) throw new Error('aborted')
             const zai = await ZAI.create()
-            const completion = await zai.chat.completions.createVision({
-              model: 'glm-4.6v',
-              messages: vlmMessages,
-              thinking: { type: 'disabled' },
-            })
+            // r98-f2：SDK createVision 不收 signal/timeout（类型就是裸 Promise）——上游挂起
+            // 时整个自查无限挂起（重试循环里每次调用都要有超时）；Promise.race 包 90s
+            // 与 parse 路由同款修法
+            const completion = await Promise.race([
+              zai.chat.completions.createVision({
+                model: 'glm-4.6v',
+                messages: vlmMessages,
+                thinking: { type: 'disabled' },
+              }),
+              new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`VLM 兜底调用超时（${VLM_TIMEOUT_MS}ms）`)), VLM_TIMEOUT_MS)),
+            ])
             text = String(completion.choices[0]?.message?.content ?? '')
           }
           decision = sanitizeDecision(extractJson(text))
@@ -382,8 +426,10 @@ export async function POST(req: Request) {
 
   const messages: ZAIMessage[] = [
     { role: 'assistant', content: SYSTEM_PROMPT + langDirective(locale) },
-    // 场景上下文（含长期记忆）以首条 user 消息注入（每次请求都是最新快照）
-    { role: 'user', content: `【自动注入的当前场景信息，非用户发言】\n${sceneWithMemory(body.scene, body.memory)}` },
+    // 场景上下文（含长期记忆）以首条 user 消息注入（每次请求都是最新快照）；
+    // r98-f2：与视觉自查分支同款 3600 截断——旧版仅校验 truthy，直连 API 可携任意
+    // 长度 scene 灌满 LLM 上下文/放大成本
+    { role: 'user', content: `【自动注入的当前场景信息，非用户发言】\n${sceneWithMemory(body.scene, body.memory).slice(0, 3600)}` },
     { role: 'assistant', content: '已了解当前场景。请讲。' },
     ...history.map((m, i) => ({
       role: m.role,

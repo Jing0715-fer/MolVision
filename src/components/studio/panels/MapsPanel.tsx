@@ -340,7 +340,12 @@ export function MapsPanel() {
 
             <div className="flex items-center justify-between rounded-md border border-border px-2.5 py-2">
               <span className="text-xs text-muted-foreground">{t({ zh: '可见（map show / hide）', en: 'Visible (map show / hide)' })}</span>
-              <Switch checked={info.visible} onCheckedChange={v => setMapLook({ visible: v })} />
+              {/* r98-f3：无文本 Switch 补可访问名称 */}
+              <Switch
+                checked={info.visible}
+                onCheckedChange={v => setMapLook({ visible: v })}
+                aria-label={t({ zh: '密度图可见', en: 'Map visible' })}
+              />
             </div>
           </div>
           <PanelHint>

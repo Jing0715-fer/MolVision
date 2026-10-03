@@ -1,7 +1,7 @@
 'use client'
 
 // 选择面板：表达式输入、快捷选择、当前选择统计、命名选择、标注
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Crosshair, BookmarkPlus, Trash2, Tag, Target, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { engineRef, dataRegistry, useMolStore } from '@/lib/molecular/store'
@@ -40,7 +40,9 @@ export function SelectionPanel() {
 
   const data = activeId ? dataRegistry.get(activeId) : null
 
-  const stats = (() => {
+  // r98-f3：选择统计改 useMemo——原 IIFE 每渲染全量遍历选中原子（面板任何
+  // 状态更新都重跑 Set 填充）；真实输入仅 selection（dataRegistry 模块级、随结构加载稳定）
+  const stats = useMemo(() => {
     if (!selection.structureId || !selection.indices.length) return null
     const d = dataRegistry.get(selection.structureId)
     if (!d) return null
@@ -53,7 +55,7 @@ export function SelectionPanel() {
       if (d.atoms.hetero[i]) het++
     }
     return { atoms: selection.indices.length, residues: residues.size, chains: chains.size, het }
-  })()
+  }, [selection])
 
   const runExpr = (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -195,7 +197,8 @@ export function SelectionPanel() {
                 </button>
                 <button
                   onClick={() => deleteNamedSelection(ns.name)}
-                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  aria-label={t({ zh: `删除命名选择 ${ns.name}`, en: `Delete named selection ${ns.name}` })}
+                  className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>

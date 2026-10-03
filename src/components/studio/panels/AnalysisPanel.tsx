@@ -184,7 +184,13 @@ export function AnalysisPanel() {
   // ---------- 2D 接触图谱 ----------
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number; pairIdx: number } | null>(null)
-  const mapData = data && structureId === activeId && pairs.length ? { data, pairs } : null
+  // r98-f3：mapData 身份稳定化——原裸构造每次渲染都是新对象，下游 axis useMemo /
+  // canvas effect 全链失效（hover 移动即全量重算 + canvas 整幅重绘）；真实输入仅
+  // data / pairs / 结构匹配判定（dataRegistry 同结构引用稳定）
+  const mapData = useMemo(
+    () => (data && structureId === activeId && pairs.length ? { data, pairs } : null),
+    [data, structureId, activeId, pairs],
+  )
 
   // 行列残基索引（按链序 + 残基序）
   const axis = useMemo(() => {
@@ -1070,7 +1076,9 @@ function ContactPairsTable({ data, pairs, cutoff, onPick }: {
   return (
     <div className="panel-card mt-2 p-1.5">
       <PairTableToolbar filter={filter} onFilter={setFilter} sortBy={sortBy} onSortBy={setSortBy} shown={shown.length} total={rows.length} />
-      <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label={t({ zh: '接触残基对列表', en: 'Contact residue pair list' })}>
+      {/* r98-f3：移除 role=listbox/option/aria-selected——button 嵌 listbox 不合 ARIA
+          （listbox 子元素必须是 option），且行是点击操作非选择列表；按钮内容文本已构成可访问名称 */}
+      <div className="mol-scroll max-h-72 overflow-y-auto">
         {shown.map(({ p, la, lb }) => {
           // 距离热力（近红远琥珀，与 2D 图谱/3D 连线同族）
           const t = Math.max(0, Math.min(1, (p.minDist - 2.5) / Math.max(0.5, cutoff - 2.5)))
@@ -1078,8 +1086,6 @@ function ContactPairsTable({ data, pairs, cutoff, onPick }: {
           return (
             <button
               key={`${p.resA}:${p.resB}`}
-              role="option"
-              aria-selected={false}
               onClick={() => onPick(p.resA, p.resB, tt({ zh: `${la} ↔ ${lb}（${p.minDist.toFixed(2)} Å）`, en: `${la} ↔ ${lb} (${p.minDist.toFixed(2)} Å)` }))}
               className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] tabular-nums transition hover:bg-accent/60"
             >
@@ -1158,14 +1164,13 @@ function HBondPairsTable({ data, pairs, onPick }: {
         </div>
         <span className="shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">{shown.length}/{rows.length}</span>
       </div>
-      <div className="mol-scroll max-h-72 overflow-y-auto" role="listbox" aria-label={t({ zh: '氢键残基对列表', en: 'H-bond residue pair list' })}>
+      {/* r98-f3：同上移除 role=listbox/option/aria-selected（ARIA 合法化） */}
+      <div className="mol-scroll max-h-72 overflow-y-auto">
         {shown.map(({ p, ld, la }) => {
           const t = Math.max(0, Math.min(1, (p.minDist - 2.0) / 1.5))
           return (
             <button
               key={`${p.donorRes}:${p.acceptorRes}`}
-              role="option"
-              aria-selected={false}
               onClick={() => onPick(p.donorRes, p.acceptorRes, tt({ zh: `${ld} → ${la}（${p.minDist.toFixed(2)} Å）`, en: `${ld} → ${la} (${p.minDist.toFixed(2)} Å)` }))}
               className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left font-mono text-[10px] tabular-nums transition hover:bg-accent/60"
             >

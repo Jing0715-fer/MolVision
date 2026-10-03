@@ -328,6 +328,7 @@ export function ConsoleBar() {
         </button>
         <button
           onClick={() => setUi({ consoleOpen: false })}
+          aria-label={t({ zh: '关闭命令行', en: 'Close command line' })}
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
         >
           <X className="h-3.5 w-3.5" />

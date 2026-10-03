@@ -61,3 +61,6 @@ server.log
 
 # MolVision local credentials (API keys — never commit)
 .molvision/
+
+# r98：子代理工作草稿（worklog 已沉淀正式记录，草稿不入库）
+agent-ctx/

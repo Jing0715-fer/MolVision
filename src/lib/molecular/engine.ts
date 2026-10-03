@@ -318,8 +318,17 @@ export class MolEngine {
   private sasaReqId = 0
   /** structureId → 计算中的 key（去重与过期丢弃） */
   private sasaPending = new Map<string, string>()
+  // r98-f1：pending 键并入类型前缀——同结构的 full/buried/xburied 三路在飞请求
+  // 互不顶替（旧版仅以 structureId 为键：full 在飞时发起 buried 会覆盖键，
+  // full 结果到达即被静默丢弃，SASA 面板 computing 永不复位——面板永久转圈的根因）
+  private sasaPendingKey(structureId: string, key: string): string {
+    const bar = key.indexOf('|')
+    return `${structureId}|${bar > 0 ? key.slice(0, bar) : key}`
+  }
+  // r98-f1：xbsa 飞行元信息改随请求键携带（旧版单槽：第二个跨结构请求覆盖后，
+  // 首个 delta 到达按错误的结构对拆分——subarray 错位、数值静默错乱）。
   /** 跨结构 ΔSASA 飞行中元信息（worker 结果回传时掩码不可得，用快照补齐 atoms 计数与标签） */
-  private xbsaMeta: { idA: string; idB: string; labelA: string; labelB: string; heavyA: number; heavyB: number } | null = null
+  private xbsaMeta = new Map<string, { idA: string; idB: string; labelA: string; labelB: string; heavyA: number; heavyB: number }>()
   /** 挂起的 color sasa 烘焙请求（worker 完成后自动 applyColor） */
   private pendingSasaBake: string | null = null
 
@@ -397,6 +406,8 @@ export class MolEngine {
   private perfPrFactor = 1
   // 动画录制（WebM）
   private recorder: MediaRecorder | null = null
+  // r98-f1：录制流引用（onstop 停轨道用——防反复录制累积存活的画布捕获轨道）
+  private recorderStream: MediaStream | null = null
   private recordChunks: Blob[] = []
   private recordStartT = 0
   private recordResolve: ((blob: Blob | null) => void) | null = null
@@ -1407,12 +1418,25 @@ export class MolEngine {
   private onPointerLeave = () => {
     this.pointerDragging = false
     this.hoverShown = false
+    this.cancelBoxSelect() // r98-f1：离场同取消——旧版不收尾会让 Ctrl 拖拽窗口死锁轨道控制
     this.callbacks.onHover?.(null)
   }
 
   private onPointerCancelDrag = () => {
     // 指针取消（触摸干扰/窗口切换）与离场同语义：结束拖拽窗口
     this.pointerDragging = false
+    this.cancelBoxSelect() // r98-f1：同上
+  }
+
+  /** r98-f1：橡皮带框选中止收尾（pointercancel/pointerleave 路径）——恢复轨道控制、
+   *  清拖拽窗口与覆盖层。旧版 onPointerUp 才做这三件事：Ctrl 拖拽中途收到
+   *  pointercancel/离场时 boxSelecting 残留 + controls.enabled 停留 false，
+   *  轨道交互完全死锁到下一次完整点击周期 */
+  private cancelBoxSelect() {
+    if (!this.boxSelecting) return
+    this.boxSelecting = null
+    this.clearRubberBand()
+    this.controls.enabled = true
   }
 
   private onPointerDown = (e: PointerEvent) => {
@@ -1787,7 +1811,10 @@ export class MolEngine {
         this.symmetryGroups.delete(id)
         this.hbondCache.delete(id)
         this.hbondPending.delete(id)
-        this.sasaPending.delete(id)
+        // r98-f1：复合键后按 id 前缀清全部在飞类型（full/buried/xburied）
+        for (const pk of [...this.sasaPending.keys()]) {
+          if (pk.startsWith(id + '|')) this.sasaPending.delete(pk)
+        }
         // r98：repAtomCache 只 set 不 delete——长会话反复载删单调增长（GC 无法回收，
         // registry 已断链但缓存仍持 Int32Array 引用）
         this.repAtomCache.delete(id)
@@ -2514,7 +2541,10 @@ export class MolEngine {
     recomputeBbox(data)
     data.sasa = undefined
     // 在途 SASA worker 结果基于旧坐标快照：丢弃，防失效后被写回旧构象数据
-    this.sasaPending.delete(data.id)
+    // r98-f1：复合键后按 id 前缀清全部在飞类型
+    for (const pk of [...this.sasaPending.keys()]) {
+      if (pk.startsWith(data.id + '|')) this.sasaPending.delete(pk)
+    }
     if (this.sasaPending.size === 0) useSasaStore.getState().setComputing(false)
     invalidatePocketField(data)
   }
@@ -2840,7 +2870,7 @@ export class MolEngine {
       return { done: true, stats }
     }
     // 大结构：worker 异步
-    if (this.sasaPending.get(structureId) === key) return { done: false }
+    if (this.sasaPending.get(this.sasaPendingKey(structureId, key)) === key) return { done: false }
     const w = this.ensureSasaWorker()
     if (!w) {
       const { perAtom, stats } = computeSasa(data, opts)
@@ -2853,11 +2883,11 @@ export class MolEngine {
       const e = data.atoms.elements[i]
       if (e === 'H' || e === 'D') isHydrogen[i] = 1
     }
-    this.sasaPending.set(structureId, key)
+    this.sasaPending.set(this.sasaPendingKey(structureId, key), key)
     useSasaStore.getState().setComputing(true)
     // 并发闸：槽位空出后再投递（排队期间被新请求取代 → 过期丢弃）
     void this.sasaSlots.acquire(tt({ zh: 'SASA 计算', en: 'SASA computation' })).then(release => {
-      if (this.sasaPending.get(structureId) !== key) { release(); return }
+      if (this.sasaPending.get(this.sasaPendingKey(structureId, key)) !== key) { release(); return }
       this.sasaSlots.post(release)
       w.postMessage({
         type: 'compute',
@@ -2895,7 +2925,7 @@ export class MolEngine {
       this.applyBuriedResult(structureId, data, result, maskA, maskB)
       return { done: true, result }
     }
-    if (this.sasaPending.get(structureId) === key) return { done: false }
+    if (this.sasaPending.get(this.sasaPendingKey(structureId, key)) === key) return { done: false }
     const w = this.ensureSasaWorker()
     if (!w) {
       const result = computeBuriedSasa(data, maskA, maskB, opts)
@@ -2907,10 +2937,10 @@ export class MolEngine {
       const e = data.atoms.elements[i]
       if (e === 'H' || e === 'D') isHydrogen[i] = 1
     }
-    this.sasaPending.set(structureId, key)
+    this.sasaPending.set(this.sasaPendingKey(structureId, key), key)
     useSasaStore.getState().setBuriedComputing(true)
     void this.sasaSlots.acquire(tt({ zh: 'ΔSASA 计算', en: 'ΔSASA computation' })).then(release => {
-      if (this.sasaPending.get(structureId) !== key) { release(); return }
+      if (this.sasaPending.get(this.sasaPendingKey(structureId, key)) !== key) { release(); return }
       this.sasaSlots.post(release)
       w.postMessage({
         type: 'compute',
@@ -3046,7 +3076,7 @@ export class MolEngine {
       this.applyCrossBuriedResult(idA, dataA, idB, dataB, r.delta, performance.now() - t0, heavyA, heavyB, labelA, labelB)
       return { done: true, result: this.crossBuriedSummary(idA, dataA, idB, dataB, r.delta) }
     }
-    if (this.sasaPending.get(idA) === key) return { done: false }
+    if (this.sasaPending.get(this.sasaPendingKey(idA, key)) === key) return { done: false }
     const w = this.ensureSasaWorker()
     if (!w) {
       const t0 = performance.now()
@@ -3054,8 +3084,8 @@ export class MolEngine {
       this.applyCrossBuriedResult(idA, dataA, idB, dataB, r.delta, performance.now() - t0, heavyA, heavyB, labelA, labelB)
       return { done: true, result: this.crossBuriedSummary(idA, dataA, idB, dataB, r.delta) }
     }
-    this.xbsaMeta = { idA, idB, labelA, labelB, heavyA, heavyB }
-    this.sasaPending.set(idA, key)
+    this.xbsaMeta.set(this.sasaPendingKey(idA, key), { idA, idB, labelA, labelB, heavyA, heavyB })
+    this.sasaPending.set(this.sasaPendingKey(idA, key), key)
     // 占位结果：面板立即可见「计算中」状态（worker 完成后替换）
     useSasaStore.getState().setBuried({
       computing: true,
@@ -3066,7 +3096,7 @@ export class MolEngine {
       cross: { idA, idB, labelA, labelB },
     })
     void this.sasaSlots.acquire(tt({ zh: '跨结构 ΔSASA', en: 'cross-structure ΔSASA' })).then(release => {
-      if (this.sasaPending.get(idA) !== key) { release(); return }
+      if (this.sasaPending.get(this.sasaPendingKey(idA, key)) !== key) { release(); return }
       this.sasaSlots.post(release)
       w.postMessage({
         type: 'compute',
@@ -3156,10 +3186,10 @@ export class MolEngine {
       w.onerror = () => {
         this.sasaWorkerFailed = true
         this.sasaPending.clear()
+        this.xbsaMeta.clear()
         this.sasaSlots.releaseAll()
         useSasaStore.getState().setComputing(false)
         // ΔSASA（含跨结构 xbsa）computing 占位清理——防「计算中…」永久残留
-        this.xbsaMeta = null
         const b = useSasaStore.getState().buried
         if (b?.computing) {
           useSasaStore.getState().setBuried(null)
@@ -3187,12 +3217,13 @@ export class MolEngine {
   }) {
     if (!msg || msg.type !== 'result') return
     this.sasaSlots.releaseOne() // 并发闸：一条结果释放一个槽（过期结果同样占用过槽）
-    if (this.sasaPending.get(msg.structureId) !== msg.key) return
-    this.sasaPending.delete(msg.structureId)
+    const pendingKey = this.sasaPendingKey(msg.structureId, msg.key)
+    if (this.sasaPending.get(pendingKey) !== msg.key) return
+    this.sasaPending.delete(pendingKey)
     // 跨结构 ΔSASA：delta 是两结构拼接后的联合数组，拆回各自结构落库
     if (msg.kind === 'buried' && msg.delta && msg.key.startsWith('xburied|')) {
-      const meta = this.xbsaMeta
-      this.xbsaMeta = null
+      const meta = this.xbsaMeta.get(pendingKey)
+      this.xbsaMeta.delete(pendingKey)
       const dataA = dataRegistry.get(meta?.idA ?? '')
       const dataB = dataRegistry.get(meta?.idB ?? '')
       if (!meta || !dataA || !dataB) {
@@ -3481,7 +3512,7 @@ export class MolEngine {
     try {
       const stream = this.canvas.captureStream(30)
       const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m))
-      if (!mime) return false
+      if (!mime) { stream.getTracks().forEach(t => t.stop()); return false } // r98-f1：不录制也要停轨道（captureStream 即占用）
       const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 })
       this.recordChunks = []
       rec.ondataavailable = e => {
@@ -3489,6 +3520,7 @@ export class MolEngine {
       }
       rec.start(250)
       this.recorder = rec
+      this.recorderStream = stream // r98-f1：保留引用——onstop 停轨道（旧版从不 stop，反复录制累积存活的画布捕获轨道）
       this.recordStartT = performance.now()
       return true
     } catch {
@@ -3506,6 +3538,9 @@ export class MolEngine {
         const blob = this.recordChunks.length ? new Blob(this.recordChunks, { type: 'video/webm' }) : null
         this.recorder = null
         this.recordResolve = null
+        // r98-f1：停画布捕获轨道（录完即释放；录制中重建画布捕获的窗口最小化）
+        this.recorderStream?.getTracks().forEach(t => t.stop())
+        this.recorderStream = null
         resolve(blob)
       }
       rec.stop()
@@ -4883,5 +4918,12 @@ export class MolEngine {
     }
     this.renderer.dispose()
     if (this.canvas.parentElement === this.container) this.container.removeChild(this.canvas)
+    // r98-f1：window 钩子清理——旧版 dispose 从不删除 window.__molEngine，引擎卸载
+    // 不重挂（回欢迎页/HMR 重挂）时整只引擎经 window 强引用滞留（含 mapLayer 残留的
+    // 最高 256MB 密度体数据——disposeMapGeometry 只清 meshes/wires 不置空 layer）
+    this.mapLayer = null
+    if (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).__molEngine === this) {
+      delete (window as unknown as Record<string, unknown>).__molEngine
+    }
   }
 }
