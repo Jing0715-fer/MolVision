@@ -3993,3 +3993,5 @@ Stage Summary:
   2. 【中】rayRender await 窗口（SSAA 解码期间 live tick 以超采样+阴影逐帧渲染 50-300ms 卡顿窗口——先恢复现场再解码）+ seqFocus 每帧签名串分配（r98 清了 rock/slab 漏了这条）
   3. 【低】色彩证据扩展（边缘梯度+色相直方图，r97 建议③顺延）④Caddyfile XTransformPort 端口约束（平台侧语义确认后加）
   4. 【低】agent 路由流式读取 idle timer（120s 无活动超时——undici 300s 兜底之上再加一层）
+
+（r98 段 cron 补记，2026-10-03 11:51）15min webDevReview 巡检任务 #432333 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 12 次实证（r85/r86/r87/r88/r90/r91/r94/r95/r92/r96/r97 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
