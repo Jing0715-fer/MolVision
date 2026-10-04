@@ -1273,7 +1273,7 @@ const CAMERA_CMD_RE = /^(orient|view|views|turn|move|zoom|dolly|rock|bookmark|cl
 const LOAD_CMD_RE = /^(load|fetch)\s+(\S+)\s*$/i
 
 /** 等待相机动画落地（r76：orient 650ms 飞行后 120ms 接 turn 会把相机打断在
- *  partial pose——KcsA 竖排环带/演示居中的另一半根因；上限兑底防僵死）。
+ *  partial pose——KcsA 竖排环带/演示居中的另一半根因；上限兜底防僵死）。
  *  r84 导出：对照预览分屏复用同一相机门控 */
 export async function waitForCameraIdle(maxMs: number): Promise<void> {
   const t0 = performance.now()
@@ -1285,7 +1285,7 @@ export async function waitForCameraIdle(maxMs: number): Promise<void> {
 }
 
 /** 等待结构真正入 store（r76：fetchPdbId resolve 在 parse 前——欢迎页首发链路
- *  parse 走 rAF 异步，旧 600ms 定时器靠运气；超时兑底返 false）。
+ *  parse 走 rAF 异步，旧 600ms 定时器靠运气；超时兜底返 false）。
  *  r84 导出：对照预览分屏复用 */
 export async function waitForStructureInStore(pdbId: string, maxMs: number): Promise<boolean> {
   const target = pdbId.trim().toUpperCase()
@@ -1334,7 +1334,7 @@ async function runTemplateCommandsSeq(commands: string[], token: number): Promis
     const loadM = cmd.match(LOAD_CMD_RE)
     if (loadM) {
       runCommand(cmd)
-      // 网络拉取兑底 15s：fetch 失败已 toast（fetchPdbId 内部），超时后继续余下
+      // 网络拉取兜底 15s：fetch 失败已 toast（fetchPdbId 内部），超时后继续余下
       // 序列而非整链僵死——诚实降级哲学的命令序列版
       await waitForStructureInStore(loadM[2], 15000)
     } else if (CAMERA_CMD_RE.test(cmd)) {
@@ -1676,7 +1676,7 @@ export function logAdaptNotes(notes: DualText[]): void {
  *  r98 三修：①返回 boolean——调用方仅在成功时弹「演示就绪」（旧版 fetch 失败/
  *  超时静默 return，用户先看到错误 toast 又收到成功 toast 的假成功）；②重复
  *  Demo 同 ID 去重（isStructureInStore 先查再拉——堆叠重复结构 + orient 全可见
- *  结构 PCA 偏轴）；③whenEngineReady 无界等待包 15s 兑底（WebGL 初始化失败
+ *  结构 PCA 偏轴）；③whenEngineReady 无界等待包 15s 兜底（WebGL 初始化失败
  *  时旧版永久 running 无错误路径） */
 export async function demoThenApply(tpl: FigureTemplate): Promise<boolean> {
   // r98：演示结构已在 store（重复点 Demo）→ 跳过拉取（堆叠重复结构 + orient PCA 偏轴）
@@ -1684,15 +1684,15 @@ export async function demoThenApply(tpl: FigureTemplate): Promise<boolean> {
     await fetchPdbId(tpl.demo)
   }
   const loaded = await waitForStructureInStore(tpl.demo, 8000)
-  if (!loaded) return false // fetch 失败已 toast；兑底防僵死
+  if (!loaded) return false // fetch 失败已 toast；兜底防僵死
   // 引擎挂载（欢迎页首发：结构入 store 后 MolViewer 才开始挂载；fitView 已在
   // whenEngineReady 队列里，先于本 resolver 入队 → 冲刷时先起飞）
-  // r98：无界等待包 15s 兑底——WebGL 初始化失败时旧版永久 running 无错误路径
+  // r98：无界等待包 15s 兜底——WebGL 初始化失败时旧版永久 running 无错误路径
   const engineReady = await Promise.race([
     new Promise<void>(res => whenEngineReady(() => res())),
     new Promise<null>(res => setTimeout(() => res(null), 15000)),
   ])
-  if (engineReady === null && !(window as unknown as Record<string, unknown>).__molEngine) return false // 引擎缺席且兑底超时
+  if (engineReady === null && !(window as unknown as Record<string, unknown>).__molEngine) return false // 引擎缺席且兜底超时
   // 冲刷后 fit 起飞还差一拍 rAF（loader 的入队体是 rAF(fitView)）——先过两帧
   // 再等飞行，否则 waitForCameraIdle 首检时动画尚未起飞会假性「立即落地」
   await new Promise(r => setTimeout(r, 80))

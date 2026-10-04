@@ -24,7 +24,7 @@ import { detectHBonds, type HBond } from './hbonds'
 import { contactColor } from './contacts'
 import { useContactStore } from './contacts-store'
 import { usePoreStore } from './pore-store'
-import { poreZoneColor, principalAxis } from './pore'
+import { poreZoneColor, poreAxis, membraneWaist } from './pore'
 import { superposeStructures, applyRigidTransform, recomputeBbox, type SuperposeResult } from './superpose'
 import {
   computeSasa, computeBuriedSasa, computeBuriedSasaArrays, sasaStats, compileRadii,
@@ -2277,7 +2277,12 @@ export class MolEngine {
     if (!state.settings.showMembrane || !active) { this.membraneBox = null; return }
     const data = dataRegistry.get(state.activeId!)
     if (!data) { this.membraneKey = 'off'; this.membraneBox = null; return }
-    const { origin, dir } = principalAxis(data)
+    // r100：膜法线 = 通道轴（对称轴优先，PCA 兜底）；膜心 = 跨膜腰心（双向收窄的
+    // 横向半径局部最小窗），无腰回落盒中点（KcsA 短跨膜蛋白/非膜蛋白与 r99 一致）。
+    // 9P6B 全长 TRPV1 实证：PCA 主轴歪 18°（特征值简并）且盒中点偏离跨膜区 31Å
+    // （膜插进 ARD 胞内域）——对称轴 + 腰心双修后膜板对准跨膜螺旋束。
+    const { origin, dir } = poreAxis(data)
+    const waist = membraneWaist(data, origin, dir)
     const n = new THREE.Vector3(dir[0], dir[1], dir[2])
     const up = Math.abs(n.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
     const u = new THREE.Vector3().crossVectors(n, up).normalize()
@@ -2313,8 +2318,10 @@ export class MolEngine {
     const h = (vHi - vLo) + pad * 2
     // r92：板心 (u,v) 取包围盒中点而非质心——板尺寸按包围盒+pad 定，质心偏一侧时
     // 板缘不对称（一侧贴边、另一侧大幅外挑，E2E 实测 1FX8 外挑 ~17Å）；盒中定心
-    // 让蛋白两侧板缘对称。沿 n 仍取 tc=盒中（跨膜区居中嵌入的双板语义）
-    const tc = (tLo + tHi) / 2
+    // 让蛋白两侧板缘对称。
+    // r100：沿法线 tc 改跨膜腰心（waist.center）——盒中点仅对「跨膜区居中」的蛋白
+    // 成立（KcsA）；全长通道（TRPV1 带 ARD）盒中点偏进胞内域 31Å。无腰保持盒中。
+    const tc = waist ? waist.center : (tLo + tHi) / 2
     const uc = (uLo + uHi) / 2
     const vc = (vLo + vHi) / 2
     const T = state.settings.membraneThickness

@@ -27,9 +27,9 @@ function fmt(n: number, d = 1): string {
   return n.toFixed(d)
 }
 
-/** 剖面 SVG（分区着色面积带 + 收缩点标注 + 双轴刻度） */
+/** 剖面 SVG（分区着色面积带 + 收缩点标注 + 双轴刻度 + 膜区背景带 r100） */
 function ProfileChart({ result }: { result: PoreResult }) {
-  const { samples, maxR, constriction } = result
+  const { samples, maxR, constriction, zone } = result
   const n = samples.length
   if (n < 2) return null
   const t0 = samples[0].t
@@ -61,6 +61,21 @@ function ProfileChart({ result }: { result: PoreResult }) {
       role="img"
       aria-label="Pore radius profile"
     >
+      {/* 膜区背景带（r100：跨膜腰窗——读图语境：红区若落在带内即跨膜收缩点） */}
+      {zone && (
+        <g>
+          <rect
+            x={x(Math.max(t0, zone.center - zone.halfWidth))}
+            width={Math.max(0, x(Math.min(t1, zone.center + zone.halfWidth)) - x(Math.max(t0, zone.center - zone.halfWidth)))}
+            y={PT}
+            height={H - PT - PB}
+            fill="#e0913c"
+            fillOpacity={0.1}
+          />
+          <line x1={x(Math.max(t0, zone.center - zone.halfWidth))} x2={x(Math.max(t0, zone.center - zone.halfWidth))} y1={PT} y2={H - PB} stroke="#e0913c" strokeOpacity={0.35} strokeWidth={0.75} strokeDasharray="2 2" />
+          <line x1={x(Math.min(t1, zone.center + zone.halfWidth))} x2={x(Math.min(t1, zone.center + zone.halfWidth))} y1={PT} y2={H - PB} stroke="#e0913c" strokeOpacity={0.35} strokeWidth={0.75} strokeDasharray="2 2" />
+        </g>
+      )}
       {/* 网格（浅） */}
       {yTicks.map(v => (
         <g key={`y${v}`}>
@@ -117,11 +132,20 @@ export function PoreProfile() {
       )}
       aria-label={t({ zh: '孔道剖面分析卡', en: 'Pore profile analysis card' })}
     >
-      {/* 标题行：图标 + 结构名 + 动作钮 */}
+      {/* 标题行：图标 + 结构名 + 轴来源徽标 + 动作钮 */}
       <div className="flex items-center gap-1.5">
         <Cylinder className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
         <span className="text-[11px] font-semibold leading-none">{t({ zh: '孔道剖面', en: 'Pore profile' })}</span>
         <span className="truncate font-mono text-[9px] text-muted-foreground">{result.structureName}</span>
+        <span
+          className="shrink-0 rounded-sm border border-border/70 bg-muted/60 px-1 py-px font-mono text-[8px] leading-tight text-muted-foreground"
+          title={t({
+            zh: result.method === 'symmetry' ? '通道轴 = 同构亚基间刚体旋转轴（寡聚体对称轴，自动检测）' : '通道轴 = 聚合物主方差轴（PCA）',
+            en: result.method === 'symmetry' ? 'Channel axis = rigid-body rotation axis between homologous subunits (oligomer symmetry, auto-detected)' : 'Channel axis = polymer principal-variance axis (PCA)',
+          })}
+        >
+          {result.method === 'symmetry' ? t({ zh: '对称轴', en: 'SYM' }) : 'PCA'}
+        </span>
         <span className="ml-auto flex items-center gap-0.5">
           <button
             type="button"

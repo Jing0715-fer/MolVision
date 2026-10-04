@@ -13,6 +13,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 FAILS=0
+PASSES=0
 
 # check <名称> <rg 正则> <路径> <最小命中数>
 # rg -c 多文件输出 "path:count"、单文件输出裸 "count"，两种形态按末字段求和；
@@ -23,6 +24,7 @@ check() {
   count=$(rg -c --no-messages -e "$pattern" -- "$path" 2>/dev/null | awk -F: '{s+=$NF} END {print s+0}')
   if [ "${count:-0}" -ge "$min" ]; then
     printf 'PASS  %-34s 命中 %2d（要求 ≥%d）\n' "$name" "$count" "$min"
+    PASSES=$((PASSES + 1))
   else
     printf 'FAIL  %-34s 命中 %2d（要求 ≥%d）—— %s\n' "$name" "${count:-0}" "$min" "$path"
     FAILS=$((FAILS + 1))
@@ -553,6 +555,15 @@ check "橡皮带取消收尾"            "cancelBoxSelect"                "src/l
 check "录制轨道停止"              "recorderStream"                 "src/lib/molecular/engine.ts"       3
 check "dispose清window钩子"       "__molEngine === this"           "src/lib/molecular/engine.ts"       1
 check "pore零聚合物守卫"          "没有聚合物链"                   "src/lib/molecular/pore.ts"         1
+# r100：通道轴检测根修（对称轴投票 + 腰扫描）——9P6B 膜歪/孔道歪 bug
+check "Kabsch对称轴投票"          "symmetryAxis"                   "src/lib/molecular/pore.ts"         2
+check "Kabsch反射修正"            "detH"                           "src/lib/molecular/pore.ts"         1
+check "跨膜腰扫描"                "membraneWaist"                  "src/lib/molecular/pore.ts"         2
+check "通道轴统一入口"            "poreAxis"                       "src/lib/molecular/pore.ts"         2
+check "腰心膜板"                  "waist \? waist.center"          "src/lib/molecular/engine.ts"       1
+check "腰窗聚焦采样"              "VESTIBULE"                      "src/lib/molecular/pore.ts"         2
+check "剖面卡轴徽标"              "result.method === 'symmetry'"   "src/components/studio/PoreProfile.tsx" 2
+check "剖面卡膜区带"              "zone.center - zone.halfWidth"   "src/components/studio/PoreProfile.tsx" 2
 # f2：agent/sf 路由 r98 同构修复
 check "agent体积预检"             "declaredLen"                    "src/app/api/agent/route.ts"        1
 check "agent图片dataURL闸"        "DATAURL_RE"                     "src/app/api/agent/route.ts"        1
@@ -617,11 +628,13 @@ check "管线autoPerf关闭"      "settings\.autoPerf = false"    "scripts/gen-t
 check "引擎精灵AO排除补丁"    "gtaoInternal._overrideVisibility" "src/lib/molecular/engine.ts" 2
 
 # ---- 汇总 ----
-TOTAL=445
+# r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
+# 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治
+TOTAL=$((PASSES + FAILS))
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0
 else
-  echo "== 结果：FAIL（$FAILS/$TOTAL 守卫失败——对应 r60/r63 修复疑被回滚，或守卫正则需更新） =="
+  echo "== 结果：FAIL（$FAILS/$TOTAL 守卫失败——对应修复疑被回滚，或守卫正则需更新） =="
   exit 1
 fi

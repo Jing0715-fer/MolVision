@@ -473,7 +473,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       } else if (cls === 'confirm') {
         records[i] = { ...records[i], status: 'confirm', output: tt({ zh: '影响较大，请确认后执行', en: 'High impact — confirm to run' }) }
       } else {
-        // 视图切换窗口兑底：load 刚落地（activeId 已设）而 MolViewer（dynamic）仍在挂载——
+        // 视图切换窗口兜底：load 刚落地（activeId 已设）而 MolViewer（dynamic）仍在挂载——
         // 引擎依赖命令（view from/orient/ray…）此刻会失败或入队静默。有结构但引擎缺席 →
         // 等就位再执行（≤8s；常规工作台引擎恒在场，此检查零开销）。修正轮走同一 runTurn 同样受益
         if (useMolStore.getState().activeId && !engineRef.current) {

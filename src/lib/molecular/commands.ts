@@ -92,7 +92,7 @@ function groupInstances(data: StructureData, indices: number[]): { indices: numb
   return out
 }
 
-/** 多配体兑底：挑离相机目标最近的残基实例（view from 失败时的自动单配体聚焦） */
+/** 多配体兜底：挑离相机目标最近的残基实例（view from 失败时的自动单配体聚焦） */
 function nearestInstance(data: StructureData, indices: number[], eng: NonNullable<typeof engineRef.current>): { indices: number[]; label: string } | null {
   const insts = groupInstances(data, indices)
   if (insts.length < 2) return insts[0] ?? null
@@ -1278,7 +1278,7 @@ export function runCommand(raw: string): void {
       const eng = engineRef.current
       if (!eng) {
         // 视图切换窗口（欢迎页 load 落地 → MolViewer dynamic 挂载中）：入队等待冲刷——
-        // 与 zoom 同语义（r47 模式），相机操作不因挂载时序失败；多配体兑底也在冲刷时执行
+        // 与 zoom 同语义（r47 模式），相机操作不因挂载时序失败；多配体兜底也在冲刷时执行
         whenEngineReady(() => {
           const e = engineRef.current
           if (!e) return
@@ -1291,7 +1291,7 @@ export function runCommand(raw: string): void {
       if (eng.viewFrom([{ structureId: sid!, indices }])) {
         return ok(tt({ zh: `视角 → 从「${selExpr}」方向观察（选择在前景、开口正对相机，17° 仰角增加纵深）`, en: `View → looking from "${selExpr}" (selection in the foreground, opening facing the camera, 17° elevation for depth)` }))
       }
-      // 多配体兑底：选择质心贴近结构中心（如 ligand 覆盖 4 个 HEM 均布）→ 自动挑离相机目标最近的配体实例重试
+      // 多配体兜底：选择质心贴近结构中心（如 ligand 覆盖 4 个 HEM 均布）→ 自动挑离相机目标最近的配体实例重试
       const inst = nearestInstance(data, indices, eng)
       if (inst && eng.viewFrom([{ structureId: s.activeId, indices: inst.indices }])) {
         return ok(tt({ zh: `视角 → 从「${selExpr}」方向观察——多配体均布已自动聚焦 ${inst.label}（选择在前景、开口正对相机）`, en: `View → looking from "${selExpr}" — evenly distributed ligands auto-focused on ${inst.label} (selection in the foreground, opening facing the camera)` }))
@@ -1764,9 +1764,12 @@ export function runCommand(raw: string): void {
     const nNarrow = result.samples.filter(x => x.r < HOLE_NARROW).length
     const nMid = result.samples.filter(x => x.r >= HOLE_NARROW && x.r < HOLE_MAX_GREEN).length
     const nWide = result.samples.filter(x => x.r >= HOLE_MAX_GREEN).length
-    ok(tt({ zh: `孔道剖面完成：主轴跨度 ${result.span.toFixed(1)} Å · ${result.nAtoms.toLocaleString(loc())} 原子 · ${result.ms.toFixed(0)} ms`, en: `Pore profile done: principal-axis span ${result.span.toFixed(1)} Å · ${result.nAtoms.toLocaleString(loc())} atoms · ${result.ms.toFixed(0)} ms` }))
+    const axLabel = result.method === 'symmetry'
+      ? tt({ zh: '对称轴（同构亚基刚体旋转轴，自动检测）', en: 'symmetry axis (rigid-body rotation between homologous subunits, auto-detected)' })
+      : tt({ zh: '主方差轴（PCA）', en: 'principal-variance axis (PCA)' })
+    ok(tt({ zh: `孔道剖面完成：通道轴 = ${axLabel} · 蛋白跨度 ${result.span.toFixed(1)} Å${result.zone ? ` · 跨膜腰窗 [${(result.zone.center - result.zone.halfWidth).toFixed(0)}, ${(result.zone.center + result.zone.halfWidth).toFixed(0)}] Å（采样聚焦腰窗±两端腔）` : ''} · ${result.nAtoms.toLocaleString(loc())} 原子 · ${result.ms.toFixed(0)} ms`, en: `Pore profile done: channel axis = ${axLabel} · protein span ${result.span.toFixed(1)} Å${result.zone ? ` · TM waist [${(result.zone.center - result.zone.halfWidth).toFixed(0)}, ${(result.zone.center + result.zone.halfWidth).toFixed(0)}] Å (sampling focused on waist ± vestibules)` : ''} · ${result.nAtoms.toLocaleString(loc())} atoms · ${result.ms.toFixed(0)} ms` }))
     ok(tt({ zh: `收缩点（最窄）半径 ${result.constriction.r.toFixed(2)} Å @ 轴向 ${result.constriction.t.toFixed(1)} Å——分区：红(过窄<${HOLE_NARROW}) ${nNarrow} 点 · 绿(可过) ${nMid} 点 · 蓝(宽敞>${HOLE_MAX_GREEN}) ${nWide} 点；视口右侧剖面卡可读图，pore off 清除`, en: `Constriction (narrowest) radius ${result.constriction.r.toFixed(2)} Å at axial ${result.constriction.t.toFixed(1)} Å — zones: red(narrow<${HOLE_NARROW}) ${nNarrow} pts · green(passable) ${nMid} pts · blue(wide>${HOLE_MAX_GREEN}) ${nWide} pts; read the chart in the viewport profile card; pore off clears` }))
-    ok(tt({ zh: '适合离子通道/膜蛋白（如 load 1bl8 KcsA / load 1fx8 GlpF）；叠合或 morph 后请重算；配 membrane 命令画脂双层语境', en: 'Best for ion channels / membrane proteins (e.g. load 1bl8 KcsA / load 1fx8 GlpF); recompute after superpose or morph; pair with the membrane command for the bilayer context' }))
+    ok(tt({ zh: '适合离子通道/膜蛋白（如 load 1bl8 KcsA / load 9p6b 人源 TRPV1 / load 1fx8 GlpF）；叠合或 morph 后请重算；配 membrane 命令画脂双层语境（膜心自动对准跨膜腰窗）', en: 'Best for ion channels / membrane proteins (e.g. load 1bl8 KcsA / load 9p6b human TRPV1 / load 1fx8 GlpF); recompute after superpose or morph; pair with the membrane command for the bilayer context (slab auto-centered on the TM waist)' }))
     return
   }
 

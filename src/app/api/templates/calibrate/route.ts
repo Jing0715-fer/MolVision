@@ -161,7 +161,7 @@ export async function POST(req: Request) {
     try {
       text = await visionWithProvider(messages, { signal: req.signal, timeoutMs: 90_000 })
     } catch (e) {
-      // r98：客户端已断开不再烧兑底 VLM 轮次（与 parse 同修）
+      // r98：客户端已断开不再烧兜底 VLM 轮次（与 parse 同修）
       if (req.signal.aborted) throw new Error('aborted')
       providerErr = e instanceof Error ? e.message : 'vision provider call failed'
     }
@@ -175,7 +175,7 @@ export async function POST(req: Request) {
           messages,
           thinking: { type: 'disabled' },
         }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('VLM 兑底调用超时（90000ms）')), 90_000)),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('VLM 兜底调用超时（90000ms）')), 90_000)),
       ])
       text = String(completion.choices[0]?.message?.content ?? '')
     }

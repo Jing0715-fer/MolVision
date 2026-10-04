@@ -578,7 +578,7 @@ function CalibrationPanel({ sourceUrl, commands, demo, onAccept }: {
       const eng = engineRef.current
       if (!eng) throw new Error('NO_ENGINE')
       if (eng.isCameraAnimating()) {
-        // 兑底：极端长动画（cinematic 1200ms）后仍在飞——再等一轮
+        // 兜底：极端长动画（cinematic 1200ms）后仍在飞——再等一轮
         await waitForCameraIdle(1800)
       }
       if (disposedRef.current) return
