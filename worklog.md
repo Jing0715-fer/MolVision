@@ -3995,3 +3995,33 @@ Stage Summary:
   4. 【低】agent 路由流式读取 idle timer（120s 无活动超时——undici 300s 兜底之上再加一层）
 
 （r98 段 cron 补记，2026-10-03 11:51）15min webDevReview 巡检任务 #432333 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 12 次实证（r85/r86/r87/r88/r90/r91/r94/r95/r92/r96/r97 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
+
+---
+Task ID: r99
+Agent: main
+Task: 用户指令「继续打磨项目，优化已有模板的美观度，继续增加新模板」——VLM 全量审计驱动的 18 支弱项精修 + 新模板六连 + 双引擎根修（GTAO 精灵黑条 / 管线 autoPerf 静默阉割）
+
+Work Log:
+- 【侦察】接手时发现 HEAD 上有未入档提交 a3f787f（UUID 消息、267 行源码改动）——后经 push 拒绝 fetch 揭晓：是 cron r98 批次的 GitHub 侧提交，最终以 ad24145（30+ 修复 + template-specs.sh 单一事实源 + guards 412）正式落档；工作区 94 文件 mode 位噪音以 git config core.filemode false 归零
+- 【审计】VLM 全量审美评分 46 支缩略图（8 张/批带编号）：垫底 wire-skeleton 2.5 / grayscale 4.0 / ballstick·hotspots·sepia·stereo 4.5 / catalytic·interface·nucleosome 5.0 / cpk·slab 5.5 / 6.0 档六支——打磨靶面 18 支锁定
+- 【18 支精修】三类杠杆：①AO/灯光（16 支 + 'ssao on'：球堆积接触阴影/白底经典款体积感；静电 + specular off 哑光）②配色重设计（grayscale/sepia SS 三级明度分层——单色靠明度不靠色相；mutation 基线 b=0→30（全蓝死水→黄绿静底）+ 标签 6→3 + 绯红热点球；stereo 彩虹→单灰（Richardson 图谱原版即单色立体对）；hydration 粉蜡+红点→板岩+深青壳层；interface 粉蜡→饱和珊瑚/深青链对）③构图（wire 主链重墨 #24292f+侧链淡灰两级线宽+雾 0.75；nucleosome 22° 斜俯视；ballstick zoom 1.5；unit-cell zoom 1.2 盒线出框）
+- 【根修一 interface-contacts】VLM「界面细节几不可见」实锤根因：demo 6LU7 沉积 AU 只有链 A（306 残基 Mpro 单体）+链 C 20 原子去污剂——`interface A B` 的链 B 从不存在，接触虚线自 r75 起从未画出 → demo 改 4HHB（α1β1 界面真实）复鉴 5→7
+- 【根修二 GTAOPass 精灵黑条】textbook 缩略图 VLM 判「black rectangular bars + 无标签文字」→ 活体二分定位：ssao off 标签即现 → three r186 GTAOPass._overrideVisibility 只排除 Points/Line/Line2 漏 Sprite——overrideMaterial 整体替换材质把 depthWrite:false 的标签精灵变成不透明深度四边形投出黑条（label on + ssao on 组合首现于 r99，r91-r97 从未组合故未暴露）→ ensureComposer 实例级补丁：Sprite 一并塞进 _visibilityCache（防御：内部 API 改名即静默退化）→ E2E 复验 A:GLU35/A:ASP52 在 AO 下可见零黑条
+- 【根修三 管线 autoPerf 静默阉割】活体设 ssao=true 四秒后被翻回 false → autoPerf 默认开 + SwiftShader <15fps 持续 3s 即自动关 ssao+outline——r99 全部 AO/描边打磨在截图前已被悄悄拆除（历史缩略图「flat/blurry/jagged」慢性根因）；管线两处清视口 eval + settings.autoPerf = false（与 showAxes 同款直改；真 GPU 用户帧率达标 autoPerf 仍是正确行为）→ 重刷后 rainbow 8/10「contact shadows ✓ outlines ✓」
+- 【新六连】风格三连：xray-film 底片负像（骨白 #e8e3d8 + 胶片灰黑 #17181b + 重描边——Franklin & Gosling 1953 Photo 51 图式源流）/ porcelain-studio 白瓷影棚（近白瓷体 + 米色 cyc 棚底 + AO 塑形 + 软主光——Wong「Avoiding colour」Nat Methods 2011）/ comic-pop 波普漫画（1.7× 加宽 + 1.6 2.2 重描边——Goodsell The Machinery of Life 平面海报语态）；实用三连：zn-finger-dna（1AAY 蛋白细胞灰 + DNA 琥珀棍 + ZN 球三色调——Pavletich & Pabo 1991）/ bdna-dodecamer（1BNA 模板库首支零蛋白模板：hide everything→show sticks, nucleic + 双链双色 + 0.3 棍——Wing/Drew/Dickerson 1980 完整螺旋原文）/ antibody-architecture（1IGT 重链青 B+D / 轻链珊瑚 A+C / 糖链驼色 E+F——链构成 RCSB 逐原子核实 214/437 残基；Harris 1997 完整 IgG 原文）——四支 demo 结构链构成均经 RCSB 拉取实检
+- 【配套】COMMAND_GLOSSARY +6 词条（负像骨白/白瓷/SS 分级明度/主链重墨/雾深线索/AO——具体锚定先于泛匹配）；TPL_ICONS +6 键（Aperture/SunDim/Paintbrush/Fingerprint/Torus/Shield——node 实检 Spiral 不存在改 Torus）；52 命令 386 条全量过闸零拦截
+- 【缩略图管线】slab-cutaway 1280x720 在当前环境 SwiftShader 饿死复现（rAF 采样 2 帧/8s = GPU 进程持续饱和；CDP captureScreenshot 与 engine.capture 的 toDataURL 双路径均排队死锁）→ 实测 800x450（31% 像素量）一击即中；后台 nohup/setsid 均被环境回收——改前台分块（8+9+6+1）；tighten 误重编码以 git checkout 还原无关卡两轮；变基 r98 时 SPECS 三处变更移植到 template-specs.sh 单一事实源（interface 4HHB / slab 800x450 / 六新规格+注释）
+- 【E2E】52 卡在位（英文名 英文 locale 命中）；antibody Demo 全链 25s（1IGT 加载 + 三色链对 + ssao 存活）VLM 判「Y 型 IgG ✓ 重链青 ✓ 轻链珊瑚 ✓ 糖链驼色 ✓ 8/10」；全会话 agent-browser errors 空；smoke 4/4
+- 【复鉴终分】18 支打磨均分 5.44→6.97（+1.5）：chalk 6→8.5 / electrostatic 6→8 / interface 5→7 / mutation 4.5→7.5 / cpk 5.5→7.5 / sepia 4.5→7 / rainbow 6→7.5 / textbook 6.5→7.5；唯 stereo 4.5→4（红蓝立体对 VLM 无眼镜本不可读——风格本真性保留）；新六连均分 7.0（comic 8 / antibody 7.5 / porcelain 7 / bdna 7 / xray 6.5 / zn 6）
+- 【门禁】lint 0 · tsc src 0（examples/skills/mock-llm 历史基线）· guards 445/445（变基 r98 412 基础 + r99 33 条；两条 r91 线描守卫随重设计更新锚点；远端「编辑模式禁粘贴」已被 r98 修好无需动）· smoke 4/4 · dev.log 零 error · 变基冲突 3 脚本干净解毕（health-check 取远端/规格移植/guards 合并去重）· push 97ddf92..325f982
+
+Stage Summary:
+- 交付一（美观度）：46→52 支且 18 支弱项精修——VLM 审计均分 5.4→7.0；打磨杠杆库沉淀：AO 接触阴影 / SS 明度分级 / 饱和链对色 / 主侧链两级线宽 / 雾深线索 / 斜俯视构图
+- 交付二（新模板）：底片负像 / 白瓷影棚 / 波普漫画 / 锌指–DNA 识别 / B-DNA 双链 / 抗体 Y 型架构——风格语域三空位 + 实用三空位（零蛋白模板 / 链构成核实的免疫图式）
+- 交付三（双引擎根修）：①GTAOPass 漏排除 Sprite——label+ssao 组合黑条（用户端同样受益）②管线 autoPerf 静默阉割——历史缩略图发灰发虚的慢性根因（r89 需 1920x960 高清视口对抗的正是被降级的 0.6 像素比）
+- 坑（新入档）：①后台脱离进程（nohup/setsid）在本环境 2-5 分钟即被回收——长管线必须前台分块跑 ②VLM 评分对 anaglyph 类「需外部器具观看」的图式结构性低估——以风格本真性为准不做迎合 ③缩略图管线与 autoPerf 的相互作用：任何依赖 ssao/outline 视觉的验证都先确认二者存活（settings 直查）再下结论 ④变基时 SPECS 类「双处同步」改动须识别对端是否已重构为单一事实源——盲目移植旧结构会倒退架构
+- 下一轮建议（按优先级）：
+  1. 【中】wire-skeleton 仍垫底（3.0）——线框+白底语域 VLM 天然低分；候选：深底反白线描变体（graphite-on-slate）与 chalk-wireframe 语域距离需先评估
+  2. 【中】hydration-shell 6.0 平台期——「散布小点」语域本身受限；候选：水球按 B 因子分级着色（首壳有序水语义增强）
+  3. 【低】52 支模板分类 chips 分布再平衡（basic 已 24 支——新模板入库时 category 取向引导）
+  4. 【低】cron 执行配额（第 12 次 Disabled）——继续观察配额窗口期
