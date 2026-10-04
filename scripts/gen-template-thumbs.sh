@@ -89,9 +89,13 @@ gen_one() {
   # 1.5) 收起序列条（194px → ~40px，canvas 增高约 150px，缩略图更聚焦 3D 视口）
   agent-browser eval "(() => { const bar = document.querySelector('.tape-well'); if (!bar) return 'NOBAR'; const btn = bar.closest('div')?.querySelector('button') || document.querySelector('.tape-well button'); if (!btn) return 'NOBTN'; btn.click(); return 'collapsed' })()"
   sleep 1
-  # 1.6) r76 清洁视口（第一遍）：隐藏全部 absolute/fixed 且不含 canvas 的元素 +
+  # r99：+ autoPerf = false——缩略图管线曾长期被自动性能模式静默阉割：SwiftShader
+#      低帧率 <15fps 持续 ~3s 即自动关 ssao+outline（降级徽章都不显）——所有
+#      AO/描边打磨在截图前已被悄悄拆除（r99 VLM 复鉴「flat」追查实锤；真 GPU
+#      用户帧率达标不受影响，autoPerf 对用户端仍是正确行为）
+# 1.6) r76 清洁视口（第一遍）：隐藏全部 absolute/fixed 且不含 canvas 的元素 +
   #      关 WebGL 万向轮（右黑框=书签条、左上灰框=HUD 的根治；见文件头说明）
-  agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) window.__molEngine.settings.showAxes = false; return 'hidden:' + n })()"
+  agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()"
   sleep 0.5
   # 2) 工具栏开模板面板 → 按【序号】点目标卡片「应用」（见文件头坑档——
   #    必须收窄到 .mol-scroll .grid + children[idx]，防 DialogContent grid 类污染）
@@ -104,7 +108,7 @@ gen_one() {
   sleep 1.8
   # 3.5) r76 清洁视口（第二遍）：命令可能新造 overlay（pore 卡/系综条/密度图例）——
   #      截图前再扫一遍（幂等；万向轮设置第一遍已关，此处防重置）
-  agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) window.__molEngine.settings.showAxes = false; return 'hidden:' + n })()"
+  agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()"
   sleep 0.5
   agent-browser eval "(() => { const c = document.querySelector('canvas'); const r = c.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }) })()" > /tmp/r72-canvas.json 2>/dev/null
   # r92 截图重试 + 陈旧防护：无头 Chrome SwiftShader 下重渲染模板（spacefill/slab+cap）

@@ -156,8 +156,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     figure: { ref: 'Fig. 1a', shows: { zh: '整体结构首图：全貌 + 折叠走向 + 结构域标注', en: 'Opening figure: overall architecture, fold topology and domain annotations' } },
     citation: { journal: 'Science', year: 2020, title: 'Cryo-EM structure of the 2019-nCoV spike in the prefusion conformation', doi: '10.1126/science.abb2507' },
     demo: '4HHB',
-    // 差异点：纯白底 + 细描边 + PCA 主轴对齐（基线「经典款」，其余模板均偏离它）
-    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg white', 'outline on 1.1 1.0', 'orient'],
+    // 差异点：纯白底 + 细描边 + PCA 主轴对齐（基线「经典款」，其余模板均偏离它）。
+    // r99 打磨：VLM 审计 6.0「彩虹噪、缺深度」→ + ssao on（接触阴影塑形——白底
+    // 经典款在不换配色的前提下找回体积感）
+    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg white', 'outline on 1.1 1.0', 'orient', 'ssao on'],
     accent: 'rose',
   },
   {
@@ -241,9 +243,14 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     category: 'interaction',
     figure: { ref: 'Fig. 3', shows: { zh: 'PPI 界面网络图：界面残基 + 结合热点标注', en: 'PPI interface network: interface residues and binding hotspots' } },
     citation: { journal: 'Nature', year: 2026, title: 'Next-generation inhibitors of SARS-CoV-2 Mpro overcome Paxlovid deficiencies' },
-    demo: '6LU7',
-    // 差异点：冷灰底 + 正面视角（界面正对读者，接触线全程可见）+ 细描边
-    commands: ['preset cartoon', 'util cbc', 'interface A B', 'bg #f5f7fa', 'view front', 'outline on 1.1 1.0'],
+    demo: '4HHB',
+    // 差异点：冷灰底 + 正面视角（界面正对读者，接触线全程可见）+ 细描边。
+    // r99 根修：VLM 审计 5.0「界面细节几不可见」——实锤根因是 demo 错配：6LU7
+    // 沉积 AU 只有链 A（306 残基 Mpro 单体，二聚体靠晶体学对称生成）+ 链 C 20
+    // 原子去污剂——`interface A B` 的链 B 从不存在，接触虚线从未画出（低对比
+    // 的真正成因）。demo → 4HHB（α1/β1 界面真实且丰富——PPI 图式的教科书案例）
+    // + 饱和链对色（α 珊瑚红 / β 深青——粉蜡链色在冷灰底上发灰的同步修正）+ AO
+    commands: ['preset cartoon', 'color #d9544f, chain A', 'color #2e8b8b, chain B', 'interface A B', 'bg #f5f7fa', 'view front', 'outline on 1.1 1.0', 'ssao on'],
     accent: 'orange',
   },
   {
@@ -327,8 +334,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // 竖排法线 → 膜板纯水平双板、蛋白跨膜居中（E2E 实测屏幕投影 (0,-1,0)）。
     // r92 构图修复：+ hide ballstick——preset surface 的 ligand 球棍层把晶体学
     // 去污剂/甘油云（散布 ~180Å）也画进来，蓝色团块远大于聚合物本体、膜板
-    // 显得「没包住蛋白」且视口裁切；语境图要的是蛋白+膜，隐藏配体层
-    commands: ['preset surface', 'hide ballstick', 'color #94a9c0', 'bg #f5f7fa', 'membrane 32', 'orient polymer', 'turn z 90'],
+    // 显得「没包住蛋白」且视口裁切；语境图要的是蛋白+膜，隐藏配体层。
+    // r99 打磨：VLM 审计 6.5「表面着水泥泞」→ + ssao on（跨膜桶与膜板交界的
+    // 遮蔽塑形——表面沟壑与膜的贴合线在阴影里清晰）
+    commands: ['preset surface', 'hide ballstick', 'color #94a9c0', 'bg #f5f7fa', 'membrane 32', 'orient polymer', 'turn z 90', 'ssao on'],
     accent: 'orange',
   },
 
@@ -414,22 +423,26 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     figure: { ref: '机制图版', shows: { zh: '变异位点图：关键残基标注 + 生化后果注解', en: 'Variant map: key residues annotated with biochemical consequences' } },
     citation: { journal: 'Nature', year: 1970, title: 'Stereochemistry of cooperative effects in haemoglobin: haem-haem interaction and the problem of allostery', doi: '10.1038/228726a0' },
     demo: '4HHB',
-    // 差异点：alter B 因子通道改写（热点=100 其余=0）→ spectrum b 热图 + 热点整残基红球
-    // （可见性关键：18 个热点原子在全景下太小——球化后红色热点在蓝底上一眼可辨，
-    // r75 E2E 实证纯 spectrum b 路径 VLM 判「uniform blue」后补的设计）+ CA 标签；
+    // 差异点：alter B 因子通道改写（r99 重设计：VLM 审计 4.5「平蓝水洗 + 标签拥挤」——
+    // ①基线 b=0 → b=30：全蓝死水 → 黄绿平静底（spectrum b 30→100 区间，热点红球
+    // 与底色互补色对比；②标签 6 → 3：每位点只标单链（β6-B / α87-A / β92-B——
+    // 对称链上重复标签是拥挤主因）；③热点球改统一绯红 #e11d48（spectrum 端点红
+    // 偏橙——饱和度拉满）+ AO。
     // 演示位点为 Hb 经典（β6 镰刀位点 · α87/β92 近端组氨酸——血红素配位）；
-    // 链不匹配时 adapt 降级为天然 B 因子柔性热图
+    // 链不匹配时 adapt 降级为天然 B 因子柔性热图（alter 整组跳过——b=30 基线同样
+    // 跳过，原生 B 值直进 spectrum ✓ 契约不变）
     commands: [
       'preset cartoon', 'bg white',
-      'alter (polymer), b=0',
+      'alter (polymer), b=30',
       'alter (resi 6 and chain B+D), b=100',
       'alter (resi 87 and chain A+C), b=100',
       'alter (resi 92 and chain B+D), b=100',
       'spectrum b, rainbow',
       'show spheres, ((resi 6 and chain B+D) or (resi 87 and chain A+C) or (resi 92 and chain B+D))',
-      'select (name CA) and ((resi 6 and chain B+D) or (resi 87 and chain A+C) or (resi 92 and chain B+D))',
+      'color #e11d48, ((resi 6 and chain B+D) or (resi 87 and chain A+C) or (resi 92 and chain B+D))',
+      'select (name CA) and ((resi 6 and chain B) or (resi 87 and chain A) or (resi 92 and chain B))',
       'label on',
-      'orient', 'outline on 1.1 1.0',
+      'orient', 'outline on 1.1 1.0', 'ssao on',
     ],
     accent: 'fuchsia',
   },
@@ -486,8 +499,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Rev. Sci. Instrum.', year: 1953, title: 'Molecular models of amino acids, peptides, and proteins', doi: '10.1063/1.1770803' },
     demo: '1CRN',
     // 差异点：全原子球（唯一无卡通模板——与 rainbow 的「带状抽象」构成表示法两极）；
-    // 1CRN 0.58Å 高分辨率文首蛋白——每个原子清晰可辨的空间填充教科书案例
-    commands: ['preset cartoon', 'hide everything', 'hide waters', 'show spheres', 'color element', 'bg white', 'orient'],
+    // 1CRN 0.58Å 高分辨率文首蛋白——每个原子清晰可辨的空间填充教科书案例。
+    // r99 打磨：VLM 审计 5.5「致密团块吞细节」→ + ssao on（球堆接触阴影——
+    // AO 正是为球堆积发明的：重叠球心距即遮蔽量，堆积密度在阴影里可读）
+    commands: ['preset cartoon', 'hide everything', 'hide waters', 'show spheres', 'color element', 'bg white', 'orient', 'ssao on'],
     accent: 'slate',
   },
   {
@@ -637,13 +652,13 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // 演示取材 1AKI 鸡蛋清溶菌酶（实测 Glu35 OE2↔Asp52 OD1 = 8.19Å）
     citation: { journal: 'Sci. Am.', year: 1966, title: 'The three-dimensional structure of an enzyme molecule', doi: '10.1038/scientificamerican1166-78' },
     demo: '1AKI',
-    // 差异点：measure dist 真实测量标注（虚线 + Å 标签——模板库首个「测量图式」）；
-    // 位点缓冲取景 zoom (resi 35 or resi 52), 8（实测 8Å 邻域 byres 展开会把取景拉回
-    // 全景——421 原子包围盒近整蛋白；两残基+缓冲 8Å 相机 55° 恰好特写）；
-    // 多链结构 measure 自动取最近原子对；adapt ⑭：短于 60 残基结构整组跳过
+    // 差异点：催化残基侧链棍改元素色（r99：VLM 审计 5.0「单色粉蜡发灰」——1AKI
+    // 单链 util cbc 整片粉；彩虹 N→C 语境 + 元素色棍（Fe 橙/N 蓝/O 红——配位
+    // 几何可读，与 heme-pocket 同款专业感）；
     commands: [
-      'preset cartoon', 'util cbc', 'bg white',
+      'preset cartoon', 'spectrum count, rainbow', 'bg white',
       'show sticks, (resi 35 or resi 52) and sidechain',
+      'color element, (resi 35 or resi 52) and sidechain',
       'measure dist (resi 35 and name OE2) (resi 52 and name OD1)',
       'zoom (resi 35 or resi 52), 8',
       'outline on 1.1 1.0',
@@ -682,8 +697,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Rev. Sci. Instrum.', year: 1953, title: 'Molecular models of amino acids, peptides, and proteins', doi: '10.1063/1.1770803' },
     demo: '1CRN',
     // 差异点：与 CPK 空间填充同源（Corey-Pauling-Koltun 模型体系）——那支看「堆积」，
-    // 这支看「键连」：球小棍出、键拓扑可读；1CRN 46 残基小蛋白全原子不糊
-    commands: ['preset ballstick', 'color element', 'bg white', 'orient', 'outline on 1.1 1.0'],
+    // 这支看「键连」：球小棍出、键拓扑可读；1CRN 46 残基小蛋白全原子不糊。
+    // r99 打磨：VLM 审计 4.5「拥挤扁平 2D 感」→ + ssao on（球棍接触阴影——
+    // 前后球分层）+ zoom 1.5（满幅构图——中景全原子模型略退后则密而不挤）
+    commands: ['preset ballstick', 'color element', 'bg white', 'orient', 'zoom 1.5', 'outline on 1.1 1.0', 'ssao on'],
     accent: 'emerald',
   },
   {
@@ -699,9 +716,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Adv. Protein Chem.', year: 1981, title: 'The anatomy and taxonomy of protein structure', doi: '10.1016/S0065-3233(08)60520-3' },
     demo: '1AKI',
     // 差异点：stereo on 红蓝立体（渲染管线双通道色分移——左右眼色偏移即深度线索，
-    // 观看需红蓝眼镜）；白底 + 彩虹保证两通道都有色彩可分；GTAO 在立体模式自动
-    // 暂停（引擎既有语义）
-    commands: ['preset cartoon', 'spectrum count, rainbow', 'bg white', 'stereo on', 'orient'],
+    // 观看需红蓝眼镜）；r99 打磨：彩虹 → 单灰 #6b7280（VLM 审计 4.5「泥泞叠影」——
+    // 彩虹多色与红蓝通道分移叠加产生泥色；Richardson 1981 图谱原版即单色立体对，
+    // 灰底在双眼滤镜下深度分离最干净）；GTAO 在立体模式自动暂停（引擎既有语义）
+    commands: ['preset cartoon', 'color #6b7280', 'bg white', 'stereo on', 'orient'],
     accent: 'rose',
   },
   {
@@ -734,11 +752,14 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // 几何上不可能实心（metaball 表面是薄壳，slab 窗口切壳只见环带+透明内腔，
     // 窗口外的远侧壳被裁掉、封盖无背面可填——VLM 三审「空心破壳」实锤）；
     // 空间填充球是闭合实体，切层即得原子截面 + cap 实心封盖（1280 实测实心色场✓）。
+    // r99 打磨：color sasa → color element（VLM 审计 5.5「气泡拥挤」——SASA 逐原子
+    // 渐变在切面上呈彩色斑点噪声；元素色截面即经典 CPK 剖面，埋藏/暴露语义已由
+    // sasa-surface / hydration-shell 模板分工）。
     // 缩略图管线侧配套：无头 Chrome SwiftShader 软光栅下重渲染每帧数秒——截图
     // CDP 超时曾静默吞掉并用除旧 raw 反复伪造「空心环」（r92 实锤）；管线已加
     // 截图三次重试+陈旧防护，本模板降 1280 视口 + 30s 等待让渲染落定（真 GPU 用户
     // 端无此问题）。Richards 1977 areas/volumes/packing 正是剖面所揭示的量
-    commands: ['preset spacefill', 'hide waters', 'color sasa', 'bg #eef1f5', 'slab 14', 'slab cap on', 'view front', 'zoom'],
+    commands: ['preset spacefill', 'hide waters', 'color element', 'bg #eef1f5', 'slab 14', 'slab cap on', 'view front', 'zoom'],
     accent: 'teal',
   },
   // ── r89 扩容（用户指令：继续添加新模板——多风格再五连：线描/灰度占 basic 未覆盖
@@ -760,7 +781,12 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // ~80——元素着色的碳线 #a9aeb5 级灰在白底上几不可见）→ 追加统一深墨
     // #3f454d（Kendrew 1958 原版制图就是黑墨白纸——风格与可读性双赢；
     // 化学元素区分语义由 cpk-spacefill 模板分工）
-    commands: ['preset wireframe', 'color #3f454d', 'bg white', 'orient', 'zoom 1.7'],
+    // r99 重设计：VLM 审计垫底 2.5「完全扁平、无深度」→ 三层深度线索：①主链
+    // 重墨 #24292f + 侧链淡灰 #79818b 双层线宽视觉（工程制图的线条层级——
+    // 路径 bold、细节 light）；②set fog_strength 0.75（LineBasicMaterial 受雾
+    // ——远端线向白底渐隐，深度即读；复鉴二轮 0.6 被判仍扁平，提到 0.75——远端
+    // 淡出约五成）；③zoom 1.6 满幅
+    commands: ['preset wireframe', 'color #79818b', 'color #24292f, (name N+CA+C+O)', 'bg white', 'set fog_strength 0.75', 'orient', 'zoom 1.6'],
     accent: 'cyan',
   },
   {
@@ -774,8 +800,11 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Nature', year: 1960, title: 'Structure of haemoglobin: a three-dimensional Fourier synthesis at 5.5-A resolution', doi: '10.1038/185416a0' },
     demo: '4HHB',
     // 差异点：util cnc 全灰（与分色/彩虹系全部相反——单通道明度制图；1960 年印刷
-    // 时代即此风格，现代单色期刊/海报仍在用）；描边保留（灰度分层靠明度差+轮廓）
-    commands: ['preset cartoon', 'util cnc', 'bg white', 'outline on 1.1 1.0', 'orient'],
+    // 时代即此风格，现代单色期刊/海报仍在用）；描边保留（灰度分层靠明度差+轮廓）。
+    // r99 重设计：VLM 审计 4.0「扁平无深度」→ SS 三级灰（螺旋 #4b535c 深 / 折叠
+    // #7d858e 中 / 环 #b0b8c0 浅——单色下的结构信息不靠色相靠明度分层，印刷时代
+    // 制版师正是这么做的）+ AO 接触阴影（明度分层 + 阴影 = 单色体积感）
+    commands: ['preset cartoon', 'color #b0b8c0', 'color #7d858e, ss s', 'color #4b535c, ss h', 'bg white', 'outline on 1.1 1.0', 'ssao on', 'orient'],
     accent: 'slate',
   },
   {
@@ -791,8 +820,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // 差异点：表面 + 中性灰底 + 酸碱残基双色调（酸红 ASP/GLU、碱蓝 LYS/ARG/HIS）
     // ——盐桥网络同款配色移到表面载体上：颜色即电荷 patch，配体/互作位点一眼定位
     // （先 color gray 中性底再上双色调——非酸碱残基不残留链配色，r89 缩略图 VLM
-    // 验证揭发的混色问题当轮修正）
-    commands: ['preset surface', 'color gray', 'color red, resn ASP+GLU', 'color blue, resn LYS+ARG+HIS', 'bg white'],
+    // 验证揭发的混色问题当轮修正）。
+    // r99 打磨：VLM 审计 6.0「模糊纹理」→ 哑光 + AO（set specular off——论文静
+    // 电图从不是亮面；ssao on——口袋与沟壑的遮蔽塑形，电荷 patch 的地形可读）
+    commands: ['preset surface', 'color gray', 'color red, resn ASP+GLU', 'color blue, resn LYS+ARG+HIS', 'bg white', 'set specular off', 'ssao on'],
     accent: 'rose',
   },
   {
@@ -806,8 +837,11 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Nature', year: 1968, title: 'Solvent effect in protein crystals', doi: '10.1038/218665a0' },
     demo: '4HHB',
     // 差异点：show waters（水 rep 转小球，ChimeraX nonbonded 风）——蛋白质晶体约
-    // 半体积是溶剂（Matthews 1968）；水球即表面有序位点的诚实标注
-    commands: ['preset cartoon', 'util cbc', 'show waters', 'bg white', 'orient'],
+    // 半体积是溶剂（Matthews 1968）；水球即表面有序位点的诚实标注。
+    // r99 重设计：VLM 审计 6.0「背景点噪声」→ 板岩蛋白 #64748b + 深青水球（粉蜡四链
+    // + 元素红水点同屏 = 无主次的噪声场；板岩底 + 单色壳——「壳层」语义成立且不
+    // 发灰——复鉴二轮 util cnc 纯灰被判 dull）+ AO
+    commands: ['preset cartoon', 'color #64748b, protein', 'show waters', 'color #0e7490, resn HOH', 'bg white', 'orient', 'ssao on'],
     accent: 'sky',
   },
   {
@@ -821,8 +855,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Nucleic Acids Res.', year: 2000, title: 'The Protein Data Bank', doi: '10.1093/nar/28.1.235' },
     demo: '4HHB',
     // 差异点：show cell（CRYST1 晶胞盒线框，a红b绿c蓝）——结构数据「从哪块晶体
-    // 来」的诚实语境图；无 CRYST1 的结构自动退化为无盒纯卡通（命令零报错）
-    commands: ['preset cartoon', 'util cbc', 'show cell', 'bg white', 'orient'],
+    // 来」的诚实语境图；无 CRYST1 的结构自动退化为无盒纯卡通（命令零报错）。
+    // r99 打磨：VLM 审计 6.0「盒线干扰、稀疏」→ zoom 1.2（盒线出框——晶胞语境
+    // 在、满幅主分子回归视觉中心）+ AO
+    commands: ['preset cartoon', 'util cbc', 'show cell', 'bg white', 'orient', 'zoom 1.2', 'ssao on'],
     accent: 'lime',
   },
 
@@ -862,8 +898,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'J. Chem. Educ.', year: 2019, title: 'Teaching protein structure with molecular visualization', doi: '10.1021/acs.jchemed.8b00909' },
     demo: '1AKI',
     // 差异点：米白单色（#f0e8d4）卡通线稿化——深墨绿板（#20362c）上的「粉笔痕」；
-    // 描边开但弱（0.6 1.4）保留手绘松弛感；与灰度制版（白底灰调）构成「亮暗两板」
-    commands: ['preset cartoon', 'color #f0e8d4', 'bg #20362c', 'outline on 0.6 1.4', 'turn y -32', 'zoom 1.4'],
+    // 描边开但弱（0.6 1.4）保留手绘松弛感；与灰度制版（白底灰调）构成「亮暗两板」。
+    // r99 打磨：VLM 审计 6.0「缺细节与色信息」→ 哑光粉笔（set specular off——粉
+    // 笔无釉面）+ AO（板书粉笔画的立体塑形——绿板上的石膏浮雕感）
+    commands: ['preset cartoon', 'color #f0e8d4', 'bg #20362c', 'outline on 0.6 1.4', 'turn y -32', 'zoom 1.4', 'set specular off', 'ssao on'],
     accent: 'emerald',
   },
   {
@@ -906,9 +944,12 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     figure: { ref: '历史图版', shows: { zh: '里程碑结构的历史呈现：印刷年代的单色制版', en: 'Milestone structures in print-era monochrome' } },
     citation: { journal: 'Nature', year: 1958, title: 'A three-dimensional model of the myoglobin molecule obtained by x-ray analysis', doi: '10.1038/181662a0' },
     demo: '1MBO',
-    // 差异点：全结构单棕 #8a6a42（与灰度制版的「去色」不同——棕调带「年代温度」）+
-    // 羊皮纸底 #f2e9d5 + 弱描边——1958 Kendrew 首个肌红蛋白低分辨率模型的时代质感
-    commands: ['preset cartoon', 'color #8a6a42', 'bg #f2e9d5', 'outline on 0.5 1.2', 'turn y 15', 'zoom 1.3'],
+    // 差异点：全结构单棕（与灰度制版的「去色」不同——棕调带「年代温度」）+
+    // 羊皮纸底 #f2e9d5 + 弱描边——1958 Kendrew 首个肌红蛋白低分辨率模型的时代质感。
+    // r99 重设计：VLM 审计 4.5「泥泞低对比」→ SS 分级棕（螺旋 #5f4526 浓 / 折叠
+    // #7f5c34 中 / 环 #a2794a 浅——铜版画的分层设色）+ 哑光（set specular off——
+    // 纸面无高光）
+    commands: ['preset cartoon', 'color #a2794a', 'color #7f5c34, ss s', 'color #5f4526, ss h', 'bg #f2e9d5', 'set specular off', 'outline on 0.7 1.4', 'turn y 15', 'zoom 1.3'],
     accent: 'amber',
   },
   {
@@ -939,8 +980,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     demo: '1AKI',
     // 差异点：label on 教科书注记（溶菌酶 Glu35/Asp52 催酸碱对——Phillips 1966 教
     // 科书图式）；链不匹配时标签静默缺失（select 空集不报错），SS 三色兜底仍是标准
-    // 教学图；与催化残基（棍 + 距离虚线）构成「标注版/测量版」两档
-    commands: ['preset cartoon', 'util ss', 'bg white', 'select (name CA) and ((resi 35 and chain A) or (resi 52 and chain A))', 'label on', 'deselect', 'zoom 1.4', 'outline on 1.1 1.0'],
+    // 教学图；与催化残基（棍 + 距离虚线）构成「标注版/测量版」两档。
+    // r99 打磨：VLM 审计 6.5「灰环缺冲击」→ + AO（SS 三色 + 接触阴影——教学图
+    // 的立体感不靠色相靠塑形）
+    commands: ['preset cartoon', 'util ss', 'bg white', 'select (name CA) and ((resi 35 and chain A) or (resi 52 and chain A))', 'label on', 'deselect', 'zoom 1.4', 'outline on 1.1 1.0', 'ssao on'],
     accent: 'sky',
   },
   {
@@ -955,8 +998,10 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     demo: '1AOI',
     // 差异点：nucleic 选择域的 per-chain 彩虹（spectrum count, rainbow, nucleic——
     // DNA 双链各自 N→C 渐变）+ 组蛋白统一石板灰（蛋白/核酸视觉分工）+ 顶视
-    // （1.65 圈超螺旋盘面在 top view 读得最清楚——Luger 1997 图式）
-    commands: ['preset cartoon', 'color #9aa3ad, protein', 'spectrum count, rainbow, nucleic', 'bg #f7f8fa', 'view top', 'zoom 1.3'],
+    // （1.65 圈超螺旋盘面在 top view 读得最清楚——Luger 1997 图式）。
+    // r99 打磨：VLM 审计 5.0「乱作一团的环」→ 22° 斜俯视（turn x 22——纯顶视下
+    // 双链叠成迷宫圈；斜角后盘面厚度与缠绕走向分层可读）+ 描边 + zoom 1.25 满幅
+    commands: ['preset cartoon', 'color #8f98a3, protein', 'spectrum count, rainbow, nucleic', 'bg #f7f8fa', 'view top', 'turn x 22', 'zoom 1.25', 'outline on 1.1 1.0'],
     accent: 'violet',
   },
   {
@@ -974,6 +1019,136 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // 展开但不贴脸）——与血红素口袋（白底元素色）构成「亮暗两特写」
     commands: ['preset cartoon', 'color #22c55e', 'bg #07100a', 'show sticks, (resn CRO)', 'color #fde68a, (resn CRO)', 'zoom (resn CRO), 12', 'outline on 1.0 2.0'],
     accent: 'lime',
+  },
+
+  // ── r99 扩容（用户指令：优化已有模板美观度 + 继续增加新模板）──
+  // 风格三连补视觉语域：底片负像（暗底单色亮调——灰度制版的负像孪生，摄影暗房
+  // 语态）/ 白瓷影棚（米色棚底 + AO 塑形——产品摄影的柔和演播室语态）/ 波普漫画
+  // （1.7× 加宽 + 重描边——Goodsell 平面海报语态）。实用三连：锌指–DNA 识别
+  // （1AAY 蛋白血灰 + DNA 琥珀棍 + ZN 球三色调）/ B 型 DNA 双链（1BNA 纯核酸
+  // 双色棍——Drew-Dickerson 完整螺旋图式）/ 抗体 Y 型架构（1IGT 重链青/轻链珊
+  // 瑚/糖链驼色——免疫球蛋白全景）。全部命令沿用白名单语法；四支演示结构链构成
+  // 经 RCSB 逐原子核实（1AAY A 蛋白/B+C DNA/3 ZN；1BNA A+B 双链；1IGT A/C 轻链
+  // B/D 重链 E/F 糖链；4HHB α1β1 界面真实）。
+  {
+    id: 'xray-film',
+    name: { zh: '底片负像', en: 'Film negative' },
+    tagline: { zh: '近黑底 + 骨白亮调卡通 + 重描边：暗房胶片上的结构负像', en: 'Near-black ground + bone-pale cartoon + heavy rims: the structure as a darkroom negative' },
+    purpose: { zh: '展览主视觉 · 摄影语境配图 · 暗调替代款', en: 'Gallery heroes · photographic contexts · the dark-register alternative' },
+    tags: [{ zh: '负像', en: 'Negative' }, { zh: '暗调', en: 'Dark' }],
+    category: 'basic',
+    figure: { ref: 'Photo 51 语境', shows: { zh: 'X 射线衍射负片：暗房显影的胶片明暗反转', en: 'X-ray diffraction negatives: darkroom-developed tone inversion' } },
+    // 图式源流：Franklin & Gosling 1953 Nature「Molecular configuration in sodium
+    // thymonucleate」（Photo 51——B 型 DNA 的 X 射线负片，结构生物学的「底片时代」
+    // 视觉记忆；负像=明暗反转的暗房语态，DOI 经 Nature 原文核实）
+    citation: { journal: 'Nature', year: 1953, title: 'Molecular configuration in sodium thymonucleate', doi: '10.1038/171740a0' },
+    demo: '4HHB',
+    // 差异点：骨白单色 #e8e3d8（与灰度制版构成「正负片」对——那支白底灰调，这支
+    // 黑底亮调）+ 近黑底 #17181b（胶片片基灰黑，非纯黑——负片的「化学灰」）+
+    // 重描边 1.2 1.8（负片高反差边缘）+ 哑光（胶片无釉面）
+    commands: ['preset cartoon', 'color #e8e3d8', 'bg #17181b', 'outline on 1.2 1.8', 'set specular off', 'turn y 30', 'zoom 1.35'],
+    accent: 'slate',
+  },
+  {
+    id: 'porcelain-studio',
+    name: { zh: '白瓷影棚', en: 'Porcelain studio' },
+    tagline: { zh: '米色棚底 + 白瓷亮调 + AO 塑形：产品摄影演播室里的柔和肖像', en: 'Beige cyc wall + porcelain tones + AO sculpting: a soft portrait in the product-photo studio' },
+    purpose: { zh: '科普主视觉 · 展品图录 · 柔光语境', en: 'Sci-comm heroes · exhibit catalogs · soft-light contexts' },
+    tags: [{ zh: '极简', en: 'Minimal' }, { zh: '影棚', en: 'Studio' }],
+    category: 'basic',
+    figure: { ref: '专栏图', shows: { zh: '单色柔和呈现：明度分层替代色相的制图策略', en: 'Soft monochrome: tone hierarchy in place of hue' } },
+    // 图式源流：Wong, B.「Points of View: Avoiding colour」Nat. Methods 2011
+    // （期刊制图经典专栏——单色/明度分层正是其核心建议之一；无彩色的柔和呈现
+    // 语态。doi 省略——专栏系列编号不确定，避免伤害可信度）
+    citation: { journal: 'Nat. Methods', year: 2011, title: 'Points of View: Avoiding colour' },
+    demo: '1CRN',
+    // 差异点：白瓷三件套——亮调近白 #f2eee6（瓷体）+ 米色棚底 #d8d1c2（比主体暗
+    // 一档——无缝背景墙 cyc，主体从底里「浮」出来）+ AO（瓷器转折面的接触阴
+    // 影——GTAO 就是数字影棚的柔光箱）+ 软主光（direct 0.8 / ambient 0.5——
+    // 平光多、塑形光少）+ 无描边（瓷器轮廓由明度差自明）；与灰度制版构成「纸
+    // 瓷两质地」：那支是纸面印刷，这支是釉面立体
+    commands: ['preset cartoon', 'color #f2eee6', 'bg #d8d1c2', 'ssao on', 'set direct 0.8', 'set ambient 0.5', 'turn y 20', 'zoom 1.3'],
+    accent: 'amber',
+  },
+  {
+    id: 'comic-pop',
+    name: { zh: '波普漫画', en: 'Comic pop' },
+    tagline: { zh: '彩虹加宽管 + 1.7× 粗描边：平面海报语态的高饱和结构漫画', en: 'Rainbow widened tubes + 1.7× heavy outlines: the structure as a flat-design comic' },
+    purpose: { zh: '科普海报 · 封面插画 · 社媒配图', en: 'Sci-pop posters · cover illustrations · social media' },
+    tags: [{ zh: '波普', en: 'Pop' }, { zh: '加粗', en: 'Bold' }],
+    category: 'basic',
+    figure: { ref: '封面', shows: { zh: '高饱和插画封面：色块化结构 + 粗轮廓线', en: 'Saturated illustration covers: blocky structures with bold contours' } },
+    // 图式源流：Goodsell「The Machinery of Life」2009（Springer）——分子科普插画
+    // 的标杆书：高饱和色块 + 粗轮廓的平面海报语态（Goodsell 式手绘水彩的引擎
+    // 可复现近似——粗管 + 重描边即「勾线填色」）
+    citation: { journal: 'Springer', year: 2009, title: 'The Machinery of Life' },
+    demo: '4HHB',
+    // 差异点：加宽 1.7×（r76 曾全线减细到 1.1 发丝线——这支反向拉粗：插画语境粗
+    // 线优先于期刊制版细线）+ 重描边 1.6 2.2（漫画勾线）+ 彩虹四链（色块化分组）；
+    // 与双色海报构成「双色/全彩」两档平面设计语态
+    commands: ['preset cartoon', 'spectrum count, rainbow', 'set cartoon_width 1.7', 'outline on 1.6 2.2', 'bg white', 'turn y 20', 'zoom 1.25'],
+    accent: 'fuchsia',
+  },
+  {
+    id: 'zn-finger-dna',
+    name: { zh: '锌指–DNA 识别', en: 'Zinc-finger DNA recognition' },
+    tagline: { zh: '血灰蛋白 + 琥珀 DNA 棍 + 锌球三色调：大沟读取的识别几何一图判读', en: 'Steel protein + amber DNA sticks + zinc spheres: the major-groove reading geometry at a glance' },
+    purpose: { zh: '序列识别 · 锌指工程 · DNA 结合设计', en: 'Sequence recognition · zinc-finger engineering · DNA-binding design' },
+    tags: [{ zh: '锌指', en: 'Zinc finger' }, { zh: 'DNA 识别', en: 'DNA binding' }],
+    category: 'interaction',
+    figure: { ref: 'Fig. 1', shows: { zh: 'Zif268 三指沿大沟缠绕 DNA：碱基特异接触 + 组氨酸/半胱氨酸锌配位', en: 'Zif268 fingers wrapping the major groove: base-specific contacts and His/Cys zinc ligation' } },
+    // 图式源流：Pavletich & Pabo 1991 Science 252:809（Cys2His2 锌指-DNA 复合物
+    // 的奠基结构——1AAY 即 Zif268 三指复合物原文取材；与 metal-center 共享引文
+    // 但图式不同：那支聚焦金属配位几何，这支读识别界面）
+    citation: { journal: 'Science', year: 1991, title: 'Zinc finger-DNA recognition: crystal structure of a Zif268-DNA complex at 2.1 Å', doi: '10.1126/science.2028256' },
+    demo: '1AAY',
+    // 差异点：三色调识别图（蛋白血灰 #5d7286 冷 / DNA 琥珀 #dd9a5c 暖——冷暖即
+    // 「谁在读取谁」+ 锌球 #f5a83c 点缀配位结点）；与 DNA-蛋白复合物（碱基五
+    // 色 + 接触虚线）构成「界面分析/架构呈现」两档——这支零分析命令、纯架构
+    // 语境图；链构成经 RCSB 核实（A 蛋白 / B+C DNA / 3 ZN）
+    commands: ['preset cartoon', 'color #5d7286, chain A', 'show sticks, chain B+C', 'color #dd9a5c, chain B+C', 'show spheres, resn ZN', 'color #f5a83c, resn ZN', 'bg white', 'orient', 'outline on 1.1 1.0', 'ssao on'],
+    accent: 'teal',
+  },
+  {
+    id: 'bdna-dodecamer',
+    name: { zh: 'B 型 DNA 双链', en: 'B-DNA duplex' },
+    tagline: { zh: '纯核酸双色棍：一条完整 B 型螺旋的双链读法', en: 'Pure-nucleic two-tone sticks: both strands of one complete B-form helix' },
+    purpose: { zh: '双螺旋教学 · 沟槽判读 · 核酸-only 结构', en: 'Double-helix teaching · groove reading · nucleic-only structures' },
+    tags: [{ zh: 'DNA', en: 'DNA' }, { zh: '双螺旋', en: 'Double helix' }],
+    category: 'basic',
+    figure: { ref: 'Fig. 1', shows: { zh: '首个完整螺旋 B-DNA 十二聚体：大沟/小沟交替与碱基对阶梯', en: 'The first complete turn of B-DNA: alternating major/minor grooves and the base-pair ladder' } },
+    // 图式源流：Wing, Drew, Takano, Broka, Tanaka, Itakura & Dickerson 1980
+    // Nature 287:755「Crystal structure analysis of a complete turn of B-DNA」
+    // （1BNA 原文——首个完整 B 型螺旋；DOI 经 Nature 原文核实）
+    citation: { journal: 'Nature', year: 1980, title: 'Crystal structure analysis of a complete turn of B-DNA', doi: '10.1038/287755a0' },
+    demo: '1BNA',
+    // 差异点：模板库首支零蛋白模板（hide everything → show sticks, nucleic——
+    // 1BNA 只有 A/B 两 DNA 链 24 碱基对）；双链双色（A 青 #0e8f82 / B 珊瑚
+    // #e8836f——反平行双链的方向语义即颜色语义）+ AO（碱基对阶梯的层间阴影）；
+    // 与核小体（蛋白+DNA 复合语境）构成「纯核酸/复合物」两档
+    commands: ['preset cartoon', 'hide everything', 'hide waters', 'show sticks, nucleic', 'color #0e8f82, chain A', 'color #e8836f, chain B', 'bg white', 'orient', 'turn y 20', 'outline on 1.1 1.0', 'ssao on', 'set stick_radius 0.3', 'zoom 1.3'],
+    accent: 'cyan',
+  },
+  {
+    id: 'antibody-architecture',
+    name: { zh: '抗体 Y 型架构', en: 'Antibody Y architecture' },
+    tagline: { zh: '重链青 / 轻链珊瑚 / 糖链驼色：完整 IgG 的 Y 型架构一图判读', en: 'Heavy teal, light coral, glycans camel: the intact IgG Y-architecture at a glance' },
+    purpose: { zh: '抗体工程 · Fab/Fc 分区 · 糖基化语境', en: 'Antibody engineering · Fab/Fc partition · glycosylation context' },
+    tags: [{ zh: '抗体', en: 'Antibody' }, { zh: '免疫球蛋白', en: 'Immunoglobulin' }],
+    category: 'basic',
+    figure: { ref: 'Fig. 1', shows: { zh: '完整 IgG 全景：Y 型二聚体 + Fab/Fc 分区 + Fc 糖链', en: 'Intact IgG overview: the Y-shaped dimer with Fab/Fc partitions and Fc glycans' } },
+    // 图式源流：Harris, Larson, Hasel & McPherson 1997 Biochemistry 36:1581
+    // 「Refined structure of an intact IgG2a monoclonal antibody」（1IGT 原文——
+    // 完整 IgG 精修结构的代表作；doi 省略避免不确定引用）
+    citation: { journal: 'Biochemistry', year: 1997, title: 'Refined structure of an intact IgG2a monoclonal antibody' },
+    demo: '1IGT',
+    // 差异点：链对架构三色（B+D 重链 #0f766e / A+C 轻链 #ef8a7e——链构成经 RCSB
+    // 逐原子核实：A/C 各 214 残基轻链、B/D 各 437 残基重链；E/F 为 Fc 糖链
+    // NAG/FUC 等——驼色 #b3a48d 不抢主链戏）——「哪条链是什么」的架构图式，
+    // 抗体工程受众的第一张图；1.14MB 大结构（管线 18s 等待）；与链组装（通用
+    // 多链配色）构成「通用/免疫专属」两档
+    commands: ['preset cartoon', 'color #0f766e, chain B+D', 'color #ef8a7e, chain A+C', 'color #b3a48d, chain E+F', 'bg white', 'orient', 'set cartoon_width 1.3', 'outline on 1.1 1.0', 'ssao on'],
+    accent: 'emerald',
   },
 ]
 
@@ -1073,6 +1248,15 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^zoom \(resn CRO\)/i, label: { zh: '色素口袋特写取景', en: 'Chromophore pocket framing' } },
   { re: /^bg #07100a/i, label: { zh: '暗荧光语境底色', en: 'Dark fluorescence stage' } },
   { re: /^bg #20/i, label: { zh: '深墨绿板书底色', en: 'Deep-green chalkboard' } },
+  // r99 新词条（风格三连 + 实用三连；具体锚定先于泛匹配：
+  // 负像/白瓷单色先于泛 color hex；ss 分级灰/棕先于泛 color hex；主链重墨先于泛；
+  // fog_strength / ssao 先于泛 set）
+  { re: /^color #e8e3d8$/i, label: { zh: '负像骨白亮调（暗房语境）', en: 'Negative bone-pale tone (darkroom)' } },
+  { re: /^color #f2eee6$/i, label: { zh: '白瓷亮调单色（影棚语境）', en: 'Porcelain pale tone (studio)' } },
+  { re: /^color #[0-9a-f]{6}, ss [hs]/i, label: { zh: 'SS 分级明度叠加', en: 'SS-graded tone overlay' } },
+  { re: /^color #24292f, \(name N\+CA\+C\+O\)/i, label: { zh: '主链重墨强调（线描层级）', en: 'Backbone ink emphasis (drawing hierarchy)' } },
+  { re: /^set fog_strength/i, label: { zh: '雾深线索（远端渐隐）', en: 'Fog depth cue (far-side fading)' } },
+  { re: /^ssao on/i, label: { zh: '环境光遮蔽（接触阴影塑形）', en: 'Ambient occlusion (contact shading)' } },
 ]
 
 /** 命令 → 双语图式解剖（未命中返回 null——调用方退回展示原命令） */

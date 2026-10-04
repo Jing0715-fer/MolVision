@@ -1228,6 +1228,31 @@ export class MolEngine {
       })
       // 去噪参数（方法名为 updatePdMaterial，小写 d）
       gtao.updatePdMaterial({ radius: 8, radiusExponent: 2, samples: 16, rings: 2 })
+      // r99 修复：GTAOPass 的 AO 预通道用 scene.overrideMaterial 整体替换材质渲染
+      // GBuffer——标签/测量文本精灵（SpriteMaterial depthWrite:false 本不参与深度）
+      // 被替换成不透明法线+深度四边形，把整块 quad 当遮蔽体投出「黑矩形条」吞掉
+      // 标签（label on + ssao on 组合首现于 r99 模板；r91-r97 从未组合所以未暴露；
+      // E2E 实锤：ssao on 时 Glu35/Asp52 标签不可见、关掉即现）。库的
+      // _overrideVisibility 只排除 Points/Line/Line2 漏了 Sprite——实例级补丁把
+      // Sprite 一并塞进同一可见性缓存（_restoreVisibility 统一恢复）。防御：内部
+      // API 改名即静默退化为库原行为（不 throw 不影响主流程）
+      const gtaoInternal = gtao as unknown as {
+        _overrideVisibility?: () => void
+        _visibilityCache?: THREE.Object3D[]
+      }
+      const origOverrideVis = gtaoInternal._overrideVisibility?.bind(gtao)
+      if (origOverrideVis && gtaoInternal._visibilityCache) {
+        const visCache = gtaoInternal._visibilityCache
+        gtaoInternal._overrideVisibility = () => {
+          origOverrideVis()
+          this.scene.traverse(o => {
+            if ((o as THREE.Sprite).isSprite && o.visible) {
+              o.visible = false
+              visCache.push(o)
+            }
+          })
+        }
+      }
       this.gtaoPass = gtao
       this.composer.addPass(gtao)
       // 架构注：不使用 OutputPass——链条为 RenderPass→GTAO→EdgePass，EdgePass 末位上屏时

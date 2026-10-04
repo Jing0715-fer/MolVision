@@ -18,7 +18,7 @@ SPECS=(
   ligand-pocket:11:6LU7:3
   sasa-surface:13:4HHB:4
   density-map:22:3EKJ:5
-  interface-contacts:11:6LU7:6
+  interface-contacts:11:4HHB:6
   symmetry-assembly:11:1CRN:7
   ensemble-dynamics:10:1D3Z:8
   publication-ready:18:4HHB:9
@@ -43,7 +43,10 @@ SPECS=(
   ballstick-chemistry:10:1CRN:28
   stereo-anaglyph:10:1AKI:29
   putty-flexibility:10:3INS:30
-  slab-cutaway:30:4HHB:31:1280x720
+  # r99：1280x720 在当前环境 SwiftShader 下仍饿死（GPU 进程 4s/帧持续饱和 →
+  # CDP captureScreenshot 三重试全超时）；实测 800x450（288k px = 31% 像素量）
+  # 一击即中 + 等待 35s。真 GPU 用户端不受影响
+  slab-cutaway:35:4HHB:31:800x450
   wire-skeleton:10:1CRN:32
   grayscale-print:10:4HHB:33
   electrostatic-surface:13:4HHB:34
@@ -58,6 +61,14 @@ SPECS=(
   textbook-annotated:12:1AKI:43
   nucleosome-dna:12:1AOI:44
   gfp-chromophore:12:1EMA:45
+  # r99 六新模板：xray/porcelain/comic 即成 10s；zn-finger 12s（1AAY 143KB 拉取 +
+  # 双表示切换）；bdna 10s（1BNA 76KB 纯核酸）；antibody 18s（1IGT 1.14MB 大结构）
+  xray-film:10:4HHB:46
+  porcelain-studio:10:1CRN:47
+  comic-pop:10:4HHB:48
+  zn-finger-dna:12:1AAY:49
+  bdna-dodecamer:10:1BNA:50
+  antibody-architecture:18:1IGT:51
 )
 
 # 对齐断言：SPECS 与 figure-templates.ts 的 id 数量一致（漂移即中止——新模板

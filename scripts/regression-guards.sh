@@ -402,7 +402,7 @@ check "水合壳层模板"              "id: 'hydration-shell'"         "src/lib
 check "晶胞语境模板"              "id: 'unit-cell-context'"       "src/lib/molecular/figure-templates.ts" 1
 check "静电中性底修正"            "color gray', 'color red"       "src/lib/molecular/figure-templates.ts" 1
 check "弱模板取景收紧三连"        "zoom 1\.5"                     "src/lib/molecular/figure-templates.ts" 2
-check "线描取景收紧"              "zoom 1\.7"                     "src/lib/molecular/figure-templates.ts" 1
+check "线描取景收紧"              "zoom 1\.6"                     "src/lib/molecular/figure-templates.ts" 1
 check "图鉴 r89 新词条"           "线框全原子表示"                "src/lib/molecular/figure-templates.ts" 1
 check "图鉴水合词条"              "水分子小球显示"                "src/lib/molecular/figure-templates.ts" 1
 check "图鉴晶胞词条"              "晶胞盒线框（a红 b绿 c蓝）"    "src/lib/molecular/figure-templates.ts" 1
@@ -426,7 +426,7 @@ check "俯仰限位默认解除"          "orbitClamp: false"             "src/l
 check "引擎限位全开分支"          "orbitClamp === false"          "src/lib/molecular/engine.ts" 1
 check "限位开关 UI 保留"          "settings.orbitClamp}"           "src/components/studio/panels/ScenePanel.tsx" 1
 check "膜模板钢蓝单色"            "color #94a9c0"                 "src/lib/molecular/figure-templates.ts" 1
-check "线描深墨对比度"            "color #3f454d"                 "src/lib/molecular/figure-templates.ts" 1
+check "线描主侧链两级"            "color #79818b"                 "src/lib/molecular/figure-templates.ts" 1
 check "ss 基元取景收紧"           "turn y -20', 'zoom 1.5"        "src/lib/molecular/figure-templates.ts" 1
 check "跨域回环白名单"            "127.0.0.1"                     "next.config.ts" 1
 
@@ -439,7 +439,7 @@ check "表面 MC 域映射根治（2×镜像偏移）" "mc.scale.set\(L / 2, L /
 check "取景尊重隐藏水"            "skipWater"                     "src/lib/molecular/engine.ts" 3
 check "剖面模板空间填充重造"      "'preset spacefill', 'hide waters'" "src/lib/molecular/figure-templates.ts" 1
 check "管线截图防陈旧重试"        "rm -f ..tmp/r72-.id.raw.png"   "scripts/gen-template-thumbs.sh" 1
-check "规格 slab-cutaway 视口档"    "slab-cutaway:30:4HHB:31:1280x720" "scripts/template-specs.sh" 1
+check "规格 slab-cutaway 视口档"   "slab-cutaway:35:4HHB:31:800x450" "scripts/template-specs.sh" 1
 
 # ---- r93：极点钉死死区根治（过极翻转 wrap + 极点微推）——「转到一定程度转不动」终修（r96 输入奇偶随刚体化退役）----
 check "过极翻转守卫方法"          "private wrapPoleGuard"        "src/lib/molecular/engine.ts" 1
@@ -577,8 +577,47 @@ check "校准自动续轮"                "autoPending"                    "src/
 check "校准采纳续轮条件"            "setAutoPending\(autoNext"      "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "校准自动开关"                "data-calibration-auto"          "src/components/studio/FigureTemplatesDialog.tsx" 1
 
+# ---- r99：模板美学大修（VLM 全量审计 46 支 → 18 支弱项精修）+ 新模板六连（52 支）----
+# 审计基线：wire-skeleton 2.5 / grayscale 4.0 / ballstick·hotspots·sepia·stereo 4.5 /
+# catalytic·interface·nucleosome 5.0 / cpk·slab 5.5 / 6.0 档六支——本轮全部精修；
+# interface-contacts 根修：6LU7 AU 无链 B（interface A B 虚线从未画出）→ demo 4HHB；
+# 双引擎根修：GTAOPass 预通道漏排除 Sprite（label+ssao 组合黑条）+ 管线 autoPerf
+# 静默阉割（SwiftShader 低帧自动关 ssao/outline——历史缩略图发灰发虚根因）
+check "负像模板"              "id: 'xray-film'"               "src/lib/molecular/figure-templates.ts" 1
+check "白瓷模板"              "id: 'porcelain-studio'"        "src/lib/molecular/figure-templates.ts" 1
+check "波普模板"              "id: 'comic-pop'"               "src/lib/molecular/figure-templates.ts" 1
+check "锌指模板"              "id: 'zn-finger-dna'"           "src/lib/molecular/figure-templates.ts" 1
+check "BDNA模板"              "id: 'bdna-dodecamer'"          "src/lib/molecular/figure-templates.ts" 1
+check "抗体模板"              "id: 'antibody-architecture'"   "src/lib/molecular/figure-templates.ts" 1
+check "负像暗底配方"          "color #e8e3d8"                 "src/lib/molecular/figure-templates.ts" 1
+check "白瓷影棚配方"          "bg #d8d1c2"                    "src/lib/molecular/figure-templates.ts" 1
+check "波普加宽描边"          "outline on 1\.6 2\.2"          "src/lib/molecular/figure-templates.ts" 1
+check "抗体链对三色"          "color #0f766e, chain B\+D"     "src/lib/molecular/figure-templates.ts" 1
+check "BDNA双链色"            "color #0e8f82, chain A"        "src/lib/molecular/figure-templates.ts" 1
+check "锌指DNA琥珀"           "color #dd9a5c, chain B\+C"     "src/lib/molecular/figure-templates.ts" 1
+check "线描主链重墨"          "color #24292f, \(name N\+CA\+C\+O\)" "src/lib/molecular/figure-templates.ts" 1
+check "线描雾深线索"          "set fog_strength 0\.75"         "src/lib/molecular/figure-templates.ts" 1
+check "灰度SS三级灰"          "color #4b535c, ss h"           "src/lib/molecular/figure-templates.ts" 1
+check "棕印SS分级棕"          "color #5f4526, ss h"           "src/lib/molecular/figure-templates.ts" 1
+check "热点基线b30"           "alter \(polymer\), b=30"       "src/lib/molecular/figure-templates.ts" 1
+check "热点标签减半单链"      "resi 6 and chain B\) or \(resi 87 and chain A\)" "src/lib/molecular/figure-templates.ts" 1
+check "立体单灰底"            "color #6b7280"                 "src/lib/molecular/figure-templates.ts" 1
+check "催化元素色棍"          "color element, \(resi 35 or resi 52\)" "src/lib/molecular/figure-templates.ts" 1
+check "界面饱和链对色"        "color #d9544f, chain A"        "src/lib/molecular/figure-templates.ts" 1
+check "核小体斜俯视"          "turn x 22"                     "src/lib/molecular/figure-templates.ts" 1
+check "水合板岩蛋白底"        "color #64748b, protein"        "src/lib/molecular/figure-templates.ts" 1
+check "AO打磨铺开"            "'ssao on'"                     "src/lib/molecular/figure-templates.ts" 16
+check "图鉴负像词条"          "负像骨白亮调"                  "src/lib/molecular/figure-templates.ts" 1
+check "图鉴AO词条"            "接触阴影塑形"                  "src/lib/molecular/figure-templates.ts" 1
+check "图标r99六新键"         "'xray-film': Aperture"         "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "图标抗体键"            "'antibody-architecture': Shield" "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "规格r99六新"           "antibody-architecture:18:1IGT:51" "scripts/template-specs.sh" 1
+check "规格界面demo改4HHB"    "interface-contacts:11:4HHB:6"  "scripts/template-specs.sh" 1
+check "管线autoPerf关闭"      "settings\.autoPerf = false"    "scripts/gen-template-thumbs.sh" 2
+check "引擎精灵AO排除补丁"    "gtaoInternal._overrideVisibility" "src/lib/molecular/engine.ts" 2
+
 # ---- 汇总 ----
-TOTAL=412
+TOTAL=445
 if [ "$FAILS" -eq 0 ]; then
   echo "== 结果：PASS（$TOTAL/$TOTAL 守卫全部通过） =="
   exit 0

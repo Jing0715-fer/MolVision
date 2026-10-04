@@ -17,9 +17,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, Atom, BookOpenText, Boxes, Camera, Candy, CircleDot, Component, Contrast, Disc, Dna, Download, Drama, ExternalLink, Film,
-  FlaskConical, Gauge, Gem, Ghost, GitCompareArrows, Glasses, GraduationCap, Grid3x3, Hexagon, History, ImagePlus, Layers, Lightbulb, Link2, Loader2, Magnet, MapPin, Moon, Network, Orbit, Palette,
-  Pencil, Play, Ruler, ScanSearch, Scissors, Shapes, Sparkles, Spline, SwatchBook, Target, Trash2, Upload, Waves, Wand2, Waypoints, Cylinder, Droplets, Box, Zap, Check, XCircle, type LucideIcon,
+  ArrowLeft, Aperture, Atom, BookOpenText, Boxes, Camera, Candy, CircleDot, Component, Contrast, Disc, Dna, Download, Drama, ExternalLink, Fingerprint, Film,
+  FlaskConical, Gauge, Gem, Ghost, GitCompareArrows, Glasses, GraduationCap, Grid3x3, Hexagon, History, ImagePlus, Layers, Lightbulb, Link2, Loader2, Magnet, MapPin, Moon, Network, Orbit, Paintbrush, Palette,
+  Pencil, Play, Ruler, ScanSearch, Scissors, Shapes, Shield, Sparkles, Spline, SunDim, SwatchBook, Target, Torus, Trash2, Upload, Waves, Wand2, Waypoints, Cylinder, Droplets, Box, Zap, Check, XCircle, type LucideIcon,
 } from 'lucide-react'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -120,6 +120,16 @@ export const TPL_ICONS: Record<string, LucideIcon> = {
   'textbook-annotated': GraduationCap,
   'nucleosome-dna': Disc,
   'gfp-chromophore': FlaskConical,
+  // r99 六新模板：Aperture（底片负像——相机光圈/暗房）/ SunDim（白瓷影棚——柔
+  // 光）/ Paintbrush（波普漫画——画笔）/ Fingerprint（锌指–DNA 识别——指纹识
+  // 别语义）/ Torus（B 型 DNA 双链——双螺旋环面）/ Shield（抗体 Y 型架构——免
+  // 疫盾牌）
+  'xray-film': Aperture,
+  'porcelain-studio': SunDim,
+  'comic-pop': Paintbrush,
+  'zn-finger-dna': Fingerprint,
+  'bdna-dodecamer': Torus,
+  'antibody-architecture': Shield,
 }
 
 function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete, onEdit }: {
