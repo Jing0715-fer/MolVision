@@ -4073,3 +4073,5 @@ Stage Summary:
   2. 【中】r98 建议①顺延：updateRep 失效链细拆 colorRev 分离
   3. 【低】环带遮挡视觉折衷可选项：pore 卡加「半透明蛋白」一键（临时降 rep opacity 看环带语境）——X 光叠加已可用，此为锦上添花
   4. 【低】cron 执行配额（第 12 次 Disabled）——继续观察配额窗口期
+
+（r99-b 段 cron 补记，2026-10-07 00:52）15min webDevReview 巡检任务 #440475 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 13 次实证（r85/r86/r87/r88/r90/r91/r94/r95/r92/r96/r97/r98 及本轮），已删除清理；另清理 2026-10-04 残留 Disabled 任务两条（#435559/#435405，r100 并行会话遗留未清）。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
