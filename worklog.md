@@ -4048,3 +4048,28 @@ Stage Summary:
 - 用户可见升级：剖面卡 SYM/PCA 徽标 + 膜区背景带 + 命令回执明示轴来源与腰窗——「为什么膜在这里」可读
 - r92 遗留「membrane-embed 蛋白居膜中」泛化解决（所有膜蛋白的膜心自动对准跨膜腰）；「1fxb vs 1FX8 PDB ID 核实」仍待办
 - 下一轮建议：①180° 旋转突跳/Hydration mismatch 两 r92 遗留仍未定位 ②腰扫描阈值（WIN 30/FLANK 24/×1.08）对斜跨膜螺旋束（如Aquaporin 倾斜）的稳健性可用更多结构实测调优 ③Kabsch 投票可扩展「检测到的对称阶数」显示（C4/C5 徽标）④pore 的 maxR 封顶对长胞外腔结构（如 P2X 受体）可改为自适应
+
+---
+Task ID: r99-b
+Agent: main
+Task: 用户指令「膜显示的准确了，另外需要一个膜显示和隐藏的按钮，另外通道没有画在3d结构中了，需要修正」——孔道环带可见性根修 + 膜显隐双 UI
+
+Work Log:
+- 【复现（9PB6 TRPM8 真实流）】欢迎页 fetch 9pb6（4.9MB，59,188 原子/3,752 残基/4 链四聚体+XUQ 配体）→ membrane 34 + pore：剖面卡出数（span 126.4 Å · 收缩 2.25 Å @ -23.3）且场景图 poreGroup 3 子对象在位、环带几何与结构包围盒精确对齐（环带 x/y 居中 201.6-217.6 vs 结构 146.8-272.4；z 138.7-260 vs 136.2-262.5）——环带「画了但对」
+- 【根因确诊（像素级对照实验）】pore show/hide 截图差分：3D 环带可见像素仅红 24+绿 16+蓝 316（640K 采样 ≈ 0.05%）——r72 设计注释「depthTest 保持开启——被蛋白前壁遮挡产生嵌在孔内的真实感」在大四聚体不透明卡通下破产：环带全栈被遮挡，仅孔口两端露边丝；app 内其他叠加层（标签 sprite/高亮边/拾取标记）全部 depthTest:false，环带是唯一例外
+- 【修复①（engine.ts updatePore）】三层材质 depthTest 全关：环带 LineBasicMaterial（depthWrite:false 基础上补 depthTest:false）+ 主轴虚线 LineDashedMaterial + 收缩环面 Torus MeshBasicMaterial——X 光叠加层语义（与标签/拾取标记同惯例），环带穿透蛋白全栈可见；注释记录 9PB6 实测数据与设计转向理由
+- 【修复②（Toolbar.tsx）】视角组（stereo 后）新增膜显隐快捷钮：Layers 图标 + aria-pressed + 橙色激活态（bg-orange-500/15 呼应磷脂头基色）；开启无活动结构时 toast 诚实报错（与 membrane 命令同语义）；点击直连 updateSettings({showMembrane})
+- 【修复③（ScenePanel.tsx）】「显示过滤」与「氢键网络」之间新增「脂双层膜」节：Switch（同汇点 settings.showMembrane，activeId 订阅守卫）+ 厚度滑杆 20-60 Å（onValueChange 即时 updateSettings membraneThickness——updateMembrane 键含 thickness 逐档重建）+ 双语说明（橙板=头基/灰雾=疏水核心/换结构自动解除/命令行等价）
+- 【E2E 铁证】①环带可见性前后对照：3D 环带像素 356→1055（3×），轴线 282 新增可见；9PB6 侧视（orient polymer + turn z 90）VLM 实证「蓝色环带在蛋白轮廓内沿中央竖轴可见 + 虚线主轴 + 橙膜板」②工具栏膜钮双向：OFF→membraneGroup 清空+pressed=false+橙类消退 / ON→5 子对象复位+pressed=true+橙类回归 ③场景面板开关双向同验 ④厚度滑杆键盘 6×ArrowRight：34→40，头基双板间距实测 36 Å=理论值（T-2×HEAD/2×2），几何精确联动 ⑤1BL8 KcsA 回归：depthTest:false ×3 材质标志实证 + 环带像素 + VLM「红绿蓝环带沿中央轴可见+膜在位+收缩环面在位+分析读图清晰」⑥膜 OFF/ON 循环后 pore 环带不丢（两组独立）⑦agent-browser errors 全会话空
+- 【缩略图】pore-analysis.png 重拍（管线滤模式）——新图环带穿透可见，VLM 三问全过（环带沿轴清晰/膜在位/缩略图合格）；9.9% 像素差实证视觉变化；管线 tighten 阶段重编码 27 张无关图按 r91 教训 git checkout 还原（净改动仅 1 张）
+- 【门禁】lint 0 · tsc src 0 · guards 460→468/468（r99-b 块 8 条并入变基后基线：depthTest 三连/工具栏钮三连/场景面板两连）· smoke 4/4 · dev.log 零应用错误（仅 9PB6 6.5MB 超 Next.js data cache 上限良性提示）
+
+Stage Summary:
+- 交付：用户双指令闭环——①「通道没有画在 3D 结构中」根修：环带/主轴/收缩环面三层 depthTest 全关，HOLE 式 X 光叠加层语义，9PB6 实测可见像素 3×、1BL8 视觉 VLM 全过 ②「膜显示和隐藏的按钮」双 UI：工具栏 Layers 快捷钮（橙激活态+诚实守卫）+ 场景面板脂双层膜节（开关+厚度滑杆+说明）
+- 语义决策：放弃 r72「嵌在孔内」的遮挡真实感——分析工具可读性优先于渲染真实感；与 app 既有叠加层惯例（标签/高亮边/拾取标记全 depthTest:false）对齐成族
+- 坑（新入档）：①「画了但看不见」类 bug 场景图检查会误判健康（poreGroup 3 子对象在位）——必须像素级 show/hide 差分定可见性 ②剖面卡 SVG 与环带同色系（红绿蓝）——canvas 裁剪区颜色计数须用差分法或排除卡区域，否则计数虚高 ③gen-template-thumbs.sh 增量模式的 tighten 阶段仍全量重编码——单模板重拍后必须 git checkout 还原无关图（r91 教训再实证）④Radix Slider 键盘路径（focus+ArrowRight）在 CDP eval 里可靠触发 onValueCommit/onValueChange——比合成 PointerEvent 稳
+- 下一轮建议（按优先级）：
+  1. 【中】pore 命令分析增强：PCA 轴对 TRPM8 类「大胞质域+小跨膜域」结构可能偏离真实孔轴（9PB6 剖面几乎全蓝 155/160 点无收缩特征）——可加 C4 对称轴估计（主轴候选=方差轴与对称轴二选一按跨膜区判优）或让用户指定轴向选择表达式
+  2. 【中】r98 建议①顺延：updateRep 失效链细拆 colorRev 分离
+  3. 【低】环带遮挡视觉折衷可选项：pore 卡加「半透明蛋白」一键（临时降 rep opacity 看环带语境）——X 光叠加已可用，此为锦上添花
+  4. 【低】cron 执行配额（第 12 次 Disabled）——继续观察配额窗口期

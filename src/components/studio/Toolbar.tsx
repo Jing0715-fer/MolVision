@@ -7,7 +7,7 @@ import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
   Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
-  Home, Loader2, MousePointer2, RotateCw, Ruler, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap,
+  Home, Loader2, MousePointer2, RotateCw, Ruler, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap, Layers,
   FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot, Sparkles, Share2,
   Award, Target, Minimize2, MoreHorizontal, ExternalLink, LayoutTemplate, BookOpenText,
 } from 'lucide-react'
@@ -467,6 +467,27 @@ export function Toolbar() {
             </button>
           </TooltipTrigger>
           <TooltipContent>{t({ zh: '红蓝立体（stereo）', en: 'Red/blue stereo (stereo)' })}</TooltipContent>
+        </Tooltip>
+        {/* r99：膜显隐快捷钮（用户指令「需要一个膜显示和隐藏的按钮」）——橙色激活态呼应
+            磷脂头基双板色；开启需活动结构（与 membrane 命令同一诚实报错语义） */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => {
+                if (!settings.showMembrane && !activeId) {
+                  toast.error(tt({ zh: '当前没有结构——先加载膜蛋白（如 load 1bl8 KcsA）', en: 'No structure loaded — load a membrane protein first (e.g. load 1bl8 KcsA)' }))
+                  return
+                }
+                updateSettings({ showMembrane: !settings.showMembrane })
+              }}
+              aria-label={t({ zh: '显示或隐藏脂双层膜', en: 'Show or hide the lipid bilayer' })}
+              aria-pressed={settings.showMembrane}
+              className={cn('tool-btn shrink-0', settings.showMembrane && 'bg-orange-500/15 !text-orange-500')}
+            >
+              <Layers className="h-4 w-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{t({ zh: '脂双层膜（membrane 命令等价；橙色板 = 磷脂头基）', en: 'Lipid bilayer (equivalent to the membrane command; orange slabs = headgroups)' })}</TooltipContent>
         </Tooltip>
 
         <div className="mol-sep" />

@@ -2197,7 +2197,10 @@ export class MolEngine {
   /**
    * 孔道剖面环带（HOLE 式）：全部采样环合并为单 LineSegments（顶点色：红=过窄/
    * 绿=可过/蓝=宽敞，一次 draw call）+ 轴向虚线 + 收缩点细环面（Torus 突出标记）。
-   * depthTest 保持开启——环带被蛋白前壁遮挡的半侧自然不可见，产生「嵌在孔内」的真实感。
+   * r99：三层 depthTest 全关——「嵌在孔内被前壁遮挡」的旧设计在实测中破产：大四聚体
+   * （9PB6 TRPM8，59064 原子）不透明卡通下环带可见像素仅 0.05%，用户主诉「通道没有
+   * 画在 3D 结构中」。改为 X 光叠加层语义（与标签/高亮边/拾取标记同惯例）：环带穿透
+   * 蛋白全栈可见，侧视即 HOLE 剖面图式的红绿蓝阶梯，顶视呈同心环——分析可读性优先。
    */
   updatePore() {
     this.clearGroupChildren(this.poreGroup)
@@ -2236,7 +2239,7 @@ export class MolEngine {
     const ringGeo = new THREE.BufferGeometry()
     ringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3))
     ringGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cols), 3))
-    const ringMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false })
+    const ringMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false, depthTest: false })
     const rings = new THREE.LineSegments(ringGeo, ringMat)
     rings.renderOrder = 8
     this.poreGroup.add(rings)
@@ -2245,7 +2248,7 @@ export class MolEngine {
       new THREE.Vector3(origin[0] + dir[0] * (tMin - 6), origin[1] + dir[1] * (tMin - 6), origin[2] + dir[2] * (tMin - 6)),
       new THREE.Vector3(origin[0] + dir[0] * (tMax + 6), origin[1] + dir[1] * (tMax + 6), origin[2] + dir[2] * (tMax + 6)),
     ])
-    const axMat = new THREE.LineDashedMaterial({ color: 0x64748b, transparent: true, opacity: 0.6, dashSize: 1.2, gapSize: 0.8 })
+    const axMat = new THREE.LineDashedMaterial({ color: 0x64748b, transparent: true, opacity: 0.6, dashSize: 1.2, gapSize: 0.8, depthTest: false })
     const axis = new THREE.Line(axGeo, axMat)
     axis.computeLineDistances()
     axis.renderOrder = 8
@@ -2253,7 +2256,7 @@ export class MolEngine {
     // 收缩点细环面（Torus：半径过小时抬到 0.4 保可见；红色强调）
     const rc = Math.max(constriction.r, 0.4)
     const torGeo = new THREE.TorusGeometry(rc, 0.16, 10, 64)
-    const torMat = new THREE.MeshBasicMaterial({ color: 0xdc2626, side: THREE.DoubleSide, transparent: true, opacity: 0.95 })
+    const torMat = new THREE.MeshBasicMaterial({ color: 0xdc2626, side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthTest: false })
     const torus = new THREE.Mesh(torGeo, torMat)
     torus.position.set(origin[0] + dir[0] * constriction.t, origin[1] + dir[1] * constriction.t, origin[2] + dir[2] * constriction.t)
     torus.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d)

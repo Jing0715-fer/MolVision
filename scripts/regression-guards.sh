@@ -627,6 +627,16 @@ check "规格界面demo改4HHB"    "interface-contacts:11:4HHB:6"  "scripts/temp
 check "管线autoPerf关闭"      "settings\.autoPerf = false"    "scripts/gen-template-thumbs.sh" 2
 check "引擎精灵AO排除补丁"    "gtaoInternal._overrideVisibility" "src/lib/molecular/engine.ts" 2
 
+# r99：孔道环带 X 光叠加层（depthTest 全关——9PB6 实测旧版可见像素 0.05% 主诉「通道没画」）+ 膜显隐双 UI（用户指令）
+check "环带depthTest关"            "depthWrite: false, depthTest: false" "src/lib/molecular/engine.ts" 1
+check "主轴虚线depthTest关"        "gapSize: 0.8, depthTest: false" "src/lib/molecular/engine.ts"    1
+check "收缩环面depthTest关"        "opacity: 0.95, depthTest: false" "src/lib/molecular/engine.ts"   1
+check "工具栏膜显隐钮"             "aria-pressed=\{settings.showMembrane\}" "src/components/studio/Toolbar.tsx" 1
+check "膜钮橙色激活态"             "bg-orange-500/15"               "src/components/studio/Toolbar.tsx" 1
+check "膜钮无结构守卫"             "先加载膜蛋白（如 load 1bl8 KcsA）" "src/components/studio/Toolbar.tsx" 1
+check "场景面板膜开关"             "Show the lipid bilayer"        "src/components/studio/panels/ScenePanel.tsx" 1
+check "膜厚度滑杆"                 "membraneThickness: v\[0\]"     "src/components/studio/panels/ScenePanel.tsx" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

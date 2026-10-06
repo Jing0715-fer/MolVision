@@ -24,6 +24,7 @@ export function ScenePanel() {
   const settings = useMolStore(s => s.settings)
   const updateSettings = useMolStore(s => s.updateSettings)
   const structures = useMolStore(s => s.structures)
+  const activeId = useMolStore(s => s.activeId)
   const fileRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
 
@@ -363,6 +364,46 @@ export function ScenePanel() {
           </span>
           <Switch aria-label={t({ zh: '隐藏水分子', en: 'Hide water' })} checked={settings.hideWater} onCheckedChange={v => updateSettings({ hideWater: v })} />
         </div>
+      </div>
+
+      <SectionTitle>{t({ zh: '脂双层膜', en: 'Lipid bilayer' })}</SectionTitle>
+      <div className="space-y-3 px-3">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Layers className="h-3.5 w-3.5 text-orange-400" /> {t({ zh: '显示膜板', en: 'Show bilayer slab' })}
+          </span>
+          {/* r99：膜显隐 UI（用户指令）——与 membrane 命令 / 工具栏 Layers 快捷钮同汇点；
+              厚度滑杆即时生效（updateMembrane 键含 thickness，拖动逐档重建板组） */}
+          <Switch
+            aria-label={t({ zh: '显示脂双层膜', en: 'Show the lipid bilayer' })}
+            checked={settings.showMembrane}
+            onCheckedChange={v => {
+              if (v && !activeId) {
+                toast.error(tt({ zh: '当前没有结构——先加载膜蛋白（如 load 1bl8 KcsA）', en: 'No structure loaded — load a membrane protein first (e.g. load 1bl8 KcsA)' }))
+                return
+              }
+              updateSettings({ showMembrane: v })
+            }}
+          />
+        </div>
+        {settings.showMembrane && (
+          <>
+            <div>
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>{t({ zh: '厚度', en: 'Thickness' })}</span>
+                <span className="font-mono">{settings.membraneThickness.toFixed(0)} Å</span>
+              </div>
+              <Slider
+                value={[settings.membraneThickness]} min={20} max={60} step={1}
+                aria-label={t({ zh: '膜厚度', en: 'Membrane thickness' })}
+                onValueChange={v => updateSettings({ membraneThickness: v[0] })}
+              />
+            </div>
+            <p className="text-[10px] leading-relaxed text-muted-foreground/70">
+              {t({ zh: '橙板 = 磷脂头基（双层各 4 Å），灰雾 = 疏水核心；沿活动结构聚合物主轴定向、贴合蛋白投影包围盒。典型生物膜 ~30-40 Å。换新结构自动解除（膜是结构特定的语境层）；命令行等价：membrane 34 / membrane off，工具栏图层按钮同效。', en: 'Orange slabs = phosphate headgroups (4 Å each), gray haze = hydrophobic core; oriented to the active structure\u2019s polymer principal axis and fitted to its projected bounding box. Typical biomembranes ~30-40 Å. Auto-dismissed when a new structure loads (the membrane is a per-structure context layer); command line: membrane 34 / membrane off; the toolbar layer button does the same.' })}
+            </p>
+          </>
+        )}
       </div>
 
       <SectionTitle>{t({ zh: '氢键网络', en: 'H-bond network' })}</SectionTitle>
