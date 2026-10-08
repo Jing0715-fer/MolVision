@@ -49,6 +49,9 @@ export function buildSpheres(
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0.02, envMapIntensity: 0.9 })
   const mesh = new THREE.InstancedMesh(geo, mat, atomIdx.length)
   const m = new THREE.Matrix4()
+  // r99-f1：热路径循环外单例复用（旧版每原子 new THREE.Color——万级原子重建时
+  // 万次分配纯 GC 压力；setRGB 与构造器同默认 working colorSpace，逐次全量写入无跨迭代残留）
+  const tmpColor = new THREE.Color()
   const pos = structure.atoms.positions
   const atomMap = new Int32Array(atomIdx.length)
   for (let k = 0; k < atomIdx.length; k++) {
@@ -57,7 +60,7 @@ export function buildSpheres(
     m.makeScale(r, r, r)
     m.setPosition(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])
     mesh.setMatrixAt(k, m)
-    mesh.setColorAt(k, new THREE.Color(colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2]))
+    mesh.setColorAt(k, tmpColor.setRGB(colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2]))
     atomMap[k] = i
   }
   mesh.instanceMatrix.needsUpdate = true
@@ -102,34 +105,42 @@ export function buildSticks(
     const dir = new THREE.Vector3()
     const mid = new THREE.Vector3()
     const aPos = new THREE.Vector3()
+    const bPos = new THREE.Vector3()
+    const composePos = new THREE.Vector3()
     const scale = new THREE.Vector3()
+    // r99-f1：热路径循环外单例复用（旧版每半键段 new Color×1 + mid.clone +
+    // new Vector3(bPos) + compose 内 from.clone()——万级键重建时 ×4 万次分配）。
+    // 各向量逐次全量写入（set/subVectors/copy），无跨迭代状态残留；半段发射
+    // 收敛为 emitSeg 闭包（零每键分配）
+    const tmpColor = new THREE.Color()
     const atomMap = new Int32Array(segs)
     let k = 0
+    const emitSeg = (atomI: number, from: THREE.Vector3, to: THREE.Vector3) => {
+      dir.subVectors(to, from)
+      const len = dir.length()
+      if (len < 1e-6) return
+      dir.normalize()
+      q.setFromUnitVectors(UP, dir)
+      scale.set(stickRadius, len, stickRadius)
+      composePos.copy(from).addScaledVector(dir, len / 2)
+      m.compose(composePos, q, scale)
+      mesh.setMatrixAt(k, m)
+      mesh.setColorAt(k, tmpColor.setRGB(colors[atomI * 3], colors[atomI * 3 + 1], colors[atomI * 3 + 2]))
+      atomMap[k] = atomI
+      k++
+    }
     for (let b = 0; b < pairA.length; b++) {
       const ai = pairA[b], bi = pairB[b]
       aPos.set(pos[ai * 3], pos[ai * 3 + 1], pos[ai * 3 + 2])
+      bPos.set(pos[bi * 3], pos[bi * 3 + 1], pos[bi * 3 + 2])
       mid.set(
         (pos[ai * 3] + pos[bi * 3]) / 2,
         (pos[ai * 3 + 1] + pos[bi * 3 + 1]) / 2,
         (pos[ai * 3 + 2] + pos[bi * 3 + 2]) / 2,
       )
-      // 两半段
-      for (const [atomI, from, to] of [
-        [ai, aPos, mid] as const,
-        [bi, mid.clone(), new THREE.Vector3(pos[bi * 3], pos[bi * 3 + 1], pos[bi * 3 + 2])] as const,
-      ]) {
-        dir.subVectors(to, from)
-        const len = dir.length()
-        if (len < 1e-6) continue
-        dir.normalize()
-        q.setFromUnitVectors(UP, dir)
-        scale.set(stickRadius, len, stickRadius)
-        m.compose(from.clone().addScaledVector(dir, len / 2), q, scale)
-        mesh.setMatrixAt(k, m)
-        mesh.setColorAt(k, new THREE.Color(colors[atomI * 3], colors[atomI * 3 + 1], colors[atomI * 3 + 2]))
-        atomMap[k] = atomI
-        k++
-      }
+      // 两半段：ai→mid / mid→bi（半键着色，同键异色平滑过渡）
+      emitSeg(ai, aPos, mid)
+      emitSeg(bi, mid, bPos)
     }
     mesh.count = k
     mesh.instanceMatrix.needsUpdate = true
@@ -437,7 +448,7 @@ function buildRibbonSegment(
     let w = wS[i0] + (wS[i1] - wS[i0]) * frac
     const t = tS[i0] + (tS[i1] - tS[i0]) * frac
     const p = pS[i0] + (pS[i1] - pS[i0]) * frac
-    const tp = taper[i0] + (Math.min(n - 1, i0 + 1) < n ? taper[Math.min(n - 1, i0 + 1)] - taper[i0] : 0) * frac
+    const tp = taper[i0] + (taper[Math.min(n - 1, i0 + 1)] - taper[i0]) * frac
     w *= Math.max(0.12, tp)
     // 颜色插值
     cA.setRGB(list[i0].color[0], list[i0].color[1], list[i0].color[2])

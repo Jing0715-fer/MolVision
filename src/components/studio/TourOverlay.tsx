@@ -1,7 +1,7 @@
 'use client'
 
 // 演示场景引导卡片：视口顶部居中浮层，逐步讲解并执行动作
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ChevronLeft, ChevronRight, Dna, FlaskConical, Layers, Pill, Waves, X, Copy, Check, Loader2, Puzzle,
 } from 'lucide-react'
@@ -63,14 +63,20 @@ const ACCENT: Record<TourAccent, { icon: string; chip: string; bar: string; ring
 function CmdChip({ cmd, accent }: { cmd: string; accent: TourAccent }) {
   const { t } = useI18n()
   const [copied, setCopied] = useState(false)
+  // r99-f2：复制提示回落定时器存 ref + 卸载清理——不再对已卸载组件 setCopied
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (resetTimerRef.current) clearTimeout(resetTimerRef.current) }, [])
+
   const copy = () => {
-    try {
-      void navigator.clipboard.writeText(cmd)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      toast.error(tt({ zh: '复制失败', en: 'Copy failed' }))
-    }
+    // r99-f2：writeText 返回 promise——旧版 try { void writeText() } catch 是死代码
+    // （void 丢弃的拒绝永不进 catch）；改 .then/.catch 真正接住失败
+    navigator.clipboard.writeText(cmd)
+      .then(() => {
+        setCopied(true)
+        if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+        resetTimerRef.current = setTimeout(() => setCopied(false), 1500)
+      })
+      .catch(() => toast.error(tt({ zh: '复制失败', en: 'Copy failed' })))
   }
   return (
     <button

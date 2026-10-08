@@ -2,13 +2,13 @@
 
 // 命令历史面板：全量历史（新→旧）+ 搜索过滤 + 置顶星标 + 点击执行 / 填入编辑 / 复制
 // 与 ConsoleBar 共享 cmd-history 模块（localStorage + 订阅），Ctrl+R 与箭头历史同步可见
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { ArrowUpRight, Copy, History, PencilLine, Play, Search, Star, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { runCommand } from '@/lib/molecular/commands'
 import {
-  clearCmdHistory, dispatchFillCmd, loadCmdHistory, loadPinnedCmds, subscribeCmdHistory, toggleCmdPin,
+  clearCmdHistory, cmdHistorySnapshot, dispatchFillCmd, emptyCmdSnapshot, pinnedCmdsSnapshot, subscribeCmdHistory, toggleCmdPin,
 } from '@/lib/molecular/cmd-history'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -93,16 +93,13 @@ export function HistoryDialog() {
   const { t } = useI18n()
   const open = useMolStore(s => s.ui.historyOpen)
   const setUi = useMolStore(s => s.setUi)
-  const [history, setHistory] = useState<string[]>(() => loadCmdHistory())
-  const [pins, setPins] = useState<string[]>(() => loadPinnedCmds())
+  // r99-f2：历史/置顶改三参 useSyncExternalStore（照搬 CommandPalette L101-102 同款）——
+  // 旧版 useState(() => loadXxx()) 渲染期读 localStorage，服务端 []/客户端真值水合错配；
+  // 订阅由 useSyncExternalStore 接管，旧版手动订阅 effect 退役
+  const history = useSyncExternalStore(subscribeCmdHistory, cmdHistorySnapshot, emptyCmdSnapshot)
+  const pins = useSyncExternalStore(subscribeCmdHistory, pinnedCmdsSnapshot, emptyCmdSnapshot)
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
-
-  // 订阅共享历史（ConsoleBar 执行/清空/置顶 → 面板即时同步；挂载即订阅，状态始终新鲜）
-  useEffect(() => subscribeCmdHistory(() => {
-    setHistory(loadCmdHistory())
-    setPins(loadPinnedCmds())
-  }), [])
 
   // 打开时聚焦搜索框 + 清空上次搜索
   useEffect(() => {

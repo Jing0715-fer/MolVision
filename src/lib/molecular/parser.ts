@@ -136,7 +136,7 @@ export class SpatialGrid {
   /** 返回半径 r 内的原子索引（不保证排序） */
   query(x: number, y: number, z: number, r: number): number[] {
     const out: number[] = []
-    const r2 = r * r
+    // r99-f1：清理死变量 r2（构造后从未参与任何比较——距离过滤在 queryRadius）
     const cx = this.ix(x), cy = this.ix(y), cz = this.ix(z)
     const span = Math.ceil(r / this.cell)
     for (let ix = cx - span; ix <= cx + span; ix++) {

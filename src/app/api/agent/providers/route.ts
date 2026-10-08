@@ -49,6 +49,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const locale = await detectLocale()
+  // r99-f3：体积预检先行（agent/parse 路由同款修法）——配置面只收短字符串
+  // （apiKey/baseURL/defaultModel/discoveredModels），64KB 上限远超合法载荷；
+  // 旧版 await request.json() 全量缓冲任意大小 body 后才做字段校验（内存面）
+  const declaredLen = Number(request.headers.get('content-length') ?? '0')
+  if (Number.isFinite(declaredLen) && declaredLen > 64 * 1024) {
+    return NextResponse.json({ error: errText(locale, '请求体超过 64KB 上限（供应商配置只需 API Key / Base URL / 模型 ID 等短字段）', 'Request body exceeds the 64KB limit (provider config only needs short fields such as API key / base URL / model ID)') }, { status: 413 })
+  }
   let body: { providerId?: string; apiKey?: string; baseURL?: string; defaultModel?: string; timeoutMs?: number; discoveredModels?: unknown; setDefault?: boolean }
   try {
     body = await request.json()

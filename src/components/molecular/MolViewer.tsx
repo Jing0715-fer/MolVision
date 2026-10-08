@@ -194,7 +194,9 @@ export default function MolViewer() {
     }
     const unsub = useMolStore.subscribe((s, prev) => {
       if (prev.structures === s.structures && prev.settings === s.settings && prev.namedSelections === s.namedSelections) return
-      const sig = `${s.structures.length}|${s.structures.map(x => x.rev).join(',')}|${s.structures.map(x => x.transform ? x.transform.quat.join(',') + ':' + x.transform.translation.join(',') : '-').join(';')}|${JSON.stringify(s.settings)}|${s.namedSelections.length}`
+      // r99-f1：签名并入 repsRev/colorRev——updateRep/addRep/removeRep/applyColor 不再
+      // bump rev，旧签名（仅 rev）对这些变化失聪，滑杆/rep 增删/改色不再触发 debounced 存档
+      const sig = `${s.structures.length}|${s.structures.map(x => `${x.rev}:${x.repsRev}:${x.colorRev}`).join(',')}|${s.structures.map(x => x.transform ? x.transform.quat.join(',') + ':' + x.transform.translation.join(',') : '-').join(';')}|${JSON.stringify(s.settings)}|${s.namedSelections.length}`
       if (sig === lastSig) return
       lastSig = sig
       scheduleSave()
@@ -339,6 +341,23 @@ export default function MolViewer() {
                 : { zh: '全结构网络（大结构较密）· 快捷键 B 关闭', en: 'Whole-structure network (dense for large structures) · press B to turn off' }),
             })
           }
+          break
+        }
+        case 'm': case 'M': {
+          // 脂双层板显隐（r99：与工具栏膜钮/ScenePanel 开关/membrane 命令四方等价）
+          const on = !store.settings.showMembrane
+          if (on && !store.activeId) {
+            toast.error(tt({ zh: '当前没有结构——先加载膜蛋白（如 load 1bl8 / load 1fx8）', en: 'No structure — load a membrane protein first (e.g. load 1bl8 / load 1fx8)' }))
+            break
+          }
+          store.updateSettings({ showMembrane: on })
+          toast.info(tt(on
+            ? { zh: '脂双层板已开启', en: 'Lipid bilayer on' }
+            : { zh: '脂双层板已关闭', en: 'Lipid bilayer off' }), {
+            description: tt(on
+              ? { zh: '橙头基双板 + 灰疏水核心沿主轴贴合蛋白 · 再按 M 关闭（场景面板可调厚度）', en: 'Orange headgroup slabs + gray core fitted along the principal axis · press M again to turn off (thickness slider in the Scene panel)' }
+              : { zh: '快捷键 M · 工具栏与场景面板可再切换', en: 'Shortcut M · toggle again from the toolbar or the Scene panel' }),
+          })
           break
         }
         case 'p': case 'P': {

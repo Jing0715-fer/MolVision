@@ -86,10 +86,34 @@ interface StructureView {
   selectionRev: number
   labelGroup: THREE.Group
   labelsKey: string
-  /** 对称伴侣重建键（rev + reps 可见性 + radius） */
+  /** 对称伴侣重建键（r99-f1：buildSeq + reps 可见性 + radius；旧版挂 entry.rev——
+ *  滑杆/着色不再 bump rev 后克隆会引用已 dispose 的旧几何，改挂 buildSeq 覆盖
+ *  一切 rep 重建来源（rev/colorRev/repsRev/ensemble·superpose 直调）） */
   symKey: string
   /** ensemble 播放期间对称克隆重建节流时间戳 */
   symLastRebuild?: number
+  /** r99-f1：本视图 rep 构建序号（buildRep 末尾自增）——对称克隆失效链的权威源。
+ *  任何原因（rev/colorRev/repsRev/坐标直调）重建了任一 rep 都会自增，克隆组
+ *  共享 rep 几何必须重克隆；比 entry.rev 更精确（纯几何级）且不漏坐标直调路径 */
+  buildSeq: number
+  /** r99-f1：ensemble 播放中氢键重算节流时间戳（rebuildStructureVisuals 直调路径） */
+  hbondLastRefresh?: number
+}
+
+/** r99-f1 C：seqFocus 视口可见性的原始输入元组（旧版 11 元素量化签名字符串的数值等价物——
+ *  快路径逐字段比较零分配；ortho 时 fov 不参与（与旧签名 'ortho' 常量分支一致）） */
+interface VisTuple {
+  id: string | null
+  px: number; py: number; pz: number
+  qx: number; qy: number; qz: number; qw: number
+  ortho: boolean
+  fov: number
+  slab: boolean
+  slabT: number
+  slabO: number
+  ens: boolean
+  ensF: number
+  rev: number
 }
 
 /** 电子密度图层状态（引擎持有；UI 经 map-store 镜像） */
@@ -435,9 +459,10 @@ export class MolEngine {
   private gizmoHover: THREE.Vector3 | null = null
   // 序列条视口聚焦：残基代表原子缓存（structureId → 每残基一个原子索引）
   private repAtomCache = new Map<string, Int32Array>()
-  /** 上次可见性计算的相机/切层签名（变化才重算） */
-  private lastVisSig = ''
-  /** 上次可见性计算时间（节流 150ms） */
+  /** r99-f1 C：上次实际重算时的原始输入元组（数值快路径比对用；NaN 初始化保证首帧必走全量路径）。
+ *  签名字符串只在重算时构造（旧版每帧先构造 11 元素串再判节流——窗口内白做 8×toFixed + join） */
+  private visTup: VisTuple = { id: null, px: NaN, py: NaN, pz: NaN, qx: NaN, qy: NaN, qz: NaN, qw: NaN, ortho: false, fov: NaN, slab: false, slabT: 0, slabO: 0, ens: false, ensF: -1, rev: -1 }
+  /** 上次可见性计算时间（节流 150ms；仅在实际重算时更新——「签名仍脏」的补算语义源） */
   private lastVisT = 0
 
   constructor(container: HTMLElement, private callbacks: EngineCallbacks = {}) {
@@ -919,29 +944,46 @@ export class MolEngine {
   private updateViewportVisibility(now: number) {
     if (!this.settings?.seqFocus) {
       if (useViewportStore.getState().structureId !== null) useViewportStore.getState().set(null, null)
-      this.lastVisSig = ''
+      // r99-f1 C：seqFocus 关闭复位改为作废元组（rev:-1 保证重开时必重算）
+      this.visTup = { id: null, px: NaN, py: NaN, pz: NaN, qx: NaN, qy: NaN, qz: NaN, qw: NaN, ortho: false, fov: NaN, slab: false, slabT: 0, slabO: 0, ens: false, ensF: -1, rev: -1 }
       return
     }
     // r95：拖拽交互中冻结视口可见性重算（每 150ms 全残基投影 + 序列条重渲——旋转中的
     // 周期性微卡源之一；松手后签名仍异，下一帧立即追上）
     if (this.pointerDragging) return
+    // r99-f1 C：节流前移——时间戳比较先行（旧版每帧先构造 11 元素签名字符串
+    //（8×toFixed + 数组 + join）再判节流，相机拖动/ensemble 播放的窗口内全部白做）。
+    // 窗口内直接返回且不更新 lastVisT/visTup = 旧版「lastVisSig 保持旧值」的补算语义：
+    // 上次因节流跳过的重算，窗口到达时元组必不等，必然补上
+    if (now - this.lastVisT < 150) return
     const state = useMolStore.getState()
     const id = state.activeId
     const cam = this.activeCamera
-    // 签名：活动结构 / 相机位姿 / fov / 正交视锥 / 切层 / ensemble 播放状态
     const es = useEnsembleStore.getState()
-    const sig = [
-      id ?? '',
-      cam.position.x.toFixed(2), cam.position.y.toFixed(2), cam.position.z.toFixed(2),
-      cam.quaternion.x.toFixed(3), cam.quaternion.y.toFixed(3), cam.quaternion.z.toFixed(3), cam.quaternion.w.toFixed(3),
-      this.activeCamera === this.orthoCamera ? 'ortho' : `fov${this.camera.fov.toFixed(1)}`,
-      this.settings.slab ? `${this.settings.slabThickness}|${this.settings.slabOffset ?? 0}` : 'noslab',
-      es.structureId === id && es.playing ? `ens${es.frame}` : '',
-      state.visualRev,
-    ].join(',')
-    if (sig === this.lastVisSig) return
-    if (now - this.lastVisT < 150) return // 节流（签名保持差异，下帧重试）
-    this.lastVisSig = sig
+    // 原始数值元组（与旧签名字符串同源输入，未量化）：全等 → 输入与上次实际重算完全
+    // 一致，免 toFixed/join 直接返回；不等 → 直接重算（不再构造字符串）
+    const ortho = this.activeCamera === this.orthoCamera
+    const ens = es.structureId === id && es.playing
+    const tup: VisTuple = {
+      id,
+      px: cam.position.x, py: cam.position.y, pz: cam.position.z,
+      qx: cam.quaternion.x, qy: cam.quaternion.y, qz: cam.quaternion.z, qw: cam.quaternion.w,
+      ortho, fov: this.camera.fov,
+      slab: !!this.settings.slab,
+      slabT: this.settings.slab ? this.settings.slabThickness : 0,
+      slabO: this.settings.slab ? (this.settings.slabOffset ?? 0) : 0,
+      ens, ensF: ens ? es.frame : -1,
+      rev: state.visualRev,
+    }
+    const eq = (a: VisTuple, b: VisTuple) => a.id === b.id && a.px === b.px && a.py === b.py && a.pz === b.pz
+      && a.qx === b.qx && a.qy === b.qy && a.qz === b.qz && a.qw === b.qw && a.ortho === b.ortho
+      && (a.ortho || a.fov === b.fov) && a.slab === b.slab && a.slabT === b.slabT && a.slabO === b.slabO
+      && a.ens === b.ens && a.ensF === b.ensF && a.rev === b.rev
+    if (eq(tup, this.visTup)) return
+    // 元组不等（真实输入变化）：重算并更新缓存+节流时间戳。与旧版量化签名的差异
+    // 仅在亚量化漂移（位移 < 0.005 被 toFixed 吃掉）：旧版跳过重算、本版多算一次
+    // 幂等重投影（结果仅在变化时写入 store，行为无害）且节流重新武装——150ms 一拍
+    this.visTup = tup
     this.lastVisT = now
     const data = id ? dataRegistry.get(id) : null
     if (!id || !data) {
@@ -1750,6 +1792,7 @@ export class MolEngine {
           labelGroup: new THREE.Group(),
           labelsKey: '',
           symKey: '',
+          buildSeq: 0,
         }
         view.group.add(view.repContainer)
         view.group.add(view.labelGroup)
@@ -1773,11 +1816,14 @@ export class MolEngine {
       for (const rep of entry.reps) {
         const existing = view.reps.get(rep.id)
         if (existing) {
-          const fullHash = JSON.stringify([rep, entry.rev, filtersKey])
+          // r99-f1：哈希并入 colorRev（着色级）；rev 保留（几何级：hiddenChains/
+          // recomputeSS/resetTransform/会话·场景恢复仍 bump rev 须全体重建）；
+          // repsRev 不入哈希——rep 对象自身在哈希内，单 rep 变更天然只失效本 rep
+          const fullHash = JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey])
           if (existing.hash === fullHash) continue
           // r59-a1 #7 修复：纯 rep.visible 翻转不重建几何（surface/cartoon 秒级重建代价）——
           // 剔除 visible 字段比对，一致则直接切 build.group.visible（不触发秒级重建）
-          const repNoVis = JSON.stringify([{ ...rep, visible: 0 }, entry.rev, filtersKey]).replace('"visible":0', '"visible":X')
+          const repNoVis = JSON.stringify([{ ...rep, visible: 0 }, entry.rev, entry.colorRev, filtersKey]).replace('"visible":0', '"visible":X')
           const existNoVis = existing.hash.replace(/"visible":(?:true|false)/, '"visible":X')
           if (repNoVis === existNoVis) {
             if (existing.build.group.visible !== rep.visible) {
@@ -1788,7 +1834,8 @@ export class MolEngine {
             continue
           }
         }
-        const hash = JSON.stringify([rep, entry.rev, filtersKey])
+        // r99-f1：哈希与 sync() 侧保持一致（rev + colorRev + filtersKey）
+        const hash = JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey])
         if (existing) {
           view.repContainer.remove(existing.build.group)
           existing.build.dispose()
@@ -1807,7 +1854,9 @@ export class MolEngine {
       const symRadius = entry.symmetry?.radius ?? 0
       const symGroup = this.symmetryGroups.get(entry.id)
       if (symRadius > 0) {
-        const wantKey = `${entry.rev}|${entry.reps.map(r => r.id + (r.visible ? '1' : '0')).join(',')}|${symRadius}|${filtersKey}`
+        // r99-f1：symKey 改挂 view.buildSeq（本帧上方 rep 重建循环已自增）——
+        // 覆盖 rev/colorRev/repsRev 及一切直调重建来源，防止克隆引用已 dispose 几何
+        const wantKey = `${view.buildSeq}|${entry.reps.map(r => r.id + (r.visible ? '1' : '0')).join(',')}|${symRadius}|${filtersKey}`
         if (!symGroup || symGroup.userData.symKey !== wantKey) {
           this.rebuildSymmetry(entry, data, view, wantKey, symRadius)
         }
@@ -1885,13 +1934,19 @@ export class MolEngine {
       this.updatePickMarkers(state.measurePicks)
     }
     // 氢键网络（key 含背景色：氢键颜色随背景亮度自适应需重渲）
+    // r99-f1 D：selection 分量条件化——hbondSelOnly=false 且无 hbondScope 时
+    // selection 完全不参与氢键渲染输出（updateHBonds 的范围过滤三分支全部不触发），
+    // 但旧键无条件并入 selection.structureId/rev → 每次点击/框选触发全量虚线
+    // dispose+重建。仅在分量真正影响输出时并入（hbondSelOnly=true 或烘焙范围
+    // 在场时保持旧口径——后者的过滤虽不用 selection，维持保守不缩窄）
+    const selInHbondKey = state.settings.hbondSelOnly || !!state.hbondScope
     const hbondKey = [
       state.settings.showHBonds, state.settings.hbondMaxDist, state.settings.hbondIncludeWater,
       state.settings.hbondSelOnly, state.settings.hideWater, state.settings.background,
       state.structures.filter(s => s.visible).map(s => s.id).join('|'),
       // r59-a1 #2 修复：链显隐签名（isolate / chains hide 后虚线重渲——旧版悬空指向已隐藏链原子）
       state.structures.map(s => `${s.id}:${(s.hiddenChains ?? []).join(',')}`).join('|'),
-      state.selection.structureId, state.selection.rev,
+      selInHbondKey ? `${state.selection.structureId}:${state.selection.rev}` : '-',
       state.hbondScope ? state.hbondScope.structureId + ':' + state.hbondScope.rev : '-',
     ].join('#')
     if (hbondKey !== this.lastHbondKey) {
@@ -2480,10 +2535,20 @@ export class MolEngine {
   }
 
   pauseEnsemble() {
+    const sid = useEnsembleStore.getState().structureId
     this.ensemblePlay = null
     useEnsembleStore.getState().setPlaying(false)
     // 播放→停止状态切换点：坐标已定格在最后一帧，一次性重建派生缓存（r63-review-a P2-8）
     this.flushEnsembleCaches()
+    // r99-f1：坐标落定点氢键强制补算——播放中 150ms 节流可能刚跳过最后一帧；
+    // detKey 挂 entry.rev 不随坐标直调失效，不补则虚线停在 ≤150ms 前的旧坐标。
+    // 自然播完路径在 applyEnsembleFrame(invalidate=true) 已刷过一次，此处幂等重刷
+    //（结构已移除则跳过——移除分支会重渲剩余结构的氢键）
+    if (sid && useMolStore.getState().structures.some(x => x.id === sid)) {
+      this.hbondCache.delete(sid)
+      this.lastHbondKey = ''
+      this.updateHBonds(useMolStore.getState())
+    }
   }
 
   /** 跳到指定整数帧（暂停状态下拖动滑块） */
@@ -2563,7 +2628,9 @@ export class MolEngine {
     }
     if (invalidate) this.invalidateDerivedCaches(data)
     else if (this.ensembleDirty?.data !== data) this.ensembleDirty = { id: data.id, data }
-    this.rebuildStructureVisuals(data)
+    // r99-f1：播放逐帧（invalidate=false）氢键重算走 150ms 节流；坐标落定点
+    //（seek/reset/播完落帧，invalidate=true）不节流即刻对齐
+    this.rebuildStructureVisuals(data, { hbondThrottle: !invalidate })
   }
 
   /** 坐标突变后的派生缓存重建（对齐 applyRigidTransform 的失效范式）：
@@ -2596,8 +2663,11 @@ export class MolEngine {
     }
   }
 
-  /** 坐标变化后重建该结构的全部视觉（reps/高亮/标签/测量/拾取标记/氢键） */
-  private rebuildStructureVisuals(data: StructureData) {
+  /** 坐标变化后重建该结构的全部视觉（reps/高亮/标签/测量/拾取标记/氢键）。
+   *  r99-f1：opts.hbondThrottle——ensemble 播放逐帧直调时氢键重算按 150ms 节流
+   *  （全量虚线 dispose+重建，小结构还有同步 detectHBonds）；坐标落定直调
+   *  （seek/reset/播完落帧/superpose/resetTransform/flush）不节流即刻对齐 */
+  private rebuildStructureVisuals(data: StructureData, opts: { hbondThrottle?: boolean } = {}) {
     // 找到对应 entry 并重建 reps
     const store = useMolStore.getState()
     const entry = store.structures.find(s => s.id === data.id)
@@ -2624,19 +2694,29 @@ export class MolEngine {
     this.updateMeasurements(store.measurements)
     this.lastPicksKey = ''
     this.updatePickMarkers(store.measurePicks)
-    // 氢键重算（清缓存使 detKey 失效）
-    this.hbondCache.delete(data.id)
+    // 氢键重算（清缓存使 detKey 失效）。
+    // r99-f1：旧版 ensemble 播放每帧直调本方法 → 每帧全量虚线 dispose+重建 +
+    // 小结构同步 detectHBonds。节流模式下 150ms 一拍；跳过时 lastHbondKey 置空
+    //（「键仍脏」），下个窗口到达（下次直调或任意 sync）必补；坐标落定点（非节流）
+    // 直调立即刷新——detKey 挂 entry.rev 不随坐标直调失效，不补则虚线停在旧坐标
+    const now = performance.now()
+    const refreshHbonds = !opts.hbondThrottle || now - (view.hbondLastRefresh ?? 0) >= 150
     this.lastHbondKey = ''
-    this.updateHBonds(store)
+    if (refreshHbonds) {
+      view.hbondLastRefresh = now
+      this.hbondCache.delete(data.id)
+      this.updateHBonds(store)
+    }
     // 接触连线坐标已变化 → 重渲染
     this.updateContacts()
     // 对称伴侣跟随重建（ensemble 播放期间节流，避免每帧全量克隆）
     const entrySym = store.structures.find(s => s.id === data.id)?.symmetry
     if (entrySym && entrySym.radius > 0) {
-      const now = performance.now()
       if (now - (view.symLastRebuild ?? 0) > 140) {
         view.symLastRebuild = now
-        const symKey = `${entry.rev}|${entry.reps.map(r => r.id + (r.visible ? '1' : '0')).join(',')}|${entrySym.radius}|${filtersKey}`
+        // r99-f1：symKey 改挂 view.buildSeq（上方 buildRep 循环已自增）——覆盖
+        // rev/colorRev/repsRev 及坐标直调一切重建来源，防克隆引用已 dispose 几何
+        const symKey = `${view.buildSeq}|${entry.reps.map(r => r.id + (r.visible ? '1' : '0')).join(',')}|${entrySym.radius}|${filtersKey}`
         this.rebuildSymmetry(entry, data, view, symKey, entrySym.radius)
       }
     }
@@ -2677,7 +2757,9 @@ export class MolEngine {
     // 视觉重建（symKey 变化由 sync 触发；这里主动调一次确保即时反馈）
     const view = this.views.get(structureId)
     if (view) {
-      const symKey = `${entry.rev}|${entry.reps.map(r => r.id + (r.visible ? '1' : '0')).join(',')}|${radius}|${store.settings.hideHydrogens}|${store.settings.hideWater}|${store.settings.quality}`
+      // r99-f1：symKey 改挂 view.buildSeq（与 sync/rebuildStructureVisuals 同源）——
+      // 滑杆/着色不 bump rev 后仍保证 rep 重建→克隆重克隆
+      const symKey = `${view.buildSeq}|${entry.reps.map(r => r.id + (r.visible ? '1' : '0')).join(',')}|${radius}|${store.settings.hideHydrogens}|${store.settings.hideWater}|${store.settings.quality}`
       this.rebuildSymmetry(entry, data, view, symKey, radius)
     }
     return {
@@ -2851,8 +2933,16 @@ export class MolEngine {
         ? { ...x, transform: { quat: quatOut, translation: tOut } }
         : x),
     }))
-    // 重建视觉（reps/标签/测量/氢键等）
+    // 重建视觉（reps/标签/测量/氢键等）；非节流直调——坐标落定点氢键即刻对齐
     this.rebuildStructureVisuals(mobile)
+    // r99-f1：叠合改写坐标但不 bump rev（transform 独立字段）——membraneKey 不含
+    // transform 分量 → 膜板滞留旧位姿（叠合后膜蛋白的主轴/包围盒已变）。叠合的是
+    // 活动结构时显式作废膜键并按当前状态重算（resetTransform 路径 bump rev 已天然覆盖；
+    // mobile ≠ active 时膜属活动结构不受影响，免重算）
+    if (useMolStore.getState().activeId === mobileId) {
+      this.membraneKey = ''
+      this.updateMembrane(useMolStore.getState())
+    }
     // 选择/视图跟随：若当前选中的是 mobile，保持选择不变（高亮已重建）
     const ms = Math.round(performance.now() - t0)
     void ms
@@ -3016,11 +3106,13 @@ export class MolEngine {
       nPoints,
       topResidues: top.slice(0, 12),
     })
-    // 若任何 rep 使用 sasa 着色 → bump rev 触发重着色（sasa 数据已就位）
+    // 若任何 rep 使用 sasa 着色 → bump colorRev 触发重着色（sasa 数据已就位）。
+    // r99-f1：改 colorRev 不再 bump rev——着色级变化不须全体重建，也不误伤
+    // hbond detKey（sasa 数据不影响氢键几何）与 membraneKey
     const entry = useMolStore.getState().structures.find(s => s.id === structureId)
     if (entry?.reps.some(rep => rep.colorScheme === 'sasa')) {
       useMolStore.setState(s => ({
-        structures: s.structures.map(x => x.id === structureId ? { ...x, rev: x.rev + 1 } : x),
+        structures: s.structures.map(x => x.id === structureId ? { ...x, colorRev: x.colorRev + 1 } : x),
         visualRev: s.visualRev + 1,
       }))
     }
@@ -3596,7 +3688,10 @@ export class MolEngine {
         }))
       }
       const build: RepBuild = { group: new THREE.Group(), pickables: [], dispose: () => {} }
-      view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, filtersKey]), build })
+      // r99-f1：错误分支同样自增 buildSeq（旧几何已被 sync 侧 dispose，克隆须重克隆）
+      // + 哈希并入 colorRev
+      view.buildSeq++
+      view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey]), build })
       return
     }
     if (rep.error) {
@@ -3675,8 +3770,10 @@ export class MolEngine {
       p.mesh.userData.enginePick = { pick: p, structureId: entry.id }
     }
     view.repContainer.add(build.group)
-    // 存储哈希与 sync() 侧计算保持一致（否则 rep 永不命中缓存逐帧重建）
-    view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, filtersKey]), build })
+    // 存储哈希与 sync() 侧计算保持一致（否则 rep 永不命中缓存逐帧重建）；
+    // r99-f1：哈希并入 colorRev + 自增 buildSeq（对称克隆失效链权威源）
+    view.buildSeq++
+    view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey]), build })
     this.pickablesCache = null
     // 材质统一挂裁剪平面；同时应用当前高光设置（新建材质也遵循 specular 开关）
     build.group.traverse(o => {
@@ -3834,7 +3931,10 @@ export class MolEngine {
 
   private applySettings(settings: Settings) {
     const prev = this.settings
-    const changed = JSON.stringify(settings) !== JSON.stringify(prev)
+    // r99-f1：改引用比较——settings 仅 updateSettings 换新引用（store 侧全部经
+    // { ...s.settings, ...patch } 或整体替换），旧版每次同步双 JSON.stringify(settings)
+    //（几十字段字符串化 × 每帧 sync）纯浪费；引用相等即未变
+    const changed = settings !== prev
     this.settings = settings
     // 切层封盖：生效态（slab && slabCap）或颜色/明暗变化时同步 uniform + 场景材质 side
     //（置于 changed 判断之前：首次应用 prev=null 与后续切换均能落地）
@@ -4777,6 +4877,34 @@ export class MolEngine {
     this.renderer.setPixelRatio(1)
     this.renderer.setSize(w, h, false)
     this.renderer.shadowMap.needsUpdate = true
+    // r99-f1 B：恢复现场提取为 restore() 幂等闭包——toDataURL 之后、await 解码之前
+    // 同步调用（旧版恢复在 finally，await Image 解码 50-300ms 期间 finally 未执行，
+    // tick 每帧以超采样画布 + PCFSoft 阴影 + 全 rep castShadow 渲染；ssao/outline
+    // 开启时 composer 目标还被 resize 回视口尺寸与超采样 FBO 每帧打架）。
+    // 渲染段仍包 try/finally 保异常恢复（restore 幂等，重复调用零副作用）
+    let rayRestored = false
+    const restore = () => {
+      if (rayRestored) return
+      rayRestored = true
+      for (const o of touched) { o.castShadow = false; o.receiveShadow = false }
+      for (const m of mats) m.needsUpdate = true
+      this.renderer.shadowMap.enabled = prevShadowEnabled
+      this.renderer.shadowMap.type = prevShadowType
+      this.keyLight.castShadow = prevKeyCast
+      this.keyLight.position.copy(prevKeyPos)
+      this.keyLight.target.position.copy(prevTargetPos)
+      if (!prevTargetInScene) this.scene.remove(this.keyLight.target)
+      this.ambientLight.intensity = prevAmbIntensity
+      this.fillLight.intensity = prevFillIntensity
+      this.scene.background = prevBg
+      this.scene.fog = prevFog
+      this.renderer.setPixelRatio(prevRatio)
+      this.renderer.setSize(prevW, prevH, false)
+      if (this.composer) {
+        // 恢复时同步目标尺寸（含 depthTexture 对齐，防 FBO 不完整 → composer 静默空帧）
+        this.syncComposerTargets(prevW, prevH, prevRatio)
+      }
+    }
     let url = ''
     try {
       if (opts.transparent) {
@@ -4816,6 +4944,9 @@ export class MolEngine {
       }
       // toDataURL 必须在恢复尺寸前读取（setSize 会清空画布）
       const hiUrl = this.renderer.domElement.toDataURL('image/png')
+      // 先恢复现场再解码：await Image 解码（50-300ms）期间 live tick 已回到
+      // 视口尺寸 + 常规阴影状态渲染（hiUrl 已捕获为 dataURL 字符串，与画布解耦）
+      restore()
       // —— 真超采样（SSAA）：内部以 ss 倍分辨率渲染，高质量降采样回目标尺寸 ——
       // 旧实现直接导出高分辨率画布（文件名却标目标尺寸），超采样倍率从未真正发挥抗锯齿作用——
       // 导出图像素级锯齿与未超采样完全一致（用户反馈「清晰度比较低」的根因）。
@@ -4843,25 +4974,8 @@ export class MolEngine {
         url = hiUrl
       }
     } finally {
-      // —— 恢复现场（无论渲染成败） ——
-      for (const o of touched) { o.castShadow = false; o.receiveShadow = false }
-      for (const m of mats) m.needsUpdate = true
-      this.renderer.shadowMap.enabled = prevShadowEnabled
-      this.renderer.shadowMap.type = prevShadowType
-      this.keyLight.castShadow = prevKeyCast
-      this.keyLight.position.copy(prevKeyPos)
-      this.keyLight.target.position.copy(prevTargetPos)
-      if (!prevTargetInScene) this.scene.remove(this.keyLight.target)
-      this.ambientLight.intensity = prevAmbIntensity
-      this.fillLight.intensity = prevFillIntensity
-      this.scene.background = prevBg
-      this.scene.fog = prevFog
-      this.renderer.setPixelRatio(prevRatio)
-      this.renderer.setSize(prevW, prevH, false)
-      if (this.composer) {
-        // 恢复时同步目标尺寸（含 depthTexture 对齐，防 FBO 不完整 → composer 静默空帧）
-        this.syncComposerTargets(prevW, prevH, prevRatio)
-      }
+      // —— 恢复现场（异常路径兜底；成功路径已在 toDataURL 后同步恢复） ——
+      restore()
     }
     return { url, w: targetW, h: targetH, ms: performance.now() - t0 }
   }
@@ -4922,6 +5036,10 @@ export class MolEngine {
     if (this.recorder && this.recorder.state === 'recording') {
       try { this.recorder.stop() } catch { /* ignore */ }
     }
+    // r99-f1：补齐轨道 stop（与 r98-f1 stopRecording 路径对齐）——旧版录制中 dispose
+    // 只 stop recorder 不停 recorderStream 轨道，画布捕获轨道存活到引擎重建才释放
+    this.recorderStream?.getTracks().forEach(t => t.stop())
+    this.recorderStream = null
     this.recorder = null
     this.hbondWorker?.terminate()
     this.sasaWorker?.terminate()

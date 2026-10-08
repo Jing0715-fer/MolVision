@@ -25,6 +25,9 @@ export interface SessionStructure {
   text: string
   reps: RepConfig[]
   colorOverrides: Record<number, string>
+  /** r99-f1 E：无选择域整体改色前的 reps 原始配色备份（按 repId 键；旧档缺省 = 从未改色）。
+ *  随档透传使 resetColors('structure') 在恢复/导入后仍能回到原始 scheme */
+  colorBackup?: Record<string, { colorScheme: RepConfig['colorScheme']; uniformColor?: string }>
   visible: boolean
   /** 叠合累计刚体变换（恢复时重放） */
   transform?: RigidTransform
@@ -129,6 +132,8 @@ export function saveSession(): boolean {
       text,
       reps: st.reps,
       colorOverrides: st.colorOverrides,
+      // r99-f1 E：配色备份随档（体积可忽略：每 rep 一条 {colorScheme, uniformColor}）
+      colorBackup: st.colorBackup,
       visible: st.visible,
       transform: st.transform,
       symmetry: st.symmetry,
@@ -255,10 +260,10 @@ export function restoreSessionData(data: SessionData): number {
       indexToId.set(idx, id)
       // 登记源文本：恢复后的自动保存 / 会话导出才能包含结构数据
       textRegistry.set(id, ss.text)
-      // 覆盖 reps / overrides / visible / transform
+      // 覆盖 reps / overrides / visible / transform（r99-f1：colorBackup 随档透传；rev+1 保持原语义不动）
       useMolStore.setState(s => ({
         structures: s.structures.map(x => x.id === id
-          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible, transform: ss.transform, hiddenChains: ss.hiddenChains?.length ? ss.hiddenChains : undefined, rev: x.rev + 1 }
+          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, colorBackup: ss.colorBackup, visible: ss.visible, transform: ss.transform, hiddenChains: ss.hiddenChains?.length ? ss.hiddenChains : undefined, rev: x.rev + 1 }
           : x),
       }))
       // 重放对称伴侣（引擎视图就绪后由 sync 构建；此处仅写入设置）
@@ -534,7 +539,7 @@ export async function mergeSessionFile(file: File): Promise<number> {
       textRegistry.set(id, ss.text)
       useMolStore.setState(s => ({
         structures: s.structures.map(x => x.id === id
-          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, visible: ss.visible, transform: ss.transform, hiddenChains: ss.hiddenChains?.length ? ss.hiddenChains : undefined, rev: x.rev + 1 }
+          ? { ...x, reps: ss.reps, colorOverrides: ss.colorOverrides, colorBackup: ss.colorBackup, visible: ss.visible, transform: ss.transform, hiddenChains: ss.hiddenChains?.length ? ss.hiddenChains : undefined, rev: x.rev + 1 }
           : x),
       }))
       if (ss.symmetry?.radius && ss.symmetry.radius > 0) {

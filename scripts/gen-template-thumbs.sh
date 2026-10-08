@@ -58,6 +58,12 @@ if [ $# -gt 0 ]; then
   done))
   echo "== filtered mode: ${#SPECS[@]} templates =="
 fi
+# r99-f3：过滤模式 id 全不匹配时 SPECS 为空——旧版静默跳过全部并照常跑 tighten
+# 收尾（假成功语义）；显式报错退出
+if [ "${#SPECS[@]}" -eq 0 ]; then
+  echo "ERROR: filter matched no template ids (requested: $*) — check against scripts/template-specs.sh" >&2
+  exit 1
+fi
 
 # r89：高清视口截取（1920×960 → 内容 ~2× 像素）——配合 scripts/tighten-thumbs.py
 # 内容感知裁剪 + 降采样到 640×320，消灭小内容上采样软化（r89 VLM 审揭发：
@@ -85,7 +91,12 @@ gen_one() {
   sleep 7
   local loaded
   loaded=$(agent-browser eval "window.__molData ? window.__molData.size : 0" 2>/dev/null | tr -d '"')
-  if [ "$loaded" = "0" ]; then echo "SKIP $id (demo $demo not loaded)"; return 1; fi
+  # r99-f3：装载判定收紧——旧版只拦 = "0"，eval 失败/超时返回空串或错误文本时被误
+  # 当成功走全管线产空图；正整数才算装载成功（与 __molData.size 语义严格对齐）
+  if ! [[ "$loaded" =~ ^[1-9][0-9]*$ ]]; then
+    echo "SKIP $id (demo $demo not loaded — eval returned: ${loaded:-<empty>})"
+    return 1
+  fi
   # 1.5) 收起序列条（194px → ~40px，canvas 增高约 150px，缩略图更聚焦 3D 视口）
   agent-browser eval "(() => { const bar = document.querySelector('.tape-well'); if (!bar) return 'NOBAR'; const btn = bar.closest('div')?.querySelector('button') || document.querySelector('.tape-well button'); if (!btn) return 'NOBTN'; btn.click(); return 'collapsed' })()"
   sleep 1

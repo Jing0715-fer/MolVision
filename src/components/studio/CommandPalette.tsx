@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import {
   Boxes, Bot, ChevronRight, Command as CommandIcon, HelpCircle,
   FolderOpen, History, Palette, Sparkles, Star, Terminal, Triangle,
-  Maximize, RotateCcw, Zap, Camera, Download, Save, FilePlus2, Share2,
+  Maximize, RotateCcw, Zap, Camera, Download, Save, FilePlus2, Share2, Rows3,
 } from 'lucide-react'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
 import { COMMAND_HELP, commandCmd, runCommand } from '@/lib/molecular/commands'
@@ -147,8 +147,19 @@ export function CommandPalette() {
       desc: settings.showHBonds
         ? { zh: '青色虚线叠加 · 快捷键 B', en: 'Teal dashed overlay · shortcut B' }
         : { zh: '青色虚线叠加 · 快捷键 B · 默认仅选集相关', en: 'Teal dashed overlay · shortcut B · selection-only by default' },
-      run: '', fill: 'hbonds ',
+      // r99：状态感知真执行（旧版 run 为空串——Enter 无动作，标签承诺的切换从未兑现）
+      run: settings.showHBonds ? 'hbonds off' : 'hbonds', fill: 'hbonds ',
       icon: Zap, iconCls: 'text-muted-foreground',
+    },
+    {
+      id: 'qa-membrane',
+      label: settings.showMembrane ? { zh: '隐藏脂双层板', en: 'Hide lipid bilayer' } : { zh: '显示脂双层板', en: 'Show lipid bilayer' },
+      desc: settings.showMembrane
+        ? { zh: '膜蛋白作图语境 · 快捷键 M', en: 'Membrane-protein context · shortcut M' }
+        : { zh: '橙头基双板沿主轴贴合蛋白 · 快捷键 M', en: 'Orange headgroup slabs along the principal axis · shortcut M' },
+      // 状态感知真执行：Enter 即切换（membrane 裸命令=开、membrane off=关）；Tab 填入命令行可继续带厚度参数
+      run: settings.showMembrane ? 'membrane off' : 'membrane', fill: 'membrane ',
+      icon: Rows3, iconCls: 'text-amber-500',
     },
     {
       id: 'qa-shot', label: { zh: '导出截图 PNG', en: 'Export PNG snapshot' }, desc: { zh: '当前视口 · 2× 分辨率 · 透明可后接 bg', en: 'Current viewport · 2× resolution · pair with bg for transparency' },
@@ -177,7 +188,7 @@ export function CommandPalette() {
       run: '', fill: 'session ',
       icon: FilePlus2, iconCls: 'text-muted-foreground',
     },
-  ], [settings.showHBonds])
+  ], [settings.showHBonds, settings.showMembrane])
 
   const allItems = useMemo<PaletteItem[]>(() => {
     // 全部命令（示例命令可直接执行；label 随界面语言取 cmd/cmdEn）

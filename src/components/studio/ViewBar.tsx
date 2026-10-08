@@ -24,6 +24,9 @@ export function ViewBar() {
   const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
+  // r99-f2：跳转高亮回落定时器存 ref——卸载时清理（不再对已卸载组件 setActiveId）；
+  // window.setTimeout 返回 number（DOM 类型），ref 同型
+  const flashTimerRef = useRef<number | null>(null)
   const renameRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile()
 
@@ -35,11 +38,15 @@ export function ViewBar() {
     if (renamingId) renameRef.current?.focus()
   }, [renamingId])
 
+  // r99-f2：卸载清理高亮定时器（900ms fire-and-forget 旧 timer 无归属，现在归 ref 管）
+  useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current) }, [])
+
   // 跳转后短暂高亮目标卡片
   const jump = (b: ViewBookmark, idx: number) => {
     if (!restoreBookmark(b.id)) return
     setActiveId(b.id)
-    window.setTimeout(() => setActiveId(prev => (prev === b.id ? null : prev)), 900)
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    flashTimerRef.current = window.setTimeout(() => setActiveId(prev => (prev === b.id ? null : prev)), 900)
     useMolStore.getState().appendLog('out', tt({ zh: `已跳转到视角书签「${b.name}」`, en: `Jumped to view bookmark "${b.name}"` }))
   }
 

@@ -2,6 +2,10 @@
 
 // 底部状态栏 —— 墨色仪表读数条（精密仪器设计语言）
 // 墨底 + 等宽数字读数 + 大写微标签分区；语义色只保留高亮点与真警示（性能降级/低帧率/测量进行中）
+// r99-f4：订阅粒度改造——五个整店订阅（hbond/ensemble/contact/sasa/perf 任何字段变化
+// 整条页脚重渲）拆成下方窄订阅徽章子组件：ensemble 播放时只有帧号小组件按帧重渲，
+// 页脚其余部分（15 个读数 + LanguageToggle）不重渲；perf 保留整订（引擎 500ms 一拍
+// 受控上报，重渲收敛在小组件内）。视觉输出完全不变（纯订阅粒度改造）
 import { Ruler, Triangle, Rotate3d, Layers, Gauge, Cpu, X } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
@@ -30,6 +34,144 @@ function Readout({ label, children }: { label?: string; children: React.ReactNod
   )
 }
 
+/** 氢键网络徽章（可点击关闭：就地取消途径——用户反馈「取消不掉」后补充的最短路径）。
+ *  r99-f4：窄订阅——visible/computing/count/waterCount 各自原始值比较，
+ *  store 其余字段（pairs 表格数据等）变化零重渲 */
+function HBondBadge() {
+  const { t, locale } = useI18n()
+  const visible = useHBondStore(s => s.visible)
+  const computing = useHBondStore(s => s.computing)
+  const count = useHBondStore(s => s.count)
+  const waterCount = useHBondStore(s => s.waterCount)
+  if (!visible) return null
+  return (
+    <button
+      type="button"
+      onClick={() => useMolStore.getState().updateSettings({ showHBonds: false })}
+      title={t({ zh: '氢键网络显示中 · 点击关闭（按 B 重新开启）', en: 'H-bond network shown · click to hide (press B to re-enable)' })}
+      aria-label={t({ zh: '关闭氢键网络', en: 'Hide H-bond network' })}
+      className="status-val flex shrink-0 cursor-pointer items-center gap-1.5 transition-opacity hover:opacity-80"
+    >
+      {computing
+        ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        : <Dot tone="bg-teal-400" />}
+      <span style={{ color: 'var(--status-fg)' }}>{computing ? t({ zh: '氢键计算中…', en: 'Computing H-bonds…' }) : t({ zh: `${count.toLocaleString(locale)} 氢键`, en: `${count.toLocaleString(locale)} H-bonds` })}</span>
+      {!computing && waterCount > 0 && <span style={{ color: 'var(--status-dim)' }}>{t({ zh: `（含水 ${waterCount}）`, en: `(${waterCount} via water)` })}</span>}
+      <X className="h-2.5 w-2.5 opacity-50" aria-hidden />
+    </button>
+  )
+}
+
+/** 接触界面分析徽章。r99-f4：窄订阅——structureId/cutoff/visible + pairs.length（原始值比较） */
+function ContactBadge({ activeId }: { activeId: string | null }) {
+  const { t, locale } = useI18n()
+  const structureId = useContactStore(s => s.structureId)
+  const cutoff = useContactStore(s => s.cutoff)
+  const visible = useContactStore(s => s.visible)
+  const pairCount = useContactStore(s => s.pairs.length)
+  if (!(structureId === activeId && pairCount > 0)) return null
+  return (
+    <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" style={{ color: 'var(--status-dim)' }}>
+      <Dot tone={visible ? 'bg-orange-400' : 'bg-white/20'} />
+      {pairCount.toLocaleString(locale)} {t({ zh: '接触', en: 'contacts' })}
+      <span className="text-[9px]">≤{cutoff.toFixed(1)}Å</span>
+    </span>
+  )
+}
+
+/** 跨结构接触徽章。r99-f4：窄订阅——cross 对象引用（setCrossResult 才换）+ crossPairs.length + visible */
+function CrossContactBadge() {
+  const { t, locale } = useI18n()
+  const cross = useContactStore(s => s.cross)
+  const crossCount = useContactStore(s => s.crossPairs.length)
+  const visible = useContactStore(s => s.visible)
+  if (!(cross && crossCount > 0)) return null
+  return (
+    <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" style={{ color: 'var(--status-dim)' }}>
+      <Dot tone={visible ? 'bg-violet-400' : 'bg-white/20'} />
+      {cross.labelA}↔{cross.labelB} {crossCount.toLocaleString(locale)}
+      <span className="text-[9px]">≤{cross.cutoff.toFixed(1)}Å</span>
+    </span>
+  )
+}
+
+/** SASA 分析结果徽章。r99-f4：窄订阅——structureId/computing/total（原始值比较；
+ *  topResidues/buried 等面板字段变化零重渲） */
+function SasaBadge({ activeId }: { activeId: string | null }) {
+  const { t, locale } = useI18n()
+  const structureId = useSasaStore(s => s.structureId)
+  const computing = useSasaStore(s => s.computing)
+  const total = useSasaStore(s => s.total)
+  if (!(structureId === activeId && (computing || total > 0))) return null
+  return (
+    <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" style={{ color: 'var(--status-dim)' }}>
+      {computing
+        ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        : <Dot tone="bg-cyan-400" />}
+      {computing ? t({ zh: 'SASA 计算中…', en: 'Computing SASA…' }) : `SASA ${total.toLocaleString(locale, { maximumFractionDigits: 0 })} Å²`}
+    </span>
+  )
+}
+
+/** NMR ensemble 徽章。r99-f4：窄订阅——structureId/total/playing + frame（各自原始值
+ *  比较）：播放中 setFrame 每帧只重渲本小组件，页脚其余部分（15 个读数 +
+ *  LanguageToggle）零参与 */
+function EnsembleBadge() {
+  const { t } = useI18n()
+  const structureId = useEnsembleStore(s => s.structureId)
+  const playing = useEnsembleStore(s => s.playing)
+  const frame = useEnsembleStore(s => s.frame)
+  const total = useEnsembleStore(s => s.total)
+  if (!(structureId && total >= 2)) return null
+  return (
+    <span className="status-val hidden shrink-0 items-center gap-1.5 sm:flex" style={{ color: 'var(--status-dim)' }}>
+      <Dot tone="bg-violet-400" pulse={playing} />
+      {playing ? t({ zh: `构象 ${frame + 1}/${total}`, en: `Frame ${frame + 1}/${total}` }) : t({ zh: `ensemble ${total} 帧`, en: `ensemble ${total} frames` })}
+    </span>
+  )
+}
+
+/** 性能读数（降级徽章 + FPS 仪表）。r99-f4：整订保留（引擎仅在 fps 开启时 500ms 一拍
+ *  受控上报）——重渲收敛在本小组件内，页脚其余部分不受影响 */
+function PerfBadges() {
+  const { t } = useI18n()
+  const showFps = useMolStore(s => s.settings.showFps)
+  const perf = usePerfStore(s => s)
+  return (
+    <>
+      {/* 自动性能模式降级徽章（琥珀警示：后处理已临时关闭、像素比 ×0.6） */}
+      {perf.degraded && (
+        <span
+          className="status-val hidden shrink-0 items-center gap-1.5 font-semibold text-amber-400 md:flex"
+          title={t({ zh: '自动性能模式：帧率持续偏低，后处理已临时关闭、分辨率已降低；帧率恢复或 perf off 时自动还原（perf status 查看）', en: 'Auto performance mode: sustained low FPS — post-processing temporarily disabled and resolution reduced; restores automatically when FPS recovers or perf off (see perf status)' })}
+        >
+          <Cpu className="h-3 w-3" /> {t({ zh: '性能', en: 'Perf' })}
+        </span>
+      )}
+
+      {/* 性能指示器（FPS 分级配色：≥55 绿 / ≥30 琥珀 / <30 红 —— 真实仪表语义，保留分级色） */}
+      {showFps && perf.fps > 0 && (
+        <span
+          className={cn(
+            'status-val hidden shrink-0 items-center gap-1.5 font-semibold md:flex',
+            perf.fps >= 55 ? 'text-emerald-400'
+              : perf.fps >= 30 ? 'text-amber-400'
+                : 'text-red-400',
+          )}
+          title={t({ zh: `帧耗时 ${perf.frameMs.toFixed(1)}ms · 几何体 ${perf.geometries} · 纹理 ${perf.textures}（fps on|off 切换）`, en: `Frame time ${perf.frameMs.toFixed(1)}ms · ${perf.geometries} geometries · ${perf.textures} textures (toggle with fps on|off)` })}
+        >
+          <Gauge className="h-3 w-3" />
+          {perf.fps < 10 ? perf.fps.toFixed(1) : perf.fps.toFixed(0)} fps
+          <span className="font-normal opacity-60">{perf.drawCalls.toFixed(0)} calls</span>
+          <span className="hidden font-normal opacity-60 lg:inline">
+            {perf.triangles >= 1e6 ? `${(perf.triangles / 1e6).toFixed(1)}M` : `${(perf.triangles / 1e3).toFixed(0)}k`} tri
+          </span>
+        </span>
+      )}
+    </>
+  )
+}
+
 export function StatusBar() {
   const { t, locale } = useI18n()
   const hoverText = useHoverStore(s => s.text)
@@ -39,16 +181,11 @@ export function StatusBar() {
   const measureMode = useMolStore(s => s.measureMode)
   const measurePicks = useMolStore(s => s.measurePicks)
   const settings = useMolStore(s => s.settings)
-  const hbond = useHBondStore(s => s)
-  const ens = useEnsembleStore(s => s)
-  const contact = useContactStore(s => s)
-  const sasa = useSasaStore(s => s)
   const mapInfo = useMapStore(s => s.info)
   const mapComputing = useMapStore(s => s.computing)
   // 性能指示（引擎仅在开启时上报 → 关闭时无重渲染；开启时 500ms 一次受控刷新）
   const showFps = useMolStore(s => s.settings.showFps)
   const outlineOn = useMolStore(s => s.settings.outline)
-  const perf = usePerfStore(s => s)
 
   const st = structures.find(x => x.id === activeId)
   const symCount = structures.reduce((acc, x) => acc + (x.symmetry?.count ?? 0), 0)
@@ -114,51 +251,17 @@ export function StatusBar() {
         </span>
       )}
 
-      {/* 氢键网络（可点击关闭：就地取消途径——用户反馈「取消不掉」后补充的最短路径） */}
-      {hbond.visible && (
-        <button
-          type="button"
-          onClick={() => useMolStore.getState().updateSettings({ showHBonds: false })}
-          title={t({ zh: '氢键网络显示中 · 点击关闭（按 B 重新开启）', en: 'H-bond network shown · click to hide (press B to re-enable)' })}
-          aria-label={t({ zh: '关闭氢键网络', en: 'Hide H-bond network' })}
-          className="status-val flex shrink-0 cursor-pointer items-center gap-1.5 transition-opacity hover:opacity-80"
-        >
-          {hbond.computing
-            ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            : <Dot tone="bg-teal-400" />}
-          <span style={{ color: 'var(--status-fg)' }}>{hbond.computing ? t({ zh: '氢键计算中…', en: 'Computing H-bonds…' }) : t({ zh: `${hbond.count.toLocaleString(locale)} 氢键`, en: `${hbond.count.toLocaleString(locale)} H-bonds` })}</span>
-          {!hbond.computing && hbond.waterCount > 0 && <span style={{ color: 'var(--status-dim)' }}>{t({ zh: `（含水 ${hbond.waterCount}）`, en: `(${hbond.waterCount} via water)` })}</span>}
-          <X className="h-2.5 w-2.5 opacity-50" aria-hidden />
-        </button>
-      )}
+      {/* 氢键网络（窄订阅子组件：store 任一字段变化只重渲本徽章） */}
+      <HBondBadge />
 
-      {/* 接触界面分析 */}
-      {contact.structureId === activeId && contact.pairs.length > 0 && (
-        <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" style={{ color: 'var(--status-dim)' }}>
-          <Dot tone={contact.visible ? 'bg-orange-400' : 'bg-white/20'} />
-          {contact.pairs.length.toLocaleString(locale)} {t({ zh: '接触', en: 'contacts' })}
-          <span className="text-[9px]">≤{contact.cutoff.toFixed(1)}Å</span>
-        </span>
-      )}
+      {/* 接触界面分析（窄订阅子组件） */}
+      <ContactBadge activeId={activeId} />
 
-      {/* 跨结构接触 */}
-      {contact.cross && contact.crossPairs.length > 0 && (
-        <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" style={{ color: 'var(--status-dim)' }}>
-          <Dot tone={contact.visible ? 'bg-violet-400' : 'bg-white/20'} />
-          {contact.cross.labelA}↔{contact.cross.labelB} {contact.crossPairs.length.toLocaleString(locale)}
-          <span className="text-[9px]">≤{contact.cross.cutoff.toFixed(1)}Å</span>
-        </span>
-      )}
+      {/* 跨结构接触（窄订阅子组件） */}
+      <CrossContactBadge />
 
-      {/* SASA 分析结果（结构级） */}
-      {sasa.structureId === activeId && (sasa.computing || sasa.total > 0) && (
-        <span className="status-val hidden shrink-0 items-center gap-1.5 md:flex" style={{ color: 'var(--status-dim)' }}>
-          {sasa.computing
-            ? <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            : <Dot tone="bg-cyan-400" />}
-          {sasa.computing ? t({ zh: 'SASA 计算中…', en: 'Computing SASA…' }) : `SASA ${sasa.total.toLocaleString(locale, { maximumFractionDigits: 0 })} Å²`}
-        </span>
-      )}
+      {/* SASA 分析结果（窄订阅子组件） */}
+      <SasaBadge activeId={activeId} />
 
       {/* 红蓝立体 */}
       {settings.stereo && (
@@ -186,13 +289,8 @@ export function StatusBar() {
         </span>
       )}
 
-      {/* NMR ensemble */}
-      {ens.structureId && ens.total >= 2 && (
-        <span className="status-val hidden shrink-0 items-center gap-1.5 sm:flex" style={{ color: 'var(--status-dim)' }}>
-          <Dot tone="bg-violet-400" pulse={ens.playing} />
-          {ens.playing ? t({ zh: `构象 ${ens.frame + 1}/${ens.total}`, en: `Frame ${ens.frame + 1}/${ens.total}` }) : t({ zh: `ensemble ${ens.total} 帧`, en: `ensemble ${ens.total} frames` })}
-        </span>
-      )}
+      {/* NMR ensemble（窄订阅子组件：播放中按帧重渲的帧号读数） */}
+      <EnsembleBadge />
 
       {/* 轮廓线开启提示（与 FPS 指示互斥位置：均在测量模式前） */}
       {outlineOn && !showFps && (
@@ -202,35 +300,8 @@ export function StatusBar() {
         </span>
       )}
 
-      {/* 自动性能模式降级徽章（琥珀警示：后处理已临时关闭、像素比 ×0.6） */}
-      {perf.degraded && (
-        <span
-          className="status-val hidden shrink-0 items-center gap-1.5 font-semibold text-amber-400 md:flex"
-          title={t({ zh: '自动性能模式：帧率持续偏低，后处理已临时关闭、分辨率已降低；帧率恢复或 perf off 时自动还原（perf status 查看）', en: 'Auto performance mode: sustained low FPS — post-processing temporarily disabled and resolution reduced; restores automatically when FPS recovers or perf off (see perf status)' })}
-        >
-          <Cpu className="h-3 w-3" /> {t({ zh: '性能', en: 'Perf' })}
-        </span>
-      )}
-
-      {/* 性能指示器（FPS 分级配色：≥55 绿 / ≥30 琥珀 / <30 红 —— 真实仪表语义，保留分级色） */}
-      {showFps && perf.fps > 0 && (
-        <span
-          className={cn(
-            'status-val hidden shrink-0 items-center gap-1.5 font-semibold md:flex',
-            perf.fps >= 55 ? 'text-emerald-400'
-              : perf.fps >= 30 ? 'text-amber-400'
-                : 'text-red-400',
-          )}
-          title={t({ zh: `帧耗时 ${perf.frameMs.toFixed(1)}ms · 几何体 ${perf.geometries} · 纹理 ${perf.textures}（fps on|off 切换）`, en: `Frame time ${perf.frameMs.toFixed(1)}ms · ${perf.geometries} geometries · ${perf.textures} textures (toggle with fps on|off)` })}
-        >
-          <Gauge className="h-3 w-3" />
-          {perf.fps < 10 ? perf.fps.toFixed(1) : perf.fps.toFixed(0)} fps
-          <span className="font-normal opacity-60">{perf.drawCalls.toFixed(0)} calls</span>
-          <span className="hidden font-normal opacity-60 lg:inline">
-            {perf.triangles >= 1e6 ? `${(perf.triangles / 1e6).toFixed(1)}M` : `${(perf.triangles / 1e3).toFixed(0)}k`} tri
-          </span>
-        </span>
-      )}
+      {/* 性能读数（降级徽章 + FPS 仪表：整订收敛在本小组件内） */}
+      <PerfBadges />
 
       {/* 测量模式（进行中操作：保留琥珀提示 + Esc 退出） */}
       {measureMode !== 'off' && (

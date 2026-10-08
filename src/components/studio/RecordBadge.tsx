@@ -41,23 +41,30 @@ export function RecordBadge() {
     const eng = engineRef.current
     if (!eng) return
     const elapsed = eng.recordingElapsed
-    const blob = await eng.stopRecording()
-    setRecording(false)
-    if (!blob || blob.size === 0) {
-      toast.error(tt({ zh: '录制内容为空', en: 'Recording is empty' }))
-      return
+    // r99-f2：stopRecording 可能抛错（MediaRecorder 停止/混流异常）——旧版无 try/catch，
+    // 抛错则 setRecording(false) 永不执行，REC 徽章永久卡死；catch 里复位状态 + 双语提示
+    try {
+      const blob = await eng.stopRecording()
+      setRecording(false)
+      if (!blob || blob.size === 0) {
+        toast.error(tt({ zh: '录制内容为空', en: 'Recording is empty' }))
+        return
+      }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = timestampName()
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      toast.success(tt({ zh: '动画已导出为 WebM 视频', en: 'Animation exported as a WebM video' }), {
+        description: tt({ zh: `${(blob.size / 1024 / 1024).toFixed(1)} MB · ${elapsed.toFixed(1)} 秒 · 30 fps`, en: `${(blob.size / 1024 / 1024).toFixed(1)} MB · ${elapsed.toFixed(1)} s · 30 fps` }),
+      })
+    } catch {
+      setRecording(false)
+      toast.error(tt({ zh: '停止录制失败，录制状态已重置', en: 'Failed to stop the recording; the recording state was reset' }))
     }
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = timestampName()
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 5000)
-    toast.success(tt({ zh: '动画已导出为 WebM 视频', en: 'Animation exported as a WebM video' }), {
-      description: tt({ zh: `${(blob.size / 1024 / 1024).toFixed(1)} MB · ${elapsed.toFixed(1)} 秒 · 30 fps`, en: `${(blob.size / 1024 / 1024).toFixed(1)} MB · ${elapsed.toFixed(1)} s · 30 fps` }),
-    })
   }
 
   return (

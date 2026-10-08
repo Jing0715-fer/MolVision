@@ -74,6 +74,7 @@ const SHORTCUTS: [string, DualText][] = [
   ['H', { zh: '显示/隐藏氢原子', en: 'Show/hide hydrogen atoms' }],
   ['W', { zh: '显示/隐藏水分子', en: 'Show/hide water molecules' }],
   ['B', { zh: '氢键网络 开/关', en: 'H-bond network on/off' }],
+  ['M', { zh: '脂双层板 开/关（膜蛋白作图语境）', en: 'Lipid bilayer on/off (membrane-protein context)' }],
   ['P', { zh: 'NMR 构象动画 播放/暂停', en: 'NMR ensemble animation play/pause' }],
   ['L', { zh: '为当前选择添加原子标注', en: 'Add atom labels to the current selection' }],
   ['V', { zh: '保存当前视角为书签（带缩略图）', en: 'Save the current view as a bookmark (with thumbnail)' }],

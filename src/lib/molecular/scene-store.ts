@@ -272,6 +272,9 @@ export const useSceneStore = create<ScenesState>((set, get) => ({
           visible: snap.visible,
           reps: JSON.parse(JSON.stringify(snap.reps)) as RepConfig[],
           colorOverrides: { ...snap.colorOverrides },
+          // r99-f1 E：reps 整体替换同步清空配色备份（旧备份指向已不存在的 repId——
+          // 与 applyPreset 同语义；场景快照的 reps 自带完整配色方案）
+          colorBackup: undefined,
           hiddenChains: snap.hiddenChains?.length ? [...snap.hiddenChains] : undefined,
           rev: x.rev + 1,
         }

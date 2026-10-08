@@ -19,7 +19,7 @@
 //   · 命令/demo 修改后快照即过期——琥珀横幅「命令已修改」+ 重新渲染入口，
 //     绝不拿旧图冒充新效果
 //   · adapt 降级说明（notes）如实呈现（智能适配 N 项 · title 逐条）
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Camera, Loader2, Play, RefreshCw, Wand2 } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import {
@@ -46,6 +46,12 @@ export function TemplatePreview({ tpl }: { tpl: FigureTemplate }) {
   const [capturedSig, setCapturedSig] = useState('')
   const [errMsg, setErrMsg] = useState('')
 
+  // r99-f2：卸载守卫（照搬 FigureTemplatesDialog CalibrationPanel 的 r98-f3 模式）——
+  // run() 含拉取结构/引擎就绪/相机落地/命令应用/截屏多个 await 点；弹窗关闭
+  // （组件卸载）后：命令不再应用到主场景、setUrl/setPhase/setStage 不回写已卸载组件
+  const disposedRef = useRef(false)
+  useEffect(() => () => { disposedRef.current = true }, [])
+
   // 剧场式进度轮播（运行中阶段推进——真实推进由管线各段完成，这里只做观感）
   useEffect(() => {
     if (phase !== 'running') return
@@ -66,30 +72,40 @@ export function TemplatePreview({ tpl }: { tpl: FigureTemplate }) {
       //    r84 E2E 揭发首版 waitForStructureInStore(id, 0) 伪探测恒 false）
       if (!isStructureInStore(tpl.demo)) {
         await fetchPdbId(tpl.demo)
+        if (disposedRef.current) return
         const ok = await waitForStructureInStore(tpl.demo, 9000)
+        if (disposedRef.current) return
         if (!ok) throw new Error('LOAD_TIMEOUT')
       }
       // ② 引擎就绪 + 相机取景落地（与 demoThenApply 同拍：80ms 双帧 + idle + 100ms 余量）
       await new Promise<void>(res => whenEngineReady(() => res()))
+      if (disposedRef.current) return
       await new Promise(r => setTimeout(r, 80))
       await waitForCameraIdle(2600)
+      if (disposedRef.current) return
       await new Promise(r => setTimeout(r, 100))
+      if (disposedRef.current) return // 命令应用前检查点：关弹窗后不再向场景施加副作用
       // ③ 智能适配 + 顺序执行（r84 起可等待：命令序列完成再截屏）
       const { commands, notes } = adaptTemplateCommands(tpl)
       setStage(2)
       await runTemplateCommands(commands)
+      if (disposedRef.current) return
       await new Promise(r => setTimeout(r, 450)) // 表示重建最后一拍（cartoon/表面异步装配）
+      if (disposedRef.current) return
       // ④ 截取视口（capture 内部处理 composer/AO/轮廓路径并恢复渲染状态）
       const eng = engineRef.current
       if (!eng) throw new Error('NO_ENGINE')
       setStage(3)
       await new Promise(r => setTimeout(r, 60))
       const shot = eng.capture({ scale: 1.5 })
+      if (disposedRef.current) return
       setUrl(shot)
       setMeta({ demo: tpl.demo, nCmds: commands.length, adapt: notes.length, at: Date.now() })
       setCapturedSig(`${tpl.demo}::${tpl.commands.join('\n')}`)
       setPhase('done')
     } catch (e) {
+      // r99-f2：已卸载不回写错误态（与 CalibrationPanel 同款）
+      if (disposedRef.current) return
       setPhase('error')
       setErrMsg(e instanceof Error ? e.message : String(e))
     }

@@ -103,7 +103,8 @@ export interface MolState {
   bumpVisual: () => void
 }
 
-function summarize(data: StructureData): { entry: Omit<StructureEntry, 'id' | 'reps' | 'colorOverrides' | 'rev' | 'visible'>; chains: ChainSummary[]; ligands: LigandSummary[] } {
+// r99-f1：Omit 增列 repsRev/colorRev（三版本号由 addStructure 构造点统一赋值）
+function summarize(data: StructureData): { entry: Omit<StructureEntry, 'id' | 'reps' | 'repsRev' | 'colorRev' | 'colorOverrides' | 'rev' | 'visible'>; chains: ChainSummary[]; ligands: LigandSummary[] } {
   const chains: ChainSummary[] = data.chains.map((c, i) => ({
     id: c.id,
     type: c.type,
@@ -348,7 +349,10 @@ export const useMolStore = create<MolState>()((set, get) => ({
       name,
       format: entry.format,
       visible: true,
+      // r99-f1 失效链细拆：rev（几何级）/repsRev（rep 增删改）/colorRev（着色）三版本号
       rev: 1,
+      repsRev: 0,
+      colorRev: 0,
       reps: defaultRepsFor(data),
       colorOverrides: {},
       summary: entry.summary,
@@ -441,27 +445,33 @@ export const useMolStore = create<MolState>()((set, get) => ({
   }),
 
   addRep: (structureId, rep) => {
+    // r99-f1：bump repsRev 而非 rev——引擎同步靠 visualRev + reps 数组 diff（repIds
+    // 集合比对，不依赖 rev），新 rep 对象自身在哈希内只失效它一个；模板 `show cartoon`
+    // 类命令链不再连带重建全部既有 rep（O(n²) → O(n)）
     set(s => ({
       structures: s.structures.map(x => x.id === structureId
-        ? { ...x, reps: [...x.reps, { ...defaultRep(rep.type), colorScheme: 'element', ...rep, id: Math.random().toString(36).slice(2, 10) }], rev: x.rev + 1 }
+        ? { ...x, reps: [...x.reps, { ...defaultRep(rep.type), colorScheme: 'element', ...rep, id: Math.random().toString(36).slice(2, 10) }], repsRev: x.repsRev + 1 }
         : x),
       visualRev: s.visualRev + 1,
     }))
   },
 
   updateRep: (structureId, repId, patch) => {
+    // r99-f1：去掉 rev+1 改 bump repsRev——rep 对象本身在哈希内，天然只失效本 rep
+    // （旧版单滑杆提交 = rev bump → 3 rep 全量重建；对称克隆失效链改挂 view.buildSeq）
     set(s => ({
       structures: s.structures.map(x => x.id === structureId
-        ? { ...x, reps: x.reps.map(r => r.id === repId ? { ...r, ...patch } : r), rev: x.rev + 1 }
+        ? { ...x, reps: x.reps.map(r => r.id === repId ? { ...r, ...patch } : r), repsRev: x.repsRev + 1 }
         : x),
       visualRev: s.visualRev + 1,
     }))
   },
 
   removeRep: (structureId, repId) => {
+    // r99-f1：同 addRep——repsRev（引擎靠 repIds diff 检出删除并 dispose，不依赖 rev）
     set(s => ({
       structures: s.structures.map(x => x.id === structureId
-        ? { ...x, reps: x.reps.filter(r => r.id !== repId), rev: x.rev + 1 }
+        ? { ...x, reps: x.reps.filter(r => r.id !== repId), repsRev: x.repsRev + 1 }
         : x),
       visualRev: s.visualRev + 1,
     }))
@@ -474,7 +484,10 @@ export const useMolStore = create<MolState>()((set, get) => ({
     const p = PRESETS[preset]
     if (!p) return
     set({
-      structures: s.structures.map(x => x.id === entry.id ? { ...x, reps: p.reps(), colorOverrides: {}, rev: x.rev + 1 } : x),
+      // r99-f1：整换 reps 属 rep 级变化（repsRev）+ 清 colorOverrides 属着色级（colorRev）；
+      // 不再 bump rev（几何未变——hbond detKey/membraneKey 不失效）。同时清空配色备份
+      //（新 reps 自带完整配色方案，旧备份指向已不存在的 repId）
+      structures: s.structures.map(x => x.id === entry.id ? { ...x, reps: p.reps(), colorOverrides: {}, colorBackup: undefined, repsRev: x.repsRev + 1, colorRev: x.colorRev + 1 } : x),
       visualRev: s.visualRev + 1,
     })
     // 预设同时清理颜色覆盖（colorOverrides 会盖住所有 rep 的配色方案——
@@ -496,6 +509,49 @@ export const useMolStore = create<MolState>()((set, get) => ({
     // 目标可能是 scheme 名或 css 颜色
     const schemes: ColorScheme[] = ['element', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'sasa', 'uniform', 'pocket']
     const isScheme = schemes.includes(target as ColorScheme)
+    // —— r99-f1 E：无选择域的整体改色改写 reps 配色，不再逐原子烘焙 ——
+    // 旧版 25k 原子结构 `color red` 烘焙 25k 条 colorOverrides（~10-20MB Record）：
+    // session 存档逼近 5MB 配额、share-link SHARE_LIMIT=100KB 必报「快照过大」、
+    // rev bump 连带 hbond detKey 全量重检测。改写 reps 配色方案后 buildRep 的
+    // computeAtomColors 直接产出同样颜色（语义等价论证见 worklog r99-f1 段）。
+    if (!scope) {
+      // SASA 无数据异步路径保持原有烘焙管线不动（queueSasaBake 结果到达后
+      // applyColor 重入，届时 data.sasa 就位走下面的 reps 改写路径）
+      if (isScheme && target === 'sasa' && !data.sasa) {
+        const r = engineRef.current?.requestSasa(entry.id)
+        if (!r?.done || !data.sasa) {
+          engineRef.current?.queueSasaBake(entry.id)
+          return
+        }
+      }
+      let hex: string | null = null
+      if (!isScheme) {
+        hex = parseCssColor(String(target))
+        if (!hex) return
+      }
+      // 首次改写前备份各 rep 原始配色（按 repId 键；连续 color red → color blue
+      // 只保第一份原始——已有备份不覆盖）；resetColors('structure') 从此恢复
+      const colorBackup = entry.colorBackup
+        ?? Object.fromEntries(entry.reps.map(r => [r.id, { colorScheme: r.colorScheme, uniformColor: r.uniformColor }]))
+      const reps = entry.reps.map(r => isScheme
+        // color uniform 与旧烘焙管线同源：computeAtomColors(..., 'uniform', { uniformColor: '#c9cdd4' })
+        ? { ...r, colorScheme: target as ColorScheme, ...(target === 'uniform' ? { uniformColor: '#c9cdd4' } : {}) }
+        : { ...r, colorScheme: 'uniform' as ColorScheme, uniformColor: hex! })
+      set({
+        structures: s.structures.map(x => x.id === entry.id ? {
+          ...x,
+          reps,
+          colorBackup,
+          // 旧语义无选择时逐原子全覆写 = 一切旧覆盖失效，清空等价
+          colorOverrides: {},
+          // 着色级失效：不 bump rev（hbond detKey/membraneKey 不动——颜色不改几何）
+          colorRev: x.colorRev + 1,
+        } : x),
+        visualRev: s.visualRev + 1,
+      })
+      return
+    }
+    // —— 有选择域：维持现有逐原子烘焙路径（选择域通常小）——
     let colors: Float32Array
     if (isScheme) {
       // SASA 需先有逐原子数据：小结构同步补算后直接烘焙；大结构触发 worker，完成后自动补烘焙
@@ -528,10 +584,10 @@ export const useMolStore = create<MolState>()((set, get) => ({
       const b = Math.round(lin(c[2] / 255) * 255)
       overrides[i] = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')
     }
-    if (scope) scope.forEach(apply)
-    else for (let i = 0; i < data.atoms.count; i++) apply(i)
+    scope.forEach(apply)
     set({
-      structures: s.structures.map(x => x.id === entry.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
+      // r99-f1：选择域着色同样只动 colorRev（旧版 rev bump 误伤 hbond detKey/membraneKey）
+      structures: s.structures.map(x => x.id === entry.id ? { ...x, colorOverrides: overrides, colorRev: x.colorRev + 1 } : x),
       visualRev: s.visualRev + 1,
     })
   },
@@ -540,15 +596,30 @@ export const useMolStore = create<MolState>()((set, get) => ({
     const s = get()
     const entry = s.structures.find(x => x.id === s.activeId)
     if (!entry) return
-    let overrides = entry.colorOverrides
     if (scope === 'structure') {
-      overrides = {}
-    } else if (s.selection.structureId === entry.id && s.selection.indices.length) {
+      // r99-f1 E：整体复位优先恢复 reps 原始配色备份（无选择域改色的逆操作）——
+      // 备份记录改色前每个 rep 的 {colorScheme, uniformColor}；无备份（从未整体改色）
+      // 时仅清 overrides（与旧版语义一致）。恢复后清空备份+overrides，bump colorRev
+      const reps = entry.colorBackup
+        ? entry.reps.map(r => {
+            const b = entry.colorBackup![r.id]
+            return b ? { ...r, colorScheme: b.colorScheme, ...(b.uniformColor !== undefined ? { uniformColor: b.uniformColor } : {}) } : r
+          })
+        : entry.reps
+      set({
+        structures: s.structures.map(x => x.id === entry.id ? { ...x, reps, colorOverrides: {}, colorBackup: undefined, colorRev: x.colorRev + 1 } : x),
+        visualRev: s.visualRev + 1,
+      })
+      return
+    }
+    let overrides = entry.colorOverrides
+    if (s.selection.structureId === entry.id && s.selection.indices.length) {
       const sel = new Set(s.selection.indices)
       overrides = Object.fromEntries(Object.entries(entry.colorOverrides).filter(([k]) => !sel.has(Number(k))))
     }
     set({
-      structures: s.structures.map(x => x.id === entry.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
+      // r99-f1：选择域复位同样只动 colorRev
+      structures: s.structures.map(x => x.id === entry.id ? { ...x, colorOverrides: overrides, colorRev: x.colorRev + 1 } : x),
       visualRev: s.visualRev + 1,
     })
   },

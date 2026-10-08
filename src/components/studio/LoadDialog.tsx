@@ -77,35 +77,39 @@ export function LoadDialog() {
           {/* 文件 */}
           <section className="space-y-2">
             <div className="mol-micro text-muted-foreground">{t({ zh: '本地文件', en: 'Local file' })}</div>
-            <div
-              onClick={() => fileRef.current?.click()}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => {
-                e.preventDefault()
-                if (e.dataTransfer.files?.length) {
-                  loadFiles(e.dataTransfer.files)
-                  setUi({ loadOpen: false })
-                }
-              }}
-              className="flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border border-dashed border-border p-5 text-center transition hover:border-primary/50 hover:bg-primary/5"
-            >
-              <FileUp className="h-5 w-5 text-muted-foreground" />
-              <div className="text-[13px] font-medium">{t({ zh: '点击选择或拖入文件', en: 'Click to choose or drop a file' })}</div>
-              <div className="text-[11px] text-muted-foreground">{t({ zh: '支持 .pdb / .ent / .cif / .mmcif / .ccp4 密度图 / .molvision 会话', en: 'Supports .pdb / .ent / .cif / .mmcif / .ccp4 maps / .molvision sessions' })}</div>
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                accept=".pdb,.ent,.cif,.mmcif,.txt,.molvision,.json,.ccp4,.map,.mrc"
-                className="hidden"
-                onChange={e => {
-                  if (e.target.files?.length) {
-                    loadFiles(e.target.files)
-                    setUi({ loadOpen: false })
-                  }
-                }}
-              />
-            </div>
+          {/* r99-f2：拖放区改 button（键盘可达：Tab 聚焦 + Enter/Space 触发文件选择；
+              onDragOver/onDrop 挂在 button 上合法）；file input 移为兄弟节点——
+              交互式内容嵌套在 button 内不合 HTML 内容模型 */}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault()
+              if (e.dataTransfer.files?.length) {
+                loadFiles(e.dataTransfer.files)
+                setUi({ loadOpen: false })
+              }
+            }}
+            className="flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-lg border border-dashed border-border p-5 text-center transition hover:border-primary/50 hover:bg-primary/5"
+          >
+            <FileUp className="h-5 w-5 text-muted-foreground" />
+            <div className="text-[13px] font-medium">{t({ zh: '点击选择或拖入文件', en: 'Click to choose or drop a file' })}</div>
+            <div className="text-[11px] text-muted-foreground">{t({ zh: '支持 .pdb / .ent / .cif / .mmcif / .ccp4 密度图 / .molvision 会话', en: 'Supports .pdb / .ent / .cif / .mmcif / .ccp4 maps / .molvision sessions' })}</div>
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept=".pdb,.ent,.cif,.mmcif,.txt,.molvision,.json,.ccp4,.map,.mrc"
+            className="hidden"
+            onChange={e => {
+              if (e.target.files?.length) {
+                loadFiles(e.target.files)
+                setUi({ loadOpen: false })
+              }
+            }}
+          />
           </section>
 
           {/* 示例 */}

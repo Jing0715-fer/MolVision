@@ -6,7 +6,7 @@
 // - 目录按 category 分组（builtin/global/cn/aggregator/local/custom），每家带品牌色与官网
 // - discoveredModels：输入 Key 后经 /models 探测到的真实可用模型（存 config，前端合并展示）
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { cookies, headers } from 'next/headers'
 import { LOCALE_COOKIE, type DualText, type Locale } from '@/i18n/locales'
@@ -738,14 +738,22 @@ function loadStore(): StoreShape {
 }
 
 function saveStore(next: StoreShape): void {
+  // r99-f3：原子写——旧版 writeFileSync 直写目标文件，devd SIGKILL 组杀（1.5GB 换血）
+  // 恰在写盘中途会留半截 JSON → loadStore catch → DEFAULT_STORE → 用户全部供应商
+  // API Key 静默蒸发。修法：写同目录临时文件再 renameSync 原子替换（rename 仅跨设备
+  // 才失败，同目录 tmp 无此问题；POSIX 保证读方要么见旧全文要么见新全文）
+  const tmp = STORE_FILE + '.tmp'
   try {
     if (!existsSync(STORE_DIR)) mkdirSync(STORE_DIR, { recursive: true, mode: 0o700 })
-    // 已存在的旧文件权限可能过宽（mode 仅首次创建生效）——每写前强制收欀 600
-    try { if (existsSync(STORE_FILE)) chmodSync(STORE_FILE, 0o600) } catch { /* 最佳努力 */ }
-    writeFileSync(STORE_FILE, JSON.stringify(next, null, 2), { encoding: 'utf-8', mode: 0o600 })
+    writeFileSync(tmp, JSON.stringify(next, null, 2), { encoding: 'utf-8', mode: 0o600 })
+    // 已存在的旧临时文件权限可能过宽（mode 仅首次创建生效）——rename 前对 tmp 强制收紧 600
+    try { chmodSync(tmp, 0o600) } catch { /* 最佳努力 */ }
+    renameSync(tmp, STORE_FILE)
     cache = next
     cacheMtime = statSync(STORE_FILE).mtimeMs
   } catch (err) {
+    // 半截 tmp 不影响读方（loadStore 只认 STORE_FILE）；清掉防残留累积
+    try { if (existsSync(tmp)) rmSync(tmp) } catch { /* 最佳努力 */ }
     console.error('[providers] saveStore failed:', err)
   }
 }
@@ -815,6 +823,14 @@ export function setDefaultProviderId(id: string): boolean {
   return true
 }
 
+/** r99-f3：入库字段 clamp（trim 后截断，空串归 undefined）——超大字符串不再直接写盘。
+ *  上限取真实 Key/URL/模型 ID 的宽松上界（apiKey 512 / baseURL 500 / defaultModel 200
+ *  字符）；API 层 64KB 体积预检之外的服务端兜底，防未来新调用方绕过路由校验直写超长串 */
+function clampStored(raw: string | undefined, max: number): string | undefined {
+  const t = raw?.trim()
+  return t ? t.slice(0, max) : undefined
+}
+
 export function setProviderConfig(id: string, patch: ProviderConfig): boolean {
   if (!getProviderProfile(id)) return false
   // baseURL 入库前防御性净化（API 层已先行校验并回 400；此处失败即拒绝保存，防未来新调用方绕过）
@@ -828,13 +844,14 @@ export function setProviderConfig(id: string, patch: ProviderConfig): boolean {
   // timeoutMs 钳制到合法窗（非数值/越界 → 清除，回落模型分档默认）
   const t = typeof patch.timeoutMs === 'number' && Number.isFinite(patch.timeoutMs) ? Math.round(patch.timeoutMs) : undefined
   const timeoutMs = t !== undefined && t >= 5_000 && t <= 600_000 ? t : undefined
-  // apiKey 省略 = 保留原值；显式空串 = 清除
+  // apiKey 省略 = 保留原值；显式空串 = 清除（clampStored 把空串归 undefined，语义不变）
   const next: ProviderConfig = {
     ...prev,
     ...patch,
-    apiKey: patch.apiKey === undefined ? prev.apiKey : patch.apiKey.trim() || undefined,
-    baseURL: (patch.baseURL ?? prev.baseURL)?.trim() || undefined,
-    defaultModel: (patch.defaultModel ?? prev.defaultModel)?.trim() || undefined,
+    // r99-f3：clamp 兜底（含 prev 来源——旧存量超长串在下一次任意保存时一并收敛）
+    apiKey: clampStored(patch.apiKey === undefined ? prev.apiKey : patch.apiKey, 512),
+    baseURL: clampStored(patch.baseURL ?? prev.baseURL, 500),
+    defaultModel: clampStored(patch.defaultModel ?? prev.defaultModel, 200),
     timeoutMs: patch.timeoutMs === undefined ? prev.timeoutMs : timeoutMs,
     discoveredModels: patch.discoveredModels === undefined ? prev.discoveredModels : patch.discoveredModels,
   }

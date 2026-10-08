@@ -134,16 +134,42 @@ interface ZAIMessage { role: 'assistant' | 'user'; content: string }
  * - 其余 → OpenAI 兼容直连（SSE 流式解析与 SDK 同源 data: 行协议）
  * 返回值统一为「完整文本」；onDelta 收到增量时透传（流式模式共用）
  * opts.signal 中止时即刻停止消费上游生成（SDK 路径 cancel reader；直连路径 fetch signal）
+ * opts.locale 随请求语言（r99-f3：idle 超时错误文案走既有 errText 双语路径）
  */
 async function completeWithProvider(
   messages: ZAIMessage[],
-  opts: { onDelta?: (piece: string) => void; signal?: AbortSignal } = {},
+  opts: { onDelta?: (piece: string) => void; signal?: AbortSignal; locale?: Locale } = {},
 ): Promise<string> {
   const providerId = getDefaultProviderId()
+  // r99-f3：ZAI 路径超时文案（双语——调用方两处均在 POST 内，locale 可得）
+  const zaiTimeoutErr = () => new Error(errText(
+    opts.locale ?? 'zh',
+    `ZAI 响应超时（${ZAI_IDLE_TIMEOUT_MS / 1000}s 无数据）`,
+    `ZAI response timed out (no data for ${ZAI_IDLE_TIMEOUT_MS / 1000}s)`,
+  ))
 
   if (providerId === 'zai') {
     const zai = await ZAI.create()
-    const raw = await zai.chat.completions.create({ messages, stream: true, thinking: { type: 'disabled' } })
+    // r99-f3：create() 本身也入 race——SDK 挂起（连接迟迟不回）时旧版在此 await
+    // 无限挂起；非流式形态（服务端忽略 stream 参数）整段 body 同在这一个 await 里等完
+    let createTimedOut = false
+    const createP = zai.chat.completions.create({ messages, stream: true, thinking: { type: 'disabled' } })
+    // 超时后迟到 resolve 的流对象尽力取消（防挂起连接泄漏）；正常路径 no-op
+    void createP.then(
+      raw => {
+        if (createTimedOut && raw && typeof (raw as { getReader?: unknown }).getReader === 'function') {
+          void (raw as ReadableStream<Uint8Array>).getReader().cancel().catch(() => { /* 已结束 */ })
+        }
+      },
+      () => { /* 迟到失败：race 已抛过超时，吞掉防 unhandled rejection */ },
+    )
+    const raw = await Promise.race([
+      createP,
+      new Promise<never>((_, rej) => setTimeout(() => {
+        createTimedOut = true
+        rej(zaiTimeoutErr())
+      }, ZAI_IDLE_TIMEOUT_MS)),
+    ])
     if (raw instanceof ReadableStream || (raw && typeof raw.getReader === 'function')) {
       const reader = (raw as ReadableStream<Uint8Array>).getReader()
       // SDK 不接受 fetch signal——取消传播只能自管：abort 即刻 cancel 上游 reader
@@ -154,9 +180,20 @@ async function completeWithProvider(
         const decoder = new TextDecoder()
         let buf = ''
         let full = ''
+        // r99-f3：idle 超时读——每次 read() 单独计时（读到数据即重置；与
+        // chatCompletionStream 直连分档 120s 对齐）；超时 cancel reader 并抛错，
+        // 走既有错误文案路径（流式 t:'err' / 非流式 502）
+        const readWithIdleTimeout = (): Promise<Awaited<ReturnType<typeof reader.read>>> =>
+          new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(zaiTimeoutErr()), ZAI_IDLE_TIMEOUT_MS)
+            void reader.read().then(
+              v => { clearTimeout(timer); resolve(v) },
+              e => { clearTimeout(timer); reject(e) },
+            )
+          })
         for (;;) {
           if (opts.signal?.aborted) { try { await reader.cancel() } catch { /* 已结束 */ } break }
-          const { done, value } = await reader.read()
+          const { done, value } = await readWithIdleTimeout()
           if (done) break
           buf += decoder.decode(value, { stream: true })
           // SSE 行协议：空行分隔事件，data: 前缀承载 JSON（与 OpenAI 兼容端点同构）
@@ -176,11 +213,16 @@ async function completeWithProvider(
           }
         }
         return full
+      } catch (e) {
+        // idle 超时/读异常：cancel 上游 reader 尽快释放连接（挂起的 read() 随之结算），再抛
+        try { await reader.cancel() } catch { /* 已结束 */ }
+        throw e
       } finally {
         opts.signal?.removeEventListener('abort', onAbort)
       }
     }
     // 非流式形态（服务端忽略 stream 参数）：一次性文本，包装为单增量
+    // （r99-f3：整段等待已由 create() 的 120s race 罩住）
     const text = (raw as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content ?? ''
     if (text) opts.onDelta?.(text)
     return text
@@ -288,6 +330,12 @@ const DATAURL_RE = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=]+)$/
  *  每次调用都受此约束（与 parse 路由 90s 同档） */
 const VLM_TIMEOUT_MS = 90_000
 
+/** r99-f3：ZAI SDK 文本路径 idle 超时——SDK 不接受 fetch signal/timeout，上游挂起时
+ *  reader.read() 永不 resolve，流式对话无限挂起（undici 300s body 兜底太迟）；每次
+ *  读到数据重置计时器，120s 无数据即判死（与 providers.ts 直连分档的推理档同额——
+ *  thinking 已禁用，常规生成远短于此） */
+const ZAI_IDLE_TIMEOUT_MS = 120_000
+
 export async function POST(req: Request) {
   const locale = await detectReqLocale()
   // r98-f2：体积预检先行——旧版 await req.json() 把任意大小 body 完整缓冲进内存后
@@ -306,6 +354,19 @@ export async function POST(req: Request) {
   }
   if (!body?.scene) {
     return NextResponse.json({ ok: false, error: errText(locale, '缺少 scene', 'Missing scene') }, { status: 400 })
+  }
+  // r99-f3：goal/memory/scene 类型卡点——非字符串直达时旧版在 .slice()/.trim() 上抛
+  // TypeError 落 502（误导为上游故障）；与 parse 路由 image/hints 同款入口校验。
+  // scene 同类一并覆盖：无 memory 时 sceneWithMemory 原样返回 scene，下游 .slice(0,3600)
+  // 同样会抛
+  if (body.goal !== undefined && typeof body.goal !== 'string') {
+    return NextResponse.json({ ok: false, error: errText(locale, 'goal 必须是字符串', 'goal must be a string') }, { status: 400 })
+  }
+  if (body.memory !== undefined && typeof body.memory !== 'string') {
+    return NextResponse.json({ ok: false, error: errText(locale, 'memory 必须是字符串', 'memory must be a string') }, { status: 400 })
+  }
+  if (typeof body.scene !== 'string') {
+    return NextResponse.json({ ok: false, error: errText(locale, 'scene 必须是字符串', 'scene must be a string') }, { status: 400 })
   }
 
   // ---------- 视觉自查分支（VLM 看截图，可选前后对比） ----------
@@ -462,8 +523,9 @@ export async function POST(req: Request) {
             if (upstreamAbort.signal.aborted) break // 退避等待期间客户端已取消
             try {
               // 供应商无关补全（zai SDK / OpenAI 兼容直连统一分派）；增量逐条转发；
-              // signal = req.signal + 本流 cancel() 的汇聚信号——客户端停止即刻传播到上游 fetch
-              full = await completeWithProvider(messages, { onDelta: piece => send({ t: 'd', v: piece }), signal: upstreamAbort.signal })
+              // signal = req.signal + 本流 cancel() 的汇聚信号——客户端停止即刻传播到上游 fetch；
+              // locale 随请求语言（r99-f3：ZAI idle 超时文案双语）
+              full = await completeWithProvider(messages, { onDelta: piece => send({ t: 'd', v: piece }), signal: upstreamAbort.signal, locale })
               decision = sanitizeDecision(extractJson(full))
               if (!decision) {
                 // 降级兜底：全文当 reply + 打捞命令行（可用性优先于严格协议）
@@ -514,8 +576,9 @@ export async function POST(req: Request) {
     let lastErr = ''
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        // 客户端断开传播到上游（非流式模式同样不该继续烧完 LLM 生成）
-        const text = await completeWithProvider(messages, { signal: req.signal })
+        // 客户端断开传播到上游（非流式模式同样不该继续烧完 LLM 生成）；
+        // locale 随请求语言（r99-f3：ZAI idle 超时文案双语）
+        const text = await completeWithProvider(messages, { signal: req.signal, locale })
         decision = sanitizeDecision(extractJson(text))
         if (decision) break
         // 降级兜底：LLM 未按 JSON 说话但有实质文本 → 全文当 reply + 打捞命令行（可用性优先于严格协议）

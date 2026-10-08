@@ -25,6 +25,8 @@ export interface SharedStructure {
   pdbId: string
   reps: RepConfig[]
   colorOverrides: Record<number, string>
+  /** r99-f1 E：配色备份随链透传（体积可忽略；接收端 resetColors 可回原始 scheme） */
+  colorBackup?: Record<string, { colorScheme: RepConfig['colorScheme']; uniformColor?: string }>
   visible: boolean
   transform?: RigidTransform
   symmetry?: { radius: number; count: number }
@@ -148,6 +150,8 @@ export function buildShareLink(): ShareLinkOutcome {
       pdbId: st.meta.pdbId as string,
       reps: st.reps,
       colorOverrides: st.colorOverrides,
+      // r99-f1 E：配色备份随链（每 rep 一条，远小于旧版逐原子 overrides）
+      colorBackup: st.colorBackup,
       visible: st.visible,
       transform: st.transform,
       symmetry: st.symmetry,
@@ -289,6 +293,8 @@ export async function applyShareSnapshot(snap: ShareSnapshot): Promise<number> {
           text,
           reps: ss.reps,
           colorOverrides: ss.colorOverrides ?? {},
+          // r99-f1 E：配色备份随链透传（旧链缺省 = 从未改色，undefined 语义一致）
+          colorBackup: ss.colorBackup,
           visible: ss.visible !== false,
           transform: ss.transform,
           symmetry: ss.symmetry,

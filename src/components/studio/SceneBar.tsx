@@ -26,6 +26,9 @@ export function SceneBar() {
   const cycleScene = useSceneStore(s => s.cycleScene)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [flashId, setFlashId] = useState<string | null>(null)
+  // r99-f2：召回高亮回落定时器存 ref——卸载时清理（不再对已卸载组件 setFlashId）；
+  // window.setTimeout 返回 number（DOM 类型），ref 同型
+  const flashTimerRef = useRef<number | null>(null)
   const renameRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile()
 
@@ -34,6 +37,9 @@ export function SceneBar() {
   useEffect(() => {
     if (renamingId) renameRef.current?.focus()
   }, [renamingId])
+
+  // r99-f2：卸载清理高亮定时器（900ms fire-and-forget 旧 timer 无归属，现在归 ref 管）
+  useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current) }, [])
 
   if (!structures.length || !scenes.length) return null
 
@@ -57,7 +63,8 @@ export function SceneBar() {
       return
     }
     setFlashId(sc.id)
-    window.setTimeout(() => setFlashId(prev => (prev === sc.id ? null : prev)), 900)
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    flashTimerRef.current = window.setTimeout(() => setFlashId(prev => (prev === sc.id ? null : prev)), 900)
     useMolStore.getState().appendLog('out', tt({ zh: `已召回场景「${sc.name}」——恢复 ${r.restored} 个结构的显示状态${r.cameraApplied ? ' + 相机' : ''}${r.missing.length ? `（未加载跳过：${r.missing.join('、')}）` : ''}`, en: `Scene "${sc.name}" recalled — restored display state for ${r.restored} structure(s)${r.cameraApplied ? ' + camera' : ''}${r.missing.length ? ` (skipped unloaded: ${r.missing.join(', ')})` : ''}` }))
   }
 

@@ -367,6 +367,10 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   const taRef = useRef<HTMLTextAreaElement>(null)
   /** 当前流式请求的中断器（停止生成按钮） */
   const abortRef = useRef<AbortController | null>(null)
+  // r99-f2：卸载即中止在飞的流式请求（与 r98-f3 UploadPanel 同款）——旧版只有停止
+  // 按钮路径可达 abort：面板随视图切换卸载后停止钮不可达，在飞请求悬挂到流自然结束；
+  // 且重挂实例的 abortRef 为 null，旧流彻底失控（busy 卡亮但按停止无响应）
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   // Ctrl/Cmd+J 全局开关（欢迎页与工作台通用——与 Ctrl+K 命令面板同族的互斥修饰键规范）
   useEffect(() => {

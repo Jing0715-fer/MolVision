@@ -29,6 +29,8 @@ function fmt(n: number, d = 1): string {
 
 /** 剖面 SVG（分区着色面积带 + 收缩点标注 + 双轴刻度 + 膜区背景带 r100） */
 function ProfileChart({ result }: { result: PoreResult }) {
+  // r99-f2：轴题 i18n（旧版硬编码中文）
+  const { t } = useI18n()
   const { samples, maxR, constriction, zone } = result
   const n = samples.length
   if (n < 2) return null
@@ -104,7 +106,7 @@ function ProfileChart({ result }: { result: PoreResult }) {
         {`${constriction.r.toFixed(2)} Å`}
       </text>
       {/* 轴题 */}
-      <text x={(PL + W - PR) / 2} y={H - 2} textAnchor="middle" fontSize="8" fill="currentColor" fillOpacity="0.6">{'位置 / Å (沿通道主轴)'}</text>
+      <text x={(PL + W - PR) / 2} y={H - 2} textAnchor="middle" fontSize="8" fill="currentColor" fillOpacity="0.6">{t({ zh: '位置 / Å（沿通道主轴）', en: 'Position / Å (along pore axis)' })}</text>
       <text x={10} y={PT + 4} fontSize="8" fill="currentColor" fillOpacity="0.6" transform={`rotate(-90 10 ${PT + 4})`} textAnchor="end">r / Å</text>
     </svg>
   )

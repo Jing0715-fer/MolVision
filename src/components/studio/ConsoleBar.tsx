@@ -1,7 +1,7 @@
 'use client'
 
 // 命令行控制台（PyMOL 风格；日志区高度三档可调；Tab 智能补全 + 参数提示 + Ctrl+R 历史搜索 + 最近命令徽章）
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { ChevronRight, ChevronsUpDown, CornerDownRight, Terminal, X, Boxes, Filter, Palette, Shapes, Sparkles, TerminalSquare, Wand2, Trash2, History, ScrollText } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
@@ -9,7 +9,7 @@ import { runCommand } from '@/lib/molecular/commands'
 import { buildCompletions, type CompletionCtx, type CompletionItem, type CompletionKind, type CompletionResult } from '@/lib/molecular/complete'
 import { useViewsStore } from '@/lib/molecular/views-store'
 import {
-  appendCmdHistory, clearCmdHistory, FILL_CMD_EVENT, loadCmdHistory, subscribeCmdHistory, HISTORY_MAX,
+  appendCmdHistory, clearCmdHistory, cmdHistorySnapshot, emptyCmdSnapshot, FILL_CMD_EVENT, subscribeCmdHistory, HISTORY_MAX,
 } from '@/lib/molecular/cmd-history'
 import { cn } from '@/lib/utils'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -68,7 +68,11 @@ export function ConsoleBar() {
   const consoleHeight = useMolStore(s => s.settings.consoleHeight)
   const updateSettings = useMolStore(s => s.updateSettings)
   const [input, setInput] = useState('')
-  const [history, setHistory] = useState<string[]>(() => loadCmdHistory())
+  // r99-f2：历史改三参 useSyncExternalStore（照搬 CommandPalette L101 同款）——旧版
+  // useState(() => loadCmdHistory()) 渲染期读 localStorage，服务端 []/客户端真值水合错配；
+  // 快照协议：cmdHistorySnapshot 缓存引用稳定（写入方失效重读）、emptyCmdSnapshot
+  // 共享空数组引用防 getSnapshot 不稳定
+  const history = useSyncExternalStore(subscribeCmdHistory, cmdHistorySnapshot, emptyCmdSnapshot)
   const [histIdx, setHistIdx] = useState(-1)
   const [completions, setCompletions] = useState<CompletionResult | null>(null)
   const [selIdx, setSelIdx] = useState(0)
@@ -105,8 +109,8 @@ export function ConsoleBar() {
     toast.success(tt({ zh: '命令历史已清空', en: 'Command history cleared' }), { description: tt({ zh: '最近命令徽章与 Ctrl+R 搜索同步清除', en: 'Recent chips and Ctrl+R search history also cleared' }) })
   }
 
-  // 共享历史订阅：HistoryDialog 执行/置顶/清空 → 控制台箭头与 Ctrl+R 即时同步
-  useEffect(() => subscribeCmdHistory(() => setHistory(loadCmdHistory())), [])
+  // 共享历史订阅：useSyncExternalStore 已接管（HistoryDialog 执行/置顶/清空 → 控制台
+  // 箭头与 Ctrl+R 即时同步）——旧版手动订阅 effect 退役
 
   // HistoryDialog「填入编辑」事件（自包含：不依赖渲染期闭包函数）
   useEffect(() => {

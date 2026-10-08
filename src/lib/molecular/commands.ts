@@ -1490,7 +1490,8 @@ export function runCommand(raw: string): void {
         n++
       }
       useMolStore.setState(s2 => ({
-        structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
+        // r99-f1：纯 colorOverrides 写入改 bump colorRev（旧版 rev 误伤 hbond detKey/membraneKey）
+        structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, colorRev: x.colorRev + 1 } : x),
         visualRev: s2.visualRev + 1,
       }))
       return ok(tt({ zh: `已 util.cbss：卡通按二级结构（螺旋红 · 折叠黄 · 环灰），配体/水/离子 ${n.toLocaleString(loc())} 原子回元素灰基色——PyMOL 经典组合`, en: `util.cbss: cartoons by secondary structure (helix red · sheet yellow · loop gray), ${n.toLocaleString(loc())} ligand/water/ion atoms back to element gray base — the classic PyMOL combo` }))
@@ -1519,7 +1520,8 @@ export function runCommand(raw: string): void {
         n++
       }
       useMolStore.setState(s2 => ({
-        structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, rev: x.rev + 1 } : x),
+        // r99-f1：同上——碳改色是纯着色路径，bump colorRev
+        structures: s2.structures.map(x => x.id === e2.id ? { ...x, colorOverrides: overrides, colorRev: x.colorRev + 1 } : x),
         visualRev: s2.visualRev + 1,
       }))
       return ok(tt({ zh: `已按元素着色 + 碳${sub === 'cbaw' ? '白' : '灰'}（util.${sub}，${n.toLocaleString(loc())} 个碳原子）——适合白底论文图`, en: `Element coloring + ${sub === 'cbaw' ? 'white' : 'gray'} carbons (util.${sub}, ${n.toLocaleString(loc())} carbon atoms) — good for white-background figures` }))

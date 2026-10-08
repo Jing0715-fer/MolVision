@@ -637,6 +637,44 @@ check "膜钮无结构守卫"             "先加载膜蛋白（如 load 1bl8 Kc
 check "场景面板膜开关"             "Show the lipid bilayer"        "src/components/studio/panels/ScenePanel.tsx" 1
 check "膜厚度滑杆"                 "membraneThickness: v\[0\]"     "src/components/studio/panels/ScenePanel.tsx" 1
 
+# ---- r99-f1：引擎层失效链细拆（rev/repsRev/colorRev 分离 + buildSeq 对称克隆链） ----
+# A：rep 哈希并入 colorRev（sync 侧 3 + buildRep 侧 2）；repsRev 不入哈希（rep 对象自身即粒度）
+check "rep哈希含colorRev"          "entry\.rev, entry\.colorRev, filtersKey" "src/lib/molecular/engine.ts" 5
+# A：symKey 三处改挂 view.buildSeq（滑杆/着色不 bump rev 后克隆防引用已 dispose 几何）
+check "symKey挂buildSeq"           "\\\$\{view\.buildSeq\}\|" "src/lib/molecular/engine.ts" 3
+check "buildRep自增buildSeq"       "view\.buildSeq\+\+"             "src/lib/molecular/engine.ts" 2
+# A：updateRep/addRep/removeRep 三路径 bump repsRev（rep 对象在哈希内天然只失效本 rep）
+check "rep操作bump repsRev"        "repsRev: x\.repsRev \+ 1"      "src/lib/molecular/store.ts" 3
+# E：applyColor/resetColors 四分支 bump colorRev（不再误伤 hbond detKey/membraneKey）
+check "着色路径bump colorRev"      "colorRev: x\.colorRev \+ 1"   "src/lib/molecular/store.ts" 4
+# E：util.cbss/cbaw/cbac 的 overrides 烘焙同样走 colorRev（复核发现的命令层漏网点）
+check "util色命令colorRev"         "colorRev: x\.colorRev \+ 1"   "src/lib/molecular/commands.ts" 2
+# E：colorBackup 备份/恢复/清空机制（store）+ 随档/随链透传（session/share-link）
+check "配色备份机制-store"          "colorBackup"                    "src/lib/molecular/store.ts" 5
+check "配色备份随档透传"            "colorBackup"                    "src/lib/molecular/session.ts" 4
+check "配色备份随链透传"            "colorBackup"                    "src/lib/molecular/share-link.ts" 3
+# B：rayRender 先恢复现场再解码（restore 幂等闭包 + toDataURL 后同步调用）
+check "ray先恢复再解码"            "rayRestored"                    "src/lib/molecular/engine.ts" 2
+# C：seqFocus 节流前移 + 数值元组快路径（VisTuple 接口/字段/比较）
+check "seqFocus元组快路径"         "VisTuple"                       "src/lib/molecular/engine.ts" 3
+# D：hbond 渲染键 selection 分量条件化（hbondSelOnly/hbondScope 在场才并入）
+check "hbond键selection条件化"     "selInHbondKey"                  "src/lib/molecular/engine.ts" 2
+# 小修包：ensemble 播放氢键 150ms 节流（参数+调用点）；superpose 后膜键显式作废；
+# applySettings 引用比较；dispose 补 recorderStream 轨道 stop
+check "ensemble氢键节流"           "hbondThrottle"                  "src/lib/molecular/engine.ts" 3
+check "superpose膜作废"            "this\.membraneKey = ''"         "src/lib/molecular/engine.ts" 1
+check "applySettings引用比较"      "settings !== prev"              "src/lib/molecular/engine.ts" 1
+check "dispose轨道stop"            "recorderStream\?\.getTracks\(\)" "src/lib/molecular/engine.ts" 2
+# A：MolViewer 自动存档签名并入三版本号（updateRep 不 bump rev 后防存档失聪；
+# 双引号内 \$ 会变成 rg 行尾锚点——模板字面量用 .{0,3} 跨越 ${ 前缀，避开 $ 字面量）
+check "存档签名三版本号"           "x\.rev\}:.{0,3}x\.repsRev\}:.{0,3}x\.colorRev" "src/components/molecular/MolViewer.tsx" 1
+# 小修包：buildSpheres/buildSticks 热路径单例复用（setRGB 复用，无 new Color/clone）
+check "热路径颜色单例"             "tmpColor\.setRGB"               "src/lib/molecular/representations.ts" 2
+# 小修包：parser 死变量 r2（query() 内——单行模式无法与 queryRadius 的合法 r2 区分，
+# 以清理标记注释钉住）与 representations 恒真死条件清理（负向——复现即回归）
+check "parser死变量清理标记"      "清理死变量"                   "src/lib/molecular/parser.ts" 1
+check0 "cartoon恒真死条件"        "i0 \+ 1\) < n \?"              "src/lib/molecular/representations.ts"
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

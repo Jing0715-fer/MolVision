@@ -30,8 +30,37 @@ interface ProbeBody {
   baseURL?: string
 }
 
+/** r99-f3：capped 文本读取——上游误配到大体积端点时旧版 res.text() 无上限全量缓冲；
+ *  流式累计超 maxBytes 即停止消费（cancel 上游连接）并截断返回，JSON 解析自然容错。
+ *  body 为 null（204 等无体状态）时回落 res.text()（无体无体积风险）。*/
+async function readCapped(res: Response, maxBytes: number): Promise<string> {
+  if (!res.body) return await res.text()
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let out = ''
+  let received = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (!value) continue
+    received += value.byteLength
+    out += decoder.decode(value, { stream: true })
+    if (received >= maxBytes) {
+      try { await reader.cancel() } catch { /* 已结束 */ }
+      break
+    }
+  }
+  return out
+}
+
 export async function POST(request: NextRequest) {
   const locale = await detectLocale()
+  // r99-f3：体积预检先行（providers 配置面同款）——探测体只收 providerId/apiKey/
+  // baseURL 三个短字段，64KB 上限远超合法载荷；旧版 request.json() 全量缓冲任意 body
+  const declaredLen = Number(request.headers.get('content-length') ?? '0')
+  if (Number.isFinite(declaredLen) && declaredLen > 64 * 1024) {
+    return NextResponse.json({ ok: false, error: errText(locale, '请求体超过 64KB 上限（模型探测只需 providerId / API Key / Base URL 等短字段）', 'Request body exceeds the 64KB limit (model probing only needs short fields such as providerId / API key / base URL)') }, { status: 413 })
+  }
   let body: ProbeBody
   try {
     body = await request.json() as ProbeBody
@@ -82,7 +111,8 @@ export async function POST(request: NextRequest) {
   const timer = setTimeout(() => controller.abort(), 10_000)
   try {
     const res = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: controller.signal })
-    const rawText = await res.text()
+    // r99-f3：capped 读取——合法 /models 列表仅几 KB，1MB 上限远超之；超限截断
+    const rawText = await readCapped(res, 1024 * 1024)
 
     if (res.ok) {
       if (rawText.trimStart().startsWith('<')) {
@@ -103,13 +133,17 @@ export async function POST(request: NextRequest) {
     if (res.status === 404) {
       return NextResponse.json({ ok: true, models: [], total: 0, note: errText(locale, '端点连通（/models 不可用），请手动填写模型 ID', 'Endpoint reachable (/models unavailable) — enter model IDs manually') })
     }
-    return NextResponse.json({ ok: false, error: errText(locale, `HTTP ${res.status}：${rawText.slice(0, 200)}`, `HTTP ${res.status}: ${rawText.slice(0, 200)}`) })
+    // r99-f3：错误文案收敛——只回状态码不回上游 body 原文（上游响应体不可信，
+    // 回显即反射面：内部错误页/敏感字段可直达前端）
+    return NextResponse.json({ ok: false, error: errText(locale, `HTTP ${res.status}（端点返回异常状态）`, `HTTP ${res.status} (endpoint returned an error status)`) })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (msg.includes('abort') || controller.signal.aborted) {
       return NextResponse.json({ ok: false, error: errText(locale, '超时（10s）——Base URL 不可达或网络受限', 'Timeout (10s) — Base URL unreachable or network restricted') })
     }
-    return NextResponse.json({ ok: false, error: errText(locale, `网络错误：${msg.slice(0, 200)}`, `Network error: ${msg.slice(0, 200)}`) })
+    // r99-f3：网络错误同样收敛为固定文案（旧版回显 e.message 截 200 字符——本地错误
+    // 信息对用户无价值且可携带内部细节）
+    return NextResponse.json({ ok: false, error: errText(locale, '网络错误（Base URL 不可达或连接被拒）', 'Network error (Base URL unreachable or connection refused)') })
   } finally {
     clearTimeout(timer)
   }

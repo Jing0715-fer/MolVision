@@ -80,8 +80,20 @@ export interface StructureEntry {
   /** 链组级隔离（isolate / chains hide / 面板眼睛开关）：被隐藏的链组索引列表。
    *  空/undefined = 全部可见（默认态）；引擎构建 rep 时过滤这些链组的原子 */
   hiddenChains?: number[]
-  /** 重建版本号（reps / overrides 变化时递增） */
+  /** 重建版本号（r99-f1 失效链细拆后的「几何级」版本号：仅坐标/链隔离/SS 重算/
+   *  结构整体替换等须全体重建的事件递增——hiddenChains / recomputeSS / resetTransform /
+   *  会话与场景恢复；引擎 rep 哈希、hbond detKey、membraneKey 均挂它） */
   rev: number
+  /** reps 数组增删/改的版本号（r99-f1）：updateRep/addRep/removeRep/applyPreset 递增——
+   *  rep 对象本身在引擎哈希内，天然只失效本 rep（单滑杆提交 = 1 rep 重建而非全体） */
+  repsRev: number
+  /** 着色级版本号（r99-f1）：applyColor/resetColors/applyPreset/SASA 着色数据就位递增——
+   *  进引擎 rep 哈希但不动 hbond detKey / membraneKey（颜色不改变几何） */
+  colorRev: number
+  /** 无选择域整体改色前的 reps 原始配色备份（按 repId 键；r99-f1 E）：
+   *  `color red`（无选择）改写 reps 配色前保存，resetColors('structure') 恢复；
+   *  连续改色只保第一份原始；applyPreset 换 reps 时清空 */
+  colorBackup?: Record<string, { colorScheme: ColorScheme; uniformColor?: string }>
   reps: RepConfig[]
   /** 原子级颜色覆盖 atomIdx → css color */
   colorOverrides: Record<number, string>

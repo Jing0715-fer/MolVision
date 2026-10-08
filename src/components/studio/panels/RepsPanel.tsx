@@ -1,7 +1,7 @@
 'use client'
 
 // 表示法面板：rep 列表卡片（类型/选择/配色/参数）
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Plus, SlidersHorizontal, Trash2, Shapes, AlertCircle, Ribbon, Worm, CircleDot, Minus, Circle, Spline, Shell } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { COLOR_SCHEME_LABELS, type ColorScheme } from '@/lib/molecular/colors'
@@ -76,6 +76,58 @@ function CommitSlider({
         onValueCommit={v => { setDrag(null); onCommit(v[0]) }}
       />
     </div>
+  )
+}
+
+/** r99-f2：提交型取色器——「本地草稿 + 取色器关闭提交」（与 CommitSlider 同族）。
+ *  原生 color 输入拖动取色时每 tick 派发 input 事件（React 合成 onChange 映射的就是它），
+ *  旧版直写 onUpdate → updateRep → rev+1 → 全结构 rep 几何重建（surface/cartoon 秒级）。
+ *  草稿态：onChange 只写本地（swatch 跟手显示），提交时机双路径覆盖——
+ *  ① 原生 change 事件（浏览器只在取色器「确认关闭」时派发一次，须 ref 挂原生监听）
+ *  ② onBlur（键盘直输 hex / 部分平台不派发 change 的兜底）。
+ *  draftRef 双路径去重：先到者清标记，后到者读 null 即幂等跳过（避免双派发） */
+function CommitColor({ value, onCommit, title, className }: {
+  value: string
+  onCommit: (v: string) => void
+  title: string
+  className: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const draftRef = useRef<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const shown = draft ?? value
+
+  // 路径①：原生 change——effect 依赖 value/onCommit，闭包随之重建；拖动期间
+  // 二者不变 → 监听器稳定不重挂（draftRef 为 ref 恒读新鲜值）
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    const onNativeChange = () => {
+      // draftRef 为 null 时回落 el.value（个别平台只派发 change 不派发 input）
+      const cur = draftRef.current ?? el.value
+      draftRef.current = null
+      setDraft(null)
+      if (cur !== value) onCommit(cur)
+    }
+    el.addEventListener('change', onNativeChange)
+    return () => el.removeEventListener('change', onNativeChange)
+  }, [value, onCommit])
+
+  return (
+    <input
+      ref={inputRef}
+      type="color"
+      value={shown}
+      onChange={e => { draftRef.current = e.target.value; setDraft(e.target.value) }}
+      onBlur={() => {
+        const cur = draftRef.current
+        draftRef.current = null
+        setDraft(null)
+        if (cur !== null && cur !== value) onCommit(cur)
+      }}
+      className={className}
+      title={title}
+    />
   )
 }
 
@@ -315,12 +367,11 @@ function RepCard({
           </SelectContent>
         </Select>
         {rep.colorScheme === 'uniform' && (
-          <input
-            type="color"
+          <CommitColor
             value={rep.uniformColor}
-            onChange={e => onUpdate(structureId, rep.id, { uniformColor: e.target.value })}
-            className="h-7 w-8 shrink-0 cursor-pointer rounded border border-border bg-background p-0.5"
+            onCommit={v => onUpdate(structureId, rep.id, { uniformColor: v })}
             title={tr({ zh: '统一颜色', en: 'Uniform color' })}
+            className="h-7 w-8 shrink-0 cursor-pointer rounded border border-border bg-background p-0.5"
           />
         )}
       </div>
