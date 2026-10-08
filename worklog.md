@@ -4173,3 +4173,5 @@ Stage Summary:
   5. 【低】pore 剖面跨结构语境：非拥有结构激活时环带可选择性淡化或提示归属（本轮观察项）
 
 （r99 段合并补记，变基并入并行会话）推送时发现远端领先 5 提交——三个并行会话同期工作：r99 模板美学大修（325f982：18 支弱项精修+新六连 52 支+GTAO 精灵黑条/autoPerf 阉割双根修）、r100 轴根修（d8ac60b：Kabsch 对称轴投票+TM waist 扫描）、r99-b 膜/孔道双修（dceb6a1：**孔道环带 X 光叠加层——「通道没画在 3D」真正根因是环带被不透明卡通遮挡（depthTest 全关修复，9PB6 可见像素 0.05%→3×）** + 膜显隐双 UI）。变基合并策略：重叠膜 UI 取远端已验证版（Toolbar Layers 钮 + 场景面板膜节），我方独有表面全保留（M 快捷键/命令面板 qa-membrane+qa-hbond 真执行化/帮助表登记）；engine.ts 双侧改动自动合并语义共存（colorRev 失效链 5 处 + buildSeq 8 处 + depthTest 5 处 + rayRestored 3 处）；ScenePanel 自动合并产生双膜节+两处语法损坏——手工去重保远端版；guards 双块 union + 动态 TOTAL（r100 进程内计数）→ **487/487 全过**。合并态终验 E2E：1BL8 孔道模板（pore 3+membrane 5+box）→ 像素级红 17/绿 60/蓝 57 环带命中 + VLM 三问全 YES（橙板横穿/环带在孔内不被蛋白遮挡/卡通清晰）→ Layers 钮 off→0 / M 键 on→5 双实现共存 → 滑杆探针 1 提交=1 buildRep（失效链分离在合并后依然成立）。终态 c0216e6 已推送。
+
+（r99 段 cron 补记，2026-10-08 20:02）15min webDevReview 巡检任务 #444519 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 14 次实证（r85/r86/r87/r88/r90/r91/r94/r95/r92/r96/r97/r98/r99-b 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
