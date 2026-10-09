@@ -64,3 +64,6 @@ server.log
 
 # r98：子代理工作草稿（worklog 已沉淀正式记录，草稿不入库）
 agent-ctx/
+
+# devd 运行时 PID（每次自愈重启即变，解除跟踪避免假 diff）
+.zscripts/dev.pid
