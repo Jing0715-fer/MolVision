@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""devd.py — Next.js dev server 守护进程（r88 热修；r91 内存看门狗升级；r102-b 双竞态修复）
+"""devd.py — Next.js dev server 守护进程（r88 热修；r91 内存看门狗升级；r102-b 双竞态修复；r103-b 斜率检测）
 
 背景（r88 根因）：
   dmesg 实锤 next-server(pid 1535) 被 OOM-killer 静默击杀
@@ -7,13 +7,17 @@
   用户页面加载不出来。此前已知：bash setsid/nohup 拉起的进程会被
   会话回收（worklog r8x 判例），故须 Python double-fork 脱离。
 
-本守护进程解决三个问题：
+本守护进程解决四个问题：
   1) 脱离 agent bash 会话存活（double-fork + setsid）；
   2) 子进程死亡（含再次 OOM）后 3s 自动重启（dev.log 落 [devd] 标记行）；
   3) r91 内存看门狗：next-server RSS 超阈值时主动优雅重启——r91 实测
      1.4GB 时已出现 HMR websocket 断连 → 客户端自发整页 reload →
      用户会话丢失被感知为「模板有问题」；提前在 1.3GB 线主动换血，
-     避免 OOM 硬杀（SIGKILL 不留日志）与 reload 失稳两个故障态。
+     避免 OOM 硬杀（SIGKILL 不留日志）与 reload 失稳两个故障态；
+  4) r103-b 内存增长斜率检测：绝对阈值对「缓慢爬升」不敏感——r102 实测
+     假死发生在 RSS 1259MB（远未触 1500MB 线，等触线时体验已受损）；
+     4 分钟窗内 RSS 单调不减且总涨 ≥300MB 即判泄漏嫌疑提前换血，
+     与绝对阈值双闸互补。
 
 防双实例：
   - 启动前若 3000 已被监听 → 守护静默退出（不与存量实例打架）；
@@ -46,6 +50,41 @@ GRACEFUL_WAIT_S = 12
 # 轮询等待而非单次判定（0.5s 间隔 × 至多 30 次 ≈ 15s）
 PORT_RELEASE_POLL_S = 0.5
 PORT_RELEASE_POLLS = 30
+# r103-b 斜率检测（r102 建议①的斜率方案）：绝对阈值对「缓慢爬升」不敏感——r102
+# 实测假死时 RSS 1259MB 远未触 MEM_LIMIT_MB 线，等触线往往已影响体验；阈值直接
+# 下调又有重启风暴风险（dev 编译缓存增长是正常行为）。数值依据：稳态 ~1.22GB +
+# 300MB ≈ 1.5GB 与绝对阈值衔接（斜率先行换血、绝对阈值兜底）；4 分钟窗（8 采样
+# × 30s 恒定间隔）避开单次路由编译尖峰——尖峰后必有回落，单调不减判定自动否决。
+SLOPE_SAMPLES = 8
+SLOPE_RISE_MB = 300
+SLOPE_FLOOR_MB = 1000
+
+
+def slope_restart_needed(samples: list[float]) -> tuple[bool, str | None]:
+    """r103-b 斜率判定（模块级纯函数——不启进程可测，r102-b import 级测试先例）。
+
+    四条全满足才触发：①窗口满 SLOPE_SAMPLES 个采样；②窗口内 RSS 单调不减
+    （允许平顶；容忍 ≤1MB 量测抖动，更显著回落即否决——编译尖峰后的 GC 回落
+    正是「正常缓存增长」与「泄漏」的分界）；③窗口总涨幅 ≥ SLOPE_RISE_MB；
+    ④最新采样 ≥ SLOPE_FLOOR_MB（低基数噪声防护：热身期 600→950 的爬升属
+    正常增长）。返回 (是否触发, 理由串)；理由串即日志行文本——与绝对阈值换血
+    的「memory restart」用词区分，事后 grep dev.log 能分清两类换血。
+    """
+    if len(samples) < SLOPE_SAMPLES:
+        return False, None
+    window = samples[-SLOPE_SAMPLES:]
+    for prev, cur in zip(window, window[1:]):
+        if cur < prev - 1.0:  # >1MB 的回落即非单调（相等平顶合法）
+            return False, None
+    rise = window[-1] - window[0]
+    if rise < SLOPE_RISE_MB:
+        return False, None
+    if window[-1] < SLOPE_FLOOR_MB:
+        return False, None
+    # 时跨推导：采样间隔恒为 MEM_CHECK_S，8 个采样首尾实际相距 (8-1)×30s=210s
+    span_s = (SLOPE_SAMPLES - 1) * MEM_CHECK_S
+    return True, (f"rss slope +{rise:.0f}MB over {span_s:.0f}s sustained "
+                  "growth (leak suspect); slope restart")
 
 
 def port_alive(port: int) -> bool:
@@ -183,6 +222,11 @@ def main() -> None:
         log_line(f"spawned next dev pid={proc.pid}")
         # r91 看门狗循环：轮询退出状态 + 周期性内存体检
         mem_restarted = False
+        # r103-b 斜率采样窗：只存最近 SLOPE_SAMPLES 个 RSS 值——采样间隔恒为
+        # MEM_CHECK_S（循环内 sleep 固定 30s），序列下标即等差时间轴，无需再存
+        # 采样时刻；生命周期与 mem_restarted 同届：换血重启与进程死亡两路 break
+        # 都回到外层循环，在这里重建空窗（新进程从零观察）。
+        rss_window: list[float] = []
         while True:
             code = proc.poll()
             if code is not None:
@@ -191,8 +235,16 @@ def main() -> None:
             if proc.poll() is not None:
                 break
             mb = server_rss_mb()
+            rss_window.append(mb)
+            del rss_window[:-SLOPE_SAMPLES]  # 滑窗：超出窗长的旧采样出队
             if mb > MEM_LIMIT_MB:
                 log_line(f"rss {mb:.0f}MB > {MEM_LIMIT_MB}MB (HMR reload risk); memory restart")
+                stop_proc_group(proc)
+                mem_restarted = True
+                break
+            slope_hit, slope_reason = slope_restart_needed(rss_window)
+            if slope_hit and slope_reason:
+                log_line(slope_reason)
                 stop_proc_group(proc)
                 mem_restarted = True
                 break
@@ -220,7 +272,8 @@ def main() -> None:
             log_line(f"port {PORT} released after "
                      f"{release_polls * PORT_RELEASE_POLL_S:.1f}s "
                      "bounded wait (slow exit path)")
-        # 端口空闲 → 循环拉起（OOM 再杀亦秒级自愈；r91 起内存超限亦主动换血）
+        # 端口空闲 → 循环拉起（OOM 再杀亦秒级自愈；r91 起内存超限、
+        # r103-b 起斜率持续增长亦主动换血）
 
 
 if __name__ == "__main__":

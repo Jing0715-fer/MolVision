@@ -816,6 +816,66 @@ check0 "死模板符号不复活"        "RechartsPrimitive|useCarousel|DrawerPr
 # global-error 根级兜底（r101-rev-a P3 悬置项收口）：root layout 抛错时最后一道 UI 防线
 check "全局错误兜底"            "Unexpected rendering error" "src/app/global-error.tsx" 1
 
+# ---- r103-a：rayRender SSAA 同步直降采样内存优化（r102 建议②） ----
+# 背景：r101 E2E 实测 3840 宽 ×2× 超采样渲染内存尖峰超沙箱预算致 dev server 进程组被杀；
+# 旧 SSAA 路径「主画布 toDataURL（7680px 宽 → 巨型 PNG base64 字符串，可达百 MB 级）→
+# await Image 解码该字符串（又一份 7680px 位图 ~66MB）→ drawImage → 小画布再 toDataURL」
+# 存在 PNG 编码→字符串→解码回位图的无谓往返，两份巨型瞬时分配是尖峰主源。新路径：
+# restore() 之前离屏目标尺寸 2D 画布直接 drawImage 主画布（同步直降采样，无巨型中间
+# 字符串/无解码往返，仅对目标尺寸小画布编码一次）；getContext('2d') 返回 null 的极端
+# 环境回落完整旧路径（hiUrl toDataURL → Image 解码 → drawImage → toDataURL）兜底。
+# ①drawImage 直降采样调用锚（必须发生在 restore() 之前——setSize 恢复视口会清空主画布；
+#    参数串完整锚定目标尺寸语义，与兜底路径的 drawImage(src,…) 不混淆）
+check "ray直降采样调用"        "drawImage\(this\.renderer\.domElement, 0, 0, targetW, targetH\)" "src/lib/molecular/engine.ts" 1
+# ②降采样平滑质量等级（imageSmoothingQuality='high'——与旧路径一致的质量语义，
+#    新快路径 + 兜底路径各一处）
+check "ray降采样high平滑"      "imageSmoothingQuality = 'high'" "src/lib/molecular/engine.ts" 2
+# ③兜底路径保留锚（getContext('2d') 不可用时的 Image 解码旧路径——'ssaa-decode' 错误串）
+check "ray旧路径解码兜底"      "ssaa-decode" "src/lib/molecular/engine.ts" 1
+# ④离屏小画布单次编码锚（目标尺寸 canvas 的 toDataURL——新路径唯一一次 PNG 编码；
+#    off\. 右侧点锚定不误伤兜底路径的 off2.toDataURL）
+check "ray离屏小画布编码"      "off\.toDataURL\('image/png'\)" "src/lib/molecular/engine.ts" 1
+# ⑤兜底路径降采样调用锚（Image 解码后 drawImage——旧路径结构完整性双锚之一，与③配套）
+check "ray旧路径降采样保留"    "drawImage\(src, 0, 0, targetW, targetH\)" "src/lib/molecular/engine.ts" 1
+
+# ---- r103-b：devd 内存增长斜率检测（r102 建议①的斜率方案——绝对阈值对「缓慢爬升」不敏感） ----
+# r102 实测假死发生在 RSS 1259MB（远未触 1500MB 绝对线）——只有绝对阈值时缓慢爬升
+# 要等触线才换血，等触线往往体验已受损；现 4 分钟窗（8 采样 × 30s）内 RSS 单调不减
+# （允许平顶、显著回落即否决——编译尖峰后的 GC 回落正是「正常缓存增长」与「泄漏」
+# 的分界）+ 总涨 ≥300MB（稳态 ~1.22GB + 300 ≈ 1.5GB 与绝对阈值衔接）+ 当前
+# ≥1000MB（低基数噪声防护）即判泄漏嫌疑主动换血；换血日志行「slope restart」与
+# 绝对阈值行「memory restart」用词区分，事后 grep dev.log 能分清两类换血。
+# ①②触发常量锚（改阈值须同步改守卫——数值语义变化应显式过闸）
+check "斜率涨幅常量"            "SLOPE_RISE_MB = 300"   "scripts/devd.py" 1
+check "斜率地板常量"            "SLOPE_FLOOR_MB = 1000" "scripts/devd.py" 1
+# ③判定纯函数锚（定义 + main 循环调用双站点——纯函数形态供 import 级测试，r102-b 先例）
+check "斜率判定纯函数"          "slope_restart_needed"  "scripts/devd.py" 2
+# ④斜率换血日志行锚（rg 正则括号必须转义——r101 坑②判例）
+check "斜率换血日志行"          "growth \(leak suspect\); slope restart" "scripts/devd.py" 1
+# ⑤main 循环采样窗接线（声明/入窗/滑窗裁剪/传参四站点——防判定函数退化为死函数）
+check "斜率采样窗接线"          "rss_window"            "scripts/devd.py" 4
+
+# ---- r103-c：smoke 假死哨兵（r102 建议③——主线程假死症状的 CI 判定缺口补齐） ----
+# 背景：r102 E2E 实测沙箱内存耗尽（next-server 1259MB + 双 Chrome ~1.35GB → free
+# 544MB）时页面主线程假死——eval 超时但浏览器级存活（get title 正常），lint/guards
+# 的静态面测不到该症状。smoke.sh 落地断言 5「假死哨兵」：press 2 触发预设切换
+# （MolViewer.tsx 快捷键监听挂 window，数字键 1-9 直映射预设——agent-browser
+# press 派发可达）+ 有界 eval 探针（Date.now() 首测 + sleep 5 有界宽限重试一次，
+# 两次皆空才判假死）+ 断言 6 触发后 console 仍零错误；汇总段由硬编码「4/4」改
+# TOTAL 动态计数。以下四锚防哨兵被后续改写静默退化：
+# ①press 触发调用锚（渲染负载触发器本体——改触发方式须同步过闸）
+check "哨兵press触发锚"          "agent-browser press 2" "scripts/smoke.sh" 1
+# ②响应探针 eval 锚（首测 + 有界宽限重试双站点；模式带 probe 赋值前缀，不误伤
+#    pass/fail 文案里的 Date.now() 字样——$ 与括号在 bash 双引号内有替换/子壳坑，
+#    沿 r101-a/r102-b 手法用单引号护正则）
+check "哨兵响应探针eval锚"      'probe=\$\(agent-browser eval "Date\.now\(\)"' "scripts/smoke.sh" 2
+# ③「假死哨兵」fail 文案锚（哨兵触发时的判定输出——文案自带 get title 区分指引；
+#    「假死哨兵触发」为 fail 分支独有串，pass 文案为「假死哨兵：」不误伤）
+check "哨兵fail文案锚"          "假死哨兵触发" "scripts/smoke.sh" 1
+# ④TOTAL 动态计数锚（pass/fail 内自增双站点 + 汇总段 $TOTAL/$TOTAL 输出共三站点
+#    ——新增断言后忘同步硬编码总数的坑就此根治）
+check "哨兵TOTAL计数锚"         'TOTAL=\$\(\(TOTAL \+ 1\)\)|\$TOTAL/\$TOTAL' "scripts/smoke.sh" 3
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

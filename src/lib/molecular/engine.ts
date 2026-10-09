@@ -4842,8 +4842,13 @@ export class MolEngine {
   }
 
   /**
-   * PyMOL ray 风格高质量静帧渲染：软阴影（PCF 2048²）+ 真超采样（内部 ss× 渲染后高质量降采样）+
+   * PyMOL ray 风格高质量静帧渲染：软阴影（PCF 2048²）+ 真超采样（内部 ss× 渲染后同步直降采样）+
    * 场景包围盒自适应阴影相机。大场景可能阻塞数秒；完成后恢复全部状态（阴影/光照/画布尺寸），返回 PNG dataURL。
+   * r103-a：SSAA 降采样改为同步直降采样——离屏目标尺寸 2D 画布直接 drawImage 主画布（浏览器内部
+   * 对 WebGL backbuffer 快照后缩放），消除旧路径「巨型中间 PNG 字符串 + 解码位图」双瞬时分配
+   * （r101 E2E 实测 4K×2× 渲染内存尖峰超沙箱预算致 dev server 进程组被杀的主源），
+   * 仅对目标尺寸小画布做一次 PNG 编码；getContext('2d') 不可用（极端环境）时回落旧
+   * Image 解码路径（'ssaa-decode'）兜底，质量语义不变（high 平滑与 WYSIWYG 一致）。
    */
   async rayRender(opts: { width?: number; supersample?: number; transparent?: boolean } = {}): Promise<{ url: string; w: number; h: number; ms: number }> {
     const t0 = performance.now()
@@ -5018,22 +5023,20 @@ export class MolEngine {
       } else {
         this.renderer.render(this.scene, this.activeCamera)
       }
-      // toDataURL 必须在恢复尺寸前读取（setSize 会清空画布）
-      const hiUrl = this.renderer.domElement.toDataURL('image/png')
-      // 先恢复现场再解码：await Image 解码（50-300ms）期间 live tick 已回到
-      // 视口尺寸 + 常规阴影状态渲染（hiUrl 已捕获为 dataURL 字符串，与画布解耦）
-      restore()
-      // —— 真超采样（SSAA）：内部以 ss 倍分辨率渲染，高质量降采样回目标尺寸 ——
-      // 旧实现直接导出高分辨率画布（文件名却标目标尺寸），超采样倍率从未真正发挥抗锯齿作用——
-      // 导出图像素级锯齿与未超采样完全一致（用户反馈「清晰度比较低」的根因）。
-      // 降采样后：边缘阶梯破 1.5× 重采样平滑，导出尺寸与文件名/返回值诚实一致。
-      if (ss > 1.001 && hiUrl) {
-        const src = new Image()
-        await new Promise<void>((res, rej) => {
-          src.onload = () => res()
-          src.onerror = () => rej(new Error('ssaa-decode'))
-          src.src = hiUrl
-        })
+      // —— 真超采样（SSAA）降采样（r103-a：同步直降采样内存优化）——
+      // 动机留档：旧版（r98 之前）直接导出高分辨率画布（文件名却标目标尺寸），超采样倍率从未
+      // 真正发挥抗锯齿作用——导出图像素级锯齿与未超采样完全一致（用户反馈「清晰度比较低」的根因）；
+      // 降采样后：边缘阶梯被高质量重采样平滑，导出尺寸与文件名/返回值诚实一致。
+      // r103-a 内存收益：旧降采样路径「主画布 toDataURL（7680px 宽 → 巨型 PNG base64 字符串，
+      // 可达百 MB 级）→ await Image 解码该字符串（又一份 7680px 位图 ~66MB）→ drawImage 降采样 →
+      // 小画布再 toDataURL」存在 PNG 编码→字符串→解码回位图的无谓往返，两份巨型瞬时分配是
+      // 4K 事件（r101 E2E 实测 3840×2× 渲染内存尖峰超沙箱预算，dev server 进程组被杀）的主源。
+      // 新路径：离屏目标尺寸 2D 画布直接 drawImage WebGL 主画布——浏览器内部对 backbuffer 快照
+      // 后缩放，无巨型中间字符串、无解码往返，仅对目标尺寸小画布做一次 PNG 编码；
+      // 质量语义不变：imageSmoothingQuality='high' 与旧路径一致，WYSIWYG 不变。
+      if (ss > 1.001) {
+        // drawImage 直降采样必须在 restore() 之前——setSize 恢复视口尺寸会清空主画布
+        //（与 toDataURL 同约束：像素快照完成后离屏画布即与主画布解耦，此后 restore/encode 均安全）
         const off = document.createElement('canvas')
         off.width = targetW
         off.height = targetH
@@ -5041,16 +5044,47 @@ export class MolEngine {
         if (octx) {
           octx.imageSmoothingEnabled = true
           octx.imageSmoothingQuality = 'high'
-          octx.drawImage(src, 0, 0, targetW, targetH)
+          octx.drawImage(this.renderer.domElement, 0, 0, targetW, targetH)
+          // 拷贝完成后立即恢复现场，再做重活（小画布 PNG 编码）——沿 r99-f1 B
+          // 「先恢复现场再异步/重处理」语义，live tick 尽早回到视口尺寸常规渲染
+          restore()
           url = off.toDataURL('image/png')
         } else {
-          url = hiUrl
+          // 兜底（极端环境 getContext('2d') 不可用）：完整旧路径保留不删——
+          // 主画布 toDataURL → Image 解码（'ssaa-decode'）→ drawImage → toDataURL
+          // toDataURL 必须在恢复尺寸前读取（setSize 会清空画布）
+          const hiUrl = this.renderer.domElement.toDataURL('image/png')
+          // 先恢复现场再解码：await Image 解码（50-300ms）期间 live tick 已回到
+          // 视口尺寸 + 常规阴影状态渲染（hiUrl 已捕获为 dataURL 字符串，与画布解耦）
+          restore()
+          const src = new Image()
+          await new Promise<void>((res, rej) => {
+            src.onload = () => res()
+            src.onerror = () => rej(new Error('ssaa-decode'))
+            src.src = hiUrl
+          })
+          const off2 = document.createElement('canvas')
+          off2.width = targetW
+          off2.height = targetH
+          const octx2 = off2.getContext('2d')
+          if (octx2) {
+            octx2.imageSmoothingEnabled = true
+            octx2.imageSmoothingQuality = 'high'
+            octx2.drawImage(src, 0, 0, targetW, targetH)
+            url = off2.toDataURL('image/png')
+          } else {
+            url = hiUrl
+          }
         }
       } else {
+        // ss ≤ 1.001：主画布本身就是目标尺寸，直接 toDataURL（保持现状）
+        // toDataURL 必须在恢复尺寸前读取（setSize 会清空画布）
+        const hiUrl = this.renderer.domElement.toDataURL('image/png')
+        restore()
         url = hiUrl
       }
     } finally {
-      // —— 恢复现场（异常路径兜底；成功路径已在 toDataURL 后同步恢复） ——
+      // —— 恢复现场（异常路径兜底；成功路径已在像素快照后同步恢复——drawImage/toDataURL 之后） ——
       restore()
     }
     return { url, w: targetW, h: targetH, ms: performance.now() - t0 }
