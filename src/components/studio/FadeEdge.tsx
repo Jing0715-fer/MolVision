@@ -33,9 +33,17 @@ export function FadeEdge({
     // 内容/容器尺寸变化（结构切换、面板拖宽、窗口缩放）时重估
     const ro = new ResizeObserver(update)
     ro.observe(el)
+    // r101-rev-b：内容增删重估——RO 只观察容器自身盒子，children 增减改变的
+    // scrollWidth 不触发回调（内容增长且无滚动发生时右缘渐隐提示永远不出现，
+    // 直到下次 scroll/resize）。MutationObserver 观察 childList/subtree 与
+    // RO 同生命周期 disconnect——一处修复 ConsoleBar（命令 chips 随输入增长）/
+    // SequenceBar（序列行切换）/MovieTimeline（关键帧增删）三消费者
+    const mo = new MutationObserver(update)
+    mo.observe(el, { childList: true, subtree: true, characterData: false })
     return () => {
       el.removeEventListener('scroll', update)
       ro.disconnect()
+      mo.disconnect()
     }
   }, [])
 

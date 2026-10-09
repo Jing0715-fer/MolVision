@@ -334,6 +334,11 @@ export class MolEngine {
   private hbondReqId = 0
   /** structureId → 检测中的 detKey（去重与过期丢弃） */
   private hbondPending = new Map<string, string>()
+  // r101：每结构最近一次投递的 reqId——坐标突变后 detKey（仅含两设置）不变，
+  // 但在飞旧请求的坐标快照已过期：结果回传时按 reqId 判过期丢弃（hbondPending 的
+  // key 判等在同设置下无法区分新旧坐标快照——resetTransform/superpose/ensemble
+  // 落帧的窄窗口竞态根治）
+  private hbondLastReq = new Map<string, number>()
   /** 最近一次 updateHBonds 的 state（异步结果到达时重渲用） */
   private lastHbondState: Parameters<MolEngine['sync']>[0] | null = null
   // SASA / ΔSASA 计算 Web Worker（大结构异步）
@@ -1885,6 +1890,7 @@ export class MolEngine {
         this.symmetryGroups.delete(id)
         this.hbondCache.delete(id)
         this.hbondPending.delete(id)
+        this.hbondLastReq.delete(id)
         // r98-f1：复合键后按 id 前缀清全部在飞类型（full/buried/xburied）
         for (const pk of [...this.sasaPending.keys()]) {
           if (pk.startsWith(id + '|')) this.sasaPending.delete(pk)
@@ -1984,8 +1990,12 @@ export class MolEngine {
       if (!entry.visible) continue
       const data = dataRegistry.get(entry.id)
       if (!data) continue
-      // 检测缓存
-      const detKey = `${s.hbondMaxDist}|${s.hbondIncludeWater}|${entry.rev}`
+      // 检测缓存。r101：detKey 不含 entry.rev——检测输入只有（坐标 + 两设置），
+      // 而 bump rev 的 setChainHidden/dssp/alter(b,q,name)/场景恢复全都不改坐标：
+      // 旧键把链显隐这类纯视觉隔离误判为检测失效 → 全量 worker 重检（O(N) 传输）。
+      // 真坐标变更（superpose/resetTransform/ensemble 落帧）全部走 rebuildStructureVisuals
+      // → 显式 hbondCache.delete 自失效；会话恢复用全新 id 天然无陈旧缓存。
+      const detKey = `${s.hbondMaxDist}|${s.hbondIncludeWater}`
       let hbonds: HBond[] | null = null
       const cached = this.hbondCache.get(entry.id)
       if (cached && cached.key === detKey) {
@@ -2463,6 +2473,7 @@ export class MolEngine {
     for (let r = 0; r < data.residues.length; r++) resWater[r] = data.residues[r].water ? 1 : 0
     const reqId = ++this.hbondReqId
     this.hbondPending.set(structureId, detKey)
+    this.hbondLastReq.set(structureId, reqId)
     // 并发闸：槽位空出后再投递（排队期间设置又变 → 过期丢弃）
     void this.hbondSlots.acquire(tt({ zh: '氢键检测', en: 'H-bond detection' })).then(release => {
       if (this.hbondPending.get(structureId) !== detKey) { release(); return }
@@ -2501,9 +2512,13 @@ export class MolEngine {
   }) {
     if (!msg || msg.type !== 'result') return
     this.hbondSlots.releaseOne() // 并发闸：一条结果释放一个槽（过期结果同样占用过槽）
-    // 过期结果（设置已变 → 新 key 已投递）：丢弃
+    // 过期结果双闸：①设置维度——新 key 已投递则丢弃；②坐标维度（r101）——
+    // detKey 去后仅含两设置，坐标突变后重投的新请求与旧在飞请求同 key，
+    // 靠 reqId 区分：非最近投递的 reqId 一律丢弃（旧坐标快照的结果不得写缓存）
     if (this.hbondPending.get(msg.structureId) !== msg.key) return
+    if (this.hbondLastReq.get(msg.structureId) !== msg.reqId) return
     this.hbondPending.delete(msg.structureId)
+    this.hbondLastReq.delete(msg.structureId)
     const hbonds: HBond[] = []
     for (let i = 0; i < msg.count; i++) {
       hbonds.push({
@@ -2541,11 +2556,15 @@ export class MolEngine {
     // 播放→停止状态切换点：坐标已定格在最后一帧，一次性重建派生缓存（r63-review-a P2-8）
     this.flushEnsembleCaches()
     // r99-f1：坐标落定点氢键强制补算——播放中 150ms 节流可能刚跳过最后一帧；
-    // detKey 挂 entry.rev 不随坐标直调失效，不补则虚线停在 ≤150ms 前的旧坐标。
-    // 自然播完路径在 applyEnsembleFrame(invalidate=true) 已刷过一次，此处幂等重刷
+    // 坐标直调路径不 bump rev（r101 起 detKey 亦不含 rev），不补则虚线停在 ≤150ms
+    // 前的旧坐标。自然播完路径在 applyEnsembleFrame(invalidate=true) 已刷过一次，此处幂等重刷
     //（结构已移除则跳过——移除分支会重渲剩余结构的氢键）
     if (sid && useMolStore.getState().structures.some(x => x.id === sid)) {
       this.hbondCache.delete(sid)
+      // r101：同步作废 pending——否则同设置下 requestHBondDetect 的去重判等
+      // （hbondPending.get(id) === detKey）会吞掉重投，旧坐标在飞结果经 reqId 闸丢弃后
+      // 新请求才携带新坐标快照补位
+      this.hbondPending.delete(sid)
       this.lastHbondKey = ''
       this.updateHBonds(useMolStore.getState())
     }
@@ -2706,13 +2725,16 @@ export class MolEngine {
     // r99-f1：旧版 ensemble 播放每帧直调本方法 → 每帧全量虚线 dispose+重建 +
     // 小结构同步 detectHBonds。节流模式下 150ms 一拍；跳过时 lastHbondKey 置空
     //（「键仍脏」），下个窗口到达（下次直调或任意 sync）必补；坐标落定点（非节流）
-    // 直调立即刷新——detKey 挂 entry.rev 不随坐标直调失效，不补则虚线停在旧坐标
+    // 直调立即刷新——坐标直调不 bump rev（r101 起 detKey 亦不含 rev），不补则虚线
+    // 停在旧坐标
     const now = performance.now()
     const refreshHbonds = !opts.hbondThrottle || now - (view.hbondLastRefresh ?? 0) >= 150
     this.lastHbondKey = ''
     if (refreshHbonds) {
       view.hbondLastRefresh = now
       this.hbondCache.delete(data.id)
+      // r101：同步作废 pending（坐标已变，同设置去重判等会吞掉重投——见 pauseEnsemble 同款注释）
+      this.hbondPending.delete(data.id)
       this.updateHBonds(store)
     }
     // 接触连线坐标已变化 → 重渲染
@@ -4820,17 +4842,22 @@ export class MolEngine {
   }
 
   /**
-   * PyMOL ray 风格高质量静帧渲染：软阴影（PCFSoft 2048²）+ 真超采样（内部 ss× 渲染后高质量降采样）+
+   * PyMOL ray 风格高质量静帧渲染：软阴影（PCF 2048²）+ 真超采样（内部 ss× 渲染后高质量降采样）+
    * 场景包围盒自适应阴影相机。大场景可能阻塞数秒；完成后恢复全部状态（阴影/光照/画布尺寸），返回 PNG dataURL。
    */
   async rayRender(opts: { width?: number; supersample?: number; transparent?: boolean } = {}): Promise<{ url: string; w: number; h: number; ms: number }> {
     const t0 = performance.now()
     const cw = this.container.clientWidth || 800
     const ch = this.container.clientHeight || 600
-    // 目标尺寸：默认视口 2×（上限 2560）；高度按视口纵横比推导
-    const targetW = Math.max(320, Math.min(2560, Math.round(opts.width ?? cw * 2)))
-    const targetH = Math.max(240, Math.round((targetW * ch) / cw))
+    // 超采样倍率先行（护栏计算依赖 ss）；目标尺寸：默认视口 2×；高度按视口纵横比推导
     const ss = Math.max(1, Math.min(2, opts.supersample ?? 1.5))
+    // r101-rev：GPU 能力护栏——超采样画布宽 targetW*ss 不得超过 maxTextureSize
+    //（移动端部分 GPU 仅 4096；超限的 setSize 产生空纹理或 WebGL context lost——
+    // 该事件异步到达不进 catch，引擎黑屏且不自动恢复）。上限 = min(4096, maxTex/ss)，
+    // 自适应视口 2× 同受此钳位保护；4096 与 ray 命令钳位一致（r101-a：旧上限 2560 会让 ray 4000 被静默砍成 2560）
+    const wCap = Math.min(4096, Math.floor(this.renderer.capabilities.maxTextureSize / ss))
+    const targetW = Math.max(320, Math.min(wCap, Math.round(opts.width ?? cw * 2)))
+    const targetH = Math.max(240, Math.round((targetW * ch) / cw))
     const w = Math.round(targetW * ss)
     const h = Math.round(targetH * ss)
 
@@ -4871,7 +4898,8 @@ export class MolEngine {
     if (keyDir.lengthSq() < 1e-6) keyDir.set(4, 8, 5)
     keyDir.normalize()
     this.renderer.shadowMap.enabled = true
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    // r101：r186 起 PCFSoftShadowMap 弃用（与 PCFShadowMap 实现已合并）——消每次 ray 的 console warning
+    this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.keyLight.castShadow = true
     this.keyLight.target.position.copy(center)
     this.scene.add(this.keyLight.target)

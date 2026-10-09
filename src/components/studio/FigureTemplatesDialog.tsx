@@ -157,40 +157,46 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete, 
         a.border, 'hover:-translate-y-0.5 hover:shadow-[0_6px_20px_oklch(0.25_0.01_80/0.12)] dark:hover:shadow-[0_6px_20px_oklch(0_0_0/0.4)]',
       )}
     >
-      {/* 缩略图（引擎真实渲染产物；缺图渐变占位） */}
-      <button
-        type="button"
-        onClick={onApply}
-        disabled={busy}
-        title={t({ zh: `应用到当前结构（演示请用 ▶ 按钮）`, en: `Apply to the current structure (use ▶ for a demo)` })}
-        className="relative block aspect-[16/10] w-full cursor-pointer overflow-hidden bg-muted/40 disabled:pointer-events-none disabled:opacity-60"
-      >
-        {imgOk ? (
-          // 静态资源缩略图（管线产物，非内容图）；next/image 对 public 静态占位无增益。
-          // r79：自定义模板为 dataURL（同一 img 元素直接消费）
-          <img
-            src={thumbSrc}
-            alt={t(tpl.tagline)}
-            loading="lazy"
-            decoding="async"
-            onError={() => setImgOk(false)}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-          />
-        ) : (
-          <span aria-hidden className={cn('absolute inset-0 flex items-center justify-center bg-gradient-to-br', a.grad)}>
-            <BookOpenText className={cn('h-8 w-8 opacity-60', a.text)} />
-          </span>
-        )}
-        {/* 序号角标（仪器簇编号惯例）；自定义模板换「自定义」印记 */}
-        {tpl.custom ? (
-          <span className="absolute left-2 top-2 rounded bg-violet-500/85 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-white">
-            {t({ zh: '自定义', en: 'CUSTOM' })}
-          </span>
-        ) : (
-          <span className={cn('absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em]', a.chip)}>
-            {String(index + 1).padStart(2, '0')}
-          </span>
-        )}
+      {/* 缩略图（引擎真实渲染产物；缺图渐变占位）
+          r101-a：兄弟结构——旧版 apply 按钮内嵌演示/对比/编辑删除三组 role="button" span
+          （button 嵌 button 在 ARIA 层面非法）；容器 div 承接 aspect/w，apply 按钮改
+          absolute inset-0 铺满底层，交互 chips 移为兄弟节点（DOM 序即层叠序恒在上层；
+          各 chip 类名逐字保留——hover 浮现/触屏恒显语义不变） */}
+      <div className="relative aspect-[16/10] w-full">
+        <button
+          type="button"
+          onClick={onApply}
+          disabled={busy}
+          title={t({ zh: `应用到当前结构（演示请用 ▶ 按钮）`, en: `Apply to the current structure (use ▶ for a demo)` })}
+          className="absolute inset-0 block cursor-pointer overflow-hidden bg-muted/40 disabled:pointer-events-none disabled:opacity-60"
+        >
+          {imgOk ? (
+            // 静态资源缩略图（管线产物，非内容图）；next/image 对 public 静态占位无增益。
+            // r79：自定义模板为 dataURL（同一 img 元素直接消费）
+            <img
+              src={thumbSrc}
+              alt={t(tpl.tagline)}
+              loading="lazy"
+              decoding="async"
+              onError={() => setImgOk(false)}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+            />
+          ) : (
+            <span aria-hidden className={cn('absolute inset-0 flex items-center justify-center bg-gradient-to-br', a.grad)}>
+              <BookOpenText className={cn('h-8 w-8 opacity-60', a.text)} />
+            </span>
+          )}
+          {/* 序号角标（仪器簇编号惯例）；自定义模板换「自定义」印记——非交互元素留 apply 按钮内部合法 */}
+          {tpl.custom ? (
+            <span className="absolute left-2 top-2 rounded bg-violet-500/85 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-white">
+              {t({ zh: '自定义', en: 'CUSTOM' })}
+            </span>
+          ) : (
+            <span className={cn('absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em]', a.chip)}>
+              {String(index + 1).padStart(2, '0')}
+            </span>
+          )}
+        </button>
         {/* 演示按钮（hover 浮现；触屏恒显） */}
         <span
           role="button"
@@ -259,7 +265,7 @@ function TemplateCard({ tpl, index, onApply, onDemo, onCompare, busy, onDelete, 
             )}
           </span>
         )}
-      </button>
+      </div>
 
       {/* 正文 */}
       <div className="flex flex-1 flex-col gap-1.5 p-3">

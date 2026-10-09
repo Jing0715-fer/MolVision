@@ -20,6 +20,7 @@ import { cookies, headers } from 'next/headers'
 import ZAI from 'z-ai-web-dev-sdk'
 import { visionWithProvider, type ContentPart, type VisionMessage } from '@/lib/molecular/agent/providers'
 import { sanitizeTemplateCommands, type TemplateDraft } from '@/lib/molecular/template-command-guard'
+import { readRequestCapped } from '@/lib/api/read-body'
 import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
 
 const CATEGORIES = ['basic', 'surface', 'conform', 'site', 'interaction', 'membrane'] as const
@@ -243,19 +244,28 @@ export async function POST(req: Request) {
   const locale = await detectReqLocale()
   const errText = (zh: string, en: string, status: number) =>
     NextResponse.json({ ok: false, error: locale === 'en' ? en : zh }, { status })
+  const err413 = () => errText('请求体超过 12MB 上限（图片应 ≤ 5MB，客户端会缩放）', 'Request body exceeds the 12MB limit (image ≤ 5MB; the client downscales)', 413)
 
   // r98：体积预检先行——旧版 await req.json() 把任意大小 body 完整缓冲进内存后
   // 才校验 5MB 上限（App Router route handler 无框架级 body 上限，直连数百 MB
-  // JSON 即可打内存）。content-length 头在解析前可得，异常直达直接拒
+  // JSON 即可打内存）。快速拒绝路径：content-length 头在解析前可得，省一次流读取
   const declaredLen = Number(req.headers.get('content-length') ?? '0')
   if (Number.isFinite(declaredLen) && declaredLen > 12 * 1024 * 1024) {
-    return errText('请求体超过 12MB 上限（图片应 ≤ 5MB，客户端会缩放）', 'Request body exceeds the 12MB limit (image ≤ 5MB; the client downscales)', 413)
+    return err413()
+  }
+  // r101-b：流式限长读取（权威上限）——chunked 传输不发送 content-length 头，
+  // 上方预检恒放行（Number(undefined→'0')=0）；getReader 逐块累计字节超 12MB
+  // 即 cancel 上游并回 413（models 路由 readCapped 响应体版同模式）。图像路由
+  // 的载荷主体是 base64 大文本字段，上限沿用 MB 级而非 64KB
+  const bodyText = await readRequestCapped(req, 12 * 1024 * 1024)
+  if (bodyText === null) {
+    return err413()
   }
 
   // ---------- 请求体校验 ----------
   let body: { image?: unknown; hints?: unknown }
   try {
-    body = (await req.json()) as { image?: unknown; hints?: unknown }
+    body = JSON.parse(bodyText) as { image?: unknown; hints?: unknown }
   } catch {
     return errText('请求体不是合法 JSON', 'Request body is not valid JSON', 400)
   }

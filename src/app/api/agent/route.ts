@@ -7,6 +7,7 @@ import { cookies, headers } from 'next/headers'
 import ZAI from 'z-ai-web-dev-sdk'
 import type { AgentRequestBody, AgentDecision } from '@/lib/molecular/agent/protocol'
 import { chatCompletionOnce, chatCompletionStream, getDefaultProviderId, visionWithProvider, type ChatMessage, type ContentPart, type VisionMessage } from '@/lib/molecular/agent/providers'
+import { readRequestCapped } from '@/lib/api/read-body'
 import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
 
 /** 请求级语言检测（与 layout 同规则）：cookie > Accept-Language —— 与界面语言保持一致 */
@@ -338,17 +339,25 @@ const ZAI_IDLE_TIMEOUT_MS = 120_000
 
 export async function POST(req: Request) {
   const locale = await detectReqLocale()
+  const err413 = errText(locale, '请求体超过 16MB 上限（视觉自查双图应 ≤5MB/张，客户端会缩放）', 'Request body exceeds the 16MB limit (visual-review images ≤ 5MB each; the client downscales)')
   // r98-f2：体积预检先行——旧版 await req.json() 把任意大小 body 完整缓冲进内存后
   // 才做字段校验（App Router route handler 无框架级 body 上限，直连数百 MB JSON 即可
-  // 打内存）。content-length 头在解析前可得，异常直达直接拒。agent 视觉自查模式带
-  // 双图（image + imageBefore，单图 ≤5MB），上限放宽到 16MB（parse 路由 12MB + 双图余量）
+  // 打内存）。agent 视觉自查模式带双图（image + imageBefore，单图 ≤5MB），上限放宽
+  // 到 16MB（parse 路由 12MB + 双图余量）。快速拒绝路径：省一次流读取
   const declaredLen = Number(req.headers.get('content-length') ?? '0')
   if (Number.isFinite(declaredLen) && declaredLen > 16 * 1024 * 1024) {
-    return NextResponse.json({ ok: false, error: errText(locale, '请求体超过 16MB 上限（视觉自查双图应 ≤5MB/张，客户端会缩放）', 'Request body exceeds the 16MB limit (visual-review images ≤ 5MB each; the client downscales)') }, { status: 413 })
+    return NextResponse.json({ ok: false, error: err413 }, { status: 413 })
+  }
+  // r101-b：流式限长读取（权威上限）——chunked 传输不发送 content-length 头，上方
+  // 预检恒放行（Number(undefined→'0')=0）；getReader 逐块累计字节超 16MB 即 cancel
+  // 上游并回 413（readCapped 响应体版同模式，防无上限全量缓冲）
+  const bodyText = await readRequestCapped(req, 16 * 1024 * 1024)
+  if (bodyText === null) {
+    return NextResponse.json({ ok: false, error: err413 }, { status: 413 })
   }
   let body: AgentRequestBody
   try {
-    body = (await req.json()) as AgentRequestBody
+    body = JSON.parse(bodyText) as AgentRequestBody
   } catch {
     return NextResponse.json({ ok: false, error: errText(locale, '请求体不是合法 JSON', 'Request body is not valid JSON') }, { status: 400 })
   }

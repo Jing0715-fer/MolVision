@@ -12,6 +12,7 @@ import { cookies, headers } from 'next/headers'
 import ZAI from 'z-ai-web-dev-sdk'
 import { visionWithProvider, type ContentPart, type VisionMessage } from '@/lib/molecular/agent/providers'
 import { sanitizeTemplateCommands } from '@/lib/molecular/template-command-guard'
+import { readRequestCapped } from '@/lib/api/read-body'
 import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
 
 /** 校准提示词：两图比对 → 六维差异 → 修正完整序列 */
@@ -103,17 +104,27 @@ export async function POST(req: Request) {
   const locale = await detectReqLocale()
   const errText = (zh: string, en: string, status: number) =>
     NextResponse.json({ ok: false, error: locale === 'en' ? en : zh }, { status })
+  const err413 = () => errText('请求体超过 12MB 上限（图片应 ≤ 5MB，客户端会缩放）', 'Request body exceeds the 12MB limit (images ≤ 5MB; the client downscales)', 413)
 
-  // r98：体积预检先行（与 parse 路由同修——await req.json() 先缓冲后校验的内存炸弹）
+  // r98：体积预检先行（与 parse 路由同修——await req.json() 先缓冲后校验的内存炸弹）。
+  // 快速拒绝路径：content-length 头在解析前可得，省一次流读取
   const declaredLen = Number(req.headers.get('content-length') ?? '0')
   if (Number.isFinite(declaredLen) && declaredLen > 12 * 1024 * 1024) {
-    return errText('请求体超过 12MB 上限（图片应 ≤ 5MB，客户端会缩放）', 'Request body exceeds the 12MB limit (images ≤ 5MB; the client downscales)', 413)
+    return err413()
+  }
+  // r101-b：流式限长读取（权威上限）——chunked 传输不发送 content-length 头，
+  // 上方预检恒放行（Number(undefined→'0')=0）；getReader 逐块累计字节超 12MB
+  // 即 cancel 上游并回 413（models 路由 readCapped 响应体版同模式）。双图
+  // base64 载荷主体，上限沿用 MB 级而非 64KB
+  const bodyText = await readRequestCapped(req, 12 * 1024 * 1024)
+  if (bodyText === null) {
+    return err413()
   }
 
   // ---------- 请求体校验 ----------
   let body: { target?: unknown; render?: unknown; commands?: unknown }
   try {
-    body = (await req.json()) as { target?: unknown; render?: unknown; commands?: unknown }
+    body = JSON.parse(bodyText) as { target?: unknown; render?: unknown; commands?: unknown }
   } catch {
     return errText('请求体不是合法 JSON', 'Request body is not valid JSON', 400)
   }

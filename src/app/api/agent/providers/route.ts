@@ -8,6 +8,7 @@ import {
   listProviderStatus, getDefaultProviderId, setDefaultProviderId,
   setProviderConfig, deleteProviderConfig, PROVIDER_CATALOG, sanitizeBaseURL, type DiscoveredModel,
 } from '@/lib/molecular/agent/providers'
+import { readRequestCapped } from '@/lib/api/read-body'
 import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
 
 export const runtime = 'nodejs'
@@ -49,16 +50,25 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const locale = await detectLocale()
+  const err413 = errText(locale, '请求体超过 64KB 上限（供应商配置只需 API Key / Base URL / 模型 ID 等短字段）', 'Request body exceeds the 64KB limit (provider config only needs short fields such as API key / base URL / model ID)')
   // r99-f3：体积预检先行（agent/parse 路由同款修法）——配置面只收短字符串
   // （apiKey/baseURL/defaultModel/discoveredModels），64KB 上限远超合法载荷；
-  // 旧版 await request.json() 全量缓冲任意大小 body 后才做字段校验（内存面）
+  // 旧版 await request.json() 全量缓冲任意大小 body 后才做字段校验（内存面）。
+  // 快速拒绝路径：content-length 头在解析前可得，省一次流读取
   const declaredLen = Number(request.headers.get('content-length') ?? '0')
   if (Number.isFinite(declaredLen) && declaredLen > 64 * 1024) {
-    return NextResponse.json({ error: errText(locale, '请求体超过 64KB 上限（供应商配置只需 API Key / Base URL / 模型 ID 等短字段）', 'Request body exceeds the 64KB limit (provider config only needs short fields such as API key / base URL / model ID)') }, { status: 413 })
+    return NextResponse.json({ error: err413 }, { status: 413 })
+  }
+  // r101-b：流式限长读取（权威上限）——chunked 传输不发送 content-length 头，
+  // 上方预检恒放行（Number(undefined→'0')=0）；getReader 逐块累计字节超限即
+  // cancel 上游并回 413（readCapped 响应体版同模式，防无上限全量缓冲）
+  const bodyText = await readRequestCapped(request, 64 * 1024)
+  if (bodyText === null) {
+    return NextResponse.json({ error: err413 }, { status: 413 })
   }
   let body: { providerId?: string; apiKey?: string; baseURL?: string; defaultModel?: string; timeoutMs?: number; discoveredModels?: unknown; setDefault?: boolean }
   try {
-    body = await request.json()
+    body = JSON.parse(bodyText)
   } catch {
     return NextResponse.json({ error: errText(locale, '请求体不是合法 JSON', 'Request body is not valid JSON') }, { status: 400 })
   }

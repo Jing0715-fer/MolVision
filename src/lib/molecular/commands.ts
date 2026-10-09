@@ -27,6 +27,7 @@ import { TOURS, findTour } from './tours'
 import { buildMorph, buildMultiMorph } from './morph'
 import { playMovie, stopMovie, useMovieStore } from './movie'
 import { buildSvgExport, downloadSvg } from './svg-export'
+import { downloadDataUrl } from './image-export'
 import { clearCmdHistory } from './cmd-history'
 import { whenEngineReady } from './engine-ready'
 import { toast } from 'sonner'
@@ -37,6 +38,9 @@ function clampNum(v: number, min: number, max: number, dflt: number): number {
   if (isNaN(v)) return dflt
   return Math.max(min, Math.min(max, v))
 }
+
+/** r101-a：png / ray 的透明背景关键字（任意参数位、大小写不敏感；t 为单字母速记，透明为中文别名） */
+const TRANSPARENT_ARG_RE = /^(transparent|t|透明)$/i
 
 /** PyMOL 逗号语法拆分：`show ballstick, ligand` → head='ballstick' tail='ligand'。
  *  选择表达式语法本身不含顶层逗号，首个逗号必是 <参数>, <选择> 分隔（LLM 的 PyMOL 惯性写法，实测高频）。 */
@@ -160,8 +164,8 @@ export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; exampl
   { cmd: 'movie play|stop|smooth|hold|edit [秒 轮]', cmdEn: 'movie play|stop|smooth|hold|edit [seconds rounds]', desc: { zh: '关键帧巡航（smooth=平滑连续路径录像丝滑 · hold=逐帧驻留 · 无秒数走时间轴；edit 编排）', en: 'Keyframe cruise (smooth = continuous path, silky recordings · hold = per-frame dwell · no seconds uses the timeline; edit arranges)' }, example: 'movie play smooth 4 2 · movie smooth' },
   { cmd: 'ensemble play|frame|fps…', desc: { zh: 'NMR 构象动画控制', en: 'NMR ensemble animation control' }, example: 'ensemble play' },
   { cmd: 'save <名>.pdb [选择]', cmdEn: 'save <name>.pdb [selection]', desc: { zh: '导出坐标为 PDB 文件', en: 'Export coordinates as a PDB file' }, example: 'save myprot.pdb chain A' },
-  { cmd: 'png [倍率]', cmdEn: 'png [scale]', desc: { zh: '截图导出 PNG', en: 'Screenshot export as PNG' }, example: 'png 2' },
-  { cmd: 'ray [宽px]', cmdEn: 'ray [width px]', desc: { zh: 'Ray 级静帧渲染（软阴影+1.5× 真超采样抗锯齿：内部高分辨率渲染后高质量降采样）', en: 'Ray-quality still render (soft shadows + 1.5× true supersampling AA: internal hi-res render then quality downsample)' }, example: 'ray 1920' },
+  { cmd: 'png [倍率] [transparent]', cmdEn: 'png [scale] [transparent]', desc: { zh: '截图导出 PNG（transparent=透明背景）', en: 'Screenshot export as PNG (transparent = transparent background)' }, example: 'png 2 · png 2 transparent' },
+  { cmd: 'ray [宽px] [超采样] [transparent]', cmdEn: 'ray [width px] [supersample] [transparent]', desc: { zh: 'Ray 级静帧渲染（软阴影+真超采样抗锯齿：内部高分辨率渲染后高质量降采样，超采样 1-2×）', en: 'Ray-quality still render (soft shadows + true supersampling AA: internal hi-res render then quality downsample, 1-2× supersampling)' }, example: 'ray 1920 · ray 1920 2 transparent' },
   { cmd: 'svg [宽px]', cmdEn: 'svg [width px]', desc: { zh: '矢量图导出（CPU 投影，无限缩放不失真；可入稿 Illustrator/Inkscape）', en: 'Vector export (CPU projection, infinitely scalable; ready for Illustrator/Inkscape)' }, example: 'svg 2400' },
   { cmd: 'show cell / hide cell', desc: { zh: '晶胞盒线框（CRYST1，a红 b绿 c蓝）', en: 'Unit-cell wireframe (CRYST1, a red b green c blue)' }, example: 'show cell' },
   { cmd: 'axes on|off', desc: { zh: '视口坐标轴指示器（点击轴端对齐视角）', en: 'Viewport axis gizmo (click an axis tip to align the view)' }, example: 'axes off' },
@@ -1899,34 +1903,54 @@ export function runCommand(raw: string): void {
   if (cmd === 'png') {
     const eng = engineRef.current
     if (!eng) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
-    const scale = clampNum(parseFloat(parts[1]), 1, 4, 2)
+    // r101-rev-a：对齐 ray 的循环解析器——旧版 parseFloat(parts[1]) 固定读首参，
+    // `png t 3` 的倍率被静默吞掉（parseFloat('t')=NaN 回落 2）。数字按出现顺序落位、
+    // transparent 关键字任意参数位（与 ray 同款语义；旧版对非法参静默容错，现统一
+    // 报用法——与 ray 的严格风格一致，隐藏拼写错误更糟）
+    const usage = tt({ zh: '用法：png [倍率1-4] [transparent]（如 png 2 transparent；缺省 2×）', en: 'Usage: png [scale 1-4] [transparent] (e.g. png 2 transparent; default 2×)' })
+    let scale: number | undefined
+    let transparent = false
+    for (const p of parts.slice(1)) {
+      if (TRANSPARENT_ARG_RE.test(p)) { transparent = true; continue }
+      const n = parseFloat(p)
+      if (isNaN(n) || scale !== undefined) return err(usage)
+      scale = clampNum(n, 1, 4, 2)
+    }
+    const sc = scale ?? 2
     const s = useMolStore.getState()
     try {
-      const url = eng.capture({ scale })
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${s.structures[0]?.name ?? 'molvision'}${scale > 1 ? `@${scale}x` : ''}.png`
-      a.click()
-      return ok(tt({ zh: `已导出 PNG（${scale}× 分辨率）`, en: `PNG exported (${scale}× resolution)` }))
+      const url = eng.capture({ scale: sc, transparent })
+      downloadDataUrl(url, `${s.structures[0]?.name ?? 'molvision'}${sc > 1 ? `@${sc}x` : ''}${transparent ? tt({ zh: '-透明', en: '-transparent' }) : ''}.png`)
+      return ok(tt({ zh: `已导出 PNG（${sc}× 分辨率${transparent ? '，透明背景' : ''}）`, en: `PNG exported (${sc}× resolution${transparent ? ', transparent background' : ''})` }))
     } catch {
       return err(tt({ zh: '截图失败', en: 'Screenshot failed' }))
     }
   }
 
   if (cmd === 'ray') {
-    // PyMOL ray 风格静帧：软阴影 + 1.5× 真超采样（内部高分辨率渲染→高质量降采样=全场景抗锯齿）
+    // PyMOL ray 风格静帧：软阴影 + 真超采样（内部高分辨率渲染→高质量降采样=全场景抗锯齿）
     // 异步化：先弹进度 toast 再渲染（双 rAF 让提示先绘制），避免长时间无反馈的「假死」观感
+    // r101-a：语法扩展 ray [宽px] [超采样] [transparent]（向后兼容——ray / ray 1920 旧语义不变）；
+    // transparent 关键字任意参数位可出现，数字参数按出现顺序先后落入宽度/超采样
     const eng = engineRef.current
     if (!eng) return err(tt({ zh: '引擎未就绪', en: 'Engine not ready' }))
     if (!eng.hasStructures) return err(tt({ zh: '场景为空——先加载结构再渲染（load <PDB编号>）', en: 'Scene is empty — load a structure before rendering (load <PDB ID>)' }))
+    const usage = tt({ zh: '用法：ray [宽px] [超采样1-2] [transparent]（如 ray 1920 2 transparent；缺省按视口 2×、1.5× 超采样）', en: 'Usage: ray [width px] [supersample 1-2] [transparent] (e.g. ray 1920 2 transparent; defaults: viewport ×2, 1.5× supersampling)' })
     let width: number | undefined
-    if (parts[1]) {
-      width = clampNum(parseFloat(parts[1]), 320, 4096, NaN)
-      if (isNaN(width)) return err(tt({ zh: '用法：ray [宽 px]（如 ray 1920；缺省按视口 2× 自适应）', en: 'Usage: ray [width px] (e.g. ray 1920; default adapts to viewport ×2)' }))
+    let supersample: number | undefined
+    let transparent = false
+    for (const p of parts.slice(1)) {
+      if (TRANSPARENT_ARG_RE.test(p)) { transparent = true; continue }
+      const n = parseFloat(p)
+      if (isNaN(n)) return err(usage)
+      if (width === undefined) width = clampNum(n, 320, 4096, NaN)
+      else if (supersample === undefined) supersample = clampNum(n, 1, 2, 1.5)
+      else return err(usage)
     }
+    const ss = supersample ?? 1.5
     const s = useMolStore.getState()
     const tid = 'ray-render'
-    ok(tt({ zh: 'Ray 渲染已启动（PCF 软阴影 + 1.5× 真超采样抗锯齿）——完成后自动导出 PNG，期间界面可能短暂停顿', en: 'Ray render started (PCF soft shadows + 1.5× true supersampling AA) — PNG exports automatically when done; the UI may briefly freeze' }))
+    ok(tt({ zh: `Ray 渲染已启动（PCF 软阴影 + ${ss}× 真超采样抗锯齿${transparent ? '，透明背景' : ''}）——完成后自动导出 PNG，期间界面可能短暂停顿`, en: `Ray render started (PCF soft shadows + ${ss}× true supersampling AA${transparent ? ', transparent background' : ''}) — PNG exports automatically when done; the UI may briefly freeze` }))
     toast.loading(tt({ zh: 'Ray 渲染中…', en: 'Ray rendering…' }), { id: tid, description: tt({ zh: '软阴影 + 超采样静帧渲染，大场景需数秒', en: 'Soft shadows + supersampled still render; large scenes take a few seconds' }) })
     void (async () => {
       // 双 rAF：确保 loading toast 先绘制到屏幕，再进入阻塞渲染
@@ -1934,19 +1958,16 @@ export function runCommand(raw: string): void {
       // 相机动画落位等待：view from / 视角书签过渡期间直接 ray 会把中途帧（旧构图）渲染进静帧
       for (let i = 0; i < 25 && eng.isCameraAnimating(); i++) await new Promise<void>(r => setTimeout(r, 100))
       try {
-        const r = await eng.rayRender({ width })
+        const r = await eng.rayRender({ width, supersample, transparent })
         if (!r.url) {
           toast.error(tt({ zh: 'Ray 渲染失败', en: 'Ray render failed' }), { id: tid, description: tt({ zh: '画布尺寸限制——试试更小的宽度', en: 'Canvas size limit — try a smaller width' }) })
           useMolStore.getState().appendLog('err', tt({ zh: 'Ray 渲染失败（画布尺寸限制——试试更小的宽度）', en: 'Ray render failed (canvas size limit — try a smaller width)' }))
           return
         }
-        const a = document.createElement('a')
-        a.href = r.url
-        a.download = `${s.structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
-        a.click()
+        downloadDataUrl(r.url, `${s.structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}${transparent ? '-transparent' : ''}.png`)
         const ms = r.ms.toFixed(0)
-        toast.success(tt({ zh: `Ray 完成：${r.w}×${r.h} px`, en: `Ray done: ${r.w}×${r.h} px` }), { id: tid, description: tt({ zh: `耗时 ${ms} ms · 真超采样抗锯齿 · PNG 已导出`, en: `${ms} ms · true supersampling AA · PNG exported` }) })
-        useMolStore.getState().appendLog('out', tt({ zh: `Ray 渲染完成：${r.w}×${r.h} px（PCF 软阴影 + 1.5× 真超采样：内部高分辨率渲染后降采样，全场景抗锯齿）· ${ms} ms——已导出 PNG`, en: `Ray render done: ${r.w}×${r.h} px (PCF soft shadows + 1.5× true supersampling: internal hi-res render then downsample, full-scene AA) · ${ms} ms — PNG exported` }))
+        toast.success(tt({ zh: `Ray 完成：${r.w}×${r.h} px`, en: `Ray done: ${r.w}×${r.h} px` }), { id: tid, description: tt({ zh: `耗时 ${ms} ms · ${ss}× 真超采样抗锯齿${transparent ? ' · 透明背景' : ''} · PNG 已导出`, en: `${ms} ms · ${ss}× true supersampling AA${transparent ? ' · transparent background' : ''} · PNG exported` }) })
+        useMolStore.getState().appendLog('out', tt({ zh: `Ray 渲染完成：${r.w}×${r.h} px（PCF 软阴影 + ${ss}× 真超采样：内部高分辨率渲染后降采样，全场景抗锯齿）· ${ms} ms——已导出 PNG`, en: `Ray render done: ${r.w}×${r.h} px (PCF soft shadows + ${ss}× true supersampling: internal hi-res render then downsample, full-scene AA) · ${ms} ms — PNG exported` }))
       } catch {
         toast.error(tt({ zh: 'Ray 渲染失败', en: 'Ray render failed' }), { id: tid, description: tt({ zh: '显存或画布尺寸限制——试试更小的宽度', en: 'GPU memory or canvas size limit — try a smaller width' }) })
         useMolStore.getState().appendLog('err', tt({ zh: 'Ray 渲染失败（显存或画布尺寸限制——试试更小的宽度）', en: 'Ray render failed (GPU memory or canvas size limit — try a smaller width)' }))

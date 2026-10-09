@@ -38,6 +38,9 @@ check0() {
   count=$(rg -c --no-messages -e "$pattern" -- "$path" 2>/dev/null | awk -F: '{s+=$NF} END {print s+0}')
   if [ "${count:-0}" -eq 0 ]; then
     printf 'PASS  %-34s 命中  0（要求 =0）\n' "$name"
+    # r101-rev-c：PASS 分支补 PASSES 自增——r60 起的历史缺口（实跑 529 条上报 517，
+    # 指标失真；exit 码语义不受影响但守卫总数应反映真实执行量）
+    PASSES=$((PASSES + 1))
   else
     printf 'FAIL  %-34s 命中 %2d（要求 =0）—— %s\n' "$name" "${count:-0}" "$path"
     FAILS=$((FAILS + 1))
@@ -692,6 +695,76 @@ check "录制停止双击闸"            "stopBusyRef"                   "src/co
 check "fileinput清value"          "e.target.value = ''"           "src/components/studio/LoadDialog.tsx" 1
 check "ZAI定时器清理"             "clearTimeout\(zaiTimer\)"    "src/app/api/templates/parse/route.ts" 1
 check "短key全遮"                 "length <= 8 \? '••••'"       "src/lib/molecular/agent/providers.ts" 1
+
+# ---- r101-b：API 请求体流式限长（r99 建议③前半——chunked 传输绕过 content-length 预检的权威上限） ----
+# 共享工具 readRequestCapped（src/lib/api/read-body.ts）：request.body 为 null 回落
+# text() 事后字节判定；有流则 getReader 逐块累计，超限 cancel 上游返回 null。
+# 五路由全接入（providers 64KB / models 64KB / agent 16MB / parse 12MB / calibrate 12MB），
+# content-length 预检保留为快速拒绝路径；全 src/app/api 复核确认无第 6 个 request.json() 路由
+check "请求体限长读取函数"        "export async function readRequestCapped" "src/lib/api/read-body.ts" 1
+# r101-rev-c：边界语义统一「超过才拒」（旧 >= 语义使恰在上限的诚实请求被拒，
+# 与 content-length 预检的 > 在同一边界字节上自相矛盾）
+check "超限cancel上游"            "received > maxBytes"         "src/lib/api/read-body.ts" 1
+check "五路由限长读取接入"        "await readRequestCapped\("    "src/app/api" 5
+check "五路由超限413回落"         "bodyText === null"            "src/app/api" 5
+# 负向：request/req .json() 调用零残留（正则锚定「= (await …」调用形——注释里的
+# 历史引用「旧版 await req.json()」不带等号赋值形，不误伤；第 6 个路由若出现
+# 裸 json() 读取也会被此守卫拦下，倒逼走 readRequestCapped）
+check0 "五路由json零残留"         "= \(?await (req|request)\.json\(\)" "src/app/api"
+
+# ---- r101-a：导出管线统一（png/ray/svg 三口下载收敛 + ray 参数面对话框 + PCFSoft 弃用清理 + TemplateCard ARIA 兄弟化） ----
+# ①共享下载模块定义（此前 Toolbar capture/rayCapture 与 commands png/ray 四处各复制一份 <a> 下载）
+check "下载收敛模块"              "export function downloadDataUrl" "src/lib/molecular/image-export.ts" 1
+# ②三口引用（Toolbar capture+rayCapture / commands png+ray 各 ≥2——任务要求的「合计 ≥3」由此双闸保证）
+check "Toolbar下载收敛"          "downloadDataUrl\(" "src/components/studio/Toolbar.tsx" 2
+check "commands下载收敛"         "downloadDataUrl\(" "src/lib/molecular/commands.ts" 2
+# ③内联 <a> 下载零残留（Toolbar 全清；commands 仅 png/ray 文件名构造清零——record webm / save pdb
+#    为非图像口保留内联；CommandPalette/RecordBadge 等其他组件的独立下载点不属本轮收敛范围，
+#    故模式钉住 png/ray 的 `${s.structures[0]} 文件名构造，避 $ 字面量用 .{0,3} 跨越——r99-main 同款）
+check0 "Toolbar无内联a下载"      "a\.download" "src/components/studio/Toolbar.tsx"
+check0 "commands无png/ray内联下载" "a\.download = .{0,3}s\.structures\[0\]" "src/lib/molecular/commands.ts"
+# ④ray 命令参数解析（语法扩展 ray [宽px] [超采样1-2] [transparent]——supersample 钳位 + 关键字正则）
+check "ray超采样解析"            "supersample" "src/lib/molecular/commands.ts" 2
+check "ray透明参数解析"          "TRANSPARENT_ARG_RE" "src/lib/molecular/commands.ts" 2
+# ⑤PCFSoftShadowMap（r186 弃用 API——每次 ray 触发 console warning）代码级零命中
+#    （模式钉住 THREE. 前缀：engine 保留的弃用说明注释文字不入此闸）
+check0 "PCFSoft弃用API清理"     "THREE\.PCFSoftShadowMap" "src"
+# ⑥Ray 渲染设置对话框（rayRender 参数面：宽度/超采样/透明，选项持久化 mv-ray-opts）存在且被 Toolbar 引用
+check "Ray导出参数面存在"       "RayExportDialog" "src/components/studio/RayExportDialog.tsx" 1
+check "Toolbar引用Ray对话框"    "RayExportDialog" "src/components/studio/Toolbar.tsx" 2
+# TemplateCard 嵌套交互修复（r99 遗留 P3）：button 嵌 role="button" span（ARIA 非法）改兄弟结构——
+# 缩略图容器 div 承接 aspect/w（旧 button 的该类句柄不复存在；右引号锚定区别于对照视图 L1444 的同前缀类）
+check "TemplateCard兄弟容器"    'relative aspect-\[16/10\] w-full"' "src/components/studio/FigureTemplatesDialog.tsx" 1
+
+# ---- r101 主代理：hbond detKey 去 entry.rev（r99 下轮建议②简化落地） ----
+# 检测输入只有（坐标+两设置）：setChainHidden/dssp/alter/场景恢复 bump rev 但不改坐标，
+# 旧键把链显隐误判为检测失效 → 全量 worker 重检。真坐标变更（superpose/resetTransform/
+# ensemble 落帧）全走 rebuildStructureVisuals → hbondCache.delete 自失效。
+# 正向：新 detKey 只含两设置分量
+check "hbond检测键纯化"          'detKey = .{0,4}\$\{s\.hbondMaxDist\}\|\$\{s\.hbondIncludeWater\}' "src/lib/molecular/engine.ts" 1
+# 负向：detKey 不再拼 rev（防回滚——拼接形 .rev 回潮即拦）
+check0 "hbond键无rev回潮"        'detKey = .{0,3}s\.hbondMaxDist.{0,4}entry\.rev' "src/lib/molecular/engine.ts"
+# 坐标自失效链在位（rebuildStructureVisuals 直调路径的显式 delete——detKey 去 rev 后这是唯一失效源）
+check "坐标直调氢键自失效"       "this\.hbondCache\.delete\(data\.id\)" "src/lib/molecular/engine.ts" 1
+
+# ---- r101-rev：三区审查修复钉 ----
+# ①hbond in-flight 竞态根治（rev-a P2-1）：reqId 双闸——同设置下坐标突变后重投的新请求与
+# 旧在飞请求同 detKey，靠 hbondLastReq 判过期丢弃旧坐标快照结果
+check "hbond请求纪元在位"        "private hbondLastReq" "src/lib/molecular/engine.ts" 1
+check "hbond结果reqId闸"         "hbondLastReq\.get\(msg\.structureId\) !== msg\.reqId" "src/lib/molecular/engine.ts" 1
+# ②坐标突变点同步作废 pending（去重判等会吞掉重投——两处 delete 站点各补一行）
+check "pause作废pending"         "this\.hbondPending\.delete\(sid\)" "src/lib/molecular/engine.ts" 1
+check "rebuild作废pending"       "this\.hbondPending\.delete\(data\.id\)" "src/lib/molecular/engine.ts" 1
+# ③rayRender GPU 护栏（rev-a P2-2）：超采样画布宽不得超 maxTextureSize（移动端 context lost）
+check "rayGPU护栏"               "maxTextureSize / ss" "src/lib/molecular/engine.ts" 1
+# ④FadeEdge 内容增删重估（rev-b P3-1）：MutationObserver 观察 childList/subtree（RO 盲区）
+check "FadeEdge内容重估"         "new MutationObserver\(update\)" "src/components/studio/FadeEdge.tsx" 1
+# ⑤Ray busy 闸（rev-b P3-2）：渲染中重触发早退 + finally 复位
+check "ray渲染busy闸"            "rayBusyRef\.current" "src/components/studio/Toolbar.tsx" 3
+# ⑥readCapped 终局 flush 对齐（rev-c P3）：models 路由响应体读取补 decoder.decode()
+check "models响应终局flush"      "out \+= decoder\.decode\(\)" "src/app/api/agent/providers/models/route.ts" 1
+# ⑦png 循环解析器（rev-a P3-2）：对齐 ray 语法（png t 3 不再吞倍率）
+check "png循环解析器"            "isNaN\(n\) \|\| scale !== undefined" "src/lib/molecular/commands.ts" 1
 
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条

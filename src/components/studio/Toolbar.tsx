@@ -9,7 +9,7 @@ import {
   Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap, Layers,
   FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot, Sparkles, Share2,
-  Award, Target, Minimize2, MoreHorizontal, ExternalLink, LayoutTemplate, BookOpenText,
+  Award, Target, Minimize2, MoreHorizontal, ExternalLink, LayoutTemplate, BookOpenText, SlidersHorizontal,
 } from 'lucide-react'
 import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt, loc, type DualText } from '@/i18n'
@@ -19,6 +19,8 @@ import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
 import { exportSessionFile, importSessionFile, mergeSessionFile, newSession, sessionInfo } from '@/lib/molecular/session'
 import { copyShareLinkToClipboard } from '@/lib/molecular/share-link'
 import { buildSvgExport, downloadSvg } from '@/lib/molecular/svg-export'
+import { downloadDataUrl } from '@/lib/molecular/image-export'
+import { RayExportDialog, DEFAULT_RAY_OPTS, type RayExportOpts } from './RayExportDialog'
 import { TOURS } from '@/lib/molecular/tours'
 import { useTourStore } from '@/lib/molecular/tour-store'
 import { useRecordStore } from '@/lib/molecular/record-store'
@@ -119,6 +121,10 @@ export function Toolbar() {
   const sessionFileRef = useRef<HTMLInputElement>(null)
   const [sessionImporting, setSessionImporting] = useState(false)
   const [confirmNewSession, setConfirmNewSession] = useState(false)
+  // Ray 渲染设置对话框（r101-a）：rayRender 参数面（宽度/超采样/透明），选项持久化 mv-ray-opts
+  const [rayOptsOpen, setRayOptsOpen] = useState(false)
+  // r101-rev-b：Ray busy 闸——Toolbar 常驻（重挂罕见），ref 标志跨渲染保持
+  const rayBusyRef = useRef(false)
   /** 待导入模式：'replace' = 清空后恢复；'merge' = 追加到当前场景 */
   const sessionImportMode = useRef<'replace' | 'merge'>('replace')
 
@@ -154,11 +160,9 @@ export function Toolbar() {
     if (!eng) return
     try {
       const url = eng.capture({ scale, transparent })
-      const a = document.createElement('a')
-      a.href = url
       const name = structures[0]?.name ?? 'molvision'
-      a.download = `${name}${scale > 1 ? `@${scale}x` : ''}${transparent ? tt({ zh: '-透明', en: '-transparent' }) : ''}.png`
-      a.click()
+      // r101-a：下载收敛——内联 <a> 换共享 downloadDataUrl（文件名构造与 tt 双语后缀语义保持原样）
+      downloadDataUrl(url, `${name}${scale > 1 ? `@${scale}x` : ''}${transparent ? tt({ zh: '-透明', en: '-transparent' }) : ''}.png`)
       toast.success(tt({ zh: `截图已导出${scale > 1 ? `（${scale}× 分辨率）` : ''}`, en: `Screenshot exported${scale > 1 ? ` (${scale}× resolution)` : ''}` }))
     } catch {
       toast.error(tt({ zh: '截图失败', en: 'Screenshot failed' }))
@@ -166,26 +170,34 @@ export function Toolbar() {
   }
 
   // Ray 级静帧：先提示再渲染（内部高分辨率渲染+降采样可能阻塞数秒，让 toast 先上屏）
-  const rayCapture = () => {
+  // r101-a：接收参数面选项（RayExportDialog「开始渲染」传入；导出菜单快捷项走 DEFAULT_RAY_OPTS 保持旧缺省行为）
+  // r101-rev-b：busy 闸——渲染中重触发（菜单重开/Dialog 重点）只排队重复劳动+双下载双 toast，
+  // 串行安全但体验差；ref 标志早退 + finally 必复位（含失败路径）
+  const rayCapture = (opts: RayExportOpts) => {
     const eng = engineRef.current
     if (!eng) return
+    if (rayBusyRef.current) {
+      toast.info(tt({ zh: 'Ray 渲染进行中——请等待当前渲染完成', en: 'Ray render in progress — please wait for the current render to finish' }))
+      return
+    }
     if (!eng.hasStructures) {
       toast.error(tt({ zh: '场景为空——先加载结构再渲染', en: 'Scene is empty — load a structure before rendering' }))
       return
     }
-    toast.info(tt({ zh: 'Ray 渲染中…', en: 'Ray rendering…' }), { description: tt({ zh: 'PCF 软阴影 + 1.5× 真超采样抗锯齿，大场景可能需要数秒', en: 'PCF soft shadows + 1.5× true supersampling AA; large scenes may take a few seconds' }) })
+    const ss = opts.supersample
+    rayBusyRef.current = true
+    toast.info(tt({ zh: 'Ray 渲染中…', en: 'Ray rendering…' }), { description: tt({ zh: `PCF 软阴影 + ${ss}× 真超采样抗锯齿${opts.transparent ? '（透明背景）' : ''}，大场景可能需要数秒`, en: `PCF soft shadows + ${ss}× true supersampling AA${opts.transparent ? ' (transparent background)' : ''}; large scenes may take a few seconds` }) })
     setTimeout(() => {
       void (async () => {
         try {
-          const r = await eng.rayRender({})
+          const r = await eng.rayRender({ width: opts.width ?? undefined, supersample: opts.supersample, transparent: opts.transparent })
           if (!r.url) throw new Error('empty')
-          const a = document.createElement('a')
-          a.href = r.url
-          a.download = `${structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}.png`
-          a.click()
-          toast.success(tt({ zh: 'Ray 渲染已导出', en: 'Ray render exported' }), { description: tt({ zh: `${r.w}×${r.h} px · 软阴影 + 真超采样抗锯齿 · ${r.ms.toFixed(0)} ms`, en: `${r.w}×${r.h} px · soft shadows + supersampling AA · ${r.ms.toFixed(0)} ms` }) })
+          downloadDataUrl(r.url, `${structures[0]?.name ?? 'molvision'}-ray-${r.w}x${r.h}${opts.transparent ? tt({ zh: '-透明', en: '-transparent' }) : ''}.png`)
+          toast.success(tt({ zh: 'Ray 渲染已导出', en: 'Ray render exported' }), { description: tt({ zh: `${r.w}×${r.h} px · 软阴影 + ${ss}× 真超采样抗锯齿${opts.transparent ? ' · 透明背景' : ''} · ${r.ms.toFixed(0)} ms`, en: `${r.w}×${r.h} px · soft shadows + ${ss}× supersampling AA${opts.transparent ? ' · transparent background' : ''} · ${r.ms.toFixed(0)} ms` }) })
         } catch {
           toast.error(tt({ zh: 'Ray 渲染失败（试试更小尺寸或命令行 ray <宽>）', en: 'Ray render failed (try a smaller size or ray <width> on the command line)' }))
+        } finally {
+          rayBusyRef.current = false
         }
       })()
     }, 80)
@@ -586,9 +598,14 @@ export function Toolbar() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => capture(2, true)} className="text-xs">{t({ zh: '2× 透明背景 PNG', en: '2× transparent-background PNG' })}</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => rayCapture()} className="gap-1.5 text-xs">
+            <DropdownMenuItem onClick={() => rayCapture(DEFAULT_RAY_OPTS)} className="gap-1.5 text-xs">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
               {t({ zh: 'Ray 级渲染（软阴影 + 超采样）', en: 'Ray-quality render (soft shadows + supersampling)' })}
+            </DropdownMenuItem>
+            {/* r101-a：Ray 渲染参数面（宽度/超采样/透明背景——rayRender 三参数此前 UI 从不传） */}
+            <DropdownMenuItem onClick={() => setRayOptsOpen(true)} className="gap-1.5 text-xs">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+              {t({ zh: 'Ray 渲染设置…', en: 'Ray render settings…' })}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => svgCapture()} className="gap-1.5 text-xs">
               <PenLine className="h-3.5 w-3.5 text-violet-500" />
@@ -743,6 +760,10 @@ export function Toolbar() {
           <Github className="h-4 w-4" />
         </a>
       </header>
+
+      {/* Ray 渲染设置对话框（r101-a）：rayRender 参数面——宽度/超采样/透明，选项持久化 mv-ray-opts；
+          空场景时「开始渲染」仍可点（rayCapture 守卫出 toast 引导加载结构） */}
+      <RayExportDialog open={rayOptsOpen} onOpenChange={setRayOptsOpen} onRender={rayCapture} />
 
       {/* 新建会话确认（有结构时二次确认，防误触） */}
       <AlertDialog open={confirmNewSession} onOpenChange={setConfirmNewSession}>

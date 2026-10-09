@@ -8,6 +8,7 @@ import { cookies, headers } from 'next/headers'
 import {
   getProviderProfile, resolveApiKey, resolveBaseURL, sanitizeBaseURL, normalizeModelsResponse, type DiscoveredModel,
 } from '@/lib/molecular/agent/providers'
+import { readRequestCapped } from '@/lib/api/read-body'
 import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
 
 export const runtime = 'nodejs'
@@ -50,20 +51,33 @@ async function readCapped(res: Response, maxBytes: number): Promise<string> {
       break
     }
   }
+  // r101-rev-c：终局 flush——多字节字符恰好被分块边界截断时，stream:true 的尾段
+  // 残留在 decoder 内部缓冲，不 flush 会丢最后一个字符 → JSON.parse 误报「未返回
+  // 模型列表」（read-body.ts 同款修复对齐）
+  out += decoder.decode()
   return out
 }
 
 export async function POST(request: NextRequest) {
   const locale = await detectLocale()
+  const err413 = errText(locale, '请求体超过 64KB 上限（模型探测只需 providerId / API Key / Base URL 等短字段）', 'Request body exceeds the 64KB limit (model probing only needs short fields such as providerId / API key / base URL)')
   // r99-f3：体积预检先行（providers 配置面同款）——探测体只收 providerId/apiKey/
-  // baseURL 三个短字段，64KB 上限远超合法载荷；旧版 request.json() 全量缓冲任意 body
+  // baseURL 三个短字段，64KB 上限远超合法载荷；旧版 request.json() 全量缓冲任意 body。
+  // 快速拒绝路径：content-length 头在解析前可得，省一次流读取
   const declaredLen = Number(request.headers.get('content-length') ?? '0')
   if (Number.isFinite(declaredLen) && declaredLen > 64 * 1024) {
-    return NextResponse.json({ ok: false, error: errText(locale, '请求体超过 64KB 上限（模型探测只需 providerId / API Key / Base URL 等短字段）', 'Request body exceeds the 64KB limit (model probing only needs short fields such as providerId / API key / base URL)') }, { status: 413 })
+    return NextResponse.json({ ok: false, error: err413 }, { status: 413 })
+  }
+  // r101-b：流式限长读取（权威上限）——chunked 传输不发送 content-length 头，
+  // 上方预检恒放行（Number(undefined→'0')=0）；getReader 逐块累计字节超限即
+  // cancel 上游并回 413（本文件 readCapped 响应体版同模式）
+  const bodyText = await readRequestCapped(request, 64 * 1024)
+  if (bodyText === null) {
+    return NextResponse.json({ ok: false, error: err413 }, { status: 413 })
   }
   let body: ProbeBody
   try {
-    body = await request.json() as ProbeBody
+    body = JSON.parse(bodyText) as ProbeBody
   } catch {
     return NextResponse.json({ ok: false, error: errText(locale, '请求体不是合法 JSON', 'Request body is not valid JSON') }, { status: 400 })
   }
