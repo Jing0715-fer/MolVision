@@ -4429,3 +4429,5 @@ Stage Summary:
   4. 【中】产品侧推进：模板美化与新模板（52 卡产线已稳定）/ 图片解析能力（老 backlog）——连续三轮基建后平衡产品价值
   5. 【低】VLM 视觉复鉴限流的退避重试封装（或以像素 diff 替代）
   6. 【低】生产部署前置清单收口（middlewareClientMaxBodySize / Caddyfile XTransformPort 白名单 / ignoreBuildErrors 决策——多轮延续挂起项，需部署环境语义确认）
+
+（r103 段 cron 补记，2026-10-09）15min webDevReview 巡检任务 #446756 创建即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 17 次实证（r85-r102 连续 16 次 + 本轮），已删除清理。devd 看门狗（绝对阈值 1500MB + r103-b 斜率双闸）继续作为巡检缺席期间的自愈防线；本轮 E2E 实测 devd 监管已实战接管。
