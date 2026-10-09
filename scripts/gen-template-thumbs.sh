@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# r71 创立 · r72 重造 · r76 清洁视口：论文图模板缩略图管线
+# r71 创立 · r72 重造 · r76 清洁视口 · r102-b 探针计数与退出码：论文图模板缩略图管线
 # ─────────────────────────────────────────────────────────────────────────────
 # 路径：欢迎页输入 demo 结构 → 工作台 → 收起序列条 → 隐藏视口 overlay（见下）→
 # 开模板面板 → 按「序号」点该模板卡片「应用」→ 等命令序列完成 → 关面板 →
@@ -87,7 +87,16 @@ gen_one() {
   # 【r87 坑档修复】querySelector('form button[type=submit]') 会命中 DOM 在先的
   # 分享链接粘贴卡表单（r86 新增——空值提交静默 no-op，结构永不上载 → 全量 SKIP）。
   # 根治：从 PDB input 锚定 closest('form') 再取提交钮（r86 worklog 同款判例）
-  agent-browser eval "(() => { const i = document.querySelector('input[aria-label=\"PDB 编号\"], input[aria-label=\"PDB ID\"]'); if (!i) return 'NOINPUT'; const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; setter.call(i, '$demo'); i.dispatchEvent(new Event('input', { bubbles: true })); const btn = i.closest('form')?.querySelector('button[type=\"submit\"]'); if (!btn) return 'NOBTN'; btn.click(); return 'submitted' })()"
+  # r102-b 探针计数（对齐 health-check-templates.sh r99-f3）：eval 返回值捕获判定——
+  # 成功值 submitted；NOINPUT/NOBTN/eval 失败空输出计 fails 并打 PROBE-FAIL 行
+  # （旧版只打印不计数，空输出被静默放行——旧 stdout 原样回显改为成功静默/失败带
+  # id 归因，失败诊断信息量反升）
+  local probe
+  probe=$(agent-browser eval "(() => { const i = document.querySelector('input[aria-label=\"PDB 编号\"], input[aria-label=\"PDB ID\"]'); if (!i) return 'NOINPUT'; const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; setter.call(i, '$demo'); i.dispatchEvent(new Event('input', { bubbles: true })); const btn = i.closest('form')?.querySelector('button[type=\"submit\"]'); if (!btn) return 'NOBTN'; btn.click(); return 'submitted' })()" 2>/dev/null | tr -d '"')
+  case "$probe" in
+    submitted) ;;
+    *) echo "PROBE-FAIL $id (load demo: ${probe:-<no output>})"; fails=$((fails + 1)) ;;
+  esac
   sleep 7
   local loaded
   loaded=$(agent-browser eval "window.__molData ? window.__molData.size : 0" 2>/dev/null | tr -d '"')
@@ -95,10 +104,16 @@ gen_one() {
   # 当成功走全管线产空图；正整数才算装载成功（与 __molData.size 语义严格对齐）
   if ! [[ "$loaded" =~ ^[1-9][0-9]*$ ]]; then
     echo "SKIP $id (demo $demo not loaded — eval returned: ${loaded:-<empty>})"
+    fails=$((fails + 1))
     return 1
   fi
   # 1.5) 收起序列条（194px → ~40px，canvas 增高约 150px，缩略图更聚焦 3D 视口）
-  agent-browser eval "(() => { const bar = document.querySelector('.tape-well'); if (!bar) return 'NOBAR'; const btn = bar.closest('div')?.querySelector('button') || document.querySelector('.tape-well button'); if (!btn) return 'NOBTN'; btn.click(); return 'collapsed' })()"
+  # r102-b 探针计数：成功值 collapsed；NOBAR/NOBTN/空输出计 fails
+  probe=$(agent-browser eval "(() => { const bar = document.querySelector('.tape-well'); if (!bar) return 'NOBAR'; const btn = bar.closest('div')?.querySelector('button') || document.querySelector('.tape-well button'); if (!btn) return 'NOBTN'; btn.click(); return 'collapsed' })()" 2>/dev/null | tr -d '"')
+  case "$probe" in
+    collapsed) ;;
+    *) echo "PROBE-FAIL $id (collapse seq bar: ${probe:-<no output>})"; fails=$((fails + 1)) ;;
+  esac
   sleep 1
   # r99：+ autoPerf = false——缩略图管线曾长期被自动性能模式静默阉割：SwiftShader
 #      低帧率 <15fps 持续 ~3s 即自动关 ssao+outline（降级徽章都不显）——所有
@@ -106,20 +121,44 @@ gen_one() {
 #      用户帧率达标不受影响，autoPerf 对用户端仍是正确行为）
 # 1.6) r76 清洁视口（第一遍）：隐藏全部 absolute/fixed 且不含 canvas 的元素 +
   #      关 WebGL 万向轮（右黑框=书签条、左上灰框=HUD 的根治；见文件头说明）
-  agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()"
+  # r102-b 探针计数：成功前缀 hidden:n（n≥0）；NOVIEW/空输出计 fails
+  probe=$(agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()" 2>/dev/null | tr -d '"')
+  case "$probe" in
+    hidden:*) ;;
+    *) echo "PROBE-FAIL $id (clean viewport pass1: ${probe:-<no output>})"; fails=$((fails + 1)) ;;
+  esac
   sleep 0.5
   # 2) 工具栏开模板面板 → 按【序号】点目标卡片「应用」（见文件头坑档——
   #    必须收窄到 .mol-scroll .grid + children[idx]，防 DialogContent grid 类污染）
-  agent-browser eval "(() => { const b = document.querySelector('button[aria-label*=\"Paper-figure\"], button[aria-label*=\"论文图\"]'); if (!b) return 'NOBTN'; b.click(); return 'panel' })()"
+  # r102-b 探针计数：成功值 panel；NOBTN/空输出计 fails
+  probe=$(agent-browser eval "(() => { const b = document.querySelector('button[aria-label*=\"Paper-figure\"], button[aria-label*=\"论文图\"]'); if (!b) return 'NOBTN'; b.click(); return 'panel' })()" 2>/dev/null | tr -d '"')
+  case "$probe" in
+    panel) ;;
+    *) echo "PROBE-FAIL $id (open template panel: ${probe:-<no output>})"; fails=$((fails + 1)) ;;
+  esac
   sleep 1.2
-  agent-browser eval "(() => { const grid = document.querySelector('[role=\"dialog\"] .mol-scroll .grid'); if (!grid) return 'NOGRID'; const card = grid.children[$idx]; if (!card) return 'NOCARD'; const demoOk = card.textContent.includes('$demo') ? 'ok' : 'MISMATCH'; const apply = card.querySelector('button[title*=\"Apply to the current structure\"], button[title*=\"应用到当前结构\"]'); if (!apply) return 'NOAPPLY'; apply.click(); return 'applied:' + demoOk })()"
+  # r102-b 探针计数：成功值 applied:ok——applied:MISMATCH（grid 序号落错卡，规格
+  # 漂移）同样计失败：错卡的 apply 已被点击、错误模板渲染仍会写入 $id.png。与
+  # health-check 的 clicked:ID-MISMATCH 仅信息性不同（那边断言的模板 id 文本恒不
+  # 在卡内，这边断言 demo 结构号必须命中——序号正确时稳态即 ok）
+  probe=$(agent-browser eval "(() => { const grid = document.querySelector('[role=\"dialog\"] .mol-scroll .grid'); if (!grid) return 'NOGRID'; const card = grid.children[$idx]; if (!card) return 'NOCARD'; const demoOk = card.textContent.includes('$demo') ? 'ok' : 'MISMATCH'; const apply = card.querySelector('button[title*=\"Apply to the current structure\"], button[title*=\"应用到当前结构\"]'); if (!apply) return 'NOAPPLY'; apply.click(); return 'applied:' + demoOk })()" 2>/dev/null | tr -d '"')
+  case "$probe" in
+    applied:ok) ;;
+    *) echo "PROBE-FAIL $id (apply template card: ${probe:-<no output>})"; fails=$((fails + 1)) ;;
+  esac
   sleep "$wait"
   # 3) 关面板（面板会挡画布）+ toast 退场；实测 canvas rect（裁剪用）
   agent-browser press Escape >/dev/null 2>&1
   sleep 1.8
   # 3.5) r76 清洁视口（第二遍）：命令可能新造 overlay（pore 卡/系综条/密度图例）——
   #      截图前再扫一遍（幂等；万向轮设置第一遍已关，此处防重置）
-  agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()"
+  # r102-b 探针计数：第二遍同计数（成功前缀 hidden:n）——此遍 eval 静默失败会让
+  # overlay 入图且无下游兜底（rect 探针只验 canvas 存在与尺寸，不验 overlay 已隐藏）
+  probe=$(agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()" 2>/dev/null | tr -d '"')
+  case "$probe" in
+    hidden:*) ;;
+    *) echo "PROBE-FAIL $id (clean viewport pass2: ${probe:-<no output>})"; fails=$((fails + 1)) ;;
+  esac
   sleep 0.5
   agent-browser eval "(() => { const c = document.querySelector('canvas'); const r = c.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }) })()" > /tmp/r72-canvas.json 2>/dev/null
   # r92 截图重试 + 陈旧防护：无头 Chrome SwiftShader 下重渲染模板（spacefill/slab+cap）
@@ -139,6 +178,7 @@ gen_one() {
   done
   if [ "$shot_ok" = "0" ]; then
     echo "SKIP $id (screenshot failed 3x — render saturation)"
+    fails=$((fails + 1))
     return 1
   fi
   # 4) PIL 裁剪 canvas 区 → 640×320 LANCZOS
@@ -173,10 +213,19 @@ PY
     echo "SHOT $id ($demo idx=$idx)"
   else
     echo "RECTFAIL-CAUGHT $id (crop skipped — see above)"
+    fails=$((fails + 1))
     return 1
   fi
 }
 
+# r102-b 退出码语义（对齐 health-check-templates.sh r99-f3 / smoke.sh）——旧行为：
+# 五处 eval 探针只打印不计数、gen_one 返回值无人聚合，脚本恒 exit 0（除空 SPECS
+# 守卫）——apply 探针失败（含 applied:MISMATCH 落错卡）可产出错误内容缩略图仍报
+# 成功。现六调用点探针（submitted/collapsed/hidden:n×2/panel/applied:ok）非成功
+# 值计 fails 并打 PROBE-FAIL 行；SKIP/RECTFAIL 亦计数（gen_one 内直接自增而非循环
+# 聚合返回值——探针失败与下游 SKIP 可对同一根因各计一次，health-check r99-f3 同款
+# 容许，退出语义只看非零）；结尾非零退出供 CI 拦截
+fails=0
 for spec in "${SPECS[@]}"; do
   IFS=':' read -r id wait demo idx vp <<< "$spec"
   gen_one "$id" "$wait" "$demo" "$idx" "$vp"
@@ -186,3 +235,6 @@ done
 # 消灭「分子在画布里只占 24-76%」的展示卡取景问题（详见 tighten-thumbs.py 头注）
 python3 "$(dirname "$0")/tighten-thumbs.py"
 echo "== phase done =="
+# r102-b 退出码语义——非零退出供 CI 拦截（输出格式不变；tighten 收尾阶段失败
+# 不在本轮口径内，沿用既有静默行为——探针/SKIP/RECTFAIL 已全覆盖产出正确性）
+[[ $fails -eq 0 ]] || exit 1

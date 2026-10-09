@@ -766,6 +766,56 @@ check "models响应终局flush"      "out \+= decoder\.decode\(\)" "src/app/api/
 # ⑦png 循环解析器（rev-a P3-2）：对齐 ray 语法（png t 3 不再吞倍率）
 check "png循环解析器"            "isNaN\(n\) \|\| scale !== undefined" "src/lib/molecular/commands.ts" 1
 
+# ---- r102-a：Ray 4K 内存护栏（r101 建议①——deviceMemory 提示 + 显存估算 + 低内存默认降档） ----
+# 背景：r101 E2E 实测 4K×2× 超采样渲染的内存尖峰（toDataURL 7680px 画布 + PNG 字符串 +
+# depth/stencil）超沙箱 1.5GB 预算致 devd 组杀 dev server——桌面 GPU maxTextureSize 通常
+# 16384 使 r101 的 GPU 护栏不触发；内存不足是另一维度，navigator.deviceMemory 是唯一可用的
+# 客户端信号。设计决策：引擎侧不加设备维度硬钳（用户显式选 2× 被静默降为 1× 会造成导出与
+# 预览不一致的困惑）——设备维度全部留在 RayExportDialog（首用默认降档+组合警示+显存估算），
+# engine.ts 零改动（r101 wCap 护栏原样保留）。
+# ①低内存设备检测（navigator.deviceMemory——Chrome 系独有，其他浏览器 undefined 静默不限制）
+check "低内存设备检测"          "deviceMemory"                   "src/components/studio/RayExportDialog.tsx" 2
+# ②显存估算公式（RGBA 4B/px × color+depth 2 份 / 1048576——预估行「约 N MB 显存」的数值来源）
+check "显存估算公式"            "1048576"                        "src/components/studio/RayExportDialog.tsx" 1
+# ③低内存首用默认降档（loadOpts 无存档分支的 supersample: 1——右花括号锚定，不误伤
+#    DEFAULT_RAY_OPTS 行的 supersample: 1.5；存档优先级永远高于设备推断）
+check "低内存默认降档"          "supersample: 1 \}"              "src/components/studio/RayExportDialog.tsx" 1
+# ④3840 + 高超采样 + 低内存组合警示文案（宽度段选区下方行内警示——TriangleAlert 图标 + 黄色文本）
+check "4K低内存组合警示"        "可能触发显存溢出"               "src/components/studio/RayExportDialog.tsx" 1
+# ⑤预估行显存估算文本在位（「约 N MB 显存」+ 16:9 上界注记；≥500MB 转警示色）
+check "显存估算行文案"          "按 16:9 估算"                   "src/components/studio/RayExportDialog.tsx" 1
+
+# ---- r102-b：脚本韧性（devd 看门狗双竞态修复 + gen-thumbs 探针计数与退出码） ----
+# ①devd cwd 归属过滤（r101-rev-c 竞态一）：server_rss_mb 扫全机 /proc/*/comm 匹配
+# next-server 无 cwd 过滤——多项目沙箱下他项目根的 next-server 可致错杀自己健康
+# server 或漏看真凶（/proc 遍历序不确定）；现要求 readlink /proc/<pid>/cwd ==
+# PROJECT 才计入（os.readlink 调用形锚定——docstring 里的 readlink 文字不误伤）
+check "devd看门狗cwd过滤"       "os\.readlink\(" "scripts/devd.py" 1
+# ②devd 端口释放有界等待（r101-rev-c 竞态二）：重启前单次 port_alive 判定会把
+# SIGKILL 路径的端口迟滞误判「外部接管」而退位——现有界轮询常量 + 轮询睡眠双锚
+check "devd端口释放有界常量"    "PORT_RELEASE_POLL" "scripts/devd.py" 2
+check "devd端口释放轮询睡眠"    "time\.sleep\(PORT_RELEASE_POLL_S\)" "scripts/devd.py" 1
+# ③gen-thumbs 探针失败计数（对齐 health-check r99-f3）：六调用点 eval 探针非成功值
+# （submitted/collapsed/hidden:n×2/panel/applied:ok——applied:MISMATCH 落错卡亦计）
+# 打 PROBE-FAIL 行并计 fails；SKIP/RECTFAIL 亦计数
+check "gen-thumbs探针失败计数"  "PROBE-FAIL" "scripts/gen-template-thumbs.sh" 1
+check "gen-thumbs失败计数站点"  'fails=\$\(\(fails \+ 1\)\)' "scripts/gen-template-thumbs.sh" 8
+# ④gen-thumbs 退出闸（旧行为恒 exit 0——apply 探针失败可产错误内容缩略图仍报成功）
+check "gen-thumbs非零退出闸"    "fails -eq 0" "scripts/gen-template-thumbs.sh" 1
+
+# ---- r102 主代理：死依赖大扫除 + global-error 兜底 ----
+# 24 个零引用包（src/ 全模式 import 穷尽实证 + examples/config/middleware/交叉引用零命中）
+# + 7 个死 shadcn 模板件（calendar/input-otp/form/carousel/chart/drawer/resizable——
+# 业务引用 0 文件）移除；prisma/@prisma/client/db.ts 保留（平台标准栈 + db:* 脚本，
+# 零运行时代价）。负向守卫防依赖回潮（package.json 再现即 FAIL——倒逼新需求走
+# 既有栈或显式论证后同步移除守卫）
+check0 "死依赖不回潮"            "framer-motion|@dnd-kit|@mdxeditor|next-auth|next-intl|react-query|react-table|syntax-highlighter|embla-carousel|recharts|input-otp|react-hook-form|react-day-picker|react-resizable-panels|@reactuses|@hookform|react-markdown|@mdxeditor" "package.json"
+# 死模板件的独占符号零复活（文件已删——RechartsPrimitive/useCarousel/DrawerPrimitive
+# 只存在于已删的 chart/carousel/drawer.tsx）
+check0 "死模板符号不复活"        "RechartsPrimitive|useCarousel|DrawerPrimitive|OTPInput" "src"
+# global-error 根级兜底（r101-rev-a P3 悬置项收口）：root layout 抛错时最后一道 UI 防线
+check "全局错误兜底"            "Unexpected rendering error" "src/app/global-error.tsx" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

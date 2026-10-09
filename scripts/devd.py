@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""devd.py — Next.js dev server 守护进程（r88 热修；r91 内存看门狗升级）
+"""devd.py — Next.js dev server 守护进程（r88 热修；r91 内存看门狗升级；r102-b 双竞态修复）
 
 背景（r88 根因）：
   dmesg 实锤 next-server(pid 1535) 被 OOM-killer 静默击杀
@@ -17,7 +17,10 @@
 
 防双实例：
   - 启动前若 3000 已被监听 → 守护静默退出（不与存量实例打架）；
-  - 重启间隙若端口被其他实例抢占 → 守护退出（避免 EADDRINUSE 循环拉起）。
+  - 重启间隙先有界等待旧端口释放（r102-b：SIGKILL 路径的进程可处不可中断
+    D 态，监听 socket 内核侧迟滞数秒——单次探测会误判「外部接管」而过早
+    退位；0.5s 间隔至多 30 次 ≈15s），仍被占用才判外部实例抢占 → 守护退出
+    （避免 EADDRINUSE 循环拉起）。
 
 用法：python3 scripts/devd.py   （前台父进程立即退出，守护转入后台）
 日志：/home/z/my-project/dev.log（追加；调用方可在启动前自行截断）
@@ -38,6 +41,11 @@ RESTART_DELAY_S = 3
 MEM_LIMIT_MB = 1500
 MEM_CHECK_S = 30
 GRACEFUL_WAIT_S = 12
+# r102-b 端口释放有界等待：SIGKILL 路径 stop_proc_group 的 wait 超时后，进程
+# 可处不可中断 D 态（大堆内存回收慢），监听 socket 迟滞数秒才释放——重启前
+# 轮询等待而非单次判定（0.5s 间隔 × 至多 30 次 ≈ 15s）
+PORT_RELEASE_POLL_S = 0.5
+PORT_RELEASE_POLLS = 30
 
 
 def port_alive(port: int) -> bool:
@@ -90,21 +98,32 @@ def rss_mb(pid: int) -> float:
 
 
 def server_rss_mb() -> float:
-    """找真正的 next-server 进程（bunx 包装器的孙进程）的 RSS。
-    扫 /proc/*/comm 匹配 next-server——端口防双实例保证全机至多一个。"""
+    """找属于本项目的 next-server 进程（bunx 包装器的孙进程）的 RSS。
+    扫 /proc/*/comm 匹配 next-server，且要求 readlink /proc/<pid>/cwd ==
+    PROJECT 才计入（r102-b cwd 归属过滤）——多项目沙箱下「端口防双实例保证
+    全机至多一个」不成立（他项目根可各自跑 next dev），/proc 遍历序不确定时
+    首中他项目进程：其 RSS 偏高 → 错杀本项目健康 server（杀完仍超限，重启
+    风暴）；其 RSS 偏低 → 漏看本项目真凶（看门狗失明直至 OOM 硬杀）。同项目
+    多匹配（罕见孤儿残留）取最大值——看门狗须对本项目任意内存大户敏感。"""
+    best = 0.0
     try:
         for d in os.listdir("/proc"):
             if not d.isdigit():
                 continue
             try:
                 with open(f"/proc/{d}/comm", "r") as f:
-                    if f.read().strip().startswith("next-server"):
-                        return rss_mb(int(d))
+                    if not f.read().strip().startswith("next-server"):
+                        continue
+                if os.readlink(f"/proc/{d}/cwd") != PROJECT:
+                    continue  # 他项目 / 外来进程（cwd 不可读者同样跳过）——不计入
             except OSError:
                 continue
+            mb = rss_mb(int(d))
+            if mb > best:
+                best = mb
     except OSError:
         pass
-    return 0.0
+    return best
 
 
 def stop_proc_group(proc: subprocess.Popen) -> None:
@@ -183,10 +202,24 @@ def main() -> None:
         else:
             log_line(f"server exited code={code}; restart in {RESTART_DELAY_S}s")
         time.sleep(RESTART_DELAY_S)
-        if port_alive(PORT):
-            # 死亡间隙端口被外部实例抢占（如手动 next dev）——守护退位
-            log_line("port 3000 taken over by external instance; devd exits")
-            return
+        # r102-b 端口释放有界等待：SIGKILL 路径 stop_proc_group 的 wait 超时后
+        # 端口可能尚未释放（进程处不可中断 D 态，监听 socket 内核侧迟滞数秒）——
+        # 旧版单次 port_alive 探测会把迟滞误判「外部接管」而退位（自杀式假阳性：
+        # 端口转瞬即空，守护先弃，此后无人拉起）。0.5s 间隔至多 30 次（≈15s）
+        # 仍占用才判真外部接管（如手动 next dev）。
+        release_polls = 0
+        while port_alive(PORT):
+            release_polls += 1
+            if release_polls > PORT_RELEASE_POLLS:
+                log_line(f"port {PORT} still occupied after "
+                         f"{PORT_RELEASE_POLLS * PORT_RELEASE_POLL_S:.0f}s "
+                         "bounded wait; external takeover; devd exits")
+                return
+            time.sleep(PORT_RELEASE_POLL_S)
+        if release_polls:
+            log_line(f"port {PORT} released after "
+                     f"{release_polls * PORT_RELEASE_POLL_S:.1f}s "
+                     "bounded wait (slow exit path)")
         # 端口空闲 → 循环拉起（OOM 再杀亦秒级自愈；r91 起内存超限亦主动换血）
 
 

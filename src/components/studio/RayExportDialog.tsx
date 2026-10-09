@@ -5,8 +5,12 @@
 // 1.5× 超采样 + 不透明背景」的隐含默认升为可见可调参数面；选项持久化 localStorage（mv-ray-opts）。
 // 开始渲染回调 Toolbar.rayCapture（空场景守卫在彼处出 toast 引导加载结构）；命令行等价：
 // ray [宽px] [超采样] [transparent]（commands.ts r101-a 同步扩展，向后兼容）。
+// r102-a（r101 建议①）：4K 内存护栏——navigator.deviceMemory（Chrome 系独有提示，其他浏览器
+// undefined 静默零影响）≤4GB 设备首用默认超采样降档 1× + 3840×高 ss 组合行内警示 + 预估行
+// 显存估算（16:9 上界）。引擎侧不加设备维度硬钳（用户显式选 2× 被静默降档会造成导出与预览
+// 不一致的困惑）——引擎只保留 maxTextureSize 硬护栏（r101-rev 已落），设备维度全部留在本 Dialog。
 import { useEffect, useState } from 'react'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, TriangleAlert } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -69,11 +73,36 @@ function snapSupersample(v: number): number {
   return best
 }
 
+/** r102-a：低内存阈值（GB）——navigator.deviceMemory 粗粒度提示的降档线（约定 ≤4GB 为低内存） */
+const LOW_MEM_GB = 4
+
+/**
+ * r102-a：设备内存粗粒度提示（navigator.deviceMemory——Chrome 系独有，单位 GB，离散值约
+ * 0.25/0.5/1/2/4/8；桌面 GPU 的 maxTextureSize 通常 16384 使 GPU 护栏不触发，内存不足是
+ * 另一维度，deviceMemory 是唯一可用的客户端信号）。其他浏览器 undefined：静默不启用任何
+ * 限制/警示（宁可漏报不误报）。仅在组件挂载后调用（Radix Dialog 关闭即卸载 → 惰性
+ * useState 初始化内执行；双保险 typeof navigator 守卫——绝不在模块顶层读 navigator，SSR 安全）。
+ */
+function readDeviceMemoryGB(): number | undefined {
+  if (typeof navigator === 'undefined') return undefined
+  const dm = (navigator as { deviceMemory?: number }).deviceMemory
+  return typeof dm === 'number' && dm > 0 ? dm : undefined
+}
+
 /** localStorage 读取：字段逐一校验 + 越界/异型回落默认（隐私模式 JSON 不可用等静默兜底） */
 function loadOpts(): RayExportOpts {
+  // r102-a：低内存设备首用默认降档——无存档（或存档不可读）且 navigator.deviceMemory ≤ 4 时
+  // 超采样默认 1×（非 1.5×）。存档优先级永远高于设备推断：只要读到合法存档，即使低内存设备
+  // 也逐字段完整尊重存档（字段异型回落仍按 DEFAULT_RAY_OPTS 常规缺省 1.5×，不受设备影响——
+  // 严格「只影响首次默认」）。降档是默认值不是硬限制：低内存设备上用户仍可显式选 1.5×/2×
+  // （3840 + 高超采样组合会显示行内警示，见宽度段）。
+  const dm = readDeviceMemoryGB()
+  const firstUse: RayExportOpts = dm !== undefined && dm <= LOW_MEM_GB
+    ? { ...DEFAULT_RAY_OPTS, supersample: 1 }
+    : DEFAULT_RAY_OPTS
   try {
     const raw = localStorage.getItem(OPTS_KEY)
-    if (!raw) return DEFAULT_RAY_OPTS
+    if (!raw) return firstUse
     const p = JSON.parse(raw) as Partial<RayExportOpts>
     const w = p.width
     return {
@@ -82,7 +111,8 @@ function loadOpts(): RayExportOpts {
       transparent: typeof p.transparent === 'boolean' ? p.transparent : false,
     }
   } catch {
-    return DEFAULT_RAY_OPTS
+    // JSON 损坏 = 存档不可用，视同首用（低内存设备同样享受降档默认）
+    return firstUse
   }
 }
 
@@ -93,6 +123,19 @@ function RayExportForm({ onOpenChange, onRender }: {
 }) {
   const { t } = useI18n()
   const [opts, setOpts] = useState<RayExportOpts>(() => loadOpts())
+  // r102-a：deviceMemory 挂载后只读一次（Radix 关闭即卸载 → 真正打开才执行，SSR 零触碰
+  // navigator）；非 Chrome 系浏览器 undefined → 静默不启用任何限制/警示
+  const [deviceMem] = useState<number | undefined>(() => readDeviceMemoryGB())
+  const lowMem = deviceMem !== undefined && deviceMem <= LOW_MEM_GB
+
+  // r102-a：显存粗估（按 16:9 上界近似——高度 W×0.5625 为常见宽屏纵横比上界）——内部画布
+  // w = W×ss、h = W×0.5625×ss；RGBA 4B/px × (color + depth/stencil) 2 份；自适应档以
+  // 视口 2× 上界 4096 估（与引擎 wCap 同上界）。实际峰值另含 toDataURL 的 PNG 字符串与
+  // 2048² shadow map——估值为量级参考而非严格预算上界。
+  const estBase = opts.width ?? 4096
+  const estW = Math.round(estBase * opts.supersample)
+  const estH = Math.round(estBase * 0.5625 * opts.supersample)
+  const estMB = Math.round((estW * estH * 4 * 2) / 1048576)
 
   // 每次变更即持久化（存储失败静默——本会话内选项仍生效）
   useEffect(() => {
@@ -133,6 +176,16 @@ function RayExportForm({ onOpenChange, onRender }: {
           <p className="text-[10px] leading-relaxed text-muted-foreground">
             {t({ zh: '自适应 = 视口宽 × 2；高度按视口纵横比自动推导。', en: 'Auto = viewport width × 2; the height follows the viewport aspect ratio.' })}
           </p>
+          {/* r102-a：低内存（≤4GB）+ 3840 + ss≥1.5 组合警示（deviceMemory undefined 的浏览器零显示） */}
+          {lowMem && opts.width === 3840 && opts.supersample >= 1.5 && (
+            <p className="flex items-start gap-1.5 text-[10px] leading-relaxed text-amber-600 dark:text-amber-400">
+              <TriangleAlert className="mt-px h-3 w-3 shrink-0" aria-hidden />
+              <span>{t({
+                zh: `低内存设备（~${deviceMem}GB）上 4K+ 高超采样可能触发显存溢出——建议 1× 超采样或降一档宽度`,
+                en: `On a low-memory device (~${deviceMem} GB), 4K+ with high supersampling may overflow video memory — prefer 1× supersampling or one width tier lower`,
+              })}</span>
+            </p>
+          )}
         </section>
 
         {/* 抗锯齿超采样：1× / 1.5× / 2× */}
@@ -181,6 +234,12 @@ function RayExportForm({ onOpenChange, onRender }: {
             {` · ${t({ zh: `内部 ${opts.supersample}× 超采样`, en: `internal ${opts.supersample}× supersample` })}`}
             {opts.transparent ? ` · ${t({ zh: '透明背景', en: 'transparent background' })}` : ''}
             {` · ${t({ zh: '超采样画布受 GPU maxTextureSize 护栏自动收缩（防 context lost）', en: 'supersampled canvas auto-clamped by the GPU maxTextureSize guard (prevents context loss)' })}`}
+            {' · '}
+            {/* r102-a：显存估算 ≥500MB 转警示色（现行五档宽度的最重组合 4096 自适应×2× 约 288MB——
+                阈值随未来更宽档位扩展自然生效，现行组合下为预留分支） */}
+            <span className={estMB >= 500 ? 'font-medium text-amber-600 dark:text-amber-400' : undefined}>
+              {t({ zh: `约 ${estMB} MB 显存（按 16:9 估算）`, en: `≈ ${estMB} MB video memory (16:9 estimate)` })}
+            </span>
           </span>
         </div>
       </div>

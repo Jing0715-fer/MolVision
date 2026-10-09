@@ -4269,3 +4269,75 @@ Stage Summary:
   6. 【低】生产部署前置：middlewareClientMaxBodySize 显式配置与 12/16MB 路由上限对齐（rev-c 平台发现）+ Caddyfile XTransformPort 数字白名单（平台语义确认后一行）
 
 （r101 段 cron 补记，2026-10-09 14:40）15min webDevReview 巡检任务 #446240 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 15 次实证（r85/r86/r87/r88/r90/r91/r94/r95/r92/r96/r97/r98/r99-b/r99 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值，本轮 4K 渲染组杀事件实证其有效）继续作为巡检缺席期间的自愈防线。
+
+---
+Task ID: r102-a
+Agent: ray-guard-subagent
+Task: Ray 4K 内存护栏系统性方案（r101 建议①）
+
+Work Log:
+- 【读基】worklog r101 段（最后 90 行）+ RayExportDialog.tsx（218 行全读）+ engine.ts rayRender L4848 起 + guards 尾部（check/check0 格式 + 动态 TOTAL）——基线 guards 538/538 全过；确认 r101 已落 wCap GPU 护栏与预估行注脚，本轮设备维度全部落在 Dialog
+- 【deviceMemory 检测】readDeviceMemoryGB()：`typeof navigator === 'undefined'` 守卫 + `(navigator as { deviceMemory?: number }).deviceMemory` 类型安全读取 + number/>0 校验；Chrome 系独有（单位 GB，离散值约 0.25/0.5/1/2/4/8），其他浏览器 undefined → 静默不启用任何限制/警示（宁可漏报不误报）；LOW_MEM_GB=4 阈值常量。SSR 安全双保险：函数自带 typeof navigator 守卫 + 只在 RayExportForm 惰性 useState 初始化内调用（Radix Dialog 关闭即卸载 → 打开才执行——与现有 loadOpts 同哲学），绝不在模块顶层读 navigator
+- 【首用默认降档】loadOpts() 内 dm=readDeviceMemoryGB() → firstUse = dm≤4 ? {...DEFAULT_RAY_OPTS, supersample:1} : DEFAULT_RAY_OPTS；`!raw`（无存档）与 catch（JSON 损坏=存档不可用，视同首用）两路走 firstUse；有合法存档时逐字段完整尊重存档（字段异型回落仍按 DEFAULT 常规缺省 1.5×，不受设备影响——严格「只影响首次默认」字面语义，注释钉住存档优先级 > 设备推断）。降档是默认值不是硬限制：低内存设备仍可显式选 1.5×/2×（有行内警示）
+- 【组合警示】宽度段选区下方（自适应说明 <p> 后）：lowMem && width===3840 && ss>=1.5 时渲染行内警示 <p>——TriangleAlert 图标（aria-hidden）+ text-amber-600 dark:text-amber-400 黄色文本，双语文案含 ~${deviceMem}GB 实值（「低内存设备（~4GB）上 4K+ 高超采样可能触发显存溢出——建议 1× 超采样或降一档宽度」）；deviceMemory undefined 的浏览器零显示
+- 【显存估算行】预估行块尾追加 {' · '} + 独立 <span>：「约 N MB 显存（按 16:9 估算）」/「≈ N MB video memory (16:9 estimate)」。公式照任务书：estBase=width??4096（自适应档以视口 2× 上界 4096 估，与引擎 wCap 同上界）；estW=Math.round(W*ss)、estH=Math.round(W*0.5625*ss)（16:9 高度上界近似）；estMB=Math.round(w*h*4*2/1048576)（RGBA 4B/px × color+depth/stencil 2 份）；estMB≥500 时该 span 转 font-medium text-amber-600 dark:text-amber-400 警示色。实算矩阵（bun 直算）：1280@1×=7 / 1920@1.5×=36 / 2560@1.5×=63 / 3840@1×=63 / 3840@1.5×=142 / 3840@2×=253 / auto@1×=72 / auto@1.5×=162 / auto@2×=288MB（现行最重组合）——≥500 阈值在现行五档宽度下不可达，按任务书公式+阈值原样保留为档位扩展预留分支，代码注释如实注明（预估实为量级参考：实际峰值另含 toDataURL PNG 字符串与 2048² shadow map）
+- 【engine.ts 零改动·设计决策确认（任务书 2 的论证）】按任务书「按此实现」方案执行：引擎侧不做设备维度静默改写——①用户显式选 2× 被静默降为 1× 会造成「导出和预览不一致」的困惑（参数面 WYSIWYG 语义破裂）②引擎无 i18n 通道（rayRender 返回对象仅 url/w/h/ms；附注字段无人消费，扩注脚消费面会波及本轮禁改的 Toolbar/commands）③deviceMemory 本身是粗粒度推断（离散值，无显存信息）——作为提示/默认值依据合适，作为硬钳依据过强。设备维度四件（默认降档/组合警示/显存估算/Chrome 系静默语义）全部留 Dialog（唯一双语 UX 面）；引擎只保留 r101 已落的 maxTextureSize 硬护栏（wCap 逻辑零触碰，git diff 实证 engine.ts 零改动）
+- 【守卫 +5（538→543）】r102-a 独立注释块（插在汇总段前，r102-b 并行块未出现——编辑前复核 guards 零 r102 痕迹，只追加自己的块不动他人）：①deviceMemory 检测 ≥2（实测命中 8 行）②显存估算公式 1048576 ≥1 ③低内存默认降档 `supersample: 1 \}`（右花括号锚定——裸 `supersample: 1` 是 DEFAULT_RAY_OPTS 行 `supersample: 1.5` 的前缀子串必误伤；\} 在 bash 双引号内原样保留、Rust regex 合法字面量转义，同 r101-a `\[16/10\]` 手法）④组合警示文案锚「可能触发显存溢出」⑤估算行文案锚「按 16:9 估算」。五模式均无 $/反引号——r101 坑④的 .{0,3} 跨越法本轮无需启用
+- 【门禁】bun run lint 0 错误 · bunx tsc --noEmit src/ 零错误（examples/mini-services/skills 5 错逐条核对为历史基线不变：websocket×2 mock-llm Bun 名 skills×2）· bun run guards 538→543/543 全过 · dev.log 尾部 ✓ Compiled + GET / 200 零编译错误 · git status 仅 RayExportDialog.tsx + regression-guards.sh 两文件 M（engine.ts/Toolbar.tsx/commands.ts/store.ts/MolViewer 零 diff 实证）· 未 git commit/push · 未写测试代码 · 未用 agent-browser（E2E 主代理统一跑）
+
+Stage Summary:
+- 交付：Ray 4K 内存护栏系统性方案三件套（r101 建议①全量落地）——①低内存设备（navigator.deviceMemory ≤4GB，Chrome 系独有，其他浏览器静默零影响）首用默认超采样降档 1×（存档优先级永远高于设备推断，有合法存档完整尊重；JSON 损坏视同首用）②3840+ss≥1.5+低内存组合行内警示（TriangleAlert+黄色双语文案，宽度段选区下方，非 Chrome 系零显示）③预估行显存估算「约 N MB 显存（按 16:9 估算）」（W×ss 与 W×0.5625×ss 的 RGBA×2 份公式，自适应档 4096 上界估，≥500MB 转警示色）；engine.ts 零改动（静默改写致导出≠预览困惑 + 引擎无 i18n 通道 + 粗粒度信号不宜作硬钳——三层论证，r101 wCap 硬护栏原样保留）
+- 验证：lint 0 / tsc src 0（5 错历史基线不变）/ guards 543/543（538 基线 +5）/ dev.log 零编译错误 / 禁改清单零 diff（git status 两文件实证）
+- E2E 交互流（供主代理，两分支）：正常设备（deviceMemory 8 或 undefined）——首开 Dialog 默认 1.5×，选 3840+2× 无警示，预估行尾「 · 约 253 MB 显存（按 16:9 估算）」muted 色；低内存设备（agent-browser 是 Chromium，若宿主报 >4 可 `Object.defineProperty(navigator,'deviceMemory',{value:4,configurable:true})` 注入模拟）——清 localStorage['mv-ray-opts'] 后首开 Dialog 默认 1×（1× 选中态），选 3840 再切 1.5×/2× → 宽度段下方浮现黄色「低内存设备（~4GB）上 4K+ 高超采样可能触发显存溢出——建议 1× 超采样或降一档宽度」+ TriangleAlert；退回 1× 或降 2560 警示即消失；显式选 2× 渲染后重开 Dialog 存档优先（2× 被尊重，验证存档 > 设备推断）
+- 坑/偏差（如实报告）：①≥500MB 警示色阈值在现行五档宽度下不可达（最重组合 auto 4096×2×=288MB）——任务书公式+阈值原样落地为更宽档位预留，未擅改阈值（偏差点：该分支当前为死分支）②rg 守卫裸模式 `supersample: 1` 是 `supersample: 1.5` 的行内前缀子串——右花括号 \} 锚定消歧（新入档变体：守卫模式前缀碰撞）③Toolbar 快捷「Ray 级渲染」菜单项与命令行 ray 缺省仍 1.5×（Toolbar 本轮禁改——快捷口不读 mv-ray-opts 是 r101-a 既有设计，引擎 wCap 硬护栏仍兜底该口；如需快捷口也设备感知留主代理统一裁决）
+
+---
+Task ID: r102-b
+Agent: scripts-resilience-subagent
+Task: devd.py 看门狗双竞态 + gen-thumbs 探针计数（r101 建议②④）
+
+Work Log:
+- 【读基】worklog r101 段（4K 渲染组杀事件环境发现 + rev-c 双竞态/探针计数实证）+ devd.py/gen-template-thumbs.sh 全读 + health-check-templates.sh r99-f3 实现作参考模板 + guards 尾部格式 + agent-ctx r101-b 记录；本机 /proc 实勘：next-server(pid 14155) cwd==/home/z/my-project ✓、另有 /app 根外来 python 进程（多项目实锤）、mock-llm 四 bun 进程他根驻留——cwd 过滤前提活体成立
+- 【devd 竞态①·cwd 归属过滤】server_rss_mb：comm 匹配后追加 `os.readlink(f"/proc/{d}/cwd") != PROJECT → continue`——他项目/外来进程（cwd 不可读 PermissionError 同跳过）不计入；docstring 重写（删除「端口防双实例保证全机至多一个」在多项目沙箱不成立的前提，写明错杀自己健康 server（杀完仍超限→重启风暴）/漏看本项目真凶（看门狗失明直至 OOM 硬杀）双向故障模式）；同项目多匹配（罕见孤儿残留）取 max——看门狗须对本项目任意内存大户敏感（首中语义在多匹配下重引入不确定性）
+- 【devd 竞态②·端口释放有界等待】常量 PORT_RELEASE_POLL_S=0.5 / PORT_RELEASE_POLLS=30（注释：SIGKILL 路径 wait 超时后进程可处不可中断 D 态，大堆内存回收慢，监听 socket 迟滞数秒）；main() 重启间隙改 `while port_alive` 轮询——release_polls>30 才 log「still occupied after 15s bounded wait; external takeover; devd exits」退位；期间释放打「released after Ns bounded wait (slow exit path)」留观测证据；顶部防双实例 docstring 同步；旧注释「死亡间隙端口被外部实例抢占——守护退位」的自杀式假阳性根修：端口转瞬即空守护先弃、此后无人拉起
+- 【devd 验证】py_compile ✓；import 级测试（main 有 __main__ 守卫，import 零副作用零进程操作）：竞态①正控 server_rss_mb()=1263.2MB（本机活 next-server 命中）/负控 PROJECT 换不存在根→0.0（过滤真实生效非摆设）/全机归属扫描表 1 进程计入；竞态②四场景 mock 矩阵（逐字符复刻循环形状+断言 sleep 恒 0.5s）：立即可用→零等待零日志零退位 / 迟滞 0.5s、7.0s→released 日志精确 / 恒占用→恰 30 睡×0.5s=15.0s 有界后第 31 次探测（t=15.0s）判外部接管——上界精确无漂移
+- 【gen-thumbs 探针计数】五形态六调用点（hidden 两遍都计——L122 第二遍 eval 静默失败会让 overlay 入图且 rect 探针只验 canvas 存在不兜底）：`probe=$(agent-browser eval "…" 2>/dev/null | tr -d '"')` + case 判定，成功值逐一实读代码确认——submitted/collapsed/panel 精确、hidden:* 前缀、**applied:ok 精确（applied:MISMATCH 计失败**：grid 序号落错卡，错卡 apply 已被点击、错误模板渲染仍写 $id.png——与 health-check 的 clicked:ID-MISMATCH 仅信息性不同：那边断言模板 id 文本恒不在卡内（本地化名+demo 号），这边断言 demo 结构号在卡内必须命中，序号正确时稳态即 ok）；非成功值（含 eval 失败空输出）→ `PROBE-FAIL $id (探针名: ${probe:-<no output>})` + fails 自增；SKIP×2（装载/截图三败）与 RECTFAIL-CAUGHT 亦自增（gen_one 内直接自增而非循环聚合返回值——免双重计数层；探针失败+下游 SKIP 同根因各计一次为 health-check r99-f3 同款容许，退出语义只看非零）；`local probe` 复用六个捕获点；主循环前 fails=0 + 结尾 `[[ $fails -eq 0 ]] || exit 1`（tighten 收尾失败不计入本轮口径，沿用既有静默行为并注释钉明）
+- 【gen-thumbs 验证·四层零浏览器管线实跑】bash -n ✓ → 判定矩阵（awk 从实文提取六 case 块逐值跑）：25 断言全过（五成功值 fails=0；NOINPUT/NOBTN/NOBAR/NOVIEW/NOGRID/NOCARD/NOAPPLY/applied:MISMATCH/空输出全 fails=1；PROBE-FAIL 行格式与 <no output> 归因断言过）→ agent-browser envelope 实证（独立 session r102b-probe 只读开页+常量 IIFE eval：输出 `"submitted"` 双引号壳，tr 剥壳后五成功值严格相等——tr 假设活体证实，非照抄 health-check）→ 全管线 mock 干跑三模式（export -f mock agent-browser 按 MOCK_MODE 换探针值 + sleep no-op + python3 PATH 包装跳过 tighten 防改真缩略图 + 640×320 raw 夹具走真 PIL 裁剪）：ok→CROP+SHOT+exit 0（成功路径零误报）；noapply（apply 返回 NOGRID）→ PROBE-FAIL 行+管线继续跑完+exit 1（错图仍落盘但如实报败——旧版恒 exit 0 的假成功根除）；noload（loaded 返回 0）→ SKIP 早退+exit 1；干跑覆写的 rainbow-overview.png 已 git checkout 复原，public/ 零残留
+- 【守卫 +6（543→549）】r102-b 独立块插在 r102-a 块后汇总段前（编辑前重读 guards 尾确认 r102-a 块已在——只追加不改他人）：①devd cwd 过滤 `os\.readlink\(` 调用形锚（docstring 的 readlink 文字不误伤）实测 1 ②端口释放常量 PORT_RELEASE_POLL ≥2 实测 6 ③轮询睡眠 time\.sleep\(PORT_RELEASE_POLL_S\) 实测 1 ④gen-thumbs PROBE-FAIL ≥1 实测 8 ⑤失败计数站点 'fails=\$\(\(fails \+ 1\)\)' ≥8 实测 9（六探针+SKIP×2+RECTFAIL 结构钉）⑥非零退出闸 fails -eq 0 实测 1；任务书④「PROBE-FAIL|exit 1」分解为两条更强独立锚——裸 exit 1 在 r99-f3 空 SPECS 守卫已存在会假通过
+- 【门禁】python3 -m py_compile scripts/devd.py ✓ · bash -n scripts/gen-template-thumbs.sh ✓ · bash -n scripts/regression-guards.sh ✓ · bun run guards 549/549 全过（538 基线+r102-a 5+本轮 6）· devd 运行态零扰动（pid 14140 持续运行未重启未 kill 任何进程，新码下次自然生效）· dev.log 尾部 GET / 200 + ✓ Compiled 零 error · scripts/__pycache__（py_compile 副产物）已清 · 未 git commit/push · src/** 零触碰（git status：devd.py/gen-thumbs/guards/worklog 本轮四件 + RayExportDialog.tsx/guards 前段为并行 r102-a 产物未触碰）
+
+Stage Summary:
+- 交付一（devd 双竞态根修）：①server_rss_mb cwd 归属过滤（readlink /proc/<pid>/cwd == PROJECT 才计入 + 同项目取 max）——多项目沙箱下他项目 next-server 不再致错杀自己健康 server 或漏看本项目真凶；②重启间隙端口释放有界等待（0.5s×30=15s）——SIGKILL 后 D 态进程的端口迟滞不再被单次探测误判「外部接管」而弃守（自杀式假阳性：端口转瞬即空守护先弃、此后无人拉起），期间释放打 released after Ns 日志留观测证据；r101 4K 渲染组杀事件的韧性补强落地
+- 交付二（gen-thumbs 假成功语义根除）：五形态六调用点探针非成功值 → PROBE-FAIL 行（带 id 归因+值回显+<no output> 归因）+ fails 计数；applied:MISMATCH（序号落错卡）计失败——错误模板渲染写入 $id.png 时如实报败；SKIP/RECTFAIL 同计；结尾非零退出（对齐 health-check r99-f3/smoke 语义）——「apply 探针失败可产出错误内容缩略图仍报成功」根除，CI 可拦截
+- 验证深度：devd import 级正/负对照+有界等待四场景边界精确（恰 15.0s 上界）；gen-thumbs 判定矩阵 25 断言+agent-browser envelope 活体实证（tr 剥壳假设证实）+三模式全管线 mock 干跑（成功/探针失败/装载失败→exit 0/1/1，旧版三模式全恒 0）——零浏览器零缩略图变更达成端到端验证（干跑覆写单图 git 复原零残留）
+- 坑（新入档）：①harness 的 eval 进命令替换（out=$(eval …)）会丢 fails 自增——子壳边界，判定逻辑测试必须当前 shell eval+临时文件捕获 stdout（首版 harness 17 假阴性教训）②agent-browser eval 的 IIFE 必须带调用括号 })()——裸函数表达式返回 {}（CLI 对函数对象序列化为空对象），首测差点误判输出格式 ③mock 干跑需 python3 PATH 包装跳过 tighten 收尾（否则真改 52 张缩略图）+ mock screenshot 必须真建文件（管线先 rm -f 旧 raw 再 [ -s ] 检查）④py_compile 产 scripts/__pycache__ 未跟踪残留——git status 前必清
+- 与任务书偏差：①hidden 探针两处调用点都计数（任务书列五处 L90/L101/L109/L113/L115——L122 是 hidden 同形第二遍，静默失败无下游兜底故一并修，同形态扩展已注明）②守卫 6 条（要求 ≥2）且④「PROBE-FAIL|exit 1」分解为两条更强独立锚 ③探针成功静默（旧 stdout 原样回显改 case 判定）——输出格式变化：失败时 PROBE-FAIL 带 id 归因信息量反升 ④devd 修复未实跑看门狗循环（运行态守护禁重启）——以 import 级单测+mock 边界矩阵代偿，双修复静态贴合现有代码风格（f-string log_line/常量注释块/docstring 全角标点）
+- 遗留（供下轮参考）：①gen-thumbs tighten 收尾阶段失败仍未计入退出码（沿用既有静默——本轮口径只覆探针/SKIP/RECTFAIL 产出正确性）②devd 15s 有界等待为独立常量未与 GRACEFUL_WAIT_S 联动推导（「SIGKILL 后 D 态回收上限」与「SIGTERM 优雅期」本是不相干时限，独立合理）③r101 建议⑤⑥（global-error.tsx root 兜底/middlewareClientMaxBodySize 显式配置）仍开放
+
+---
+Task ID: r102
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r101 六项下轮建议前四落地 + QA/E2E 全链 + 环境假死根因攻坚 + 后续规划
+
+Work Log:
+- 【基线】HEAD=df4676e（r101 完成态）干净；dev 200；r101 记录的六项下轮建议①②③④⑤立项（⑥生产配置悬置）
+- 【开发·三路】r102-a 子代理（Ray 4K 内存护栏系统性方案：RayExportDialog readDeviceMemoryGB + LOW_MEM_GB=4 首用默认降档 supersample:1 + 3840×ss≥1.5 低内存组合行内警示 TriangleAlert amber + 预估行显存估算（16:9 上界 RGBA×2 公式 ≥500MB 警示色）；engine.ts 零改动设计决策——设备维度留 Dialog 提示不硬钳，maxTextureSize 硬护栏保留）· r102-b 子代理（devd.py 双竞态：server_rss_mb 加 readlink /proc/<pid>/cwd==PROJECT 归属过滤 + 重启间隙 while port_alive 有界轮询 15s（0.5s×30）才判外部接管；gen-template-thumbs.sh 六调用点探针计数 + applied:MISMATCH 亦计 + PROBE-FAIL 归因行 + fails/exit 1 退出闸——对齐 health-check r99-f3；import 级单测 + mock 三模式干跑 ok→0/apply 失败→1/装载失败→1）· 主代理（死依赖大扫除 + global-error.tsx）
+- 【死依赖大扫除】静态 import 全模式穷尽（for pkg rg from/require）+ 1 文件引用者业务反查（ui/calendar 等七件业务引用 0）+ 动态 import/配置文件/examples/middleware/交叉引用四路复核（坑：rg -t tsx 不存在使全模式循环静默失效——以首查无过滤结果为准 + tsc 编译器背书）：24 包移除（@dnd-kit×3/@mdxeditor/@tanstack×2/@hookform/framer-motion/next-auth/next-intl/react-syntax-highlighter/@reactuses/date-fns/uuid/zod/sharp/react-markdown + 七死模板件携带的 react-day-picker/input-otp/react-hook-form/embla-carousel/recharts/vaul/react-resizable-panels）+ 7 个死 shadcn 模板件删除（calendar/input-otp/form/carousel/chart/drawer/resizable）；**prisma/@prisma/client/db.ts 保留**（平台标准栈 + db:* 脚本 + 零运行时代价）；bun remove 一次成功；守卫负向钉死回潮（死依赖不回潮 check0 package.json + 死模板符号不复活 check0 src）
+- 【global-error.tsx】root 级兜底（app router 约定自渲染 html/body）：双语硬编码（无 i18n 依赖——错误时组件树不可信）+ reset 按钮 + digest 回显；r101-rev-a P3 悬置项收口
+- 【QA】lint 0 · tsc src 0 · guards 538→552/552（r102-a 5 + r102-b 6 + 主 3）· smoke 4/4
+- 【E2E·内存护栏双分支（沙箱 Chromium 原生 deviceMemory=4——低内存分支即真实路径）】①低内存首用降档：清 mv-ray-opts → 首开 Dialog 1×(fast) checked=true（非 1.5× 默认）✓ ②3840+2× 组合警示完整出现（含 ~4GB 实值 + TriangleAlert）✓ ③条件渲染：退 1× 或 2560 警示即消失 ✓ ④正常设备模拟（Object.defineProperty deviceMemory=8 + 清档）：默认 1.5× 回归 + 3840+2× 零警示 ✓ ⑤显存估算行 ≈253MB@3840×2（与公式精确一致）✓ ⑥渲染回归 1280×422 · 1× · 1854ms ✓
+- 【E2E·核心回归】预设 2/5/1 三键切换全响应 ✓ · 膜 M 键 5→0 双向 ✓ · 控制台 hbonds 命令（cacheKey 3.5|false · 2202 条 · pending=0）+ hbonds off ✓ · 全会话 console errors 0 ✓
+- 【环境假死攻坚（本轮最大发现）】E2E 中期 press 2（ballstick 预设）后页面主线程假死（eval 超时但浏览器级 get title 存活）——两度复现 + A/B 测试一度误判为 RayExportDialog r102-a 引入（stash 基线通过 + 回退单文件通过）；后续同文件重测会话 1 通过、会话 2 假死——确定性假设被打破；假死现场系统级取证：**next-server RSS 膨胀至 1259MB + 双 Chrome 实例 ~1.35GB → 4GB 沙箱仅剩 544MB free**——SwiftShader CPU 渲染 + GC 饥饿下主线程长任务不yield → CDP eval 超时。清理双 Chrome + kill 膨胀 next-server（老 devd 代码 ~25s 慢路径自愈恢复）后健康内存（available 1698MB）重测：同代码全预设 PASS。**结论：环境级内存耗尽假死，非代码 bug**；r102-a 代码健康内存下正常。误判教训入坑
+- 【坑（新入档）】①**A/B 测试的采样偏差陷阱**：环境型间歇故障（内存压力涨落）与代码变更时间点耦合时会制造假确定性（2/2 挂死 vs 2/2 通过的小样本足以误导）——环境型症状（假死/超时/慢）先查 free/top 系统态再归因代码 ②rg 无 -t tsx 文件类型（tsx 不在默认类型表）——-t ts 组合循环会整体静默失效返回全 0，多模式核查必须验证探针本身（对已知引用文件跑一次确认非 0）③agent-browser 批量命令超时会 kill CLI 中途留下陈旧会话锁——后续命令连环超时假象；杀进程重启即愈 ④老 devd SIGKILL 后恢复慢路径实测 ~25s（r102-b 有界等待修复正中该面，但新码需 devd 重启才生效——本轮不重启避免扰动，下轮自然生效）
+- 【门禁】lint 0 · tsc src 0 · guards 552/552 · smoke 4/4 · dev.log 零 error（kill next-server 为环境攻坚主动操作，devd 自愈）· git add -A → commit → push origin main
+
+Stage Summary:
+- 交付一（开发）：r101 六项下轮建议前四全落地——Ray 内存护栏系统性方案（Dialog 三层防御：低内存默认降档/组合警示/显存估算+引擎 maxTextureSize 硬护栏兜底）· devd.py 看门狗双竞态根治（cwd 过滤+端口有界等待）· gen-thumbs 探针计数退出闸 · 死依赖大扫除（24 包+7 模板件，供应链面收缩）· global-error root 兜底
+- 交付二（QA/E2E）：全门禁绿 + 内存护栏双分支数值级验证 + 核心回归全过 + 零控制台错误；环境假死根因定位（内存耗尽）并完成恢复验证
+- 交付三（认知）：「E2E 假死」类症状的系统级取证流程入档（free/ps/devd 状态先行，代码归因殿后）
+- 下一轮建议（按优先级，基于本轮测试结果）：
+  1. 【中】**dev server 内存增长治理**（本轮假死根因的正面攻坚）：next-dev 长会话 RSS 1259MB 实测——①devd 阈值下调至 ~1.1GB 或加增长斜率检测（连续 N 分钟单调涨即预警重启）②E2E 长会话规范：浏览器会话按 ~20 分钟周期性重启防累积 ③Next dev compile 内存 profile（.next 缓存清空的收益实测）
+  2. 【中】Ray 渲染内存护栏的用户侧收口：渲染完成后主动 renderer.dispose 临时资源？或 toDataURL 大字符串的及早释放（浏览器 GC 不可控——评估 offscreen canvas 降采样路径替代主画布 toDataURL，消除 7680px 主画布尺寸突变）
+  3. 【中】E2E 测试基础设施：smoke.sh 扩展「预设切换+页面响应探针」（本轮假死类症状的自动哨兵：press 2 后 eval 超时即红）——CI 可判性对齐 guards
+  4. 【低】膜/孔道/模板等核心功能的 screenshot 对比基线（像素 diff 哨兵）——视觉回归自动化起步
+  5. 【低】生产部署前置清单收口（middlewareClientMaxBodySize 显式配置 / Caddyfile XTransformPort 白名单 / next.config ignoreBuildErrors 决策）——三项均需部署环境语义确认，挂起为部署前 checklist
