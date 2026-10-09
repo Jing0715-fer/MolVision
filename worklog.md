@@ -4267,3 +4267,5 @@ Stage Summary:
   4. 【中】gen-template-thumbs.sh 探针计数+exit 码（对齐 health-check r99-f3 模式——apply 探针失败可产错误缩略图仍报成功）
   5. 【低】global-error.tsx root 兜底 + next.config ignoreBuildErrors 决策收口（rev-a P3-4 悬置项）
   6. 【低】生产部署前置：middlewareClientMaxBodySize 显式配置与 12/16MB 路由上限对齐（rev-c 平台发现）+ Caddyfile XTransformPort 数字白名单（平台语义确认后一行）
+
+（r101 段 cron 补记，2026-10-09 14:40）15min webDevReview 巡检任务 #446240 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 15 次实证（r85/r86/r87/r88/r90/r91/r94/r95/r92/r96/r97/r98/r99-b/r99 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值，本轮 4K 渲染组杀事件实证其有效）继续作为巡检缺席期间的自愈防线。
