@@ -4341,3 +4341,5 @@ Stage Summary:
   3. 【中】E2E 测试基础设施：smoke.sh 扩展「预设切换+页面响应探针」（本轮假死类症状的自动哨兵：press 2 后 eval 超时即红）——CI 可判性对齐 guards
   4. 【低】膜/孔道/模板等核心功能的 screenshot 对比基线（像素 diff 哨兵）——视觉回归自动化起步
   5. 【低】生产部署前置清单收口（middlewareClientMaxBodySize 显式配置 / Caddyfile XTransformPort 白名单 / next.config ignoreBuildErrors 决策）——三项均需部署环境语义确认，挂起为部署前 checklist
+
+（r102 段 cron 补记，2026-10-09 15:41）15min webDevReview 巡检任务 #446324 创建即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 16 次实证，已删除清理。devd 看门狗继续作为巡检缺席期间的自愈防线（本轮 r102-b 双竞态修复已落盘，devd 下次自然重启生效——kill 后 ~25s 慢路径为老代码行为）。
