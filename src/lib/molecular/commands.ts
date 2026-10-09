@@ -1049,7 +1049,16 @@ export function runCommand(raw: string): void {
       }
       n++
     }
-    useMolStore.getState().bumpVisual()
+    // r99-main：b/q/name 是 rep 缓存哈希的第三类输入（既非坐标 rev 也非烘焙色
+    // colorRev——旧版只 bumpVisual，而 visualRev 不入哈希）→ alter 后 putty 半径/
+    // bfactor·spectrum-b 配色永不刷新。按影响补双 bump：putty 几何（b 半径）与选择
+    // 求值（name）→ rev；spectrum b/bfactor 着色 → colorRev（保守正确）
+    useMolStore.setState(st => ({
+      structures: st.structures.map(x => x.id === s.activeId
+        ? { ...x, rev: x.rev + 1, colorRev: x.colorRev + 1 }
+        : x),
+      visualRev: st.visualRev + 1,
+    }))
     return ok(tt({ zh: `已修改 ${n.toLocaleString(loc())} 个原子的 ${field}（putty/spectrum b 可见效果）`, en: `Modified ${field} on ${n.toLocaleString(loc())} atoms (visible via putty/spectrum b)` }))
   }
 

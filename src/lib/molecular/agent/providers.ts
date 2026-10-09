@@ -929,7 +929,8 @@ export function listProviderStatus(): ProviderStatus[] {
       hasBaseURLOverride: !!(conf?.baseURL?.trim() && conf.baseURL.trim() !== p.baseURL),
       effectiveModel: conf?.defaultModel?.trim() || p.defaultModel,
       isDefault: store.default === p.id,
-      maskedKey: key ? `${key.slice(0, 4)}…${key.slice(-4)}` : null,
+      // r99-main：短 key（≤8，本地网关常见）掩码即全文回显——全遮
+      maskedKey: key ? (key.length <= 8 ? '••••' : `${key.slice(0, 4)}…${key.slice(-4)}`) : null,
       envKeySource: envKey,
       availableModels: mergeAvailableModels(p, conf?.discoveredModels),
       effectiveTimeoutMs: resolveTimeoutMs(p.id),

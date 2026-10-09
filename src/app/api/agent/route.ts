@@ -368,6 +368,18 @@ export async function POST(req: Request) {
   if (typeof body.scene !== 'string') {
     return NextResponse.json({ ok: false, error: errText(locale, 'scene 必须是字符串', 'scene must be a string') }, { status: 400 })
   }
+  // r99-main：补齐 r99-f3 卡点剩余面——image/imageBefore/stream/messages 数组项。
+  // messages 项 role 收敛 user/assistant 枚举（旧版任意 role 字符串直传上游）
+  const badStr = (v: unknown) => v !== undefined && v !== null && typeof v !== 'string'
+  if (badStr(body.image) || badStr(body.imageBefore)
+    || (body.stream !== undefined && typeof body.stream !== 'boolean')
+    || (body.messages !== undefined && (
+      !Array.isArray(body.messages)
+      || body.messages.some(m => !m || typeof m?.role !== 'string' || typeof m?.content !== 'string' || !['user', 'assistant'].includes(m.role))
+    ))
+  ) {
+    return NextResponse.json({ ok: false, error: errText(locale, '字段类型非法（image/imageBefore 须为字符串，stream 须为布尔，messages 须为 {role: user|assistant, content: string} 数组）', 'Invalid field types (image/imageBefore must be strings, stream a boolean, messages an array of {role: user|assistant, content: string})') }, { status: 400 })
+  }
 
   // ---------- 视觉自查分支（VLM 看截图，可选前后对比） ----------
   if (body.image && body.goal) {
@@ -428,16 +440,24 @@ export async function POST(req: Request) {
             const zai = await ZAI.create()
             // r98-f2：SDK createVision 不收 signal/timeout（类型就是裸 Promise）——上游挂起
             // 时整个自查无限挂起（重试循环里每次调用都要有超时）；Promise.race 包 90s
-            // 与 parse 路由同款修法
-            const completion = await Promise.race([
-              zai.chat.completions.createVision({
-                model: 'glm-4.6v',
-                messages: vlmMessages,
-                thinking: { type: 'disabled' },
-              }),
-              new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`VLM 兜底调用超时（${VLM_TIMEOUT_MS}ms）`)), VLM_TIMEOUT_MS)),
-            ])
-            text = String(completion.choices[0]?.message?.content ?? '')
+            // 与 parse 路由同款修法。r99-main：定时器 clearTimeout（成功路径不再空挂
+            // 90s 持 rej 闭包）
+            let zaiReject: ((e: Error) => void) | null = null
+            const timeoutP = new Promise<never>((_, rej) => { zaiReject = rej })
+            const zaiTimer = setTimeout(() => zaiReject?.(new Error(`VLM 兜底调用超时（${VLM_TIMEOUT_MS}ms）`)), VLM_TIMEOUT_MS)
+            try {
+              const completion = await Promise.race([
+                zai.chat.completions.createVision({
+                  model: 'glm-4.6v',
+                  messages: vlmMessages,
+                  thinking: { type: 'disabled' },
+                }),
+                timeoutP,
+              ])
+              text = String(completion.choices[0]?.message?.content ?? '')
+            } finally {
+              clearTimeout(zaiTimer)
+            }
           }
           decision = sanitizeDecision(extractJson(text))
           if (decision) break
@@ -518,6 +538,9 @@ export async function POST(req: Request) {
         let full = ''
         let decision: AgentDecision | null = null
         let lastErr = ''
+        // r99-main：已流出增量计数——旧版守卫量 full（仅成功路径赋值），部分流出后故障
+        // 时 full 恒 '' → 守卫永不触发 → 重试从零重拉把相同前缀二次推送，客户端文本重复
+        let emitted = 0
         try {
           for (let attempt = 0; attempt < 2; attempt++) {
             if (upstreamAbort.signal.aborted) break // 退避等待期间客户端已取消
@@ -525,7 +548,7 @@ export async function POST(req: Request) {
               // 供应商无关补全（zai SDK / OpenAI 兼容直连统一分派）；增量逐条转发；
               // signal = req.signal + 本流 cancel() 的汇聚信号——客户端停止即刻传播到上游 fetch；
               // locale 随请求语言（r99-f3：ZAI idle 超时文案双语）
-              full = await completeWithProvider(messages, { onDelta: piece => send({ t: 'd', v: piece }), signal: upstreamAbort.signal, locale })
+              full = await completeWithProvider(messages, { onDelta: piece => { emitted += piece.length; send({ t: 'd', v: piece }) }, signal: upstreamAbort.signal, locale })
               decision = sanitizeDecision(extractJson(full))
               if (!decision) {
                 // 降级兜底：全文当 reply + 打捞命令行（可用性优先于严格协议）
@@ -541,7 +564,7 @@ export async function POST(req: Request) {
               // ——不重试、不报错（重试只留给限流/网络抖动等瞬时上游故障）
               if (upstreamAbort.signal.aborted || (e instanceof Error && e.name === 'AbortError')) break
               lastErr = e instanceof Error ? e.message : 'LLM 调用异常'
-              if (full) break // 已流出内容不重试（重发会重复推送增量）
+              if (emitted > 0) break // 已流出增量不重试（量 emitted 而非 full——重发会重复推送）
             }
             // 瞬时故障退避后重试（429 限流窗口显著更长——限流感知退避）
             const isRate = /429|too many|rate.?limit/i.test(lastErr)

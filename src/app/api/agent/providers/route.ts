@@ -67,6 +67,12 @@ export async function POST(request: NextRequest) {
   if (body.providerId !== undefined && !PROVIDER_CATALOG.some(p => p.id === body.providerId)) {
     return NextResponse.json({ error: errText(locale, `providerId 必须是：${PROVIDER_CATALOG.map(p => p.id).join(', ')}`, `providerId must be one of: ${PROVIDER_CATALOG.map(p => p.id).join(', ')}`) }, { status: 400 })
   }
+  // r99-main：字符串字段类型白名单——旧版只查值域不查类型，apiKey: 123 / baseURL: {}
+  // 在下游 .trim() 抛 TypeError → 500 裸异常页（实测复现）。统一 400 双语
+  const badStr = (v: unknown) => v !== undefined && v !== null && typeof v !== 'string'
+  if (badStr(body.providerId) || badStr(body.apiKey) || badStr(body.baseURL) || badStr(body.defaultModel)) {
+    return NextResponse.json({ error: errText(locale, '字段类型非法（providerId/apiKey/baseURL/defaultModel 须为字符串）', 'Invalid field types (providerId/apiKey/baseURL/defaultModel must be strings)') }, { status: 400 })
+  }
 
   if (body.setDefault && body.providerId) {
     const ok = setDefaultProviderId(body.providerId)

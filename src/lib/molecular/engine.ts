@@ -1819,11 +1819,11 @@ export class MolEngine {
           // r99-f1：哈希并入 colorRev（着色级）；rev 保留（几何级：hiddenChains/
           // recomputeSS/resetTransform/会话·场景恢复仍 bump rev 须全体重建）；
           // repsRev 不入哈希——rep 对象自身在哈希内，单 rep 变更天然只失效本 rep
-          const fullHash = JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey])
+          const fullHash = JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey, this.repDynSelKey(entry, rep)])
           if (existing.hash === fullHash) continue
           // r59-a1 #7 修复：纯 rep.visible 翻转不重建几何（surface/cartoon 秒级重建代价）——
           // 剔除 visible 字段比对，一致则直接切 build.group.visible（不触发秒级重建）
-          const repNoVis = JSON.stringify([{ ...rep, visible: 0 }, entry.rev, entry.colorRev, filtersKey]).replace('"visible":0', '"visible":X')
+          const repNoVis = JSON.stringify([{ ...rep, visible: 0 }, entry.rev, entry.colorRev, filtersKey, this.repDynSelKey(entry, rep)]).replace('"visible":0', '"visible":X')
           const existNoVis = existing.hash.replace(/"visible":(?:true|false)/, '"visible":X')
           if (repNoVis === existNoVis) {
             if (existing.build.group.visible !== rep.visible) {
@@ -1834,8 +1834,8 @@ export class MolEngine {
             continue
           }
         }
-        // r99-f1：哈希与 sync() 侧保持一致（rev + colorRev + filtersKey）
-        const hash = JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey])
+        // r99-f1：哈希与 sync() 侧保持一致（rev + colorRev + filtersKey + r99-main dynSelKey）
+        const hash = JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey, this.repDynSelKey(entry, rep)])
         if (existing) {
           view.repContainer.remove(existing.build.group)
           existing.build.dispose()
@@ -2658,8 +2658,16 @@ export class MolEngine {
     if (!dirty) return
     this.invalidateDerivedCaches(dirty.data)
     const entry = useMolStore.getState().structures.find(s => s.id === dirty.id)
-    if (entry?.reps.some(r => r.colorScheme === 'pocket')) {
+    // r99-main：sasa 同为构象相关烘焙色——数据已清，重建自动落灰兜底色（旧版只看 pocket）
+    if (entry?.reps.some(r => r.colorScheme === 'pocket' || r.colorScheme === 'sasa')) {
       this.rebuildStructureVisuals(dirty.data)
+    }
+    // r99-main：ensemble 落定后膜几何对齐新构象（superpose 路径已有专属失效，此为
+    // 落帧路径补齐）——膜开启时作废键并按当前状态重算（与 superpose 同款模式）
+    if (useMolStore.getState().settings.showMembrane
+      && useMolStore.getState().activeId === dirty.id) {
+      this.membraneKey = ''
+      this.updateMembrane(useMolStore.getState())
     }
   }
 
@@ -3674,6 +3682,46 @@ export class MolEngine {
     })
   }
 
+  /** r99-main：rep 选择表达式里的动态词依赖签名——sele/sel（当前选择）、命名选择
+   *  （indices 快照或 expr）、modelN（结构表序）在 buildRep 时经 buildNamedMasks 实时
+   *  求值，但其输入不在 r99-f1 哈希四元组内 → 引用型 rep 停留创建时刻的原子集。
+   *  策略：仅对引用了动态词的 rep 附加签名（静态 rep 零开销，选择高亮走
+   *  view.selectionRev 独立通道不受影响）；所引名字集合/内容/选择 rev/结构表长
+   *  变化即哈希失配重建。sync/buildRep 两侧均读 useMolStore.getState() 活状态，
+   *  同一同步 tick 内必然一致（公式分叉 = 永不命中缓存，五处共用本方法唯一事实源） */
+  private repDynSelKey(entry: StructureEntry, rep: RepConfig): string {
+    const sel = rep.selection
+    if (!sel || !/[A-Za-z]/.test(sel)) return ''
+    const store = useMolStore.getState()
+    let out = ''
+    // 当前选择（sele/sel；zone 改写形式也含 sele）
+    if (/(^|[^A-Za-z0-9_])(sele|sel)(?![A-Za-z0-9_])/.test(sel)) {
+      out += `se:${store.selection.structureId ?? ''}:${store.selection.rev}`
+    }
+    // 命名选择（本结构的；含引用名集合 + 内容签名——同名换内容也失配）
+    const nsFor = store.namedSelections.filter(n => n.structureId === entry.id)
+    if (nsFor.length) {
+      const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const refs = nsFor.filter(n => new RegExp(`(^|[^A-Za-z0-9_])${esc(n.name)}(?![A-Za-z0-9_])`).test(sel))
+      if (refs.length) {
+        const sigOf = (n: typeof refs[number]) => {
+          if (n.indices) {
+            let h = 7
+            for (let k = 0; k < n.indices.length; k++) h = (Math.imul(h, 31) + n.indices[k]) | 0
+            return `i${n.indices.length}:${h}`
+          }
+          return `e${n.expr}`
+        }
+        out += `|ns:${refs.map(n => n.name).join(',')}|${refs.map(sigOf).join(';')}`
+      }
+    }
+    // ChimeraX modelN（结构表序变化即语义变化）
+    if (/(^|[^A-Za-z0-9_])model\d+(?![A-Za-z0-9_])/.test(sel)) {
+      out += `|mdl:${store.structures.length}`
+    }
+    return out
+  }
+
   private buildRep(entry: StructureEntry, rep: RepConfig, data: StructureData, view: StructureView, settings: Settings, filtersKey: string) {
     const named = buildNamedMasks(entry.id, data)
     const res = evaluateSelection(rep.selection, { structure: data, named })
@@ -3689,9 +3737,9 @@ export class MolEngine {
       }
       const build: RepBuild = { group: new THREE.Group(), pickables: [], dispose: () => {} }
       // r99-f1：错误分支同样自增 buildSeq（旧几何已被 sync 侧 dispose，克隆须重克隆）
-      // + 哈希并入 colorRev
+      // + 哈希并入 colorRev + r99-main dynSelKey
       view.buildSeq++
-      view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey]), build })
+      view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey, this.repDynSelKey(entry, rep)]), build })
       return
     }
     if (rep.error) {
@@ -3771,9 +3819,9 @@ export class MolEngine {
     }
     view.repContainer.add(build.group)
     // 存储哈希与 sync() 侧计算保持一致（否则 rep 永不命中缓存逐帧重建）；
-    // r99-f1：哈希并入 colorRev + 自增 buildSeq（对称克隆失效链权威源）
+    // r99-f1：哈希并入 colorRev + 自增 buildSeq（对称克隆失效链权威源）+ r99-main dynSelKey
     view.buildSeq++
-    view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey]), build })
+    view.reps.set(rep.id, { hash: JSON.stringify([rep, entry.rev, entry.colorRev, filtersKey, this.repDynSelKey(entry, rep)]), build })
     this.pickablesCache = null
     // 材质统一挂裁剪平面；同时应用当前高光设置（新建材质也遵循 specular 开关）
     build.group.traverse(o => {

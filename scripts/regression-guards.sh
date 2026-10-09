@@ -675,6 +675,24 @@ check "热路径颜色单例"             "tmpColor\.setRGB"               "src/
 check "parser死变量清理标记"      "清理死变量"                   "src/lib/molecular/parser.ts" 1
 check0 "cartoon恒真死条件"        "i0 \+ 1\) < n \?"              "src/lib/molecular/representations.ts"
 
+# ---- r99-main：并入会话独有修复（dynSelKey 动态选择签名 / alter 双bump / 膜落帧失效 / flush sasa / API 类型白名单补齐 / emitted 守卫 / ZAI 定时器清理 / UI 小修批） ----
+check "动态选择依赖签名"          "repDynSelKey"                   "src/lib/molecular/engine.ts" 6
+check "alter双bump"               "rev: x\.rev \+ 1, colorRev: x\.colorRev \+ 1" "src/lib/molecular/commands.ts" 1
+check "flush含sasa重烘"           "colorScheme === 'pocket' \|\| r.colorScheme === 'sasa'" "src/lib/molecular/engine.ts" 1
+check "落帧膜失效"                "this.updateMembrane\(useMolStore.getState\(\)\)" "src/lib/molecular/engine.ts" 2
+check "agent流emitted守卫"        "let emitted = 0"               "src/app/api/agent/route.ts" 1
+check "agent类型白名单补齐"       "badStr\(body.image\)"        "src/app/api/agent/route.ts" 1
+check "providers类型白名单"       "const badStr"                  "src/app/api/agent/providers/route.ts" 1
+check "models类型白名单"          "const badStr"                  "src/app/api/agent/providers/models/route.ts" 1
+check "命名选择归属数据"          "dataRegistry\.get\(ns\.structureId\)" "src/components/studio/panels/SelectionPanel.tsx" 1
+check "演示并发闸"                "if \(busyId \|\| loading\) return" "src/components/studio/FigureTemplatesDialog.tsx" 1
+check "撤销还原链隔离"            "hiddenChains: st.hiddenChains" "src/components/studio/panels/StructuresPanel.tsx" 1
+check "S菜单膜语境"               "脂双层膜语境"                   "src/components/studio/ObjectActionBar.tsx" 2
+check "录制停止双击闸"            "stopBusyRef"                   "src/components/studio/RecordBadge.tsx" 3
+check "fileinput清value"          "e.target.value = ''"           "src/components/studio/LoadDialog.tsx" 1
+check "ZAI定时器清理"             "clearTimeout\(zaiTimer\)"    "src/app/api/templates/parse/route.ts" 1
+check "短key全遮"                 "length <= 8 \? '••••'"       "src/lib/molecular/agent/providers.ts" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

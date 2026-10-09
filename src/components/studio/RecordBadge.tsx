@@ -19,6 +19,8 @@ export function RecordBadge() {
   const recording = useRecordStore(s => s.recording)
   const setRecording = useRecordStore(s => s.setRecording)
   const timeRef = useRef<HTMLSpanElement>(null)
+  /** r99-main：stop 双击守卫（await 窗口内重入误报空录制） */
+  const stopBusyRef = useRef(false)
 
   // 计时器：直接更新 DOM 文本（避开 set-state-in-effect 且零重渲染）
   useEffect(() => {
@@ -40,6 +42,10 @@ export function RecordBadge() {
   const stop = async () => {
     const eng = engineRef.current
     if (!eng) return
+    // r99-main：双击守卫——首次 stop 的 await 期间 recordStore.recording 仍 true（按钮
+    // 可再点），第二次调用时 rec.state 已非 recording → 返回 null → 误报「录制内容为空」
+    if (stopBusyRef.current) return
+    stopBusyRef.current = true
     const elapsed = eng.recordingElapsed
     // r99-f2：stopRecording 可能抛错（MediaRecorder 停止/混流异常）——旧版无 try/catch，
     // 抛错则 setRecording(false) 永不执行，REC 徽章永久卡死；catch 里复位状态 + 双语提示
@@ -64,6 +70,8 @@ export function RecordBadge() {
     } catch {
       setRecording(false)
       toast.error(tt({ zh: '停止录制失败，录制状态已重置', en: 'Failed to stop the recording; the recording state was reset' }))
+    } finally {
+      stopBusyRef.current = false
     }
   }
 

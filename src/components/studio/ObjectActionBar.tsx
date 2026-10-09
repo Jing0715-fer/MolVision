@@ -82,6 +82,8 @@ export function ObjectActionBar({ st, className }: { st: StructureEntry; classNa
   const setActive = useMolStore(s => s.setActive)
   const setStructureVisible = useMolStore(s => s.setStructureVisible)
   const labelCount = useMolStore(s => s.labels.filter(l => l.structureId === st.id).length)
+  // r99-main：S 菜单膜语境条目用当前厚度幂等重启（与命令行 membrane <厚度> 语义一致）
+  const membraneThickness = useMolStore(s => s.settings.membraneThickness)
 
   // 全部动作先激活目标结构（PyMOL 对象面板语义：动作作用于该对象）
   const act = (cmd: string) => {
@@ -122,6 +124,7 @@ export function ObjectActionBar({ st, className }: { st: StructureEntry; classNa
         <DropdownMenuItem onClick={() => act('show hydrogens')}>{t({ zh: '氢原子', en: 'Hydrogens' })}</DropdownMenuItem>
         <DropdownMenuItem onClick={() => act('show waters')}>{t({ zh: '水分子', en: 'Waters' })}</DropdownMenuItem>
         <DropdownMenuItem onClick={() => act('show cell')}>{t({ zh: '晶胞盒', en: 'Unit cell' })}</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act(`membrane ${Math.round(membraneThickness)}`)}>{t({ zh: '脂双层膜语境', en: 'Lipid bilayer' })}</DropdownMenuItem>
         <DropdownMenuItem onClick={() => act('preset publication')}>{t({ zh: '出版级互作一键组', en: 'Publication preset' })}</DropdownMenuItem>
       </LetterButton>
 
@@ -135,6 +138,7 @@ export function ObjectActionBar({ st, className }: { st: StructureEntry; classNa
         <DropdownMenuItem onClick={() => act('hide hydrogens')}>{t({ zh: '氢原子', en: 'Hydrogens' })}</DropdownMenuItem>
         <DropdownMenuItem onClick={() => act('hide waters')}>{t({ zh: '水分子', en: 'Waters' })}</DropdownMenuItem>
         <DropdownMenuItem onClick={() => act('hide cell')}>{t({ zh: '晶胞盒', en: 'Unit cell' })}</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => act('membrane off')}>{t({ zh: '脂双层膜语境', en: 'Lipid bilayer' })}</DropdownMenuItem>
       </LetterButton>
 
       <LetterButton letter="L" title={t({ zh: `标注 Label——为 ${st.name} 当前选择添加/清除原子标注`, en: `Label — add/clear atom labels for the current selection in ${st.name}` })} accent={labelCount > 0 ? 'border-primary/50 text-primary' : undefined}>

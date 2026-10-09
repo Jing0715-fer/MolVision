@@ -4175,3 +4175,23 @@ Stage Summary:
 （r99 段合并补记，变基并入并行会话）推送时发现远端领先 5 提交——三个并行会话同期工作：r99 模板美学大修（325f982：18 支弱项精修+新六连 52 支+GTAO 精灵黑条/autoPerf 阉割双根修）、r100 轴根修（d8ac60b：Kabsch 对称轴投票+TM waist 扫描）、r99-b 膜/孔道双修（dceb6a1：**孔道环带 X 光叠加层——「通道没画在 3D」真正根因是环带被不透明卡通遮挡（depthTest 全关修复，9PB6 可见像素 0.05%→3×）** + 膜显隐双 UI）。变基合并策略：重叠膜 UI 取远端已验证版（Toolbar Layers 钮 + 场景面板膜节），我方独有表面全保留（M 快捷键/命令面板 qa-membrane+qa-hbond 真执行化/帮助表登记）；engine.ts 双侧改动自动合并语义共存（colorRev 失效链 5 处 + buildSeq 8 处 + depthTest 5 处 + rayRestored 3 处）；ScenePanel 自动合并产生双膜节+两处语法损坏——手工去重保远端版；guards 双块 union + 动态 TOTAL（r100 进程内计数）→ **487/487 全过**。合并态终验 E2E：1BL8 孔道模板（pore 3+membrane 5+box）→ 像素级红 17/绿 60/蓝 57 环带命中 + VLM 三问全 YES（橙板横穿/环带在孔内不被蛋白遮挡/卡通清晰）→ Layers 钮 off→0 / M 键 on→5 双实现共存 → 滑杆探针 1 提交=1 buildRep（失效链分离在合并后依然成立）。终态 c0216e6 已推送。
 
 （r99 段 cron 补记，2026-10-08 20:02）15min webDevReview 巡检任务 #444519 创建成功但秒级「Disabled due to exec limits exceeded」——账户级执行配额硬限第 14 次实证（r85/r86/r87/r88/r90/r91/r94/r95/r92/r96/r97/r98/r99-b 及本轮），已删除清理。devd 看门狗（1.5GB 内存阈值）继续作为巡检缺席期间的自愈防线。
+
+---
+Task ID: r99-main
+Agent: main
+Task: r99 本地成果与并行会话合并——远端已推进 r99-b/r99/r100（膜双 UI+孔道 X 光 depthTest 根修+失效链三分+52 模板+模板美学，guards 487/487），本地提交与其高度重叠。策略：git reset --hard origin/main 为基，盘点重叠后仅重放本地独有修复（16 项），跳过远端已有等价实现（膜 UI/失效链/visTup/StatusBar 窄订阅/restore-before-decode 设计）
+
+Work Log:
+- 【重叠盘点】远端已有：膜切换双 UI（Toolbar Layers+场景面板膜节）/r99-f1 三分失效链（rev/repsRev/colorRev+buildSeq 对称链——与本地 colorRev 分离等价更全）/seqFocus visTup 数值元组（更优）/rayRender restore-before-decode（规避 await 窗口，本地 rayBusy 冻结反致解码期画布空白闪烁——弃）/StatusBar r99-f4 窄订阅子组件化/EnsembleBar 播放序/命名选择 bump/PoreProfile 双语轴/superpose 专属膜失效/session merge whenEngineReady/MolViewer 签名扩容
+- 【本地独有重放（16 文件）】①engine：repDynSelKey 动态选择依赖签名（远端哈希四元组同样缺动态词输入！）——sele/sel/命名选择/modelN 引用检测+内容哈希（indices 滚动哈希/expr 文本），五处哈希位点统一挂第五元素；flushEnsembleCaches 扩 sasa 重烘+落帧膜失效（superpose 有专属失效，落帧路径补齐，active 判定同款）②commands：alter b/q/name 双 bump（rev+colorRev——第三类输入终修）③API：agent 补齐 r99-f3 卡点剩余面（image/imageBefore/stream/messages 项 role 枚举）+流式 emitted 计数守卫（旧版量 full 恒 '' 守卫永不触发→重试重发前缀）+providers/models 字符串类型白名单（实测 500→400）+ZAI race 定时器 clearTimeout×3 路由（成功路径不再空挂 90s 持 rej 闭包）④UI 小修批：SelectionPanel 命名选择归属结构数据源/FigureTemplatesDialog 演示并发闸/StructuresPanel 撤销还原 hiddenChains/RecordBadge 停止双击闸（适配远端 try/catch 结构）/MapLegend 恢复位置视口 clamp/AgentPanel 发送后高度复位/LoadDialog+WelcomeScreen file input 清 value/ObjectActionBar S-H 菜单膜语境条目（membraneThickness 订阅+幂等重启）/providers maskedKey 短 key 全遮
+- 【合并态 E2E（agent-browser 复验）】①1bl8 加载+membrane 命令→5 子对象+key on|34②S 菜单膜条目幂等重启@34③dynSelKey 探针：show lines sele 建 rep（addRep=1 重建）→select name N 改变选择→repCount=1（仅 sele 引用型 rep 重建，静态 3 rep 零波及——远端哈希四元组下此场景重建数会是 0 的陈旧渲染，本地签名修复实锤）④alter b=50→repCount=4（全量重烘，修复前 0）⑤browser errors 空
+- 【门禁】lint 0 · tsc src 0 · guards 487→503/503（r99-main 块 16 条）· smoke 4/4 · dev.log 零 error
+
+Stage Summary:
+- 交付：并行会话冲突的干净解法——以远端为基只重放独有增量，避免同概念双实现并存（本地 colorRev/膜 UI/rayBusy 三项判定为冗余主动弃用，其中 rayBusy 冻结与远端「先恢复再解码」设计冲突会引入画布空白闪烁的实锤分析）
+- 核心增量：repDynSelKey 补上 r99-f1 哈希四元组缺的「动态选择词」输入面（sele/命名选择/modelN 引用型 rep 从「永不刷新」到「跟随选择重建」，静态 rep 零开销）；alter 第三类输入双 bump；API 类型白名单补齐+流式重试 emitted 守卫+三路由 ZAI 定时器清理；UI 小修 10 项
+- 坑（新入档）：①git push 被拒时先 fetch 看远端——并行会话可能已做同概念工作，盲 rebase 会造出双实现地狱；重叠判定用「概念等价性」而非代码相似度 ②MultiEdit 非原子再现：第三条编辑失配时前两条已落盘（git diff 实证 +17 行半应用态）——编辑后必须 diff 校验 ③「冻结 live tick」类优化要先看管线是否已用「提前恢复」设计规避——两种修法互斥，叠加会引入新缺陷（解码期画布空白）
+- 下一轮建议（按优先级）：
+  1. 【中】r99 审查遗留 P3（远端+本地合并后仍开放）：chunked 传输绕过 content-length 预检（流式限长读取）/TemplateCard 嵌套交互 ARIA/FadeEdge 内容变化重估/TemplatePreview disposedRef/脚本诊断值捕获断言
+  2. 【中】hbond detKey 挂 entry.rev 的 setChainHidden 误伤（纯视觉隔离触发整轮 worker 重检）——坐标纪元号 coordEpoch 方案
+  3. 【低】global-error.tsx / next.config ignoreBuildErrors 决策 / devd.py 多项目进程匹配

@@ -168,16 +168,25 @@ export async function POST(req: Request) {
     if (text === null) {
       if (req.signal.aborted) throw new Error('aborted')
       const zai = await ZAI.create()
-      // r98：SDK createVision 不收 signal/timeout——Promise.race 包同款 90s
-      const completion = await Promise.race([
-        zai.chat.completions.createVision({
-          model: 'glm-4.6v',
-          messages,
-          thinking: { type: 'disabled' },
-        }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('VLM 兜底调用超时（90000ms）')), 90_000)),
-      ])
-      text = String(completion.choices[0]?.message?.content ?? '')
+      // r98：SDK createVision 不收 signal/timeout——Promise.race 包同款 90s。
+      // r99-main：定时器 clearTimeout（成功路径不再空挂 90s 持 rej 闭包）+ 超时毫秒插值
+      const VLM_TIMEOUT_MS = 90_000
+      let zaiReject: ((e: Error) => void) | null = null
+      const timeoutP = new Promise<never>((_, rej) => { zaiReject = rej })
+      const zaiTimer = setTimeout(() => zaiReject?.(new Error(`VLM 兜底调用超时（${VLM_TIMEOUT_MS}ms）`)), VLM_TIMEOUT_MS)
+      try {
+        const completion = await Promise.race([
+          zai.chat.completions.createVision({
+            model: 'glm-4.6v',
+            messages,
+            thinking: { type: 'disabled' },
+          }),
+          timeoutP,
+        ])
+        text = String(completion.choices[0]?.message?.content ?? '')
+      } finally {
+        clearTimeout(zaiTimer)
+      }
     }
     const raw = extractJsonObject(text) as Record<string, unknown> | null
     if (!raw) {

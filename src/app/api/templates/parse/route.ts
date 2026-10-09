@@ -284,6 +284,10 @@ export async function POST(req: Request) {
     }
     if (req.signal.aborted) throw new Error('aborted')
     const zai = await ZAI.create()
+    // r99-main：定时器 clearTimeout（成功路径不再空挂 timeoutMs 持 rej 闭包）
+    let zaiReject: ((e: Error) => void) | null = null
+    const timeoutP = new Promise<never>((_, rej) => { zaiReject = rej })
+    const zaiTimer = setTimeout(() => zaiReject?.(new Error(`VLM 兜底调用超时（${timeoutMs}ms）`)), timeoutMs)
     try {
       const completion = await Promise.race([
         zai.chat.completions.createVision({
@@ -291,12 +295,14 @@ export async function POST(req: Request) {
           messages,
           thinking: { type: 'disabled' },
         }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`VLM 兜底调用超时（${timeoutMs}ms）`)), timeoutMs)),
+        timeoutP,
       ])
       return String(completion.choices[0]?.message?.content ?? '')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'VLM 调用异常'
       throw new Error(providerErr ? `${providerErr}; ${msg}` : msg)
+    } finally {
+      clearTimeout(zaiTimer)
     }
   }
 

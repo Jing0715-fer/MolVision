@@ -30,7 +30,14 @@ function loadPos(): FreePos | null {
     const raw = localStorage.getItem(POS_KEY)
     if (!raw) return null
     const p = JSON.parse(raw) as Partial<FreePos>
-    return typeof p?.x === 'number' && typeof p?.y === 'number' ? { x: p.x, y: p.y } : null
+    if (typeof p?.x !== 'number' || typeof p?.y !== 'number') return null
+    // r99-main：恢复位置按当前视口 clamp——大屏拖到右侧存档（x=2400），换小屏（1280）
+    // 打开后卡片 fixed 定位在视口外不可见不可拖不可双击归位，只能清 localStorage 自救
+    const W = 300, H = 200 // 卡片大致尺寸近似（clamp 宽容：只需拉回可交互区）
+    return {
+      x: Math.min(Math.max(8, p.x), Math.max(8, window.innerWidth - W - 8)),
+      y: Math.min(Math.max(8, p.y), Math.max(8, window.innerHeight - H - 8)),
+    }
   } catch {
     return null
   }

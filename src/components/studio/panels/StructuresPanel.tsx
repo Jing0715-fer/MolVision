@@ -147,7 +147,8 @@ function closeStructureWithUndo(st: StructureEntry) {
         textRegistry.set(newId, text)
         useMolStore.setState(s => ({
           structures: s.structures.map(x => x.id === newId
-            ? { ...x, reps: st.reps, colorOverrides: st.colorOverrides, visible: st.visible, transform: st.transform, symmetry: st.symmetry, hasSS: st.hasSS }
+            // r99-main：补 hiddenChains——链隔离中的结构误关后撤销，旧版隔离状态丢失
+            ? { ...x, reps: st.reps, colorOverrides: st.colorOverrides, visible: st.visible, transform: st.transform, symmetry: st.symmetry, hasSS: st.hasSS, hiddenChains: st.hiddenChains }
             : x),
         }))
         if (st.symmetry?.radius) engineRef.current?.updateSymmetry(newId, st.symmetry.radius)

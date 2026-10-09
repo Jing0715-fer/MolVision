@@ -1625,6 +1625,9 @@ export function FigureTemplatesDialog() {
   }
 
   const demo = async (tpl: FigureTemplate) => {
+    // r99-main：跨模板并发闸——A 卡演示的命令应用阶段（loading 已回落）B 卡仍可点，
+    // 两条命令序列交错执行改写同一场景（与 WelcomeScreen.demo 的守卫对齐）
+    if (busyId || loading) return
     setBusyId(tpl.id)
     try {
       // r98：返回值感知——失败/超时不再弹「演示就绪」假成功

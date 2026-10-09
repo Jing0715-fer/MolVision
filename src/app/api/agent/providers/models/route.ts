@@ -68,6 +68,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: errText(locale, '请求体不是合法 JSON', 'Request body is not valid JSON') }, { status: 400 })
   }
   const providerId = body.providerId ?? ''
+  // r99-main：字符串字段类型白名单——旧版零校验，apiKey: 123 在 .trim() 抛 TypeError →
+  // 500 裸异常页（实测复现）。统一 400 双语
+  const badStr = (v: unknown) => v !== undefined && v !== null && typeof v !== 'string'
+  if (badStr(body.providerId) || badStr(body.apiKey) || badStr(body.baseURL)) {
+    return NextResponse.json({ ok: false, error: errText(locale, '字段类型非法（providerId/apiKey/baseURL 须为字符串）', 'Invalid field types (providerId/apiKey/baseURL must be strings)') }, { status: 400 })
+  }
 
   // 内置通道：直接回目录（glm-4.6 等）
   if (providerId === 'zai') {

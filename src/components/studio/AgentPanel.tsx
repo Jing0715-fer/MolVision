@@ -555,6 +555,9 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     const q = text.trim()
     if (!q || busy) return
     setInput('')
+    // r99-main：发送后输入框高度复位——高度由 onTaInput 指令式管理，值清空不受 React
+    // 管控，多行输入发送后保持撑高直到下次键入才缩回
+    if (taRef.current) taRef.current.style.height = 'auto'
     const userMsg: AgentChatMessage = { id: newId(), role: 'user', content: q, time: nowTime() }
     const history = [...msgs, userMsg]
     setMsgs(history)

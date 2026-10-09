@@ -108,6 +108,8 @@ export function LoadDialog() {
                 loadFiles(e.target.files)
                 setUi({ loadOpen: false })
               }
+              // r99-main：清 value——解析失败后重选同一文件不派发 change（重试静默失效）
+              e.target.value = ''
             }}
           />
           </section>

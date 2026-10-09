@@ -184,11 +184,17 @@ export function SelectionPanel() {
                 <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{ns.count.toLocaleString(locale)} at</span>
                 <button
                   onClick={() => {
-                    if (!data) return
+                    // r99-main：expr 型命名选择须用「归属结构」的数据求值——旧版拿
+                    // 活动结构 data 求 B 结构的表达式，掩码按 A 的原子数算却 setSelection
+                    // 给 B，多结构场景选区错乱（对照 SequenceBar.recallNS 正确范本）
+                    const nsData = dataRegistry.get(ns.structureId)
                     if (ns.indices) setSelection(ns.structureId, ns.indices)
-                    else if (ns.expr) {
-                      const res = evaluateSelection(ns.expr, { structure: data, named: buildNamedMasks(ns.structureId, data) })
-                      if (!res.error) setSelection(ns.structureId, maskToIndices(res.mask))
+                    else if (ns.expr && nsData) {
+                      const res = evaluateSelection(ns.expr, { structure: nsData, named: buildNamedMasks(ns.structureId, nsData) })
+                      if (res.error) toast.error(`${tt({ zh: '选择错误：', en: 'Selection error: ' })}${res.error}`)
+                      else setSelection(ns.structureId, maskToIndices(res.mask))
+                    } else if (!nsData && !ns.indices) {
+                      toast.error(tt({ zh: `结构 ${ns.structureId} 数据不在（可能已关闭）`, en: `Structure ${ns.structureId} data missing (may be closed)` }))
                     }
                   }}
                   className="rounded px-1.5 py-0.5 text-[10px] text-primary transition hover:bg-primary/10"
