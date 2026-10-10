@@ -69,6 +69,15 @@ SPECS=(
   zn-finger-dna:12:1AAY:49
   bdna-dodecamer:10:1BNA:50
   antibody-architecture:18:1IGT:51
+  # r104 膜类四新模板（wait 依据 r104 主代理 agent-browser 活体实测：装载 7-9s 由
+  # 管线固定 sleep 7 吸收，此处 wait=apply 后命令执行+相机飞行+settling）：
+  # selectivity 12s（12 命令 + zoom 特写飞行）；gpcr 15s（16 命令 + create 53ms +
+  # 膜定位 + 开窗 + 40° 俯角 + zoom 飞行——膜类最长链）；porin 11s（9 命令 + 膜 +
+  # orient 飞行）；toxin 13s（10 命令 + pore 计算 145ms/20324 原子 + 膜 + 顶视）
+  selectivity-filter:12:1K4C:52
+  gpcr-retinal-pocket:15:1F88:53
+  beta-barrel-porin:11:1PHO:54
+  toxin-pore-assembly:13:7AHL:55
 )
 
 # 对齐断言：SPECS 与 figure-templates.ts 的 id 数量一致（漂移即中止——新模板

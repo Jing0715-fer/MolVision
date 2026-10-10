@@ -4431,3 +4431,37 @@ Stage Summary:
   6. 【低】生产部署前置清单收口（middlewareClientMaxBodySize / Caddyfile XTransformPort 白名单 / ignoreBuildErrors 决策——多轮延续挂起项，需部署环境语义确认）
 
 （r103 段 cron 补记，2026-10-09）15min webDevReview 巡检任务 #446756 创建即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 17 次实证（r85-r102 连续 16 次 + 本轮），已删除清理。devd 看门狗（绝对阈值 1500MB + r103-b 斜率双闸）继续作为巡检缺席期间的自愈防线；本轮 E2E 实测 devd 监管已实战接管。
+
+---
+Task ID: r104
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r103 测试结果建议落地（④产品侧模板扩容 + ①视觉回归基线 + ③哨兵重载变体）+ QA/E2E 全链 + 结果驱动规划
+
+Work Log:
+- 【基线】HEAD=186c59d（r103 完成态）；guards 566/566 · dev 200 · 工作区干净。r103 下轮建议四条全纳入本轮：①视觉基线 ②浏览器重启规范（并入流程纪律） ③哨兵重载 ④产品侧（膜类模板——52 卡中 membrane 仅 2 支，分类最大缺口）
+- 【工具层事故】Task 工具三连「context deadline exceeded」——但第二次调用实际已执行（r104-b 子代理完整交付了 visual-baseline.sh 21.6KB + 3 基线 + 7 守卫，只是结果未能回传、worklog 未写）。教训：Task 超时 ≠ 未执行——后续遇超时先 git status/ls 核对副产物再决定重做还是收编。r104-a/c 改由主代理亲自执行
+- 【r104-a 膜类模板四连（membrane 2→6）】
+  · 核实：RCSB API 逐条——1K4C（2.0Å KcsA-Fab，7 个 K⁺ 实配位 entity 5 comp_id K×7；Zhou 2001 Nature 414:43 DOI 10.1038/35102009）· 1F88（2.8Å 视紫红质，首个 GPCR 晶体结构；Palczewski 2000 Science DOI 10.1126/science.289.5480.739；A/B 双链沉积）· 1PHO（3.0Å PhoE，deposit 引文即 Cowan 1992 Nature DOI 10.1038/358727a0；单链沉积三聚体靠晶体对称）· 7AHL（1.89Å α-溶血素七聚体；Song 1996 Science DOI 10.1126/science.274.5294.1859）；2RH1/2OMF 候选被否的实证依据一并入档（2RH1=T4L 嵌合体 PCA 被带歪膜错位×2 变体实测；2OMF 引文「To be Published」+单链）
+  · 命令活体验证（agent-browser 控制台 UI 路径：欢迎页装载 native setter 范式 + PyMOL 命令行按钮 + input[placeholder^="load 4hhb"] Enter 提交）：1K4C select elem K=7 原子 ✓；7AHL pore 实测 SYM 七重轴自动检测 + 收缩点 5.08Å@11.0Å + 跨度 102Å（20,324 原子 145ms）✓；1PHO pore 收缩点 0.00Å（单桶 PCA 轴封堵）→ 弃 pore；1PHO symmetry 30 晶格邻居「packed lattice」杂乱 → 弃 symmetry
+  · VLM 复鉴三轮迭代：①2RH1 两变体膜均错位（蛋白悬膜上/膜切中段）→ 弃 2RH1 改 1F88；②1F88 侧视视黄醛被完全遮挡（橙配体像素仅 1）→ hide cartoon, byres(within 5.5 of (resn RET)) 口袋开窗 → 橙配体像素 26→431（VLM 8/10「cutaway technique 成功」）；③色染陷阱定位：colorOverrides 原子级覆盖让 color element 的口袋残基卡通也被染棕（v2 steel 4328→v5 1588、tan 2000→3698 实测）——开窗设计一并规避
+  · 落盘：figure-templates.ts APPEND 四模板（selectivity-filter 琥珀离子纵列 / gpcr-retinal-pocket 开窗图式+create 单体提取+disable 源二聚体（双链沉积的 symmetryAxis C2 陷阱规避）/ beta-barrel-porin 青绿侧视膜夹层 / toxin-pore-assembly 顶视 HOLE eye view）+ 文件头 r104 段 + COMMAND_GLOSSARY +4 词条（口袋开窗/离子纵列/琥珀高亮/视黄醛高亮）+ template-specs.sh SPECS 末尾 4 行（idx 52-55，wait 12/15/11/13 实测依据入注）+ 守卫 +9（582 过）
+  · 缩略图：管线增量模式 4 张生成（PROBE-FAIL/SKIP 零）；VLM 终审 7/8/9/8 分
+- 【r104-b 视觉回归基线（子代理交付 + 主代理收编）】scripts/visual-baseline.sh（capture/check 双模式；3 场景：home-cartoon 4HHB / membrane-toggle 1FX8 / template-rainbow 命令执行器分支；1280×800 定视口；清洁视口两遍 + autoPerf/showAxes 关（r99 教训）；PIL ImageChops 逐像素 diff 阈 1.5%/2.0；截图三败重试 r92 陈旧帧防护）+ scripts/visual-baselines/ 3 基线入 git + 守卫 7。主代理修复：退出码锚正则缺引号（FAILS" -eq 0）0 命中 → 单引号护正则修复。双端验证：check 同环境重拍 3/3 PASS（漂移 0.00-0.02%——确定性实证）；负例实验：篡改 membrane-toggle 基线（膜区域矩形）→ 12.28% 漂移 FAIL 精确检出（敏感度实证）→ 恢复后 3/3 复过
+- 【r104-c smoke 重载哨兵】断言 5 升级：装载 4HHB（native setter + 有界等待 __molData.size 2s×10 轮）→ press 2 真实预设切换（4,548 原子重渲染，贴近 r102 假死现场）→ Date.now() 探针。装载失败诚实降级 light 路径（路径标记入 PASS 文案）。实跑 6/6「heavy 路径」实证 + 守卫 +4（装载探针/等待循环/路径双站点/文案）
+- 【r104-d 管线 tighten 作用域化（测试结果的意外发现）】缩略图管线跑完后 28 张旧图被修改——像素对比 pore-analysis/ss-motif/xray-film 三样本 5-13% 边缘像素漂移：全量 tighten 对已收紧旧图做裁剪+LANCZOS 往返 = 单轮生成损失，多轮累积。修法：gen-template-thumbs.sh 把过滤模式 id 透传 tighten-thumbs.py（作用域门 + 未知名报错 exit 1）——重跑验证旧图零漂移（git status 仅 4 新 PNG untracked）+ 守卫 +3。第一版「coverage≥87% 跳过」幂等护栏实为死代码（bbox 检测 DIFF_TH=40 只捕高对比核心、实测 26-66%）已删——作用域化才是根修
+- 【QA 门禁】lint 0 · tsc src 0（examples×2+mini-services×1+skills×2 历史基线不变）· guards 566→589/589（r104-b 7 + r104-a 9 + r104-c 4 + r104-d 3）· smoke 6/6 heavy 路径 · visual-baseline check 3/3 · dev.log 唯二「error」为 7AHL 2.5MB 超 Next data cache 2MB 上限的良性缓存通知（请求本身 200）——新观察入档
+- 【E2E】画廊 56 卡 ✓ + 膜类过滤 6 卡（4 新模板 purpose 全对位）✓ + a11y 嵌套交互 0 ✓ · 预设 2/5/1 三键 HUD 全过 ✓ · 膜 M 键 0→5→0 双向 ✓ · 语言 en→zh-CN（cookie）→en 双向 ✓（E2E 新知：双位轨道组件点「目标语言」钮，点当前位是 no-op——上轮踩坑入档）· 跨结构适配：gpcr-retinal-pocket 应用到 1BL8（无 RET 结构）——create 链 A 单体成功 + membrane 5 对象在位 + 零浏览器错误（诚实降级）✓ · 全程 console errors 零 · 终态 20 draw calls / 34,812 三角面
+- 【坑（新入档）】①Task 工具超时 ≠ 未执行：先查副产物（git status/新文件）再决策；子代理超时时其交付可能已落盘 ②VLM 对 WebGL 渲染解读仍不可靠（本轮两次误读：幻影「晶胞盒」、把膜板认成「symmetry mates」）——像素计数 + 引擎内部状态（membraneGroup.children/membraneBox/settings.showCell）三方交叉才是硬证据；r104-b 像素 diff 哨兵正是该认知的产品化 ③RCSB 经典膜蛋白多为「非天然装配沉积」（1PHO/2OMF 单链、1F88 双链、1K4C 带 Fab）——create+disable 单体提取范式可复用 ④语言切换 E2E 选择器要点目标语言按钮 ⑤tighten 生成损失：管线全量后处理阶段必须作用域化
+
+Stage Summary:
+- 交付一（开发）：r103 建议①③④全落地——膜类模板 2→6（四支全部 RCSB 核实+活体验证+VLM 7/8/9/8）/ 视觉回归基线哨兵（确定性 0.02% + 敏感度 12.28% 双实证）/ smoke 重载哨兵（heavy 路径实证）
+- 交付二（管线健康）：tighten 作用域化根修生成损失（5-13%/轮 → 零漂移）
+- 交付三（QA/E2E）：全门禁绿（guards 589/589 · smoke 6/6 heavy · visual-baseline 3/3）+ E2E 画廊/预设/膜切换/语言/跨结构适配全过零控制台错误
+- 交付四（认知）：Task 超时副产物核对纪律、VLM×WebGL 误读对策（像素+引擎状态交叉验证）、RCSB 沉积形态陷阱与 create/disable 范式入档
+- 下一轮建议（按优先级，基于本轮测试结果）：
+  1. 【中】视觉基线场景扩容：4 支新膜类模板入 visual-baseline 场景集（尤其 gpcr-retinal-pocket 的 create/disable 复合链路 + toxin 的 pore 计算链路——本轮缩略图管线验证过一次但无像素基线哨兵）；capture 基线的 PR 审查工作流（基线更新须 diff 说明）
+  2. 【中】命令级 per-rep 着色能力：colorOverrides 原子级覆盖的天然限制（本轮实测痛点——口袋残基棍想元素色而卡通保持主题色做不到）；命令语法扩展（如 color <色>, <选>, <表示法>）或 rep 级配色面板
+  3. 【中】大结构（>2MB PDB）缓存策略：7AHL 2.5MB 超 Next data cache 上限每轮重取（dev.log 实测良性但重复网络往返）；评估磁盘缓存或 ETag 分段
+  4. 【低】模板 apply 降级摘要 toast：跨结构适配时命令错误（zoom 空选等）散在控制台——无控制台用户看不到降级原因
+  5. 【低】产品侧延续：site/conform 分类的「第二风格」补全（本轮 membrane 2→6 后 site 8 支/conform 5 支的相对缺口）与图片解析精度迭代（r97 后未再动）
+  6. 【低】生产部署前置清单收口（多轮挂起项：middlewareClientMaxBodySize / Caddyfile XTransformPort 白名单 / ignoreBuildErrors 决策）

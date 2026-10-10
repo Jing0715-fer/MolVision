@@ -82,9 +82,20 @@ def tighten(path: str, dry: bool) -> str:
 
 def main() -> None:
     dry = '--dry' in sys.argv
+    # r104 作用域化：命令行传 id 列表则只处理指定项（增量管线模式——旧图免重采样
+    # 漂移；每轮全量 tighten 对旧图做裁剪 + LANCZOS 往返，实测单轮 5-13% 边缘像素
+    # 漂移累积为生成损失）。无参 = 全量（有意全量重生成的场合）。
+    scope = [a for a in sys.argv[1:] if a != '--dry']
     # 从 figure-templates.ts 提取内置模板 id 序（与管线口径一致）
     src = open(os.path.join(PROJECT, 'src/lib/molecular/figure-templates.ts'), encoding='utf-8').read()
     ids = re.findall(r"id: '([a-z-]+)'", src)
+    if scope:
+        unknown = [a for a in scope if a not in ids]
+        if unknown:
+            print(f'ERROR: tighten 作用域含未知名 {unknown}（可用：见 figure-templates.ts）')
+            sys.exit(1)
+        ids = [i for i in ids if i in scope]
+        print(f'作用域模式：仅处理 {len(ids)} 张（{"、".join(ids[:4])}{"…" if len(ids) > 4 else ""}）')
     files = [f'{i}.png' for i in ids if os.path.exists(os.path.join(OUT_DIR, f'{i}.png'))]
     print(f'内置模板 {len(ids)} · 存图 {len(files)} 张')
     changed = 0

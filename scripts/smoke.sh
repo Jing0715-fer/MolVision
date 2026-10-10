@@ -9,8 +9,9 @@
 #         2. 应用标志在（document.title / 正文含 "MolVision"）
 #         3. 语言切换入口在（中文/EN 按钮）
 #         4. 主体 UI 骨架在（正文含 structure/结构 等工作台标志）
-#         5. 假死哨兵：预设切换键（press 2）触发后有界 eval 探针仍响应
-#            （r103-c / r102 建议③——主线程假死症状的 CI 判定缺口补齐）
+#         5. 假死哨兵：重载路径——先装载 4HHB 再预设切换（press 2 真实重渲染）
+#            触发后有界 eval 探针仍响应（r103-c / r102 建议③ / r104-c 重载变体；
+#            装载失败诚实降级轻量路径，路径标记入 PASS 文案）
 #         6. 预设触发后 console 仍零错误（交互路径不引入运行时错误）
 # 任一失败打印清晰失败信息并 exit 1（CI 可直接拦截）。
 #
@@ -91,7 +92,7 @@ else
   fail "主体 UI 骨架缺失：正文不含 structure/结构/MOLECULAR STUDIO（实得：${skel:-<eval 无返回>}）"
 fi
 
-# ---- 断言 5：假死哨兵（r103-c / r102 建议③） ----
+# ---- 断言 5：假死哨兵（r103-c / r102 建议③ · r104-c 重载变体） ----
 # 动机：r102 E2E 实测沙箱内存耗尽（next-server RSS 1259MB + 双 Chrome ~1.35GB，
 # 4GB 沙箱仅剩 544MB free）时页面主线程假死——eval 超时但浏览器级存活（get title
 # 正常），lint/guards 的静态面测不到该症状，CI 存在判定性缺口。哨兵 = 渲染负载
@@ -100,6 +101,27 @@ fi
 # 输入框聚焦时 agent-browser press 派发的按键可达监听器（r102 E2E 的「预设
 # 2/5/1 三键切换」即走此路径）。探针有界宽容：首次空返回可能只是瞬态长任务
 # （GC 尖峰/编译不 yield），sleep 5 重试一次，两次皆空才判假死——避免瞬时抖动误报。
+# 【r104-c 重载变体（r103 建议③/r103-c 遗留①）】轻量键盘分发的发现率有限——
+# 空页面 press 2 因 activeId 空守卫不真正 applyPreset（无渲染负载，只测主线程
+# 响应性）。重载路径：先经欢迎页装载 4HHB（native setter + input 事件——React
+# 受控输入 E2E 铁律；gen-template-thumbs.sh 同款范式），有界等待 __molData.size
+# 非零（2s × 10 轮）后再 press 2——真实结构上的预设切换（4,548 原子重渲染），
+# 贴近 r102 假死现场的渲染负载。装载失败（RCSB 网络抖动/输入缺失）退回轻量
+# 路径继续探测（哨兵语义不依赖结构存在——诚实降级并打印路径标记）。
+load_path="light"
+load_probe=$(agent-browser eval "(() => { const i = document.querySelector('input[aria-label=\"PDB 编号\"], input[aria-label=\"PDB ID\"]'); if (!i) return 'NOINPUT'; const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; setter.call(i, '4HHB'); i.dispatchEvent(new Event('input', { bubbles: true })); const btn = i.closest('form')?.querySelector('button[type=\"submit\"]'); if (!btn) return 'NOBTN'; btn.click(); return 'submitted' })()" 2>/dev/null | tr -d '"')
+if [ "$load_probe" = "submitted" ]; then
+  # 有界等待：结构入 store（fetch→parse→addStructure 约 1-3s；RCSB 网络抖动上限 20s）
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 2
+    sz=$(agent-browser eval "window.__molData ? window.__molData.size : 0" 2>/dev/null | tr -d '"')
+    if [ -n "$sz" ] && [ "$sz" -ge 1 ] 2>/dev/null; then break; fi
+  done
+  if [ -n "$sz" ] && [ "$sz" -ge 1 ] 2>/dev/null; then
+    load_path="heavy"
+    sleep 2   # 等引擎挂载与首帧渲染落地，再切换预设
+  fi
+fi
 agent-browser press 2 >/dev/null 2>&1 || true
 sleep 2   # 等触发后的键盘分发/状态更新落地，再探测主线程
 probe=$(agent-browser eval "Date.now()" 2>/dev/null || true)
@@ -110,9 +132,9 @@ if [ -z "$probe" ]; then
   probe=$(agent-browser eval "Date.now()" 2>/dev/null || true)
 fi
 if [ -n "$probe" ]; then
-  pass "假死哨兵：预设切换键触发后主线程仍响应（eval Date.now() → ${probe}，重试 ${retries} 次）"
+  pass "假死哨兵：${load_path} 路径预设切换触发后主线程仍响应（eval Date.now() → ${probe}，重试 ${retries} 次）"
 else
-  fail "假死哨兵触发：press 2 后 eval Date.now() 探针两轮（首测 + 有界宽限重试 ${retries} 次）均无返回——疑似主线程假死（r102 实测症状为 eval 超时但浏览器级存活，可先跑 agent-browser get title 区分环境内存耗尽假死与页面崩溃）"
+  fail "假死哨兵触发：${load_path} 路径 press 2 后 eval Date.now() 探针两轮（首测 + 有界宽限重试 ${retries} 次）均无返回——疑似主线程假死（r102 实测症状为 eval 超时但浏览器级存活，可先跑 agent-browser get title 区分环境内存耗尽假死与页面崩溃）"
 fi
 
 # ---- 断言 6：预设触发后 console 仍零错误 ----

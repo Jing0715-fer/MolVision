@@ -233,7 +233,9 @@ done
 
 # r89：内容感知收紧（bbox 检测 + 裁剪 + 16:10 重排）——管线产出后自动跑一遍，
 # 消灭「分子在画布里只占 24-76%」的展示卡取景问题（详见 tighten-thumbs.py 头注）
-python3 "$(dirname "$0")/tighten-thumbs.py"
+# r104 作用域化：过滤模式把本轮 id 透传给 tighten——旧图免重采样漂移（全量
+# tighten 对已收紧旧图做裁剪 + LANCZOS 往返，单轮 5-13% 边缘像素漂移累积）
+python3 "$(dirname "$0")/tighten-thumbs.py" "$@"
 echo "== phase done =="
 # r102-b 退出码语义——非零退出供 CI 拦截（输出格式不变；tighten 收尾阶段失败
 # 不在本轮口径内，沿用既有静默行为——探针/SKIP/RECTFAIL 已全覆盖产出正确性）

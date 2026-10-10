@@ -1,6 +1,18 @@
 'use client'
 
-// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化 · r77 表示法经典与辅因子位扩容 · r78 构象与动力学分类落地 · r87 同类异风变体扩容 · r89 多风格再五连）
+// 论文图复现模板（r71 创立 · r72 差异化打磨 · r75 互作分析扩容 + 原文图式对比 · r76 分类细化 · r77 表示法经典与辅因子位扩容 · r78 构象与动力学分类落地 · r87 同类异风变体扩容 · r89 多风格再五连 · r104 膜类四连）
+// ─────────────────────────────────────────────────────────────────────────────
+// r104 扩容（膜蛋白 · 通道分类补全 2→6——分类最大缺口；r103 测试结果建议④产品侧推进）：
+//  · membrane +4：K⁺ 选择性滤器特写（1K4C——7 个 K⁺ 实配位 + 琥珀离子纵列 + 灰
+//    基底滤器棍，Zhou/MacKinnon 2001）· GPCR 视黄醛口袋（1F88——首个 GPCR 晶体
+//    结构 + 「口袋开窗」图式（hide cartoon 局部开窗让埋藏生色团上镜）+ 双链沉积
+//    陷阱的 create 单体提取，Palczewski 2000）· β-桶 porin 外膜语境（1PHO——
+//    Cowan 1992 原文结构，青绿单色 + 膜夹层侧视）· α-溶血素七聚体孔道（7AHL——
+//    顶视 HOLE eye view：七重对称轴自动检测 + 环带同心圆 + 膜面，Song 1996）
+//  · 全部 PDB/引文经 RCSB API 核实；命令序列 agent-browser 活体验证（VLM 复鉴 +
+//    像素级配体计数 + 引擎内部状态三方交叉）；beta-barrel-porin 弃 symmetry/pore
+//    双方案的 E2E 依据见模板行内注释
+//  · COMMAND_GLOSSARY +4 词条（口袋开窗/离子纵列/琥珀高亮/视黄醛高亮）
 // ─────────────────────────────────────────────────────────────────────────────
 // 定位：把 Cell / Nature / Science 等高影响力结构生物学文章中反复出现的「图式」
 // （figure style）——表示法组合 + 配色 + 视角 + 灯光 + 轮廓 + 相机——固化为命令
@@ -1150,6 +1162,103 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     commands: ['preset cartoon', 'color #0f766e, chain B+D', 'color #ef8a7e, chain A+C', 'color #b3a48d, chain E+F', 'bg white', 'orient', 'set cartoon_width 1.3', 'outline on 1.1 1.0', 'ssao on'],
     accent: 'emerald',
   },
+
+  // ── r104 扩容：膜蛋白 · 通道分类补全（2→6，分类最大缺口）──
+  // 用户价值：膜蛋白是结构生物学高产图式领域——KcsA 滤器/GPCR 生色团/β-桶 porin/
+  // 成孔毒素均为奠基级经典。demo PDB 与引文全部经 RCSB API 逐条核实（entity 构成、
+  // 分辨率、primary citation 期刊/年份/DOI）；命令序列全部 agent-browser 活体验证
+  // （VLM 复鉴 + 像素级橙配体计数 + 引擎内部状态三方交叉）。
+  //  1. selectivity-filter（1K4C）：7 个 K⁺ 离子实配位（RCSB entity 5 comp_id K ×7）
+  //     · Zhou 2001 Nature 414:43 DOI 10.1038/35102009；滤器残基 byres(within 4 of
+  //     (elem K)) 活体验证命中；VLM 复鉴「clean close-up, no defects」
+  //  2. gpcr-retinal-pocket（1F88）：首个 GPCR 晶体结构（Palczewski 2000 Science
+  //     DOI 10.1126/science.289.5480.739）；双链沉积 → create 提取链 A 单体（RET
+  //     20 原子随链入对象）+ disable 源二聚体；「口袋开窗」设计（hide cartoon 局部
+  //     开窗——埋藏生色团从遮挡变主角，橙配体像素 26→431 实证）；VLM 复鉴 8/10
+  //  3. beta-barrel-porin（1PHO）：Cowan 1992 Nature DOI 10.1038/358727a0 原文结构
+  //     （deposit 引文即此——非 2OMF 的「To be Published」）；单链沉积（三聚体靠
+  //     晶体对称）→ 弃 symmetry 方案（E2E 实测晶格邻居成「packed lattice」杂乱场）
+  //     与 pore 方案（单桶 PCA 轴收缩点 0.00Å 封堵）——纯侧视 + 膜夹层（VLM 8/10
+  //     「properly sandwiched」）
+  //  4. toxin-pore-assembly（7AHL）：Song 1996 Science DOI 10.1126/science.274.5294.1859
+  //     · pore 活体实测 SYM 七重轴自动检测 + 收缩点 5.08Å@11.0Å + 跨度 102Å；
+  //     顶视构图（turn x 90——HOLE eye view：环带同心圆 + 膜面同框，与 pore-analysis
+  //     侧视构成「侧视/顶视」两档）
+  {
+    id: 'selectivity-filter',
+    name: { zh: 'K⁺ 选择性滤器特写', en: 'K⁺ selectivity filter' },
+    tagline: { zh: '灰基底滤器棍 + 琥珀 K⁺ 纵列 + 元素色邻域：去水化离子通透链一图判读', en: 'Gray filter sticks + amber K⁺ column + element neighborhood: the dehydrated-ion path' },
+    purpose: { zh: '选择性滤波器 · S1-S4 配位位点 · 阻断剂判读', en: 'Selectivity filter · S1–S4 sites · blocker readout' },
+    tags: [{ zh: '离子通道', en: 'Ion channel' }, { zh: '选择性滤器', en: 'Selectivity filter' }],
+    category: 'membrane',
+    figure: { ref: 'Fig. 2', shows: { zh: '滤器特写：K⁺ 在 S1-S4 位点的配位几何 + 主链羰基氧笼', en: 'Filter close-up: K⁺ coordination at S1–S4 and the carbonyl cage' } },
+    citation: { journal: 'Nature', year: 2001, title: 'Chemistry of ion coordination and hydration revealed by a K+ channel-Fab complex at 2.0 A resolution', doi: '10.1038/35102009' },
+    demo: '1K4C',
+    // 差异点：膜类首支「零膜板」分析特写——1K4C 是 KcsA-Fab 复合物（8 链），聚合
+    // 物 PCA 被 Fab 双臂带歪（r100 先例 9P6B 同病），membrane 定位不可靠；Zhou 2001
+    // 原文滤器图式本就无膜语境（纯滤器 + 离子）。灰 #8a94a6 全基底 + byres(within 4
+    // of (elem K)) 滤器棍（7 个 K⁺ 实配位——RCSB entity 5 核实）+ 琥珀 #d97706 离子
+    // 球纵列 + 8Å 缓冲特写；与 pore-analysis（全蛋白 + 膜 + 环带）构成「全景/特写」两档
+    commands: ['preset cartoon', 'color #8a94a6, polymer', 'bg white', 'hide ballstick', 'show sticks, byres(within 4 of (elem K))', 'color element, byres(within 4 of (elem K))', 'show spheres, elem K', 'color #d97706, elem K', 'orient polymer', 'turn z 90', 'zoom byres(within 8 of (elem K)), 8', 'outline on 1.1 1.0'],
+    accent: 'amber',
+  },
+  {
+    id: 'gpcr-retinal-pocket',
+    name: { zh: 'GPCR 视黄醛口袋', en: 'GPCR retinal pocket' },
+    tagline: { zh: '钢蓝七跨膜束 + 口袋开窗 + 橙视黄醛 + 脂双层：埋藏生色团的开窗读法', en: 'Steel 7-TM bundle + pocket cutaway + orange retinal + bilayer: the buried chromophore, windowed' },
+    purpose: { zh: '生色团结合 · GPCR 激活机制 · 埋藏口袋作图', en: 'Chromophore binding · GPCR activation · buried-pocket figures' },
+    tags: [{ zh: 'GPCR', en: 'GPCR' }, { zh: '视黄醛', en: 'Retinal' }],
+    category: 'membrane',
+    figure: { ref: 'Fig. 4', shows: { zh: '视黄醛结合口袋：生色团 + 配位残基 + 质子化 Schiff 碱语境', en: 'Retinal pocket: chromophore, its coordination residues and the protonated Schiff-base context' } },
+    citation: { journal: 'Science', year: 2000, title: 'Crystal Structure of Rhodopsin: A G Protein-Coupled Receptor', doi: '10.1126/science.289.5480.739' },
+    demo: '1F88',
+    // 差异点：模板库首个「口袋开窗」图式——视黄醛深埋七跨膜束内（v1 侧视橙配体像素
+    // 仅 1、VLM「完全遮挡」），hide cartoon, byres(within 5.5 of (resn RET)) 局部开窗
+    // 后橙配体像素 26→431（VLM 复鉴 8/10「cutaway technique 成功」）。双链沉积陷阱
+    // （1F88 为 A/B 二聚体——symmetryAxis 会检出平行膜面的 C2 轴把膜转 90°）：
+    // create 提取链 A 单体（RET 20 原子随链入对象）+ disable 源；40° 俯角让口袋朝向
+    // 镜头。adapt：无 RET 结构退化为链 A 单体仍正确（膜/口袋命令 resn RET 空选诚实
+    // 报错）；首个 GPCR 晶体结构原文取材（Nobel 级图式源流）
+    commands: ['create rhodo = chain A and (polymer or resn RET)', 'preset cartoon', 'color #94a9c0, polymer', 'bg white', 'hide ballstick', 'disable 1F88', 'hide cartoon, byres(within 5.5 of (resn RET))', 'show sticks, byres(within 4.5 of (resn RET)) and polymer', 'show spheres, resn RET', 'color #e0761f, resn RET', 'membrane 36', 'orient polymer', 'turn z 90', 'turn x 40', 'zoom byres(within 6 of (resn RET)), 6', 'outline on 1.1 1.0'],
+    accent: 'violet',
+  },
+  {
+    id: 'beta-barrel-porin',
+    name: { zh: 'β-桶 porin 外膜语境', en: 'β-barrel porin context' },
+    tagline: { zh: '青绿 β-桶侧剖 + 脂双层夹层：外膜通道蛋白的桶板条与箍环一图判读', en: 'Teal β-barrel in a bilayer sandwich: outer-membrane staves and girdles at a glance' },
+    purpose: { zh: 'β-桶架构 · 外膜蛋白 · 眼口收缩环判读', en: 'β-barrel architecture · outer-membrane proteins · eyelet readout' },
+    tags: [{ zh: 'β-桶', en: 'β-barrel' }, { zh: '外膜', en: 'Outer membrane' }],
+    category: 'membrane',
+    figure: { ref: 'Fig. 2', shows: { zh: 'porin 三聚体俯视：三孔眼 + β-桶板条折叠 + 收缩环 L3', en: 'Porin trimer top view: three eyelets, the β-barrel stave fold and the L3 constriction' } },
+    citation: { journal: 'Nature', year: 1992, title: 'Crystal structures explain functional properties of two E. coli porins', doi: '10.1038/358727a0' },
+    demo: '1PHO',
+    // 差异点：β-桶与 α-螺旋束两大跨膜架构的对照图式（与 pore-analysis 构成膜类
+    // 「螺旋通道/β-桶」两档）。1PHO 单链沉积（三聚体靠晶体对称生成）——symmetry
+    // 方案 E2E 实测弃用（晶格邻居成「packed lattice」杂乱场）；pore 方案弃用（单桶
+    // PCA 轴收缩点 0.00Å 封堵、环带不可读）；纯侧视 + membrane 30 夹层为 VLM 8/10
+    // 「properly sandwiched」实证。青绿 #0f766e 单色 + AO 塑形（桶板条沟壑在阴影里
+    // 可读）；Cowan 1992 原文结构（deposit 引文即此——porin 图式奠基论文）
+    commands: ['preset cartoon', 'color #0f766e, polymer', 'bg white', 'hide ballstick', 'membrane 30', 'orient polymer', 'turn z 90', 'ssao on', 'outline on 1.1 1.0'],
+    accent: 'teal',
+  },
+  {
+    id: 'toxin-pore-assembly',
+    name: { zh: 'α-溶血素七聚体孔道', en: 'α-hemolysin pore assembly' },
+    tagline: { zh: '七链虹彩蘑菇顶视 + HOLE 环带同心圆 + 膜面：成孔毒素的装配与孔径一图判读', en: 'Heptamer rainbow, top-down + HOLE rings on the membrane face: pore-forming assembly and aperture' },
+    purpose: { zh: '成孔毒素 · 七聚装配 · 孔径/收缩点判读', en: 'Pore-forming toxins · heptameric assembly · aperture readout' },
+    tags: [{ zh: '成孔毒素', en: 'Pore toxin' }, { zh: '七聚体', en: 'Heptamer' }],
+    category: 'membrane',
+    figure: { ref: 'Fig. 1', shows: { zh: 'α-溶血素蘑菇形七聚体：顶视七重对称 + 茎部跨膜孔道', en: 'The mushroom-shaped heptamer: seven-fold cap and the stem channel' } },
+    citation: { journal: 'Science', year: 1996, title: 'Structure of staphylococcal alpha-hemolysin, a heptameric transmembrane pore', doi: '10.1126/science.274.5294.1859' },
+    demo: '7AHL',
+    // 差异点：膜类首支「顶视」图式（turn x 90——HOLE eye view：环带同心圆半径沿
+    // 孔径展开 + 膜面同框「蛋白嵌膜盘」读法）。pore 活体实测 SYM 七重轴自动检测
+    // （收缩点 5.08Å@11.0Å、跨度 102Å、20,324 原子 145ms）；util cbc 七链虹彩
+    // （装配语义：七个相同亚基围成孔）；与 pore-analysis（KcsA 侧视）构成「侧视/
+    // 顶视」两档；αHL 为可溶性成孔毒素（茎部插入靶膜——膜板语境图式正确）
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'hide ballstick', 'pore', 'membrane 30', 'orient polymer', 'turn z 90', 'turn x 90', 'outline on 1.1 1.0'],
+    accent: 'rose',
+  },
 ]
 
 /** 命令图鉴（r75：「对比」视图把命令序列翻成双语图式解剖；未命中退回原命令）。
@@ -1257,6 +1366,12 @@ export const COMMAND_GLOSSARY: { re: RegExp; label: DualText }[] = [
   { re: /^color #24292f, \(name N\+CA\+C\+O\)/i, label: { zh: '主链重墨强调（线描层级）', en: 'Backbone ink emphasis (drawing hierarchy)' } },
   { re: /^set fog_strength/i, label: { zh: '雾深线索（远端渐隐）', en: 'Fog depth cue (far-side fading)' } },
   { re: /^ssao on/i, label: { zh: '环境光遮蔽（接触阴影塑形）', en: 'Ambient occlusion (contact shading)' } },
+  // r104 新词条（膜类四模板；具体锚定先于泛匹配：hide cartoon 开窗先于泛 hide；
+  // show spheres, elem 离子纵列先于泛 show spheres；color hex 定向高亮先于泛 color hex）
+  { re: /^hide cartoon, byres/i, label: { zh: '口袋开窗（局部隐藏卡通）', en: 'Pocket cutaway (local cartoon hiding)' } },
+  { re: /^show spheres, elem/i, label: { zh: 'K⁺ 离子球状纵列', en: 'K⁺ ion sphere column' } },
+  { re: /^color #d97706, elem/i, label: { zh: '离子琚珀色高亮', en: 'Ion amber highlight' } },
+  { re: /^color #e0761f, resn/i, label: { zh: '视黄醛橙色高亮', en: 'Retinal orange highlight' } },
 ]
 
 /** 命令 → 双语图式解剖（未命中返回 null——调用方退回展示原命令） */

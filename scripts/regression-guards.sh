@@ -876,6 +876,72 @@ check "哨兵fail文案锚"          "假死哨兵触发" "scripts/smoke.sh" 1
 #    ——新增断言后忘同步硬编码总数的坑就此根治）
 check "哨兵TOTAL计数锚"         'TOTAL=\$\(\(TOTAL \+ 1\)\)|\$TOTAL/\$TOTAL' "scripts/smoke.sh" 3
 
+# ---- r104-b：E2E 视觉回归基线（r103 建议①——像素 diff 哨兵补「渲染面回归」判定缺口） ----
+# 背景：guards 是 grep 级静态防线，膜错位（r92）/模板变色/表示法丢失等渲染面回归
+# 只有真实截图才能判定；VLM 复鉴有 429 限流不适合 CI——visual-baseline.sh 以
+# screenshot 与基线的 PIL 逐像素比对补齐该缺口（capture 拍基线入 git / check 门禁
+# 比对，任一场景 FAIL 即 exit 1）。以下锚防哨兵被后续改写静默退化：
+# ①capture/check 双模式入口锚（模式门 $ 变量 + 花括号在 bash 双引号内有替换坑，
+#    沿 r101-a/r102-b 手法用单引号护正则；capture 提示串在用法 echo + 基线缺失
+#    FAIL 文案双站点出现）
+check "视觉基线模式门锚"        'MODE="\$\{1:-\}"' "scripts/visual-baseline.sh" 1
+check "视觉基线capture提示锚"   "visual-baseline\.sh capture" "scripts/visual-baseline.sh" 2
+# ②场景数组锚（写死的 3 场景集是哨兵的覆盖面定义——删膜场景 = r92 级膜回归面失守；
+#    + 是 rg 正则元字符必须转义）
+check "视觉基线膜场景锚"        "membrane-toggle:14:load\+cmd:1FX8" "scripts/visual-baseline.sh" 1
+# ③PIL 差异判定锚（比对核心 ImageChops.difference + 阈值判定行——改阈值须显式
+#    过闸，阈值依据见 visual-baseline.sh 文件头【比对算法与阈值】）
+check "视觉基线像素diff锚"      "ImageChops\.difference" "scripts/visual-baseline.sh" 1
+check "视觉基线阈值锚"          "pct > 1\.5 or mean > 2\.0" "scripts/visual-baseline.sh" 1
+# ④退出码锚（CI 拦截语义——恒 exit 0 的哨兵是摆设，r102-b gen-thumbs 假成功判例）
+check "视觉基线退出码锚"        'FAILS" -eq 0' "scripts/visual-baseline.sh" 1
+# ⑤固定会话锚（visual-baseline 独立会话名——不与缩略图管线/冒烟会话撞车，
+#    4GB 沙箱内存纪律与并行代理共存的前提）
+check "视觉基线会话锚"          'AGENT_BROWSER_SESSION="visual-baseline"' "scripts/visual-baseline.sh" 1
+
+# ---- r104-a：膜类模板四连（r103 测试结果建议④产品侧推进——membrane 分类 2→6） ----
+# 背景：52 模板中 membrane 仅 2 支（分类最大缺口）；r104 新增四支全部经 RCSB API
+# 核实 PDB/引文 + agent-browser 活体验证（VLM 复鉴 + 像素级配体计数 + 引擎内部
+# 状态三方交叉）。以下锚防新模板被后续改写静默退化（命令序列核心特征逐条钉住）：
+# ①四模板 id 锚（figure-templates.ts 各 1 命中——id 即卡片身份）
+check "膜类滤器模板锚"          "id: 'selectivity-filter'" "src/lib/molecular/figure-templates.ts" 1
+check "膜类GPCR模板锚"          "id: 'gpcr-retinal-pocket'" "src/lib/molecular/figure-templates.ts" 1
+check "膜类porin模板锚"         "id: 'beta-barrel-porin'" "src/lib/molecular/figure-templates.ts" 1
+check "膜类毒素模板锚"          "id: 'toxin-pore-assembly'" "src/lib/molecular/figure-templates.ts" 1
+# ②SPECS 登记锚（template-specs.sh 四行齐全——漏登记 = 缩略图管线点错卡/静默漏拍）
+check "膜类规格登记锚"          "selectivity-filter:12:1K4C:52" "scripts/template-specs.sh" 1
+check "膜类规格登记锚2"         "gpcr-retinal-pocket:15:1F88:53" "scripts/template-specs.sh" 1
+# ③活体验证过的关键命令锚（GPCR 口袋开窗——模板库首个 hide cartoon 局部开窗图式，
+#    橙配体像素 26→431 的根因命令；滤器离子纵列 elem K 双命令）
+check "膜类开窗命令锚"          "hide cartoon, byres\(within 5\.5 of \(resn RET\)\)" "src/lib/molecular/figure-templates.ts" 1
+check "膜类离子纵列锚"          "show spheres, elem K" "src/lib/molecular/figure-templates.ts" 1
+# ④头注释 r104 扩容段锚（扩容史与验证方法论的档位点）
+check "膜类头注释锚"            "r104 扩容（膜蛋白 · 通道分类补全 2→6" "src/lib/molecular/figure-templates.ts" 1
+
+# ---- r104-c：smoke 假死哨兵重载变体（r103 建议③ / r103-c 遗留①） ----
+# 背景：r103-c 哨兵的轻量键盘分发在空页面 press 2 因 activeId 空守卫不真正
+# applyPreset——无渲染负载，发现率有限。r104-c 升级为「装载 4HHB → press 2」
+# 重载路径（真实 4,548 原子重渲染，贴近 r102 假死现场）；装载失败诚实降级轻量
+# 路径（路径标记入 PASS 文案）。以下锚防重载逻辑被后续改写静默退化回轻量：
+# ①重载路径标记锚（heavy/light 双站点——load_path 变量是路径语义的载体）
+check "哨兵重载路径锚"          'load_path="(light|heavy)"' "scripts/smoke.sh" 2
+# ②装载探针锚（native setter + 4HHB——React 受控输入 E2E 铁律的装载实现本体）
+check "哨兵装载探针锚"          "setter\.call\(i, '4HHB'\)" "scripts/smoke.sh" 1
+# ③有界等待循环锚（__molData.size 轮询——装载判定的数据源；非零才升 heavy）
+check "哨兵装载等待锚"          "window\.__molData \? window\.__molData\.size : 0" "scripts/smoke.sh" 1
+# ④路径标记 PASS 文案锚（重载路径的证据输出——smoke 6/6 输出能区分 heavy/light）
+check "哨兵路径文案锚"          '\$\{load_path\} 路径预设切换触发后主线程仍响应' "scripts/smoke.sh" 1
+
+# ---- r104-d：缩略图管线 tighten 作用域化（r104 像素对比实锤的生成损失根修） ----
+# 背景：全量 tighten 对已收紧旧图做裁剪 + LANCZOS 往返，单轮 5-13% 边缘像素漂移
+# （pore-analysis/ss-motif/xray-film 三样本 git HEAD 像素对比）——多轮累积即生成
+# 损失。修法：过滤模式把本轮 id 透传给 tighten-thumbs.py，旧图零重采样。
+# ①管线透传锚（gen-template-thumbs 把命令行 id 传给 tighten——增量模式的作用域来源）
+check "管线tighten透传锚"      'tighten-thumbs\.py" "\$@"' "scripts/gen-template-thumbs.sh" 1
+# ②tighten 作用域门锚（scope 过滤 + 未知名报错——防作用域化被静默回退成全量）
+check "tighten作用域门锚"      "if scope:" "scripts/tighten-thumbs.py" 1
+check "tighten未知名报错锚"    "作用域含未知名" "scripts/tighten-thumbs.py" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治
