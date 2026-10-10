@@ -4465,3 +4465,5 @@ Stage Summary:
   4. 【低】模板 apply 降级摘要 toast：跨结构适配时命令错误（zoom 空选等）散在控制台——无控制台用户看不到降级原因
   5. 【低】产品侧延续：site/conform 分类的「第二风格」补全（本轮 membrane 2→6 后 site 8 支/conform 5 支的相对缺口）与图片解析精度迭代（r97 后未再动）
   6. 【低】生产部署前置清单收口（多轮挂起项：middlewareClientMaxBodySize / Caddyfile XTransformPort 白名单 / ignoreBuildErrors 决策）
+
+（r104 段 cron 补记，2026-10-10）15min webDevReview 巡检任务 #449226 创建即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 18 次实证（r85-r103 连续 17 次 + 本轮），已删除清理。devd 看门狗（绝对阈值 1500MB + r103-b 斜率双闸）继续作为巡检缺席期间的自愈防线；本轮 r104-b visual-baseline 像素哨兵与 r104-c smoke 重载哨兵的 CI 可判性成为巡检缺席期的第三道防线（guards 589 + smoke 6 + visual-baseline 3 三级门禁已在本轮全绿验证）。
