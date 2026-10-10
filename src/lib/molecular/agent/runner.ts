@@ -29,6 +29,8 @@ const AUTO_PREFIXES = new Set([
   'contacts', 'contact', 'clash', 'interface', 'iface',
   'xcontacts', 'xcontact', 'xiface', 'sasa', 'area', 'bsa', 'buried', 'bsa-area',
   'xbsa', 'xburied', 'xbsa-area', 'dssp', 'secstr',
+  // 膜与孔道（r105 补入——此前 agent 无法触达 membrane/pore，membrane-context 技能依赖）
+  'membrane', 'lipid', 'bilayer', 'pore',
   'superpose', 'match', 'align', 'mm', 'untransform', 'unpose',
   // 测量
   'measure', 'dist',

@@ -942,6 +942,59 @@ check "管线tighten透传锚"      'tighten-thumbs\.py" "\$@"' "scripts/gen-tem
 check "tighten作用域门锚"      "if scope:" "scripts/tighten-thumbs.py" 1
 check "tighten未知名报错锚"    "作用域含未知名" "scripts/tighten-thumbs.py" 1
 
+# ---- r105-a：.agent/skills 开发流程 skill 体系（多轮 agent 操作规矩标准化为 4 SKILL + 索引） ----
+# 背景：r99-r104 多轮开发沉淀的操作规矩（三段式流程/QA 门禁链/E2E 铁律/worklog 文稿
+# 格式）此前只存在于 worklog 叙述中——新会话/子代理恢复语境全靠通读尾部大段文字。本轮
+# 标准化为 .agent/skills/ 下 4 个 SKILL.md + README 索引（随 git 跟踪，区别于不入库的
+# 全局 /skills/）。以下四锚防体系被后续改写/删除静默退化（括号为 rg 正则分组
+# alternation——沿 r104-c load_path="(light|heavy)" 手法；四模式均无 $/反引号，
+# bash 双引号内安全；目录递归路径 .agent/skills/ 为隐藏目录——rg 显式给定路径
+# 可正常搜索，插入前已实测验证）：
+# ①索引四技能锚（README 技能清单表 4 行 + 使用方式 4 行，实测 8——索引被清空或任一
+#    技能从索引消失即 FAIL）
+check "skill索引四技能锚"     "molvision-(dev-cycle|qa-gates|e2e|worklog-format)" ".agent/skills/README.md" 8
+# ②frontmatter 结构锚（目录递归 5 文件各 1 行 description:，实测 5——任一 skill 文件
+#    被删或 frontmatter 损坏即 FAIL）
+check "skill frontmatter锚"   "^description:" ".agent/skills/" 5
+# ③门禁 tsc 口径锚（目录递归：dev-cycle 收尾门禁链 1 + qa-gates 门禁表/详述 2，实测 3
+#    ——「只看 src/」口径在两份流程文档双站点钉住，防回退成全项目口径误判 5 个历史
+#    基线错）
+check "skill门禁tsc口径锚"    "bunx tsc --noEmit src/" ".agent/skills/" 3
+# ④E2E 铁律锚（目录递归：e2e 铁律 1 本体 + qa-gates smoke heavy 路径引用，实测 2——
+#    React 受控输入 native setter 范式双站点，防头号铁律被删）
+check "skill E2E铁律锚"       "native setter" ".agent/skills/" 2
+
+# ---- r105：产品侧 agent 标准技能系统（skills.ts 注册表 6 支 + 匹配/注入/徽章/报告卡片
+# ---- + runner/route 白名单补 membrane/pore + COMMAND_REF 膜孔道词条） ----
+# 用户指令「所有 agent 操作用 skill 标准化流程 + 输出文稿固定格式」的产品侧落地：
+# 前端 matchSkill（strong×2/weak×1 计分，唯一最高 ≥2 选中）→ skillId 随请求上送 →
+# 后端把「标准 workflow + 固定报告格式」注入系统提示 → LLM 按标准流程出命令、
+# reply 按【…报告】+ ▌节行固定文稿 → AgentPanel 报告卡片分级渲染。
+# 以下十一锚防各环节被改写/删除静默退化（括号与 \[ \] 均为 rg 正则合法转义，
+# 无 $/反引号——bash 双引号内安全；实测数见各行注释）：
+# ①注册表六支技能 id 锚（实测 6——任一技能被删即 FAIL）
+check "agent技能注册表六支锚"  "id: 'ligand-pocket'|id: 'hbond-network'|id: 'interface-analysis'|id: 'pub-figure'|id: 'structure-survey'|id: 'membrane-context'" "src/lib/molecular/agent/skills.ts" 6
+# ②匹配阈值锚（实测 1——唯一最高分 ≥2 才选中的防误触发达成式；改阈值/删 tie 判定即 FAIL）
+check "agent技能匹配阈值锚"    "bestScore >= 2 && !tie" "src/lib/molecular/agent/skills.ts" 1
+# ③系统提示注入锚（实测 2——matchedSkill find + buildSkillDirective 拼接双站点；注入被删技能退化为普通对话即 FAIL）
+check "agent技能指令注入锚"    "matchedSkill" "src/app/api/agent/route.ts" 2
+# ④报告标记检测函数锚（实测 1——isSkillReport 定义；删掉则前端报告卡片永不触发）
+check "agent报告检测函数锚"    "isSkillReport" "src/lib/molecular/agent/skills.ts" 1
+# ⑤报告检测接线锚（实测 3——AgentPanel import + isReport 判定 + 渲染分支三站点）
+check "agent报告检测接线锚"    "isSkillReport" "src/components/studio/AgentPanel.tsx" 3
+# ⑥技能徽章文案锚（实测 7——消息徽章「标准技能 ·」2 + 输入预览「已识别标准技能」2 + 注释 3）
+check "agent技能徽章文案锚"    "标准技能" "src/components/studio/AgentPanel.tsx" 7
+# ⑦报告卡片样式锚（实测 1——border-l-2 主色边 + 浅主色底的视觉分级样式串）
+check "agent报告卡片样式锚"    "border-l-2 border-l-primary bg-primary/\[0\.04\]" "src/components/studio/AgentPanel.tsx" 1
+# ⑧runner 执行白名单膜锚（实测 1——membrane/lipid/bilayer/pore 四命令头一行；删则 agent 无法执行膜技能）
+check "agent runner膜白名单锚" "'membrane', 'lipid', 'bilayer', 'pore'" "src/lib/molecular/agent/runner.ts" 1
+# ⑨route 打捞白名单膜锚（实测 1——与 runner 同步的 KNOWN_CMD_HEADS 四命令头）
+check "agent route打捞白名单锚" "'membrane', 'lipid', 'bilayer', 'pore'" "src/app/api/agent/route.ts" 1
+# ⑩协议 skillId 字段锚（实测 2——AgentRequestBody 请求体 + AgentChatMessage 持久化消息双字段）
+check "agent协议skillId锚"     "skillId\?: string" "src/lib/molecular/agent/protocol.ts" 2
+# ⑪命令速查膜孔道词条锚（实测 1——COMMAND_REF 分析行的 membrane/pore 语法说明；删则 LLM 不知命令存在）
+check "agent速查膜孔道词条锚"  "membrane \[厚度Å\]\|off（脂双层示意板" "src/app/api/agent/route.ts" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

@@ -9,6 +9,8 @@ import type { AgentRequestBody, AgentDecision } from '@/lib/molecular/agent/prot
 import { chatCompletionOnce, chatCompletionStream, getDefaultProviderId, visionWithProvider, type ChatMessage, type ContentPart, type VisionMessage } from '@/lib/molecular/agent/providers'
 import { readRequestCapped } from '@/lib/api/read-body'
 import { LOCALE_COOKIE, type Locale } from '@/i18n/locales'
+// r105 标准技能：纯数据+纯函数（无 window/document 依赖），服务端安全 import
+import { AGENT_SKILLS, buildSkillDirective } from '@/lib/molecular/agent/skills'
 
 /** 请求级语言检测（与 layout 同规则）：cookie > Accept-Language —— 与界面语言保持一致 */
 async function detectReqLocale(): Promise<Locale> {
@@ -45,7 +47,7 @@ const COMMAND_REF = `## 命令速查（全部小写；[sel] 为可选选择表�
 选择/统计：select [名=]<表达式> · deselect（清除选中——状态栏/面板/序列条高亮归零，不影响 hbonds in 烘焙范围） · count_atoms [表达式] · iterate (选择), 字段…（打印原子属性：name resn resi chain ss b q elem） · alter (选择), b=表达式 / q=值 / name="…"（修改属性，如 alter (resi 100-110), b=b+10）
 视角：zoom <sel>（聚焦选择；zoom ligand, 5 带缓冲Å；zoom in / zoom out 推拉；无参=全量适配） · orient [sel]（PCA 主轴对齐） · view from <sel>（从选择方向观察——口袋开口正对相机、配体在前景，结合位点标准视角；如 view from ligand / view from (resn HEM and chain A)） · turn <x|y|z> <±角度°>（旋转视角：x=俯仰 y=水平方位 z=滚转） · move <x|y|z> <±Å>（平移：x=右 y=上 z=推拉） · view front|back|top|bottom|left|right|x|y|z（正交视角预设） · view save <名> / view go <名> / view list（视角书签）
 视觉：set <项> <值>（项: ambient direct fill specular fog fog_strength fov spin_speed transition quick|normal|cinematic quality low|medium|high axes fps seq_focus cap_color cap_shading auto_perf outline outline_strength outline_thickness transparency sphere_scale stick_radius cartoon_width） · spin on|off · rock on|off · slab <nÅ>|off|move <±Å>|center|cap on|off · stereo on|off · ssao on|off [半径Å] [强度]（独立命令，非 set 键） · outline on|off [强度 粗细px] · axes on|off · fps on|off · label on|off（标记当前选择） · show cell / hide cell（晶胞盒线框：a红 b绿 c蓝） · cell on|off（同 show cell） · hbonds on [nÅ]（默认仅选择集范围；无选择时不显示） · hbonds on [nÅ] in <表达式>（烘焙独立范围：不随 deselect 清除、不依赖选择——口袋工作流标准写法 hbonds on 3.4 in byres(within 4.5 of (ligand)) and not water，范围必须含配体本身才能画出配体-残基氢键） · hbonds off · symmetry <Å>|off · map fofc <id>（差值电子密度）
-分析：contacts <A> | <B> [nÅ] · interface <链A> <链B> · xcontacts <A>:<expr> | <B>:<expr>（跨结构） · sasa · bsa · xbsa · dssp（重算二级结构） · superpose <名> onto <名> [chain X to Y] · untransform [名]
+分析：contacts <A> | <B> [nÅ] · interface <链A> <链B> · xcontacts <A>:<expr> | <B>:<expr>（跨结构） · sasa · bsa · xbsa · dssp（重算二级结构） · superpose <名> onto <名> [chain X to Y] · untransform [名] · membrane [厚度Å]|off（脂双层示意板：橙头基双板+灰疏水核心，沿主轴定向贴合蛋白；膜蛋白作图语境标配，膜心自动对准跨膜腰窗） · pore [封顶Å] [采样数]|off（离子通道孔道剖面：HOLE 式球拟合红/绿/蓝环带 + 收缩点半径；通道结构配 membrane 出图）
 测量：measure dist (exprA) (exprB) · measure angle (A) (B) (C) · measure dihedral (A) (B) (C) (D) · measure clear（多原子选择距离取最近原子对，角度/二面角取质心最近原子；例：measure dist (resn HEM) (within 5 of resn HEM and protein)）
 构象/媒体：morph <名> = <结构A> <结构B> [帧数] · morph multi <名> = <A> <B> <C>… [帧数]（构象插值轨迹） · ensemble play|stop|frame <n> · movie play|stop [smooth|hold] [秒 轮]（smooth=平滑巡航：关键帧间 Catmull-Rom 连续路径速度不归零，录 WebM 必用；hold=逐帧驻留经典模式） · movie smooth|hold（设默认模式） · movie edit（时间轴编排） · record start|stop（录制 WebM）
 导出/会话：save <名.pdb> [sel] · png [倍率] · ray [宽px]（Ray 级静帧） · svg [宽px] · session save|export|info
@@ -270,6 +272,8 @@ const KNOWN_CMD_HEADS = new Set([
   'close', 'clear', 'reset', 'delete',
   'iterate', 'alter', 'cell', 'spectrum', 'enable', 'disable', 'set_name',
   'isolate', 'chains', 'deselect', 'desel',
+  // r105：膜与孔道（与 runner.ts AUTO_PREFIXES 同步——技能流程命令可被打捞）
+  'membrane', 'lipid', 'bilayer', 'pore',
 ])
 
 /** commands 字段兼容：数组或字符串（"set a 1; set b 2" 形式——实测 LLM 偶发用字符串） */
@@ -376,6 +380,11 @@ export async function POST(req: Request) {
   }
   if (typeof body.scene !== 'string') {
     return NextResponse.json({ ok: false, error: errText(locale, 'scene 必须是字符串', 'scene must be a string') }, { status: 400 })
+  }
+  // r105 标准技能：skillId 类型卡点（非法类型 400 与 goal/memory 同款口径；
+  // 合法字符串但不在注册表内 → 安全降级为普通对话，不报错——老客户端/伪造值都不炸）
+  if (body.skillId !== undefined && typeof body.skillId !== 'string') {
+    return NextResponse.json({ ok: false, error: errText(locale, 'skillId 必须是字符串', 'skillId must be a string') }, { status: 400 })
   }
   // r99-main：补齐 r99-f3 卡点剩余面——image/imageBefore/stream/messages 数组项。
   // messages 项 role 收敛 user/assistant 枚举（旧版任意 role 字符串直传上游）
@@ -514,8 +523,14 @@ export async function POST(req: Request) {
     ? '\n\n[System reminder] Your next reply must be ONLY a JSON object: {"reply":"<English reply>","commands":["<command>",...]}. commands is an array of strings (empty [] if no executable commands). Output nothing besides the JSON.'
     : '\n\n【系统提醒】你的下一条回复必须只是一个 JSON 对象：{"reply":"<中文回复>","commands":["<命令>",...]}。commands 是字符串数组（无可执行命令时为 []），不要输出 JSON 以外的任何文字。'
 
+  // r105 标准技能：skillId 命中注册表时把「标准流程 + 固定报告格式」注入系统提示尾部
+  // （recency 弱于 PROTOCOL_SUFFIX——协议约束仍在最后一条 user 消息加固；非注册表值
+  // 安全降级为普通对话）。视觉自查分支不注入（VLM 审视不执行技能流程）。
+  const matchedSkill = body.skillId ? AGENT_SKILLS.find(s => s.id === body.skillId) : undefined
+  const systemPrompt = matchedSkill ? `${SYSTEM_PROMPT}\n\n${buildSkillDirective(matchedSkill)}` : SYSTEM_PROMPT
+
   const messages: ZAIMessage[] = [
-    { role: 'assistant', content: SYSTEM_PROMPT + langDirective(locale) },
+    { role: 'assistant', content: systemPrompt + langDirective(locale) },
     // 场景上下文（含长期记忆）以首条 user 消息注入（每次请求都是最新快照）；
     // r98-f2：与视觉自查分支同款 3600 截断——旧版仅校验 truthy，直连 API 可携任意
     // 长度 scene 灌满 LLM 上下文/放大成本

@@ -4467,3 +4467,55 @@ Stage Summary:
   6. 【低】生产部署前置清单收口（多轮挂起项：middlewareClientMaxBodySize / Caddyfile XTransformPort 白名单 / ignoreBuildErrors 决策）
 
 （r104 段 cron 补记，2026-10-10）15min webDevReview 巡检任务 #449226 创建即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 18 次实证（r85-r103 连续 17 次 + 本轮），已删除清理。devd 看门狗（绝对阈值 1500MB + r103-b 斜率双闸）继续作为巡检缺席期间的自愈防线；本轮 r104-b visual-baseline 像素哨兵与 r104-c smoke 重载哨兵的 CI 可判性成为巡检缺席期的第三道防线（guards 589 + smoke 6 + visual-baseline 3 三级门禁已在本轮全绿验证）。
+
+---
+Task ID: r105-a
+Agent: dev-infra-subagent
+Task: .agent/skills 开发流程 skill 体系——多轮沉淀的 agent 操作规矩标准化为 4 个 SKILL.md + 索引 README（随 git 跟踪，与不入库的全局 skills/ 区分）+ 4 条结构守卫
+
+Work Log:
+- 【读基】worklog.md 尾部 221 行（4250-4470：r102-a/r102-b/r102/r103-a/r103-b/r103-c/r103/r104 段——门禁链顺序、守卫插入纪律、bash 双引号 $/反引号坑、rg 括号转义、E2E 铁律的实际语境）+ regression-guards.sh 尾部 130 行（826-955：r103-a 至 r104-d 块 + 汇总段——插入点定 r104-d 块后、汇总段前）+ git log -5/status（HEAD=7181632 工作区干净）；基线实跑：guards 589/589 全过 · curl localhost:3000 → 200 · dev.log 尾部连续 GET / 200 零编译 error；.gitignore 核实：/skills/（全局目录）不入库而 .agent/ 无条目——「随 git 跟踪」前提达成
+- 【改动·交付 5 文件】①.agent/skills/README.md（索引：体系目的——所有 agent 操作含 cron 巡检统一按 skill 标准流程执行；四技能清单表；使用方式——新会话/子代理先读 worklog 尾部 ~200 行恢复语境再按任务类型读对应 SKILL）②molvision-dev-cycle/SKILL.md（三段式工作流：下一阶段开发〔基线检查→读 worklog→开发守卫先行〕→ QA+E2E → 以测试结果规划后续优先级排序；基线检查四步；收尾门禁链八步顺序）③molvision-qa-gates/SKILL.md（六道门禁精确命令+通过口径〔lint 0/tsc 只看 src/——全项目口径 5 个历史基线错 examples×2+mini-services×1+skills×2/guards 总数一致性+插入纪律/smoke 6/6 heavy 路径/visual-baseline 3/3〕+ dev.log 良性噪音清单〔EADDRINUSE 历史遗留/7AHL 缓存通知良性/○ Compiling 后才算真 error〕+ 红线〔绝不 bun run build、3000 端口〕）④molvision-e2e/SKILL.md（8 条铁律每条附「为什么」：native setter+input 事件/长任务 eval CDP 超时分步/VLM 全尺寸复鉴从首个 { 起+WebGL 解读不可靠须像素计数+引擎内部状态三方交叉/click 偶发 not found 改 eval 状态断言/会话 ~20 分钟周期 close+open/Task 超时≠未执行先查副产物/陈旧帧三败重试+清洁视口两遍+autoPerf showAxes 关/双位轨道点目标语言钮）⑤molvision-worklog-format/SKILL.md（三模板代码块：worklog 段〔Task ID/Agent/Task/Work Log 三条目/Stage Summary 四字段〕/子代理任务书〔读基/任务/交付/红线/收尾〕/测试报告〔场景/步骤/断言预期 vs 实测数字/结论/证据〕+ 附加纪律：每段以 --- 行开头、追加不覆盖、写实测数字）；5 文件全部 YAML frontmatter（--- 开始/name:/description: 写具体触发语境）
+- 【改动·守卫 +4（589→593）】r105-a 独立注释块插在 r104-d 块后、汇总段前（插入前 rg 复核 guards 零 r105 痕迹——只追加自己的块）：①skill索引四技能锚 molvision-(dev-cycle|qa-gates|e2e|worklog-format) 于 README（括号为 rg 正则分组 alternation 沿 r104-c 手法；实测 8=表格 4 行+使用方式 4 行）②skill frontmatter锚 ^description: 目录递归（实测 5=4 SKILL+README 各 1——任一文件被删或 frontmatter 损坏即红）③skill门禁tsc口径锚 bunx tsc --noEmit src/ 目录递归（实测 3=dev-cycle 收尾链 1+qa-gates 门禁表/详述 2——「只看 src/」口径双站点钉住防回退全项目口径）④skill E2E铁律锚 native setter 目录递归（实测 2=e2e 铁律本体 1+qa-gates smoke heavy 路径引用 1）；四模式均无 $/反引号（bash 双引号安全）；.agent/ 为隐藏目录——rg 显式给定路径可搜（插入前实测验证后落守卫）
+- 【验证】bash -n scripts/regression-guards.sh ✓ · bash scripts/regression-guards.sh 实跑 == 结果：PASS（593/593 守卫全部通过）==（589 基线+本轮 4；插入前同脚本实跑 589/589——插入前后双跑闭环）· 4 新守卫命中 8/5/3/2 与注释设计数精确一致 · 5 个 md 文件存在且 frontmatter 合法（--- 首行+name:+description: 逐文件 od/rg 核查）· git status 本轮产物恰 .agent/ 5 新文件 + guards M + worklog M 三项（src/ 零触碰——主代理并行 agent 层改动未受干扰）· 未 git commit/push · 未跑 E2E · 未重启/未杀任何进程（全程零进程操作）· dev server 3000 全程 200
+
+Stage Summary:
+- 交付：.agent/skills 开发流程 skill 体系 5 文件（README 索引 + dev-cycle/qa-gates/e2e/worklog-format 四 SKILL，均带触发语境 frontmatter）——r99-r104 多轮沉淀的 agent 操作规矩从 worklog 叙述升级为随 git 跟踪的标准化 skill；新会话/子代理开工流程固化为「读 worklog 尾部恢复语境 → 按任务类型读 SKILL」，主代理派发子代理有固定任务书模板
+- 验证：guards 593/593（589+4，插入前后双跑；四锚命中 8/5/3/2 精确一致）· bash -n ✓ · 5 文件 frontmatter 逐项核查 ✓ · dev 200 全程 · git 三项产物实证
+- 与任务书偏差（如实）：①README 也写了 frontmatter（任务书 README 节未要求，但验证节「5 个 md 文件 frontmatter 合法」按全 5 文件口径满足——防御性双读法）②frontmatter 锚/tsc 口径锚/E2E 铁律锚用目录递归路径 .agent/skills/（check() 单路径限制下以目录递归实现多文件覆盖——隐藏目录 rg 显式路径可搜已实测；此为设计选择非偏差，如实记录）③worklog-format 无独立内容锚（4 守卫配 5 文件——由 frontmatter 锚+README 索引锚间接覆盖；如需内容级钉住留下轮扩容）④本轮未跑 lint/tsc/smoke/visual-baseline 全链（任务书验证节口径为 bash -n+guards+frontmatter 三项；本轮 diff 仅 md 文件+guards 脚本——主代理收尾统一跑全链）
+- 遗留（供下轮参考）：①skill 内容为 r105-a 时点快照——后续流程演进（门禁增删/新铁律入档）须同步更新对应 SKILL.md（守卫只钉结构不钉全文）②新技能入体系时 README 表格+使用方式行数会变——guard 1 的 8 行口径须同步调 min 值并注明（新技能入表属显式过闸变更）③e2e SKILL 的 8 铁律可随新坑继续追加（追加不动他人条目——与守卫同纪律）④skill 体系与全局 skills/ 的关系：本项目规矩进 .agent/skills/（入库），可复用的通用能力才进全局——边界维持现状
+
+---
+Task ID: r105
+Agent: main
+Task: 用户指令「继续下一阶段开发 + 目前 agent 层是否有 skill 这类机制 + 所有 agent 操作用 skill 标准化流程 + 输出文稿固定格式」——双线落地：产品侧 agent 标准技能系统（AI 助手 skill 化）+ 流程侧开发操作 skill 体系（.agent/skills/）+ QA/E2E 全链 + 结果驱动规划
+
+Work Log:
+- 【基线】HEAD=7181632（r104 完成态）；guards 589/589 · dev 200 · 工作区干净。现状核查：全局 skills/ 目录 80+ 技能存在但未被 git 跟踪且零 MolVision 相关内容；产品 agent 层（src/lib/molecular/agent/：providers 1173 行 + chat-store/protocol/runner/context）无 skill 机制（rg -i "skill" 全 src 零命中）——用户问题「agent 层是否有 skill 机制」的答案：有全局基础设施、无项目内沉淀，本轮双线补齐
+- 【r105-a 子代理（流程侧）】.agent/skills/ 开发流程 skill 体系：4 个 SKILL.md（molvision-dev-cycle 三段式 / molvision-qa-gates 六道门禁精确口径 / molvision-e2e 八条铁律各附为什么 / molvision-worklog-format 三模板）+ README 索引（frontmatter 全合法，随 git 跟踪——区别于不入库的全局 skills/）+ 守卫 +4（589→593）——多轮 worklog 血泪规矩首次固化为可复用 skill 文件，后续会话/子代理/cron 恢复上下文的成本从「读 worklog 尾部 200 行」降为「读对应 SKILL.md」
+- 【r105-b 产品侧核心（主代理亲写）】src/lib/molecular/agent/skills.ts（新文件 ~300 行）：AgentSkill 接口（id/name/description/triggers{strong,weak}/workflow/report{sections}）+ AGENT_SKILLS 注册表 6 支（ligand-pocket 配体口袋分析 / hbond-network 氢键网络 / interface-analysis 界面接触 / pub-figure 出版级配图=规则18 skill化 / structure-survey 组分普查 / membrane-context 膜蛋白语境）——每支含标准 workflow（步骤名+命令模板+验证点，与 SYSTEM_PROMPT 行为规则严格一致）+ 固定报告格式（【…报告】+ ▌节行，数值不许编造取不到写—）+ matchSkill 计分匹配（strong×2/weak×1，唯一最高 ≥2 才选中——单弱词如「配体」「膜」不误触发）+ buildSkillDirective 编译注入段 + isSkillReport 文稿标记检测；纯数据纯函数零 window 依赖（服务端可 import）
+- 【r105-c 协议与注入】protocol.ts：AgentRequestBody + AgentChatMessage 双 skillId 可选字段（请求上送 + 持久化徽章渲染）；route.ts 五处独立单 Edit：import skills / COMMAND_REF 分析行补 membrane+pore 词条（旧版速查无此二命令——LLM 不知其存在）/ KNOWN_CMD_HEADS 补膜四命令头 / body.skillId 类型卡点（非字符串 400，非注册表值优雅降级 200）/ SYSTEM_PROMPT 后动态追加 buildSkillDirective（matchedSkill 命中时；视觉自查分支不注入；流式与非流式共用单组装点 L518）
+- 【r105-d 白名单与前端】runner.ts AUTO_PREFIXES 补 membrane/lipid/bilayer/pore（历史缺口：膜命令存在但 agent 无法执行——membrane-context 技能依赖补齐）；AgentPanel 六处独立单 Edit：import / callAgent+callAgentStream 加 skillId 参数 / send 里 matchSkill(q) 匹配传递 / assistant 消息 skillId 徽章（emerald 标准技能·）+ isSkillReport 报告卡片分级渲染（【标题】主色加粗 + ▌节行标签/数值分色 + border-l-primary 浅主色底）/ 输入框实时识别预览徽章（「Skill detected: … will run a standard workflow and output a fixed-format report」，与发送同一 matchSkill 所见即所得）
+- 【守卫 +11（593→604）】r105 主块（r105-a 块后汇总段前）：六支 id 锚 6 / 匹配阈值锚 1 / 指令注入锚 2 / 报告检测函数锚 1 / 检测接线锚 3 / 徽章文案锚 7 / 卡片样式锚 1 / runner 膜白名单锚 1 / route 打捞白名单锚 1 / 协议 skillId 锚 2 / 速查膜词条锚 1——十一锚全环节防退化
+- 【QA】lint 0 · tsc 全项目 5 历史基线错不变（src/ 零）· guards 604/604 · smoke 6/6（heavy 路径）· visual-baseline 3/3（漂移 0.00-0.03%）
+- 【E2E-G3 纯函数（bun 直跑）】skills count 6 ✓ · matchSkill('分析一下配体口袋')→ligand-pocket（双弱词组合达 2 分）✓ · matchSkill('把配体改成红色')→undefined（单弱词防误触发达成实证）✓ · hbond-network/pub-figure 命中 ✓ · '你好'→undefined ✓ · isSkillReport('【配体口袋分析报告】…')→true ✓
+- 【E2E-G2 后端】buildSkillDirective 输出 19 行标准段（命中声明+5 步流程+报告格式）✓ · curl skillId=ligand-pocket → 200 mock 正常 ✓ · skillId=123 → 400 ✓ · skillId="not-a-skill" → 200 优雅降级 ✓
+- 【E2E-G1 前端链（agent-browser，英文 locale）】输入 'analyze the ligand binding pocket' → 预览徽章「Skill detected: Ligand Pocket Analysis — runs a standard workflow and outputs a fixed-format report」✓ · 改输 'color the ligand red' → 徽章消失（防误触发 UI 实证）✓ · 发送 → assistant 消息「Skill · Ligand Pocket Analysis」徽章 ✓ · localStorage 注入报告格式消息 → reload → 报告卡片全渲染（标题 true/卡片样式 true/5 节行 true/技能徽章 true）✓ · fetch 拦截 → 请求体 skillId 精确值 "pub-figure"（publication figure export 消息）✓ · 全程 errors 零 ✓
+- 【E2E-G4 核心回归】4HHB 加载（4,779 原子 + canvas 在位；新知：欢迎页 PDB input 需 form submit 而非 keydown Enter 触发）✓ · 预设 2 键 HUD「Ball-and-stick」（新知：HUD 实际 Title Case 而非全大写，断言串大小写要放宽）✓ · membrane 命令 on（toast「bilayer on (thickness 34 Å: orange headgroup slabs…)」完整）✓ · 语言 EN→中文（lang=zh-CN + cookie=zh，点目标语言钮铁律）✓
+- 【E2E 发现 bug 并修复】assistant 技能徽章不显示——send 流程 patchAi({content, streaming, commands}) 遗漏 skillId 字段（aiMsg 构造了但 patch 对象没带）→ 单 Edit 补 skillId: aiMsg.skillId → reload 重测徽章出现 ✓
+- 【E2E 运维实录】agent-browser open 首次 ERR_CONNECTION_REFUSED——devd 看门狗恰逢其时执行内存换血（RSS 1566MB > 1500MB 绝对阈值，15:31:32 重启 3s 恢复）——r103-b 双闸机制的实战触发首次实录；重开后全链通过
+- 【坑（新入档）】①欢迎页 PDB input 提交用 form submit 派发（keydown Enter 无监听）②HUD 表示法文案 Title Case（断言勿用全大写）③patch 类 API 增字段时逐字段核对 patch 对象（构造了 aiMsg 不等于 patch 携带了 skillId——E2E 抓出的真实遗漏）④agent-browser eval 变量跨调用持久（const 重复声明报错——用 IIFE 包裹）⑤页面 locale 英文时中文选择器（placeholder*="描述需求"）静默失配——先探 placeholder 再选选择器
+
+Stage Summary:
+- 交付一（流程侧）：.agent/skills/ 开发操作 skill 体系（4 SKILL.md + 索引 + 4 守卫）——三段式工作流/六道门禁/八条 E2E 铁律/三模板全部固化，回答用户「agent 操作 skill 标准化」的流程侧诉求
+- 交付二（产品侧）：AI 助手标准技能系统——6 支预置技能（每支=标准 workflow+固定报告格式）+ 计分匹配 + 系统提示注入 + 技能徽章/实时预览/报告卡片分级渲染 + runner/route/速查三处膜孔道命令白名单补齐（历史缺口）；回答用户「agent 层 skill 机制」的产品侧诉求：matchSkill→skillId→buildSkillDirective→【…报告】固定文稿→卡片渲染全链贯通
+- 交付三（QA/E2E）：门禁全绿（guards 604/604 · smoke 6/6 · visual-baseline 3/3）+ E2E 四组分断言全过零 console 错误 + E2E 期抓出并修复 patchAi skillId 遗漏 bug
+- 交付四（认知）：devd 内存换血实战首次实录（1566MB 触发 3s 恢复）；E2E 新知 5 条入档
+- 与用户指令对位：①「agent 层是否有 skill 机制」——有全局 skills/（80+ 技能，未入库）但项目零沉淀，本轮双线补齐 ②「所有 agent 操作用 skill 标准化流程」——产品侧 6 技能+流程侧 4 SKILL 落地 ③「输出文稿固定格式」——报告【…报告】+▌节行格式（产品）+ worklog/任务书/测试报告三模板（流程）
+- 下一轮建议（按优先级，基于本轮测试结果）：
+  1. 【高】技能系统真实 LLM 实测：mock-llm 关键词模板不读 system prompt 注入段——技能流程的「LLM 遵循度」尚未在真实 LLM 上验证（配一个真实 provider 或扩 mock-llm 加「技能感知」模板：收到含技能段 system 时按技能 workflow 生成命令序列与报告——把 E2E 的 G1 断言升级为端到端）
+  2. 【中】技能库扩容：sasa/bsa 表面分析、xcontacts 跨结构互作、morph 构象对比、symmetry 晶格组装四类高频工作流技能化（matchSkill 框架零改动纯注册表追加——每支 30 行）；技能选择器 UI（AgentPanel 顶部技能芯片栏，点选强制绑定 skillId 而非依赖自然语言匹配）
+  3. 【中】r104 建议延续：命令级 per-rep 着色（colorOverrides 原子级覆盖限制——技能报告里「口袋残基棍元素色+卡通主题色」做不到）/ 视觉基线场景扩容（4 支新膜类模板入基线）
+  4. 【低】membrane-context 技能与 pore 命令联动实测（9pb6/1BL8 通道结构上 agent 端到端：加膜+孔道剖面+报告）——依赖建议 1 的 mock 技能感知
+  5. 【低】报告卡片交互增强：▌数值节可点击跳转（如口袋残基节 → zoom 口袋）；技能报告持久化统计（会话内技能使用计数）
+  6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）

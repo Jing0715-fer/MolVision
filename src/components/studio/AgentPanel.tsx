@@ -17,6 +17,8 @@ import { SESSIONS_MAX, sessionTimeLabel, useAgentChatStore } from '@/lib/molecul
 import {
   AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentStreamEvent,
 } from '@/lib/molecular/agent/protocol'
+// r105 标准技能：发送前本地匹配（matchSkill），报告文稿标记检测（isSkillReport）驱动卡片渲染
+import { AGENT_SKILLS, matchSkill, isSkillReport, type AgentSkill } from '@/lib/molecular/agent/skills'
 import { ProviderSettingsDialog, type ProviderInfo } from './ProviderSettingsDialog'
 import { cn } from '@/lib/utils'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -62,18 +64,19 @@ function lastGoalText(list: AgentChatMessage[]): string {
   return tt({ zh: '优化当前视图的渲染效果', en: 'Improve the rendering of the current view' })
 }
 
-/** 调后端 LLM：返回决策或 null（错误已 toast）。带 image 时走 VLM 视觉自查分支（可选前后对比）；memory 为长期对话记忆摘要 */
+/** 调后端 LLM：返回决策或 null（错误已 toast）。带 image 时走 VLM 视觉自查分支（可选前后对比）；memory 为长期对话记忆摘要；skillId 为 r105 标准技能（视觉自查分支忽略） */
 async function callAgent(
   apiMessages: { role: 'user' | 'assistant'; content: string }[],
   scene: string,
   visual?: { image: string; goal: string; imageBefore?: string },
   memory?: string,
+  skillId?: string,
 ): Promise<AgentDecision | null> {
   try {
     const res = await fetch('/api/agent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(visual ? { messages: apiMessages, scene, memory, image: visual.image, goal: visual.goal, imageBefore: visual.imageBefore } : { messages: apiMessages, scene, memory }),
+      body: JSON.stringify(visual ? { messages: apiMessages, scene, memory, image: visual.image, goal: visual.goal, imageBefore: visual.imageBefore } : { messages: apiMessages, scene, memory, skillId }),
     })
     const data = await res.json() as { ok: boolean; decision?: AgentDecision; error?: string }
     if (!data.ok || !data.decision) {
@@ -97,14 +100,14 @@ type StreamResult =
 async function callAgentStream(
   apiMessages: { role: 'user' | 'assistant'; content: string }[],
   scene: string,
-  opts: { signal?: AbortSignal; onFirstDelta?: () => void; onDelta?: (acc: string) => void; memory?: string },
+  opts: { signal?: AbortSignal; onFirstDelta?: () => void; onDelta?: (acc: string) => void; memory?: string; skillId?: string },
 ): Promise<StreamResult> {
   let acc = ''
   try {
     const res = await fetch('/api/agent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: apiMessages, scene, memory: opts.memory, stream: true }),
+      body: JSON.stringify({ messages: apiMessages, scene, memory: opts.memory, skillId: opts.skillId, stream: true }),
       signal: opts.signal,
     })
     if (!res.ok || !res.body) {
@@ -577,9 +580,14 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       setMsgs(m => m.map(x => (x.id === aiId ? { ...x, ...patch } : x)))
     }
     try {
+      // r105 标准技能：发送前本地匹配用户意图（strong×2/weak×1 计分，唯一最高 ≥2 才选中）；
+      // 命中后 skillId 随请求上送 → 后端把「标准流程 + 固定报告格式」注入系统提示；
+      // 未命中/歧义 → undefined 走普通对话（行为与旧版完全一致，零回归面）
+      const skill: AgentSkill | null = matchSkill(q)
       const r = await callAgentStream(buildApiHistory(history), buildSceneContext(), {
         signal: ctrl.signal,
         memory: buildMemoryDigest(history),
+        skillId: skill?.id,
         onFirstDelta: () => { ensureMsg(); setPhase('stream') },
         // 增量原文 → 渐进提取 reply 字段（JSON 半截/散文降级两态都安全）
         onDelta: acc => patchAi({ content: extractPartialReply(acc) }),
@@ -590,9 +598,10 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
         const aiMsg: AgentChatMessage = {
           id: aiId, role: 'assistant',
           content: r.decision.reply, time: nowTime(),
+          skillId: skill?.id,
           commands: cmds.length ? cmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
         }
-        patchAi({ content: aiMsg.content, streaming: false, commands: aiMsg.commands })
+        patchAi({ content: aiMsg.content, streaming: false, commands: aiMsg.commands, skillId: aiMsg.skillId })
         if (cmds.length) {
           setPhase('exec')
           // 执行前抓基线截图（视觉自查前后对比；结构未加载或截图失败时静默跳过）
@@ -795,11 +804,24 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           </div>
         )}
 
-        {msgs.map(m => (
+        {msgs.map(m => {
+          // r105 标准技能：assistant 消息命中技能时的徽章（名字取注册表——skillId 为持久化字段）
+          const msgSkill = m.role === 'assistant' && m.skillId ? AGENT_SKILLS.find(s => s.id === m.skillId) : undefined
+          // 报告文稿检测：reply 以「【…报告】」开头 → 结构化报告卡片渲染（标题行/▌ 节行分级）
+          const isReport = m.role === 'assistant' && !m.streaming && isSkillReport(m.content)
+          return (
           <div key={m.id} className={cn('flex flex-col', m.role === 'user' ? 'items-end' : 'items-start')}>
             {m.kind === 'visual' && (
               <span className="mb-0.5 inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-px text-[9px] font-medium text-primary">
                 <Eye className="h-2.5 w-2.5" /> {t({ zh: '视觉自查', en: 'Visual check' })}
+              </span>
+            )}
+            {msgSkill && (
+              <span
+                className="mb-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-600/10 px-1.5 py-px text-[9px] font-medium text-emerald-700 dark:text-emerald-400"
+                title={t(msgSkill.description)}
+              >
+                <Sparkles className="h-2.5 w-2.5" /> {t({ zh: `标准技能 · ${msgSkill.name.zh}`, en: `Skill · ${msgSkill.name.en}` })}
               </span>
             )}
             <div
@@ -810,10 +832,34 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                   : cn(
                     'rounded-lg rounded-bl-sm border border-border bg-card text-foreground',
                     m.kind === 'visual' && 'border-l-2 border-l-primary/70',
+                    // 报告卡片：左主色边 + 浅主色底（与普通聊天气泡视觉分级）
+                    isReport && 'border-l-2 border-l-primary bg-primary/[0.04]',
                   ),
               )}
             >
-              {m.content}
+              {isReport ? (
+                // 报告文稿分级渲染：标题行（【…报告】）主色加粗；▌ 节行标签与数值分色
+                <div className="space-y-0.5">
+                  {m.content.split('\n').map((line, li) => {
+                    const t2 = line.trim()
+                    if (/^【[^】]{2,20}报告】$/.test(t2)) {
+                      return <p key={li} className="mb-1 font-semibold text-primary">{t2}</p>
+                    }
+                    if (t2.startsWith('▌')) {
+                      const sep = t2.indexOf('：')
+                      return (
+                        <p key={li} className="flex gap-1.5">
+                          <span className="shrink-0 font-medium text-foreground/85">{sep > 0 ? t2.slice(0, sep + 1) : ''}</span>
+                          <span className="min-w-0 flex-1 text-foreground/75">{sep > 0 ? t2.slice(sep + 1) : t2}</span>
+                        </p>
+                      )
+                    }
+                    return t2 ? <p key={li} className="text-foreground/75">{t2}</p> : null
+                  })}
+                </div>
+              ) : (
+                m.content
+              )}
               {m.streaming && (
                 <span aria-hidden className="ml-0.5 inline-block h-3 w-[5px] animate-pulse rounded-[1px] bg-primary align-middle" />
               )}
@@ -893,7 +939,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
             )}
             <span className="mt-0.5 px-1 font-mono text-[9px] tabular-nums text-muted-foreground/50">{m.time}</span>
           </div>
-        ))}
+          )
+        })}
 
         {busy && (
           <div className="flex items-center gap-1.5 rounded-lg rounded-bl-sm border border-border bg-card px-3 py-2">
@@ -913,6 +960,19 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
       {/* 输入区 */}
       <div className="shrink-0 border-t border-border p-2.5">
+        {/* r105 标准技能实时识别预览：输入即匹配（与发送时同一 matchSkill——所见即所得）；
+            命中显示技能徽章，用户提前知道本轮将按标准流程执行并产出固定格式报告 */}
+        {!busy && input.trim() && matchSkill(input) && (
+          <div className="mb-1.5 flex items-center gap-1.5 rounded-md border border-emerald-600/25 bg-emerald-600/[0.06] px-2 py-1 text-[9.5px] text-emerald-700 dark:text-emerald-400">
+            <Sparkles className="h-3 w-3 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              {t({
+                zh: `已识别标准技能：${matchSkill(input)!.name.zh} —— 将按标准流程执行并输出固定格式报告`,
+                en: `Skill detected: ${matchSkill(input)!.name.en} — runs a standard workflow and outputs a fixed-format report`,
+              })}
+            </span>
+          </div>
+        )}
         <div className="flex items-end gap-1.5 rounded-lg border border-border bg-background px-2 py-1.5 transition focus-within:border-primary/50">
           <textarea
             ref={taRef}

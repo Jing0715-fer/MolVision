@@ -21,6 +21,8 @@ export interface AgentChatMessage {
   commands?: AgentCmdRecord[]
   /** visual = 视觉自查消息（VLM 看截图后的评估/修正） */
   kind?: 'chat' | 'visual'
+  /** r105 标准技能：本轮命中的技能 id（UI 徽章与报告卡片渲染用） */
+  skillId?: string
   /** 视觉自查消息附带的视口截图缩略图（JPEG data URL，≤320px 宽；持久化前剥离——体积） */
   image?: string
   /** 流式生成中（打字机光标显示；持久化前剥离——中断重载不再是流式态） */
@@ -41,6 +43,8 @@ export interface AgentRequestBody {
   messages: { role: 'user' | 'assistant'; content: string }[]
   /** 前端构建的当前场景上下文（结构/reps/选择/设置摘要） */
   scene: string
+  /** r105 标准技能：前端 matchSkill 命中的技能 id（skills.ts 注册表校验；非法值安全降级为普通对话） */
+  skillId?: string
   /** 长期对话记忆：最近 12 条之前的早期消息压缩摘要（用户意图 + 已执行命令 + 自查结论）。
    *  后端注入场景上下文尾部——超出滚动窗口的对话仍可被引用（避免重复已完成的工作） */
   memory?: string
