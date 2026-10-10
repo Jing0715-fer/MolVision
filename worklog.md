@@ -4519,3 +4519,5 @@ Stage Summary:
   4. 【低】membrane-context 技能与 pore 命令联动实测（9pb6/1BL8 通道结构上 agent 端到端：加膜+孔道剖面+报告）——依赖建议 1 的 mock 技能感知
   5. 【低】报告卡片交互增强：▌数值节可点击跳转（如口袋残基节 → zoom 口袋）；技能报告持久化统计（会话内技能使用计数）
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
+
+（r105 段 cron 补记，2026-10-10）15min webDevReview 巡检任务 #449631 创建即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 19 次实证（r85-r104 连续 18 次 + 本轮），已删除清理。任务书已内嵌 r105 开发纪律（.agent/skills/ 四 SKILL 引用 + 门禁链口径 + kill 红线 + 下轮优先级）——配额恢复后可直接重建。devd 看门狗（绝对阈值 + 斜率双闸）+ 三级 CI 门禁（guards 604 + smoke 6 + visual-baseline 3）继续作为巡检缺席期的自愈防线；本轮 devd 内存换血实战首次实录（1566MB 触发 3s 恢复）。
