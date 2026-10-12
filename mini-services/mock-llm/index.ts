@@ -283,7 +283,8 @@ function fillFromReceiptsByLabel(label: string, src: string): string | null {
     return near ? `${m[1]} 对（最近 ${near[1]} ${near[2]} Å）` : `${m[1]} 对`
   }
   if (/氢键条数|^氢键$/.test(label)) {
-    const m = /氢键网络当前 (\d+) 条/.exec(src)
+    // r108-b：runner 现把 hbond-store 键数追加进回执（「氢键网络当前 N 条」ZH / EN 同锚格式）
+    const m = /氢键网络当前 (\d+) 条/.exec(src) ?? /H-bond network: currently (\d+) bonds/.exec(src)
     return m ? `${m[1]} 条` : null
   }
   if (/埋藏面积/.test(label)) {

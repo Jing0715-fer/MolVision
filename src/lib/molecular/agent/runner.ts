@@ -2,6 +2,7 @@
 // 与命令行/命令面板共用 runCommand（同一条代码路径，行为一致、可审计）。
 import { runCommand } from '../commands'
 import { useMolStore } from '../store'
+import { useHBondStore } from '../hbond-store'
 import { tt } from '@/i18n'
 import type { AgentCmdRecord } from './protocol'
 
@@ -54,6 +55,10 @@ const ASYNC_PREFIXES = new Set([
   'xcontacts', 'xcontact', 'xiface', 'create', 'morph', 'movie', 'ensemble', 'ens',
   'record', 'rec', 'symmetry', 'symmates',
 ])
+
+/** r108-a 计算类命令：回执常为「计算中」——有界轮询等待结果日志落地（大结构 Web Worker 可达数秒，
+ *  r107 实测 700ms 单次延迟不够，报告回填拿到的是占位文案而非实测值） */
+const CALC_WAIT_PREFIXES = new Set(['sasa', 'area', 'bsa', 'buried', 'bsa-area', 'xbsa', 'xburied', 'xbsa-area'])
 
 export type CmdClass = 'auto' | 'confirm' | 'blocked'
 
@@ -131,6 +136,43 @@ export async function execAgentCmd(cmd: string): Promise<AgentCmdRecord> {
   }
 
   const first = grab()
+  // r108-a 计算类命令有界轮询：回执 entry 含「计算中/computing」时等待后续结果 entry 落地
+  // （sasa/bsa/xbsa 完成时必打结果日志，consoleLog seq 单调——后续 out entry 出现即完成；
+  //  有界 5s 防大结构卡死，超时/无标记走旧路径保持兜底）
+  if (CALC_WAIT_PREFIXES.has(head) && first && /计算中|computing/i.test(first) && !hasErr()) {
+    const pending = useMolStore.getState().consoleLog.find(
+      l => (l.seq ?? 0) > seqBefore && l.type !== 'in' && /计算中|computing/i.test(l.text),
+    )
+    if (pending) {
+      for (let i = 0; i < 16; i++) {
+        await sleep(300)
+        if (hasErr()) break
+        const landed = useMolStore.getState().consoleLog.some(l => (l.seq ?? 0) > (pending.seq ?? 0) && l.type === 'out')
+        if (landed) return { cmd, status: 'ok', output: grab().slice(0, 300) }
+      }
+    }
+  }
+  // r108-b hbonds 开启类命令：轮询 hbond-store 统计落地后把键数追加进回执（引擎检测在渲染
+  // 节流拍里跑——小结构同步、大结构走 worker；此前回执只含烘焙原子数不含键数，回填链拿不到
+  // 实测值）。statLine 与 AgentPanel 运行时补充行同格式（「氢键网络当前 N 条」——mock 回填
+  // 正则与真实 LLM 都可从回执直接提取）；off/0 关闭命令回执已完整，跳过
+  if ((head === 'hbonds' || head === 'hbond' || head === 'hbon') && !/^(off|0)$/i.test((cmd.trim().split(/\s+/)[1] ?? '').toLowerCase())) {
+    await sleep(250) // 引擎节流 150ms 一拍——先等一拍再读
+    const t0 = Date.now()
+    let statLine = ''
+    // r108 E2E 实测：4HHB（4,779 原子）worker 检测超 2.75s 首版上界——statLine 未落地；
+    // 扩至 5.5s（对齐 r107 建议口径「计算类轮询有界 5s」），超时仍保旧回执兜底
+    while (Date.now() - t0 < 5250) {
+      if (hasErr()) break
+      const hb = useHBondStore.getState()
+      if (hb.visible && !hb.computing) {
+        statLine = tt({ zh: `氢键网络当前 ${hb.count} 条（其中涉水 ${hb.waterCount}）`, en: `H-bond network: currently ${hb.count} bonds (${hb.waterCount} water-involved)` })
+        break
+      }
+      await sleep(250)
+    }
+    if (statLine && first) return { cmd, status: hasErr() ? 'error' : 'ok', output: `${first}\n${statLine}`.slice(0, 300) }
+  }
   if (ASYNC_PREFIXES.has(head) && !first) {
     await new Promise(r => setTimeout(r, 700))
     return { cmd, status: hasErr() ? 'error' : 'ok', output: grab() || tt({ zh: '已受理（后台进行中）', en: 'Accepted (running in the background)' }) }

@@ -1060,6 +1060,43 @@ check "mock节域提取锚"          "fillFromReceiptsByLabel" "mini-services/mo
 # ⑪mock 回填标记同步锚（实测 2——分支注释+startsWith 检测；与 skills.ts REPORT_FILL_MARKER 值双站点同步哨兵）
 check "mock回填标记同步锚"      "报告回执回填" "mini-services/mock-llm/index.ts" 2
 
+# ---- r108：回执数值源扩容（计算类命令有界轮询 + hbonds 回执补键数）+ 回填 UX（闪高亮/toast/技能计数） ----
+# 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」
+# ——r107 E2E 实测坐实的回填链缺口根修：
+# ①计算类命令（sasa/bsa/xbsa）回执常为「计算中」——700ms 单次延迟不够大结构 Web Worker，
+#   报告回填拿到的是占位文案而非实测值：execAgentCmd 有界轮询（5s）等结果日志落地
+#   （consoleLog seq 单调——「计算中」entry 之后出现 out entry 即完成，超时走旧兜底）；
+# ②hbonds 回执只含烘焙原子数不含键数：轮询 hbond-store（visible && !computing，3s 有界）
+#   把「氢键网络当前 N 条（其中涉水 M）」追加进回执——与运行时补充行同锚格式，mock/真实
+#   LLM 都可从回执直接提取；mock 氢键正则补 EN 分支（H-bond network: currently N bonds）；
+# ③回填 UX：protocol filled 字段 + 报告卡 fill-flash 闪高亮（1.6s 淡出）+ toast 双语；
+# ④技能使用计数：msgs 派生 skillCounts + 弹层项 ×N 徽章（probe-pop 弹跳，key 变化重播）。
+# 以下十二锚防各环节被改写/删除静默退化（实测数见各行注释）：
+# ①计算轮询常量锚（实测 2——注释+CALC_WAIT_PREFIXES 定义；删则 sasa/bsa 回填恒为「后台计算中」）
+check "计算轮询常量锚"          "CALC_WAIT_PREFIXES" "src/lib/molecular/agent/runner.ts" 2
+# ②计算轮询落地锚（实测 2——landed 判定+返回；删则轮询空转永超时）
+check "计算轮询落地锚"          "landed" "src/lib/molecular/agent/runner.ts" 2
+# ③氢键statLine锚（实测 2——statLine 定义+注释提及；删则 hbonds 回执无键数、回填链失实测值）
+check "氢键statLine锚"          "氢键网络当前" "src/lib/molecular/agent/runner.ts" 2
+# ④氢键store轮询锚（实测 1——hb.visible && !hb.computing 完成判据；改则轮询读半成品统计）
+check "氢键store轮询锚"         "hb.visible && !hb.computing" "src/lib/molecular/agent/runner.ts" 1
+# ⑤mock氢键EN正则锚（实测 1——H-bond network: currently 分支；删则 EN 语言回执氢键数无法回填）
+check "mock氢键EN正则锚"        "H-bond network: currently" "mini-services/mock-llm/index.ts" 1
+# ⑥protocol filled 字段锚（实测 1——filled?: boolean；删则 tsc 报错挡回填标记写入）
+check "protocolfilled字段锚"    "filled\?: boolean" "src/lib/molecular/agent/protocol.ts" 1
+# ⑦AgentPanel 回填标记锚（实测 1——patchAi({filled: true})；删则闪高亮永不触发）
+check "回填标记写入锚"          "filled: true" "src/components/studio/AgentPanel.tsx" 1
+# ⑧回填 toast 锚（实测 1——toast.success 双语文案；删则数值真实化无可感知反馈）
+check "回填toast锚"             "报告数值已按命令回执回填" "src/components/studio/AgentPanel.tsx" 1
+# ⑨闪高亮 class 锚（实测 1——isReport && m.filled 条件类；删则 fill-flash 定义成死代码）
+check "闪高亮class锚"           "fill-flash" "src/components/studio/AgentPanel.tsx" 1
+# ⑩css keyframes 锚（实测 3——@keyframes 定义+.fill-flash 类+animation 引用；删则类无动画）
+check "闪高亮keyframes锚"       "fill-flash" "src/app/globals.css" 2
+# ⑪技能计数派生锚（实测 4——useMemo 定义+弹层徽章引用 3 处；删则计数徽章消失）
+check "技能计数派生锚"          "skillCounts" "src/components/studio/AgentPanel.tsx" 4
+# ⑫计数徽章文案锚（实测 1——本会话已使用次数 title；删则徽章无障碍提示丢失）
+check "计数徽章文案锚"          "本会话已使用次数" "src/components/studio/AgentPanel.tsx" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

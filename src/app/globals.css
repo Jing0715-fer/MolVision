@@ -285,6 +285,16 @@ canvas {
   animation: probe-pop 320ms cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
+/* r108 技能报告回填完成闪高亮：数值从「—」占位变实测值的一次性可感知反馈（1.6s 淡出；
+   动画结束后回退到报告卡本身的 bg-primary/[0.04] 浅主色底） */
+@keyframes fill-flash {
+  0%   { background-color: color-mix(in srgb, var(--primary) 16%, transparent); }
+  100% { background-color: transparent; }
+}
+.fill-flash {
+  animation: fill-flash 1600ms ease-out 1;
+}
+
 /* ============================================================
    精密仪器设计语言（Precision Instrument）
    ============================================================ */

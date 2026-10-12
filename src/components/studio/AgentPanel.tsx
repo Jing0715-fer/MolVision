@@ -4,7 +4,7 @@
 // 浮动于 3D 视图右侧；对话持久化 localStorage；confirm 态命令需用户点确认；
 // 视觉自查：命令执行完毕后截图送 VLM 审视渲染结果，未达标自动给出修正命令，
 // 修正命令本身还会被再自查一轮（有界双轮：修到效果理想为止，不无限循环）
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Ban, Bot, Check, ChevronDown, Clock, Eye, EyeOff, Loader2, MessageSquarePlus, Pencil, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
 } from 'lucide-react'
@@ -373,6 +373,13 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   // 走标准流程）；面板局部态（不持久化：面板重挂即回自然语言匹配的默认行为）
   const [pinnedSkill, setPinnedSkill] = useState<string | null>(null)
   const [skillPickerOpen, setSkillPickerOpen] = useState(false)
+  // r108-d 技能使用计数（会话内派生值—— msgs 中 skillId 出现次数；弹层项右侧徽章展示，
+  // key 变化复用 probe-pop 弹跳——计数增加时新徽章弹入；必须在 early return 之前调用）
+  const skillCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const x of msgs) if (x.skillId) m[x.skillId] = (m[x.skillId] ?? 0) + 1
+    return m
+  }, [msgs])
   const scrollRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   /** 当前流式请求的中断器（停止生成按钮） */
@@ -642,7 +649,11 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                 [{ role: 'user', content: buildReportFillPrompt(skill, r.decision.reply, records, runtime) }],
                 buildSceneContext(),
               )
-              if (fill && isSkillReport(fill.reply)) patchAi({ content: fill.reply })
+              if (fill && isSkillReport(fill.reply)) {
+                // r108-c：filled 标记驱动报告卡闪高亮（数值真实化的可感知反馈）+ toast
+                patchAi({ content: fill.reply, filled: true })
+                toast.success(tt({ zh: '报告数值已按命令回执回填', en: 'Report values filled from command receipts' }))
+              }
             } catch { /* 回填失败保留草稿 */ }
           }
         }
@@ -871,6 +882,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                     m.kind === 'visual' && 'border-l-2 border-l-primary/70',
                     // 报告卡片：左主色边 + 浅主色底（与普通聊天气泡视觉分级）
                     isReport && 'border-l-2 border-l-primary bg-primary/[0.04]',
+                    // r108 回填完成闪高亮：数值从「—」占位变实测值的一次性可感知反馈（1.6s 淡出）
+                    isReport && m.filled && 'fill-flash',
                   ),
               )}
             >
@@ -1048,6 +1061,11 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                         <span className="block truncate text-[11px] font-medium">{t(s.name)}</span>
                         <span className="mt-0.5 block text-[9.5px] leading-snug text-muted-foreground line-clamp-2">{t(s.description)}</span>
                       </span>
+                      {(skillCounts[s.id] ?? 0) > 0 && (
+                        <span key={skillCounts[s.id]} className="probe-pop mt-px shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[9px] font-semibold text-primary" title={t({ zh: '本会话已使用次数', en: 'Times used in this session' })}>
+                          ×{skillCounts[s.id]}
+                        </span>
+                      )}
                     </button>
                   )
                 })}

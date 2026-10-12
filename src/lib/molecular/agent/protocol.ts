@@ -23,6 +23,8 @@ export interface AgentChatMessage {
   kind?: 'chat' | 'visual'
   /** r105 标准技能：本轮命中的技能 id（UI 徽章与报告卡片渲染用） */
   skillId?: string
+  /** r108 两段式回填完成标记：报告卡闪高亮（数值从「—」占位变实测值的可感知反馈） */
+  filled?: boolean
   /** 视觉自查消息附带的视口截图缩略图（JPEG data URL，≤320px 宽；持久化前剥离——体积） */
   image?: string
   /** 流式生成中（打字机光标显示；持久化前剥离——中断重载不再是流式态） */

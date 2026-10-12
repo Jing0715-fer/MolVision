@@ -4593,3 +4593,37 @@ Stage Summary:
 （r107 段 cron 补记，2026-10-12）15min webDevReview 巡检任务 #452981 创建成功但「Disabled due to exec limits exceeded」——账户级执行配额硬限第 20 次实证（r85-r106 连续 19 次 + 本轮），已删除清理。本轮重建待配额恢复；devd 看门狗（绝对阈值 + 斜率双闸）+ 三级 CI 门禁（guards 625 + smoke 6 + visual-baseline 3）继续作为巡检缺席期自愈防线。
 
 （r107 段 cron 补记更正，2026-10-12）巡检任务重建实测：#453107 创建（11:27:15）即「Disabled due to exec limits exceeded」（11:27:16）——账户级执行配额硬限第 21 次实证（r85-r107 连续 20 次 + 本轮），已删除清理。worklog r107 主段「本轮重建待配额恢复」表述据此更正为：配额仍未恢复，巡检缺席期防线不变——devd 看门狗（绝对阈值 + 斜率双闸）+ 三级 CI 门禁（guards 625 + smoke 6 + visual-baseline 3）。
+
+---
+Task ID: r108
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r107 实测建议两项【高】落地：①回执数值源扩容（计算类命令有界轮询 + hbonds 回执补键数）②回填 UX（fill-flash 闪高亮 + toast + 技能使用计数）；QA 门禁链全绿 + E2E 四组 + 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=ecc2ef3（r107 cron 补记态）；工作区干净；guards 实跑 625/625 = 本轮基线数；dev 200；dev.log 尾部零真 error（429 为 VLM 兜底限流噪音）；.agent/skills 四 SKILL 按流程读取恢复语境；r107 段「下一轮建议」第 1/2 项【高】= 本轮立项来源
+- 【改动·r108-a 计算类命令有界轮询】src/lib/molecular/agent/runner.ts：CALC_WAIT_PREFIXES（sasa/area/bsa/buried/xbsa/xburied）——回执 entry 含「计算中/computing」时记该 entry seq，300ms×16 拍轮询等待后续 out entry 落地（consoleLog seq 单调；完成日志必打——contacts.ts:341/367 与 sasa done 分支实证），有界 5s 超时走旧兜底；根修 r107 实测坐实的「700ms 单次延迟不够大结构 Web Worker」缺口
+- 【改动·r108-b hbonds 回执补键数】同文件：hbonds 开启类命令（off/0 跳过）轮询 useHBondStore（visible && !hb.computing——worker pending 期间 computing=true 挡住半成品读）有界 5.25s，statLine 双语追加进回执「氢键网络当前 N 条（其中涉水 M）/ H-bond network: currently N bonds (M water-involved)」——与 AgentPanel 运行时补充行同锚格式；mock-llm fillFromReceiptsByLabel 氢键分支补 EN 正则（H-bond network: currently (\d+) bonds）——r107 中文 only 正则的 EN 语言盲区补齐
+- 【改动·r108-c 回填 UX】①protocol.ts AgentChatMessage 增 filled?: boolean（持久化字段——重载后 flash 重播可接受）；②AgentPanel 回填成功处 patchAi({content, filled: true}) + toast.success 双语「报告数值已按命令回执回填」；③报告卡片 isReport && m.filled && 'fill-flash' 条件类；④globals.css @keyframes fill-flash（color-mix(in srgb, var(--primary) 16%, transparent) → transparent，1600ms ease-out 单次——动画结束回退卡片本身 bg-primary/[0.04]）
+- 【改动·r108-d 技能使用计数】AgentPanel skillCounts useMemo 派生值（msgs 统计 skillId 次数；首次踩坑放 early return 后被 react-hooks/rules-of-hooks 拦截——移到组件 hooks 区 pinnedSkill 旁）+ 技能弹层项右侧 ×N 徽章（probe-pop 弹跳复用，key=计数变化重播）
+- 【守卫 +12（625→637）】r108 独立注释块（r107 块后汇总段前）：计算轮询常量/落地锚 2 / 氢键 statLine/store 轮询锚 2 / mock 氢键 EN 正则锚 1 / protocol filled 字段锚 1 / 回填标记写入/toast 锚 2 / 闪高亮 class/keyframes 锚 2 / 技能计数派生/徽章文案锚 2——十二锚全环节防退化
+- 【QA】lint 0 · tsc src 零错误（全项目 5 历史基线错不变）· guards 637/637 · smoke 6/6（heavy 路径）· visual-baseline 3/3（漂移 0.00-0.03%）· dev.log 尾部零真 error
+- 【E2E-G3 纯函数】13/13 全过：技能总数 10 / matchSkill 八例（含单弱词防误触发 null / 特异性决胜三例） / isSkillReport / buildReportFillPrompt 标记开头+回执行进 prompt+无 runtime 无补充段；首次跑 4 个 FAIL 系断言自身措辞错误（「构象对比」不含 strong 词本就不触发——1 分低于阈值是设计行为；期望 undefined 应为 null——matchSkill 返回类型 AgentSkill | null）非代码回归，修正后全绿
+- 【E2E-M mock 直测】T1 EN 氢键回执链（H-bond network: currently 110 bonds 压平进回执行）→ ▌氢键条数：110 条 ✓；T2 ZH 回执链（氢键网络当前 8 条）→ 8 条 ✓；T3 无氢键回执 → 占位「—」保持（诚实优先）✓；普通模板路径零回归 ✓。首测 T1 失败根因：测试报文用真实换行——buildReportFillPrompt 组包时 replace(/\s+/g," ") 会压平，须模拟压平后形态（回执行尾部拼接）
+- 【E2E-G1 浏览器端到端（mock 供应商 openai→3999）】4HHB form submit ✓ · Ctrl+J ✓ · 'analyze the ligand binding pocket' 预览徽章 ✓ · 报告全节回填实测值：口袋残基 91 对（最近 D:HEM148 ↔ D:LYS66 2.06 Å）+ 氢键 494 条 + 接触对 91 对 + 4HHB/HEM×4 ✓ · fill-flash class 在 DOM ✓ · 独立 hbonds on 3.5 命令 statLine 实证（EN「H-bond network: currently 589 bonds (0 water-involved)」）✓ · 技能计数徽章 ×2（弹层 probe-pop）✓ · fetch 拦截 5 请求（技能+视觉+回填+独立轮+视觉）✓ · 全程 console errors 零 ✓
+- 【E2E-G4 回归】语言 EN→中文（lang=zh-CN）→ 中文 statLine 实证「氢键网络当前 349 条（其中涉水 0）」（3.2Å scope 过滤值；349<494<589 随距离上限递增自洽）✓ · 供应商清理（DELETE openai + setDefault zai，configs={} default=zai）✓ · console 零 error ✓
+- 【E2E 发现与实测结论】①G1 技能轮 hbonds statLine 未落地——preset publication 重渲染负载下 worker 检测超 5.25s 上界；但回填值依然正确（AgentPanel 运行时补充行读 hb.count=494 填进报告）——两段式架构按设计兜底，判定为可接受体验差异而非缺陷（独立命令轮实证 statLine 工作）；②r107 遗留「110 vs 494」之谜本轮解开：494 是 3.4Å scope 过滤后的真实值非全结构值（3.2→349 / 3.4→494 / 3.5→589 距离递增单调一致）——非 bug；③providers API 无 custom id——mock 供应商用 openai id 指向 3999 baseURL（r106/r107 的「custom」记载应为此用法）
+- 【坑（新入档）】①IM 显示层吃「[m」序列：python repr/git diff/终端输出的「[msgs」渲染成「sgs」（msgs 去掉 [m）——tsc/lint/rg \bsgs\b 零匹配与 od -c 十六进制正确内容实锤显示层假象；字节级核验须用 od -c，勿信 repr；②useMemo 放 early return（if (!open) return null）之后会 react-hooks/rules-of-hooks 报错——派生值 useMemo 须放组件 hooks 区；③matchSkill 返回 AgentSkill | null（非 undefined）——断言期望写 undefined 必假失败；④MultiEdit 声明原子但实测可部分应用（前 4 段生效后 1 段失败）——失败后须逐段 rg 验证实际应用状态再补编辑；⑤测试报文模拟回执形态须复现组包管线（buildReportFillPrompt 的 replace(/\s+/g," ") 压平）——真实换行会躲进第二条 receiptLine 失配；⑥mock 对「hbonds on 3.6」自由文本生成「hbonds on 3.2」（关键词模板写死参数）——E2E 断言勿依赖 mock 透传用户参数
+
+Stage Summary:
+- 交付一（r108-a）：计算类命令回执有界轮询——sasa/bsa/xbsa 的「后台计算中」占位回执升级为实测值落地（有界 5s，超时保旧兜底）；回填链「格式合规→数值真实」的最后一公里
+- 交付二（r108-b）：hbonds 回执补键数——statLine 双语（氢键网络当前 N 条/H-bond network: currently N bonds）+ mock EN 正则补齐；EN/ZH 双语言 E2E 实证（589 EN/349 ZH 条实测值入回执）
+- 交付三（r108-c/d）：回填 UX——fill-flash 闪高亮（1.6s 淡出）+ toast 双语 + 技能使用计数徽章（×N probe-pop 弹跳）；数值真实化首次有可感知反馈
+- 交付四（验证）：guards 625→637 全过 · smoke 6/6 · visual-baseline 3/3 · E2E 四组（G3 13/13 / M 三链 / G1 六项 / G4 双语）全绿零 console 错误；附带解开 r107「110 vs 494」之谜（scope 过滤真实值，非 bug）
+- 与用户指令对位：①「进行下一阶段开发」——r107 建议清单两项【高】+【中】第 3 项（部分）落地 ②「qa测试和e2e测试」——六道门禁 + 四组 E2E ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【高】G1 技能轮 statLine 超时根修：preset publication 重渲染负载下 worker 检测 >5.25s——方案 A：hbonds 轮询期间渲染拍降载（preset 后延迟触发检测）；方案 B：statLine 超时后在回填前补抓（AgentPanel 回填段已读 hb.count——把该值同时写进命令卡 output 即 UI 层补抓，5 行改动）；方案 B 优先
+  2. 【高】r107 建议第 1 项延续：两段式回填的真实 LLM 数值质量验证（本轮 mock 链与格式遵循已验，真实 GLM 的 EN 回执填中文报告跨语执行未实测；10 技能各抽 1 轮 A/B）
+  3. 【中】报告卡片 ▌数值节点击跳转（如口袋残基节 → zoom 口袋；氢键节 → hbonds 聚焦）——r106/r107 建议延续，将报告从只读升级为可交互分析入口
+  4. 【中】计算类轮询扩容到 contacts 大结构路径（contacts 当前同步——>10k 原子结构可能卡主线程；CALC_WAIT 框架零改动纯前缀追加）+ 视觉自查截图时机与 hbonds 检测的错峰
+  5. 【中】r104 建议延续：命令级 per-rep 着色（colorOverrides 限制）/ 视觉基线场景扩容（4 支新膜类模板入基线）
+  6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
