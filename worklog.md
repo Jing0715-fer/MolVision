@@ -4627,3 +4627,5 @@ Stage Summary:
   4. 【中】计算类轮询扩容到 contacts 大结构路径（contacts 当前同步——>10k 原子结构可能卡主线程；CALC_WAIT 框架零改动纯前缀追加）+ 视觉自查截图时机与 hbonds 检测的错峰
   5. 【中】r104 建议延续：命令级 per-rep 着色（colorOverrides 限制）/ 视觉基线场景扩容（4 支新膜类模板入基线）
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
+
+（r108 段 cron 补记，2026-10-12）15min webDevReview 巡检任务 #453831 创建（18:36:30）即「Disabled due to exec limits exceeded」（18:36:31）——账户级执行配额硬限第 22 次实证（r85-r107 连续 21 次 + 本轮），已删除清理。任务书已内嵌 r108 开发纪律（门禁链 637 基线 + kill 红线 + E2E 新坑 6 条 + 下轮优先级）——配额恢复后可直接重建。巡检缺席期防线不变：devd 看门狗（绝对阈值 + 斜率双闸）+ 三级 CI 门禁（guards 637 + smoke 6 + visual-baseline 3）。
