@@ -425,6 +425,8 @@ export function isSkillReport(content: string): boolean {
 /**
  * 把技能编译成注入 LLM 的指令段（route.ts 追加在 SYSTEM_PROMPT 之后）。
  * 三部分：命中声明 + 标准流程（步骤顺序不可省略）+ 固定报告格式（数值不许编造）。
+ * r107-a：报告格式段后附 few-shot 输出示例——单行 JSON（\n 为字面转义，不产生真实换行），
+ * 演示报告如何嵌进 reply 字段（r106 实测 GLM-4.6 懂格式但不懂「报告住在 JSON 字符串里」）。
  */
 export function buildSkillDirective(skill: AgentSkill): string {
   const steps = skill.workflow
@@ -433,6 +435,10 @@ export function buildSkillDirective(skill: AgentSkill): string {
   const sections = skill.report.sections
     .map(sec => `▌${sec.label.zh}：${sec.hint.zh}`)
     .join('\n')
+  // few-shot：单行 JSON（\\n 字面转义——行首锚定解析不受影响），章节取前两节演示嵌套方式
+  const sampleSections = skill.report.sections.slice(0, 2).map(sec => `▌${sec.label.zh}：…`).join('\\n')
+  const sampleFirstCmd = (skill.workflow[0]?.cmd ?? '').replace(/"/g, '\\"')
+  const sample = `{"reply":"【${skill.name.zh}报告】\\n${sampleSections}\\n…","commands":["${sampleFirstCmd}","…"]}`
   return `## 本次任务命中标准技能：${skill.name.zh}（${skill.id}）
 用户需求与该技能适用场景匹配。你必须按以下标准执行，不得自由发挥：
 
@@ -443,5 +449,49 @@ ${steps}
 【${skill.name.zh}报告】
 ${sections}
 
+### 输出示例（仅演示 JSON 结构与报告在 reply 字段内的嵌套方式——\\n 为转义换行；数值必须按实际场景与回执替换，章节按完整清单给全）
+${sample}
+
 报告完成后不要再附加其他寒暄文字；commands 按标准流程完整给出（含 ray 等导出类收尾命令）。`
+}
+
+// ---------- r107-b：技能报告两段式执行（回执数值回填） ----------
+// 根因（r106 E2E 实测坐实）：单轮架构里报告生成在命令执行之前——回执类数值（接触对数/
+// ΔSASA/RMSD/总面积等）只能合规写「—」。两段式：第一段照常流式出报告（「—」占位，用户
+// 立刻看到结构）；第二段在命令执行完毕后把「报告草稿 + 命令回执 + 运行时补充」二次送 LLM
+// 回填实测数值——报告从「格式合规」升级到「数值真实」。
+
+/** 回填消息固定开头标记（前端组包 + mock 检测共用——单站点定义防两端漂移） */
+export const REPORT_FILL_MARKER = '【报告回执回填】'
+
+/** 单条命令回执（AgentPanel 从 runTurn 的执行记录提取） */
+export interface SkillReceipt {
+  cmd: string
+  output?: string
+}
+
+/**
+ * 组装两段式回填的用户消息（自包含：草稿 + 回执 + 运行时补充；无需对话历史）。
+ * 走普通对话路径（不带 skillId——不重注技能流程与命令回放，避免 mock/LLM 把回填当成
+ * 新一轮技能执行）。runtime 为前端可取的实时事实（如氢键网络当前条数）——回执文本
+ * 之外的补充数值源。
+ */
+export function buildReportFillPrompt(skill: AgentSkill, draft: string, receipts: SkillReceipt[], runtime?: string): string {
+  const receiptLines = receipts
+    .filter(r => r.output)
+    .slice(-10)
+    .map(r => `- ${r.cmd} → ${(r.output ?? '').replace(/\s+/g, ' ').slice(0, 260)}`)
+    .join('\n')
+  const runtimeLine = runtime?.trim() ? `\n\n运行时补充：${runtime.trim().slice(0, 160)}` : ''
+  return `${REPORT_FILL_MARKER}（系统任务，非用户发言）
+标准技能「${skill.name.zh}」的报告草稿与命令执行回执如下。请把草稿回填为实测数值版报告：
+- 保持格式与节结构完全不变：首行【${skill.name.zh}报告】标题 + 每节一行 ▌ 开头、节名与顺序不动
+- 回执中有的数值以回执为准（覆盖草稿占位值）；回执中确实没有的保留草稿原值（「—」保持「—」，绝不编造）
+- 只输出回填后的完整报告文本，不要输出其他任何文字
+
+报告草稿：
+${draft}
+
+命令回执（cmd → output）：
+${receiptLines}${runtimeLine}`
 }

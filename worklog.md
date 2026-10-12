@@ -4558,3 +4558,36 @@ Stage Summary:
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
 
 （r106 段 cron 补记，2026-10-10）15min webDevReview 巡检任务 #452981 创建成功（`0 */15 * * * ?` 6 字段格式——首次 `*/15 * * * * ?` 被解析为 15 秒间隔拒建，秒字段须显式 0）。任务书已内嵌 r106 开发纪律（.agent/skills/ 四 SKILL 引用 + 门禁链 614 基线 + kill 红线 + E2E 新坑 4 条 + 下轮优先级）。若创建即 Disabled（配额硬限——r85-r105 连续 19 次实证）则按惯例删除清理并以此补记为准。
+---
+Task ID: r107
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r106 实测建议清单两项【高】全落地：①真实 LLM 报告格式遵循度根修（recency 加固 + few-shot）②技能报告两段式执行（命令回执数值回填——「格式合规」→「数值真实」）；QA 门禁链全绿 + E2E 四组 + 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=39977d4（r106 cron 补记态——巡检自动提交的非语义改动：6 文件 mode + 9 同字节 PNG）；工作区干净；guards 实跑 614/614 = 本轮基线数；dev 200；dev.log 尾部连续 GET/POST 200 零真 error；cron 任务 #452981 已创建但「Disabled due to exec limits exceeded」（配额硬限第 20 次实证——r85-r106 连续 19 次 + 本轮）按惯例删除清理；.agent/skills 四 SKILL 按流程读取恢复语境；r106 段「下一轮建议」第 1/2 项【高】= 本轮立项来源
+- 【改动·r107-a 技能格式 recency 加固】src/app/api/agent/route.ts：SKILL_FORMAT_SUFFIX（双语）——matchedSkill 命中时末条 user 消息在 PROTOCOL_SUFFIX 后追加技能格式短提醒（「reply 必须以【{技能名}报告】开头、每节一行 ▌ 开头、节名与系统提示一致、取不到写—」），与协议提醒同 recency 层级；无技能命中为空串零影响。src/lib/molecular/agent/skills.ts buildSkillDirective：报告格式段后新增「### 输出示例」few-shot——单行 JSON（\n 字面转义非真实换行）演示报告嵌在 reply 字段内的形态（r106 实测 GLM 懂格式但不懂「报告住在 JSON 字符串里」）；章节取前两节演示嵌套、首命令入 commands 示例
+- 【改动·r107-b 两段式执行（前端）】①skills.ts 新增 REPORT_FILL_MARKER 常量 + SkillReceipt 接口 + buildReportFillPrompt 纯函数（自包含回填消息：草稿 + 回执 10 条内 + 运行时补充；「回执为准/取不到保持—/绝不编造」三纪律；走普通对话路径不带 skillId——不重注技能流程）；②AgentPanel.tsx runTurn 签名升级 Promise<AgentCmdRecord[]>——修正轮/视觉修正轮递归子轮 records 合并返回（回执来源）；③send 在 runTurn 完毕后：skill && isSkillReport(草稿) && 有 ok 回执 → setPhase('fill') → useHBondStore.getState() 取氢键实时计数组运行时补充行 → callAgent 二次调用 → isSkillReport(fill.reply) 卡点通过才 patchAi 覆盖（填错不破坏原报告）；④chat-store BusyPhase 增 'fill'；⑤phaseLabel/phaseHint 增 fill 双语文案（回填报告数值 / 命令回执 → 实测数值）
+- 【改动·r107-b mock 侧】mini-services/mock-llm/index.ts：①buildDecision 新增 0.4 回填分支（先于 0.5 技能分支）——末条 user 以【报告回执回填】开头时走 fillReportFromReceipts；②fillReportFromReceipts：草稿段/回执段/运行时补充三段解析（回执行以 ' → ' 分隔符唯一判据；运行时正则带 m 标志——E2E 实测踩坑：PROTOCOL_SUFFIX 在消息末尾，无 m 时该行不在字符串结尾恒失配）→ 逐 ▌ 节行只回填占位值（—/后台计算中），节域正则提取实测值，提取不到保持原值（诚实优先）；③fillFromReceiptsByLabel 节域正则中英双语（E2E 实测坐实：应用 console 回执随界面语言，EN 语言下中文-only 正则全失配——contacts「N residue-pair contacts」/ bsa「ΔSASA…total N Å²」/ sasa「SASA…total N Å² · hydrophobic…· polar…」/ symmetry「N symmetry mates generated」/ nearest 距离）
+- 【坑（本轮新入档）】①TS 模板字面量里写「\n 为转义换行」的注释文案，\n 会被解析成真实换行把标题行劈两半——须写 \\n（G3 直测当场抓获）②mock 供应商 apiKey 必须为 test-key-12345（r106 E2E 用过但 worklog 未记录——本轮 401 重查源码坐实）③agent-browser 拦截器抓的 body 截 2000 字符 JSON.parse 会炸——用 indexOf 切片检查④两段式回填的浏览器断言要等足够久：命令 5 步 + 视觉自查 + 回填往返，25s 快照时仍见「—」属过早——两次误判后第三次确认全链已应用（教训：对异步多段流程的断言轮询要有界等待而非单点快照）⑤AgentPanel 发送按钮 aria-label 是「Send to AI assistant」（EN）——按 aria-label 找而非 lucide svg class；ta.form.requestSubmit() 不触发 send（按钮 onClick 才是处理器）
+- 【守卫 +11（614→625）】r107 独立注释块（r106 块后汇总段前，插入前 rg 复核零 r107 痕迹）：route recency 锚 2 / few-shot 示例锚 2 / 回填标记单站点锚 2 / 回填 prompt 构建锚 3 / 回填格式卡点锚 1 / runTurn 回执返回锚 1 / fill 阶段锚 3 / BusyPhase fill 锚 1 / mock 回填分支锚 2 / mock 节域提取锚 2 / mock 回填标记同步锚 2——十一锚全环节防退化（含 REPORT_FILL_MARKER 值与 mock 检测串双站点同步哨兵）
+- 【QA】lint 0 · bunx tsc --noEmit 全项目 5 历史基线错不变（mock-llm Bun 错行号 490→567 随文件增长位移、内容不变；src/ 零）· guards 625/625 · smoke 6/6（heavy 路径）· visual-baseline 3/3（漂移 0.00-0.02%）· dev.log 尾部零真 error（唯一 429 为 E2E 期间 VLM 兜底通道瞬时限流——请求本身 200、视觉自查 try/catch 兜底，测试自致负载非代码回归）
+- 【E2E-G3 纯函数（bun 直跑）】注入段 few-shot：示例标题行存在 ✓ · 示例为单行 JSON 且 \n 字面转义 ✓ · 章节行数仍为 5（示例不污染 mock 行首锚解析）✓ · buildReportFillPrompt：固定标记开头 ✓ · 草稿段/回执行（→ 分隔）/运行时补充 ✓ · 不编造纪律文案 ✓ · 无 runtime 无补充段 ✓ · 无 output 回执过滤 ✓ · isSkillReport 不认【回填失败】错误态（保留草稿是对的）✓ · matchSkill 零回归 ✓
+- 【E2E-M mock 直测（curl 级）】ZH 回执链：口袋残基/接触对 42 对（含最近残基对与距离）+ 氢键 8 条（运行时）✓ · 结构配体/建议等草稿已有值不覆盖 ✓ · commands 恒 [] ✓ · 标题与节结构保持 ✓；EN 回执链：91 对（residue-pair contacts 双语正则）+ 氢键 494 条 ✓ · ZH 回执链回归 ✓
+- 【E2E-G1 浏览器端到端（mock 供应商）】4HHB PDB 表单加载（native setter + requestSubmit，__molData.size=1）✓ · Ctrl+J 面板 ✓ · 'analyze the ligand binding pocket' 预览徽章 Skill detected ✓ · fetch 拦截捕获 3 请求：skillId 请求 + 视觉自查（image）+ 回填（【报告回执回填】标记）✓ · 草稿先以「—」占位流式呈现 ✓ · 5 条 workflow 命令执行（contacts 回执 91 residue-pair contacts · nearest D:HEM148 ↔ D:LYS66 2.06 Å）✓ · 回填后报告卡实测值：口袋残基 91 对（最近 D:HEM148 ↔ D:LYS66 2.06 Å）+ 氢键 110 条（运行时实时计数）+ 接触对 91 对 ✓ · 全程 console errors 零 ✓
+- 【E2E-真实 LLM A/B 遵循度实测（r107-a 核心验证）】默认供应商切 zai（GLM-4.6 沙箱内置 SDK）POST /api/agent 带 skillId=ligand-pocket：reply 以【配体口袋分析报告】开头 PASS · 5 节 ▌ 行全渲染 PASS · 无前置散文 PASS · workflow contacts 首位 PASS · 命令 5 条 PASS ——与 r106 同一测试对比（命令 5/5 遵循但报告格式 0%——英文散文）：recency 加固 + few-shot 双管齐下后报告格式遵循 0% → 100%；GLM 甚至从场景推断血红素口袋经典残基（HIS F8/E7 等——4HHB 真实口袋残基，非编造）。测毕恢复 zai 默认 + DELETE custom 配置（configs={} default=zai）
+- 【E2E-G4 轻量复核】技能选择器按钮在（title 锚「标准技能库」）✓ · 语言切换入口在 ✓ · 膜路径未触碰（r106 已深度验证——本轮改动零触及，按最小回归面纪律跳过）
+
+Stage Summary:
+- 交付一（r107-a）：真实 LLM 报告格式遵循度根修——SKILL_FORMAT_SUFFIX recency 加固（与 PROTOCOL_SUFFIX 同机制的近距离锚）+ 注入段 few-shot JSON 嵌套示例；实测 GLM-4.6 报告格式遵循 0% → 100%（r106 实测缺口的闭环）
+- 交付二（r107-b）：技能报告两段式执行——第一段照常流式出「—」占位报告（用户立刻看到结构），第二段命令执行完毕后「草稿+回执+运行时补充」二次送 LLM 回填实测数值；mock 节域正则中英双语；报告从「格式合规」升级到「数值真实」（浏览器端到端：91 对接触 + 最近残基对 2.06 Å + 110 条氢键全实测）
+- 交付三（验证）：guards 614→625 全过 · smoke 6/6 · visual-baseline 3/3 · E2E 四组（G3 纯函数 / M mock 直测双语 / G1 浏览器端到端含回填断言 / 真实 LLM A/B）全绿零 console 错误
+- 与用户指令对位：①「进行下一阶段开发」——r106 建议清单两项【高】全落地 ②「qa测试和e2e测试」——六道门禁 + 四组 E2E ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【高】两段式回填的真实 LLM 数值质量验证（本轮验证了 mock 链与格式遵循，真实 GLM 的回填数值准确性未实测——EN 语言下 GLM 读英文回执填中文报告的跨语执行；A/B：草稿 vs 回填数值与命令回执一致性人工比对 + 10 技能各抽 1 轮）
+  2. 【高】回执数值源扩容（本轮实测坐实的缺口）：hbonds 命令回执只含烘焙范围原子数不含键数（运行时补充线单点兜底）；bsa/xbsa/sasa 回执在技能执行时序里常为「后台计算中」——回填等待窗口（ASync 命令二次抓取 700ms 不够大结构 Web Worker）；方案：execAgentCmd 对计算类命令轮询回执至落地（有界 5s）或 fill 前置延迟
+  3. 【中】回填 UX 增强：报告卡「—」→实测值变化时闪高亮（数值真实化的可感知反馈）+ 回填差异 tooltip（哪些节被回执覆盖）
+  4. 【中】技能选择器增强延续（r106 建议第 3 项未做）：芯片栏横向滚动 + 技能使用计数 + 报告卡片 ▌数值节点击跳转
+  5. 【中】r104 建议延续：命令级 per-rep 着色（colorOverrides 限制）/ 视觉基线场景扩容（4 支新膜类模板入基线）
+  6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
+
+（r107 段 cron 补记，2026-10-12）15min webDevReview 巡检任务 #452981 创建成功但「Disabled due to exec limits exceeded」——账户级执行配额硬限第 20 次实证（r85-r106 连续 19 次 + 本轮），已删除清理。本轮重建待配额恢复；devd 看门狗（绝对阈值 + 斜率双闸）+ 三级 CI 门禁（guards 625 + smoke 6 + visual-baseline 3）继续作为巡检缺席期自愈防线。

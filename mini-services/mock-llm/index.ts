@@ -265,6 +265,78 @@ function fillSkillReportValue(skillId: string, label: string, scene: SceneFacts 
   }
 }
 
+// ---------- r107 两段式回填（mock 侧） ----------
+// 解析回填 prompt（草稿 + 命令回执 + 运行时补充）→ 占位值按节域正则从回执提取实测值。
+// 与真实 LLM 的语义匹配等价的机械版：节域名 → 回执文案正则（contacts「N 对残基接触」/
+// bsa「合计 N Å²」/ sasa「总计 N Å²」/ symmetry「已生成 N 个对称伴侣」/ 运行时「氢键网络
+// 当前 N 条」）。提取不到保持原值——绝不编造（与技能注入段「取不到写—」同一纪律）。
+
+/** 节域名 → 回执正则提取（src = 回执行文本 + 运行时补充拼接）。
+ *  r107 双语：应用 console 回执随界面语言（ZH「N 对残基接触」/ EN「N residue-pair
+ *  contacts」）——E2E 实测 EN 语言下中文-only 正则全数失配，占位值无法回填。 */
+function fillFromReceiptsByLabel(label: string, src: string): string | null {
+  // 接触对/口袋残基/接触残基类：contacts 回执 + 最近接触（残基对 + 距离）
+  if (/接触对|接触残基|口袋残基/.test(label)) {
+    const m = /(\d+) 对(跨结构)?残基接触/.exec(src) ?? /(\d+) (?:cross-structure )?residue-pair contacts/.exec(src)
+    if (!m) return null
+    const near = /最近 (\S+ ↔ \S+) ([\d.]+) Å/.exec(src) ?? /nearest (\S+ ↔ \S+) ([\d.]+) Å/.exec(src)
+    return near ? `${m[1]} 对（最近 ${near[1]} ${near[2]} Å）` : `${m[1]} 对`
+  }
+  if (/氢键条数|^氢键$/.test(label)) {
+    const m = /氢键网络当前 (\d+) 条/.exec(src)
+    return m ? `${m[1]} 条` : null
+  }
+  if (/埋藏面积/.test(label)) {
+    const m = /合计 (\d+) Å²/.exec(src) ?? /ΔSASA[\s\S]*?total (\d+) Å²/.exec(src)
+    return m ? `${m[1]} Å²` : null
+  }
+  if (/总面积/.test(label)) {
+    const m = /总计 (\d+) Å²/.exec(src) ?? /SASA[\s\S]*?total (\d+) Å²/.exec(src)
+    return m ? `${m[1]} Å²` : null
+  }
+  if (/疏水与极性/.test(label)) {
+    const m = /疏水 (\d+) · 极性 (\d+)/.exec(src) ?? /hydrophobic (\d+) · polar (\d+)/.exec(src)
+    return m ? `疏水 ${m[1]} Å² · 极性 ${m[2]} Å²` : null
+  }
+  if (/伴侣数/.test(label)) {
+    const m = /已生成 (\d+) 个对称伴侣/.exec(src) ?? /(\d+) symmetry mates generated/.exec(src)
+    return m ? `${m[1]} 个` : null
+  }
+  if (/距离/.test(label)) {
+    const m = /最近 \S+ ↔ \S+ ([\d.]+) Å/.exec(src) ?? /nearest \S+ ↔ \S+ ([\d.]+) Å/.exec(src)
+    return m ? `${m[1]} Å` : null
+  }
+  if (/RMSD/i.test(label)) {
+    const m = /RMSD ([\d.]+)/.exec(src)
+    return m ? `${m[1]} Å` : null
+  }
+  return null
+}
+
+/** 回填 prompt → 回填后的报告（格式与节结构原样保持，仅占位值替换为实测值） */
+function fillReportFromReceipts(text: string): { reply: string; commands: string[] } {
+  // 草稿段：'报告草稿：\n' 之后到 '\n\n命令回执' 前；回执段：'命令回执' 标记之后
+  const draftMatch = /报告草稿：\n([\s\S]*?)\n\n命令回执/.exec(text)
+  const draft = draftMatch ? draftMatch[1].trim() : ''
+  const receiptPart = text.split('命令回执（cmd → output）：')[1] ?? ''
+  // 回执行 '- cmd → output'（指令行无 ' → '——cmd/output 分隔符是唯一判据）
+  const receiptLines = [...receiptPart.matchAll(/^- (.+?) → (.+)$/gm)].map(m => `${m[1]} ${m[2]}`)
+  const rtMatch = /运行时补充：(.+)$/m.exec(text)
+  const src = `${receiptLines.join('\n')}\n${rtMatch ? rtMatch[1] : ''}`
+  if (!draft) return { reply: '【回填失败】草稿段解析失败', commands: [] }
+  const filled = draft.split('\n').map(line => {
+    const sec = /^▌([^：]+)：(.*)$/.exec(line)
+    if (!sec) return line
+    const [, label, value] = sec
+    // 只回填占位值（「—」/「后台计算中」）——草稿已有实测值不覆盖（保守策略，与
+    // 「回执为准」指令的差异仅在于 mock 无法语义判定草稿值是否可被回执覆盖）
+    if (value !== '—' && !/后台计算中/.test(value)) return line
+    const v = fillFromReceiptsByLabel(label, src)
+    return v ? `▌${label}：${v}` : line
+  }).join('\n')
+  return { reply: filled, commands: [] }
+}
+
 /** 关键词 → AgentDecision 协议模板（commands 覆盖全命令面；顺序具体优先于宽泛） */
 function buildDecision(messages: MockMessage[]): { reply: string; commands: string[] } {
   // 多模态兼容：content 可能是 OpenAI 视觉格式的数组——归一化为纯文本再走模板
@@ -315,6 +387,13 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
       '视觉自查通过：渲染结果与用户目标一致，无需修正。',
       'Visual check passed: the render matches the goal — no corrections needed.',
       [])
+  }
+
+  // 0.4 r107 报告回执回填分支（两段式第二段）：末条 user 消息以【报告回执回填】开头时，
+  //     解析「草稿 + 命令回执 + 运行时补充」→ 占位值（— / 后台计算中）按节域正则从回执
+  //     提取实测值（提取不到保持「—」——诚实优先）；commands 恒为 []（回填只改文稿）。
+  if (lastUser.startsWith('【报告回执回填】')) {
+    return fillReportFromReceipts(lastUser)
   }
 
   // 0.5 r106 技能感知分支（先于关键词模板：技能命中时标准流程优先）。commands 按注入段

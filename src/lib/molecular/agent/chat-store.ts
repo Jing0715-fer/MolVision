@@ -14,7 +14,7 @@ import { tt } from '@/i18n'
 import { AGENT_CHAT_KEY, AGENT_CHAT_MAX, AGENT_VISUAL_KEY, type AgentChatMessage, type AgentCmdRecord } from './protocol'
 
 /** 忙碌阶段（思考 → 流式生成 → 执行 → 视觉自查） */
-export type BusyPhase = 'think' | 'stream' | 'exec' | 'visual'
+export type BusyPhase = 'think' | 'stream' | 'exec' | 'visual' | 'fill'
 
 /** localStorage 键（多会话 v1；旧单会话键 molvision-agent-chat 自动迁移为首个会话） */
 const SESSIONS_KEY = 'molvision-agent-sessions-v1'

@@ -17,8 +17,11 @@ import { SESSIONS_MAX, sessionTimeLabel, useAgentChatStore } from '@/lib/molecul
 import {
   AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentStreamEvent,
 } from '@/lib/molecular/agent/protocol'
-// r105 标准技能：发送前本地匹配（matchSkill），报告文稿标记检测（isSkillReport）驱动卡片渲染
-import { AGENT_SKILLS, matchSkill, isSkillReport, type AgentSkill } from '@/lib/molecular/agent/skills'
+// r105 标准技能：发送前本地匹配（matchSkill），报告文稿标记检测（isSkillReport）驱动卡片渲染；
+// r107-b 两段式：buildReportFillPrompt 组回填消息（命令回执 → 实测数值）
+import { AGENT_SKILLS, matchSkill, isSkillReport, buildReportFillPrompt, type AgentSkill } from '@/lib/molecular/agent/skills'
+// r107-b 运行时补充数值源：氢键网络实时计数（状态徽章同源——回执文本之外的数值补充）
+import { useHBondStore } from '@/lib/molecular/hbond-store'
 import { ProviderSettingsDialog, type ProviderInfo } from './ProviderSettingsDialog'
 import { cn } from '@/lib/utils'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -473,8 +476,10 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
    *   有界防循环，同时保证「修正 → 复查 → 直到效果理想」的闭环；修正轮的 imageBefore
    *   传入上一轮自查截图，VLM 可验证修正是否真实生效）。
    * imageBefore：本轮命令执行前的视口截图（视觉自查前后对比——判断变化是否真实发生）。
+   * 返回：本轮（含修正/视觉修正子轮递归合并）全部命令的执行记录——r107-b 两段式回填的
+   * 回执来源（回执文本里的接触对数/ΔSASA 等实测数值）。
    */
-  const runTurn = useCallback(async (msgId: string, cmds: string[], depth: number, priorMsgs: AgentChatMessage[], visualBudget: number, imageBefore?: string) => {
+  const runTurn = useCallback(async (msgId: string, cmds: string[], depth: number, priorMsgs: AgentChatMessage[], visualBudget: number, imageBefore?: string): Promise<AgentCmdRecord[]> => {
     const records: AgentCmdRecord[] = cmds.map(cmd => ({ cmd, status: 'pending' as const }))
     patchCmds(msgId, records)
     for (let i = 0; i < records.length; i++) {
@@ -517,7 +522,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           commands: fixCmds.length ? fixCmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
         }
         setMsgs(m => [...m, fixMsg])
-        if (fixCmds.length) { await runTurn(fixId, fixCmds, depth + 1, [...priorMsgs, fixMsg], visualBudget, imageBefore); fixTurnRan = true }
+        if (fixCmds.length) { records.push(...(await runTurn(fixId, fixCmds, depth + 1, [...priorMsgs, fixMsg], visualBudget, imageBefore))); fixTurnRan = true }
       }
     }
     // 视觉自查：修正轮已自带自查（同一画面不再重复检查，节省一次 VLM 调用）
@@ -550,12 +555,14 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
             if (revCmds.length) {
               setPhase('exec')
               // 修正轮消耗一次自查预算；上轮截图作为 before，VLM 可验证修正真实生效
-              await runTurn(revId, revCmds, depth, [...priorMsgs, revMsg], visualBudget - 1, shot)
+              records.push(...(await runTurn(revId, revCmds, depth, [...priorMsgs, revMsg], visualBudget - 1, shot)))
             }
           }
         } catch { /* 截图/VLM 失败不影响主流程 */ }
       }
     }
+    // r107-b：返回本轮全部执行记录（含递归子轮）——两段式回填的回执来源
+    return records
   }, [patchCmds, buildApiHistory, buildMemoryDigest, visualOn])
 
   const send = useCallback(async (text: string) => {
@@ -620,7 +627,24 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
             } catch { before = undefined }
             if (!before) before = undefined
           }
-          await runTurn(aiId, cmds, 0, [...history, aiMsg], 2, before)
+          const records = await runTurn(aiId, cmds, 0, [...history, aiMsg], 2, before)
+          // r107-b 技能报告两段式：命令回执落地后二次回填。第一段报告以「—」占位流式呈现
+          //（用户立刻看到结构），此处把「草稿 + 命令回执 + 运行时补充」送 LLM 回填实测数值
+          //（接触对数/ΔSASA/氢键条数等——报告从「格式合规」升级到「数值真实」）。回填走普通
+          // 对话路径（不带 skillId——不重注技能流程与命令回放）；回填失败或格式不合规保留
+          // 草稿（isSkillReport 卡点——填错不破坏原报告）。
+          if (skill && isSkillReport(r.decision.reply) && records.some(x => x.status === 'ok' && x.output)) {
+            setPhase('fill')
+            try {
+              const hb = useHBondStore.getState()
+              const runtime = hb.visible ? `氢键网络当前 ${hb.count} 条（其中涉水 ${hb.waterCount}）` : ''
+              const fill = await callAgent(
+                [{ role: 'user', content: buildReportFillPrompt(skill, r.decision.reply, records, runtime) }],
+                buildSceneContext(),
+              )
+              if (fill && isSkillReport(fill.reply)) patchAi({ content: fill.reply })
+            } catch { /* 回填失败保留草稿 */ }
+          }
         }
       } else if (r.kind === 'aborted') {
         ensureMsg()
@@ -671,8 +695,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
   if (!open) return null
 
-  const phaseLabel = phase === 'think' ? t({ zh: '正在思考', en: 'Thinking' }) : phase === 'stream' ? t({ zh: '回复生成中', en: 'Generating reply' }) : phase === 'exec' ? t({ zh: '正在执行命令', en: 'Running commands' }) : t({ zh: '视觉自查中', en: 'Visual self-check' })
-  const phaseHint = phase === 'visual' ? t({ zh: '审视渲染结果', en: 'Reviewing the render' }) : phase === 'exec' ? t({ zh: '命令将自动执行', en: 'Commands run automatically' }) : phase === 'stream' ? t({ zh: '逐字生成，可随时停止', en: 'Streaming — stop anytime' }) : t({ zh: '理解你的需求', en: 'Understanding your request' })
+  const phaseLabel = phase === 'think' ? t({ zh: '正在思考', en: 'Thinking' }) : phase === 'stream' ? t({ zh: '回复生成中', en: 'Generating reply' }) : phase === 'exec' ? t({ zh: '正在执行命令', en: 'Running commands' }) : phase === 'fill' ? t({ zh: '回填报告数值', en: 'Filling report values' }) : t({ zh: '视觉自查中', en: 'Visual self-check' })
+  const phaseHint = phase === 'visual' ? t({ zh: '审视渲染结果', en: 'Reviewing the render' }) : phase === 'exec' ? t({ zh: '命令将自动执行', en: 'Commands run automatically' }) : phase === 'fill' ? t({ zh: '命令回执 → 实测数值', en: 'Command receipts → measured values' }) : phase === 'stream' ? t({ zh: '逐字生成，可随时停止', en: 'Streaming — stop anytime' }) : t({ zh: '理解你的需求', en: 'Understanding your request' })
   // 思考/流式阶段 LLM 请求可中断；命令执行与视觉自查阶段不可（停止无意义）
   const canAbort = busy && (phase === 'think' || phase === 'stream')
   // r106 技能选择器：输入预览所见的技能 = 固定技能优先，否则自然语言匹配（与发送时同一

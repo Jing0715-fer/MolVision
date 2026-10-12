@@ -1027,6 +1027,39 @@ check "mock场景结构替换锚"     "substituteSceneStructs" "mini-services/mo
 # ⑩mock 注入段标记锚（实测 2——与 buildSkillDirective 输出的标记串一致〔注释+正则〕；标记改文案两侧不同步即 FAIL）
 check "mock注入段标记锚"       "本次任务命中标准技能" "mini-services/mock-llm/index.ts" 2
 
+# ---- r107：真实 LLM 报告格式 recency 加固 + 技能报告两段式执行（回执数值回填） ----
+# 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」
+# ——r106 E2E 实测坐实的两大缺口根修：
+# ①真实 LLM 报告格式遵循率 0（注入段在系统提示位、recency 弱于 PROTOCOL_SUFFIX——英文
+#   散文覆盖固定格式）：route.ts 末条 user 消息追加 SKILL_FORMAT_SUFFIX（与协议提醒同
+#   机制的近距离锚）+ skills.ts 注入段附 few-shot JSON 嵌套示例（单行、\n 字面转义）；
+# ②报告回执类数值恒为「—」的单轮架构根因：两段式——runTurn 返回执行记录 → AgentPanel
+#   在命令执行完毕后把「草稿+回执+运行时补充」二次送 LLM 回填（isSkillReport 卡点——
+#   回填不合规保留草稿）；mock-llm 新增 0.4 回填分支（节域正则机械提取，诚实优先）。
+# 以下十一锚防各环节被改写/删除静默退化（实测数见各行注释；括号/管道转义沿 r105-r106 手法）：
+# ①route 技能格式 recency 锚（实测 2——SKILL_FORMAT_SUFFIX 定义+末条 user 消息拼接；删则真实 LLM 报告格式遵循率回退）
+check "route技能格式recency锚"  "SKILL_FORMAT_SUFFIX" "src/app/api/agent/route.ts" 2
+# ②注入段 few-shot 示例锚（实测 2——示例标题行+文档注释；删则 LLM 不知报告嵌在 JSON reply 字段内）
+check "注入段few-shot示例锚"    "输出示例" "src/lib/molecular/agent/skills.ts" 2
+# ③回填消息标记单站点锚（实测 2——REPORT_FILL_MARKER 定义+组包引用；改值须两端同步否则 mock 分支失聪）
+check "回填标记单站点锚"        "REPORT_FILL_MARKER" "src/lib/molecular/agent/skills.ts" 2
+# ④回填 prompt 构建锚（实测 3——注释+import+调用；删则两段式第二段无消息可发）
+check "回填prompt构建锚"        "buildReportFillPrompt" "src/components/studio/AgentPanel.tsx" 3
+# ⑤回填格式卡点锚（实测 1——isSkillReport(fill.reply)；删则回填散文直接覆盖报告草稿）
+check "回填格式卡点锚"          "isSkillReport\(fill.reply\)" "src/components/studio/AgentPanel.tsx" 1
+# ⑥runTurn 回执返回锚（实测 1——return records；删则回填无回执来源）
+check "runTurn回执返回锚"       "return records" "src/components/studio/AgentPanel.tsx" 1
+# ⑦fill 阶段锚（实测 3——setPhase+标签+提示文案；删则回填期间无进度反馈）
+check "fill阶段锚"              "'fill'" "src/components/studio/AgentPanel.tsx" 3
+# ⑧BusyPhase fill 锚（实测 1——chat-store 联合类型字面段；删则 setPhase('fill') tsc 报错）
+check "BusyPhasefill锚"         "'visual' \| 'fill'" "src/lib/molecular/agent/chat-store.ts" 1
+# ⑨mock 回填分支锚（实测 2——fillReportFromReceipts 定义+0.4 分支调用；删则 mock 把回填当普通对话）
+check "mock回填分支锚"          "fillReportFromReceipts" "mini-services/mock-llm/index.ts" 2
+# ⑩mock 节域提取锚（实测 2——fillFromReceiptsByLabel 定义+调用；删则回填永远 —）
+check "mock节域提取锚"          "fillFromReceiptsByLabel" "mini-services/mock-llm/index.ts" 2
+# ⑪mock 回填标记同步锚（实测 2——分支注释+startsWith 检测；与 skills.ts REPORT_FILL_MARKER 值双站点同步哨兵）
+check "mock回填标记同步锚"      "报告回执回填" "mini-services/mock-llm/index.ts" 2
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

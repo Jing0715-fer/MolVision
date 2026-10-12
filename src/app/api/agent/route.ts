@@ -529,6 +529,15 @@ export async function POST(req: Request) {
   const matchedSkill = body.skillId ? AGENT_SKILLS.find(s => s.id === body.skillId) : undefined
   const systemPrompt = matchedSkill ? `${SYSTEM_PROMPT}\n\n${buildSkillDirective(matchedSkill)}` : SYSTEM_PROMPT
 
+  // r107-a 技能格式 recency 加固：注入段在首条 assistant 消息（系统提示位），距回复生成隔
+  // 全部对话历史——r106 E2E 实测 GLM-4.6 命令序列严格遵循（5 步全对）但报告格式遵循率 0
+  // （英文散文覆盖了注入段的【…报告】固定格式）。与 PROTOCOL_SUFFIX 同机制：末条 user
+  // 消息追加技能格式短提醒（recency 与协议提醒同级——注入段与生成点之间的近距离锚）；
+  // 无技能命中时为空串，普通对话零影响。
+  const SKILL_FORMAT_SUFFIX = matchedSkill ? (locale === 'en'
+    ? `\n[Skill format reminder] This turn matched standard skill "${matchedSkill.name.en}" (${matchedSkill.id}). Inside that JSON object, the "reply" field MUST be exactly the fixed-format report: first line 【${matchedSkill.name.zh}报告】, then one line per report section, each starting with ▌ (section labels identical to the skill directive in the system prompt). Numbers only from command receipts & scene info; write "—" when unavailable. No prose before or after the report.`
+    : `\n【技能格式提醒】本轮命中标准技能「${matchedSkill.name.zh}」（${matchedSkill.id}）。上述 JSON 对象的 "reply" 字段必须是固定格式报告：首行【${matchedSkill.name.zh}报告】，随后每节一行、以 ▌ 开头（节名与系统提示技能指令中的固定章节完全一致）；数值只取命令回执与场景信息，取不到写「—」；报告前后不要有任何寒暄或说明文字。`) : ''
+
   const messages: ZAIMessage[] = [
     { role: 'assistant', content: systemPrompt + langDirective(locale) },
     // 场景上下文（含长期记忆）以首条 user 消息注入（每次请求都是最新快照）；
@@ -538,7 +547,7 @@ export async function POST(req: Request) {
     { role: 'assistant', content: '已了解当前场景。请讲。' },
     ...history.map((m, i) => ({
       role: m.role,
-      content: (i === history.length - 1 ? m.content + PROTOCOL_SUFFIX : m.content).slice(0, 2400),
+      content: (i === history.length - 1 ? m.content + PROTOCOL_SUFFIX + SKILL_FORMAT_SUFFIX : m.content).slice(0, 2400),
     })),
   ]
 
