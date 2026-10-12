@@ -4730,3 +4730,5 @@ Stage Summary:
   4. 【中】跳转交互增强剩余项（r109 建议③）：报告节 hover 时 3D 视口预览高亮（口袋残基节 hover → 口袋残基瞬时选框）；技能选择器芯片栏横向滚动
   5. 【中】修正轮「真修正」扩容：fixRewrite 规则表扩展到非空选择类失败（如「链不存在」泛错误 → chains list 探测规则化——r110 只对空选择族生效）；mock 0.45 的 chains list 探测结果消费（多轮重组——需要 mock 侧会话记忆，工程量大需评估）
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）；r104 命令级 per-rep 着色延续
+
+（r110 段 cron 补记，2026-10-12）15min webDevReview 巡检任务 #454443 创建（23:28:40）即「Disabled due to exec limits exceeded」（23:28:41）——账户级执行配额硬限第 25 次实证（r85-r109 连续 24 次 + 本轮），已删除清理。任务书已内嵌 r110 开发纪律（基线 9aba967 / guards 677 / 双守护格局与自愈纪律 / kill 红线 / E2E 铁律含 IIFE 新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 内存双闸）+ mockd（3999 两级探活+单例重启）双守护 + 四级 CI 门禁（guards 677 + smoke 6 + visual-baseline 7）。
