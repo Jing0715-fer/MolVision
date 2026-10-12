@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# visual-baseline.sh —— E2E 视觉回归基线（r104-b / r103 建议①：像素 diff 哨兵）
+# visual-baseline.sh —— E2E 视觉回归基线（r104-b / r103 建议①：像素 diff 哨兵；
+#                                   r106-c 场景扩容 3→7）
 #
 # 用途：与 guards（grep 级）/ smoke（主线程响应级）并列的「渲染面回归」防线——
 #       膜错位（r92 事故）/模板变色/表示法丢失等只有真实截图才能判定的回归，
@@ -77,15 +78,22 @@ if [ "$MODE" != "capture" ] && [ "$MODE" != "check" ]; then
   exit 1
 fi
 
-# ---- 场景集（r104-b 起步 3 个；格式 name:wait:操作类型:参数） ----
+# ---- 场景集（r104-b 起步 3 个 → r106-c 扩容 7 个；格式 name:wait:操作类型:参数） ----
 #   wait = 操作完成后的等待秒数；操作类型 load = 装载即场景 /
 #   load+cmd = 装载后执行控制台命令（参数 PDB|命令）/
-#   template = 装载 demo 结构（4HHB，与 template-specs.sh rainbow-overview 条目
-#   同源）后 figure 直达应用模板（参数 = 模板 id）
+#   template = 装载 demo 结构后 figure 直达应用模板（参数 PDB|模板 id——与
+#   template-specs.sh 各条目同源；wait 值沿用其活体实测：12/15/11/13，其中
+#   7AHL 是 20,324 原子大结构 + pore 计算（SYM 七重轴 + HOLE 剖面）+ membrane
+#   + util cbc 链路最重，13→20 加余量——宁可等长不可截短，防动画/着色未落地
+#   造成 capture 与 check 帧相位漂移）
 SCENES=(
   "home-cartoon:8:load:4HHB"                          # 欢迎页上载后默认卡通——最基础回归面
   "membrane-toggle:14:load+cmd:1FX8|membrane 32"      # 膜渲染回归面（r92 膜错位事故场景）
-  "template-rainbow:16:template:rainbow-overview"     # 模板执行器回归面（全命令序列）
+  "template-rainbow:16:template:4HHB|rainbow-overview"          # 模板执行器回归面（全命令序列）
+  "membrane-1k4c:12:template:1K4C|selectivity-filter"           # r104 膜类：K⁺滤器特写（琥珀离子纵列，零膜板分析图式）
+  "membrane-1f88:15:template:1F88|gpcr-retinal-pocket"          # r104 膜类：GPCR 口袋开窗（create/disable 复合链路 + membrane 36）
+  "membrane-1pho:11:template:1PHO|beta-barrel-porin"           # r104 膜类：β-桶膜夹层侧视（青绿单色 + ssao）
+  "membrane-7ahl:20:template:7AHL|toxin-pore-assembly"         # r104 膜类：七聚体顶视 + pore 计算链路（20,324 原子最重场景）
 )
 
 FAILS=0
@@ -227,7 +235,7 @@ run_scene() {
   case "$op" in
     load) pdb="$params" ;;
     load+cmd) pdb="${params%%|*}" ;;
-    template) pdb="4HHB" ;;   # rainbow-overview demo（template-specs.sh 同源）
+    template) pdb="${params%%|*}" ;;   # demo 结构（参数 PDB|模板 id——template-specs.sh 同源）
     *) echo "PROBE-FAIL $name (unknown op: $op)"; return 1 ;;
   esac
 
@@ -279,7 +287,7 @@ run_scene() {
       run_console_cmd "$name" "$cmd" || return 1
       ;;
     template)
-      run_console_cmd "$name" "figure $params" || return 1
+      run_console_cmd "$name" "figure ${params#*|}" || return 1   # 参数 PDB|模板 id → 提 id 送命令执行器
       ;;
   esac
   sleep "$wait"   # 场景数组里的等待秒数：动画/着色/膜构建/toast 退场全落地

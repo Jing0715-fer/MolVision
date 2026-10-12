@@ -1097,6 +1097,41 @@ check "技能计数派生锚"          "skillCounts" "src/components/studio/Agen
 # ⑫计数徽章文案锚（实测 1——本会话已使用次数 title；删则徽章无障碍提示丢失）
 check "计数徽章文案锚"          "本会话已使用次数" "src/components/studio/AgentPanel.tsx" 1
 
+# ---- r106-c：视觉基线场景扩容 3→7（r104 建议① / r105 建议③——r104 四支膜类模板入像素基线哨兵） ----
+# 背景：r104 四支膜类模板（selectivity-filter/gpcr-retinal-pocket/beta-barrel-porin/
+# toxin-pore-assembly）此前只有缩略图管线单次成像覆盖，无像素基线哨兵——gpcr 的
+# create/disable 复合链路、7AHL 的 pore 计算链路（SYM 七重轴 + HOLE 剖面环带）的
+# 渲染回归现在由 7 场景基线锁定（r106-c check 实测 7/7 全过、4 新场景漂移 0.00%）。
+# 以下六锚防扩容被静默退化回 3 场景（括号为 rg 正则 alternation，沿 r105-a/r106-b
+# 手法；含 $/{/| 的正则一律单引号护——r101-a/r104-b bash 双引号替换坑）：
+# ①四新场景名锚（实测 4——SCENES 数组 name:wait:template: 结构行；删任一场景即 FAIL）
+check "视觉基线膜类四场景锚"  "membrane-(1k4c|1f88|1pho|7ahl):[0-9]+:template:" "scripts/visual-baseline.sh" 4
+# ②demo PDB 与模板 id 配对锚（实测 4——配对被改错 = 场景装载错结构/错模板而哨兵仍绿；
+#    \| 为字面管道符，四个「PDB|模板 id」配对各 1 命中）
+check "视觉基线模板装载对锚"  '1K4C\|selectivity-filter|1F88\|gpcr-retinal-pocket|1PHO\|beta-barrel-porin|7AHL\|toxin-pore-assembly' "scripts/visual-baseline.sh" 4
+# ③template op 解析锚（实测 3——pdb 取 | 前段双站点〔load+cmd/template〕+ figure 命令
+#    取 | 后段 1 站点；任一站点退回硬编码 4HHB = 四新场景全部装载/应用错位）
+check "视觉基线template解析锚" 'pdb="\$\{params%%\|\*\}"|figure \$\{params#\*\|\}' "scripts/visual-baseline.sh" 3
+# ④7AHL 重等待锚（实测 1——20,324 原子 + pore/membrane/util cbc 最重链路 13→20 的余量
+#    等待；被砍短会造成着色/膜构建未落地的 capture↔check 帧相位漂移假红）
+check "视觉基线7AHL重等待锚"  "membrane-7ahl:20:template:7AHL" "scripts/visual-baseline.sh" 1
+# ⑤新基线文件存在锚（四张 PNG 必须在 scripts/visual-baselines/——rg 对 PNG 二进制无文本
+#    锚可搜，沿「凭据不入库」if/else 手法；被删/漏 capture 即 FAIL 提示重拍）
+BL_NEW=0
+for f in membrane-1k4c membrane-1f88 membrane-1pho membrane-7ahl; do
+  [ -s "scripts/visual-baselines/$f.png" ] && BL_NEW=$((BL_NEW + 1))
+done
+if [ "$BL_NEW" -eq 4 ]; then
+  echo "PASS  视觉基线四新文件锚        命中  4（要求 ≥4）"
+  PASSES=$((PASSES + 1))
+else
+  echo "FAIL  视觉基线四新文件锚        命中  $BL_NEW（要求 ≥4）—— scripts/visual-baselines/ 缺新基线 PNG（bash scripts/visual-baseline.sh capture 重拍）"
+  FAILS=$((FAILS + 1))
+fi
+# ⑥双模式分派锚（实测 3——capture 存图分支 + capture 汇总分支 + check 比对调用；
+#    SCENES 数组 capture/check 双模式共用，场景锚①②+分派锚合证双模式对新场景的覆盖）
+check "视觉基线双模式分派锚"  'MODE" = "capture"|compare_baseline "\$name"' "scripts/visual-baseline.sh" 3
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

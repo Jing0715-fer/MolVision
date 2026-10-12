@@ -4629,3 +4629,21 @@ Stage Summary:
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
 
 （r108 段 cron 补记，2026-10-12）15min webDevReview 巡检任务 #453831 创建（18:36:30）即「Disabled due to exec limits exceeded」（18:36:31）——账户级执行配额硬限第 22 次实证（r85-r107 连续 21 次 + 本轮），已删除清理。任务书已内嵌 r108 开发纪律（门禁链 637 基线 + kill 红线 + E2E 新坑 6 条 + 下轮优先级）——配额恢复后可直接重建。巡检缺席期防线不变：devd 看门狗（绝对阈值 + 斜率双闸）+ 三级 CI 门禁（guards 637 + smoke 6 + visual-baseline 3）。
+
+---
+Task ID: r106-parallel
+Agent: main（本会话——与远端 r106/r107/r108 会话并行的另一条线）
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」在本会话执行完成后 push 被拒——发现远端已有同指令并行会话完成 r106（ed2b827）并演进至 r107/r108；本轮裁决合并：采纳远端为主线 + 移植本会话唯一远端缺失交付（r106-c 视觉基线扩容）
+
+Work Log:
+- 【并行事实还原】本会话 r106（本地 commit 10001ab，未及 push）与远端 r106（ed2b827）为同一用户指令的两条并行会话线（IM 网关重复投递）；两线交付高度重叠——mock 技能感知（本线：任意 role 扫描+「—」占位；远端线：场景快照填值+PDB 场景替换）/ 技能库 6→10（本线 xcontacts-interface/morph-compare 命名+横滚芯片栏；远端线 xcontact-analysis/morph-conformations 命名+Popover 弹层+matchSkill 特异性决胜）/ 守卫（本线 604→623；远端线 604→614）；**两线 E2E 独立发现同一负结果：真实 LLM（GLM）命令序列 5/5 逐字遵循 ✓ 而报告格式未遵循 ✗**——交叉印证该缺口的真实性
+- 【裁决】远端线已演进至 r108：r107 根修报告格式遵循度（recency 加固 SKILL_FORMAT_SUFFIX + few-shot，GLM A/B 实测 0%→100%）+ 技能报告两段式执行（回执数值回填）；r108 回执数值源扩容（sasa/bsa/xbsa 有界轮询实测值 + 回填 UX 闪高亮/技能计数）——远端为更先进主线，本会话本地 commit 10001ab 弃用（git reset --hard origin/main）；其内容除 r106-c 外均已被远端等价或更先进实现覆盖
+- 【移植 r106-c（本会话唯一远端缺失交付）】①4 张基线 PNG（membrane-1k4c/1f88/1pho/7ahl——从本地 commit 对象提取，同工作区同环境产物）→ scripts/visual-baselines/ ②visual-baseline.sh 场景集 3→7（template op 升级双参数 PDB|模板id 解析——template-rainbow 同步升级 4HHB|rainbow-overview 形态行为等价）③guards r106-c 6 锚块插入 r108 块后汇总段前（远端 637 + 6 = 643；远端既有 7 处视觉基线锚为 r104-b 旧锚与本块零重复，插入前 rg 复核）
+- 【移植验证】bash -n 双脚本 ✓ · guards 实跑 643/643 全过（六锚命中 4/4/3/1/4/3 与 r106-c 设计精确一致）· visual-baseline check 7/7 全过（4 新场景漂移 0.00% / 平均差 0.00/255——与 reset 前本会话复核结果逐位一致，基线跨 reset 无损）· lint 0 · 页面远端功能存活（Skills 弹层在位 + dev 200）
+- 【本会话独有经验入档（远端 worklog 未覆盖）】①mock 测试形态对齐纪律：curl 直测通过≠前端链路贯通——必须加「route 真实组装形态」组（本会话 E2E 抓出 system-only role 失配后本线修复为任意 role 扫描；远端线的实现天然扫 assistant/system 双 role 未踩此坑——两种解法同效）②E2E 键盘快捷键派发前必 blur 输入焦点（MolViewer 输入框守卫静默吞键——press 成功但状态不变的静默失败形态）③并行会话红线：同一工作区两条会话并行时，push 前必 git fetch 检查远端分歧——本轮 push 被拒才暴露并行；两条线各自 commit 会产生大面积冲突（本会话若强行 rebase：mock/skills/AgentPanel/guards/worklog 五文件两套实现），裁决弃一是低成本路径
+- 【门禁】lint 0 · guards 643/643 · visual-baseline check 7/7 · dev 200 · dev.log 良性（7AHL 缓存通知口径）
+
+Stage Summary:
+- 交付：r106-c 视觉基线扩容移植至 r108 主线（4 膜类模板像素哨兵 3→7 场景 + 6 守卫 637→643 + check 7/7 漂移 0.00%）——本会话 r106 的全部交付中唯一未被远端并行线覆盖的部分，无损落位
+- 裁决记录：同指令双会话并行实证（IM 网关重复投递）；远端线 r107/r108 已根修两线共同发现的「真实 LLM 报告格式遵循度」缺口——主线归远端，本会话弃用本地重复 commit，并行处置模式（fetch 分歧检测→对比交付→弃重复→移植缺口）入档
+- 遗留（供下轮参考）：①远端 r106 建议⑤「mock-llm 技能感知升级：fix-turn 修正轮携带技能上下文」与「场景替换扩展到链 ID」仍开放 ②本会话 E2E 证据截图（.zscripts/r106-e2e-report-card.png / r106b-chipbar-selected.png）留工作区未入库（历史惯例）；其记录的 UI 形态（横滚芯片栏）已随本线弃用被远端弹层版取代 ③并行会话协调：若 IM 网关重复投递再现，后完成方应先 fetch 再决策——避免重复轮次浪费
