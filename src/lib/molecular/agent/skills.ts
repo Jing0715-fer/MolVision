@@ -42,7 +42,8 @@ export interface AgentSkill {
 }
 
 /**
- * 预置技能库（6 支）——全部命令均在 runner.ts 白名单内（membrane/pore 已随 r105 补入）。
+ * 预置技能库（10 支：r105 六支 + r106 扩容四支）——全部命令均在 runner.ts 白名单内
+ * （membrane/pore 已随 r105 补入；sasa/xcontacts/superpose/morph/symmetry 本就在册）。
  * workflow 与 SYSTEM_PROMPT 行为规则严格一致（pub-figure 即规则 18 出版流程的 skill 化）。
  */
 export const AGENT_SKILLS: AgentSkill[] = [
@@ -124,7 +125,7 @@ export const AGENT_SKILLS: AgentSkill[] = [
         en: ['interface analysis', 'protein-protein interaction', 'dimer interface', 'interface residues'],
       },
       weak: {
-        zh: ['界面', '接触面', '链间互作'],
+        zh: ['界面', '接触面', '链间互作', '接触'],
         en: ['interface', 'contact surface'],
       },
     },
@@ -246,6 +247,134 @@ export const AGENT_SKILLS: AgentSkill[] = [
       ],
     },
   },
+  // ---------- r106 扩容四支（r105 建议清单第 2 项：sasa/bsa 表面、xcontacts 跨结构、
+  // morph 构象、symmetry 晶格四类高频工作流技能化——全部命令已在 runner 白名单内） ----------
+  {
+    id: 'sasa-surface',
+    name: { zh: '表面暴露分析', en: 'Surface Exposure Analysis' },
+    description: {
+      zh: '溶剂可及面积统计（总/疏水/极性）+ 暴露度渐变着色一站式标准流程',
+      en: 'Solvent-accessible area stats (total/hydrophobic/polar) + exposure-gradient coloring in one standard workflow',
+    },
+    triggers: {
+      strong: {
+        zh: ['表面分析', '暴露分析', '溶剂可及', '可及面积', '表面积分析', '暴露度分析', '表面暴露', '暴露程度'],
+        en: ['surface analysis', 'solvent accessible', 'sasa analysis', 'exposure analysis', 'surface area analysis'],
+      },
+      weak: {
+        zh: ['表面', '暴露度', '暴露'],
+        en: ['surface', 'exposure', 'accessible', 'sasa'],
+      },
+    },
+    workflow: [
+      { label: { zh: 'SASA 计算', en: 'SASA computation' }, cmd: 'sasa', check: { zh: 'Shrake–Rupley 法（probe 1.4Å 默认）；大结构 Web Worker 后台算完自动输出并更新着色', en: 'Shrake–Rupley (probe 1.4 Å default); large structures auto-print when the worker finishes' } },
+      { label: { zh: '暴露度着色', en: 'Exposure coloring' }, cmd: 'color sasa', check: { zh: '埋藏蓝紫 → 暴露橙红渐变；分析面板含 Top 暴露残基', en: 'Buried blue-violet → exposed orange-red; panel lists top-exposed residues' } },
+      { label: { zh: '全景适配', en: 'Fit view' }, cmd: 'zoom', check: { zh: '整体结构入框', en: 'Frame the whole structure' } },
+    ],
+    report: {
+      sections: [
+        { key: 'total', label: { zh: '总面积', en: 'Total area' }, hint: { zh: 'SASA 总面积（Å²，命令回执）', en: 'Total SASA (Å², from receipt)' } },
+        { key: 'ratio', label: { zh: '疏水与极性', en: 'Hydrophobic & polar' }, hint: { zh: '疏水/极性/水与配体分项面积（Å²）', en: 'Hydrophobic / polar / het areas (Å²)' } },
+        { key: 'top', label: { zh: '高暴露残基', en: 'Top exposed' }, hint: { zh: 'Top 暴露残基（分析面板，≤4 个）', en: 'Top-exposed residues (panel, ≤4)' } },
+        { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
+      ],
+    },
+  },
+  {
+    id: 'xcontact-analysis',
+    name: { zh: '跨结构互作分析', en: 'Cross-structure Interaction Analysis' },
+    description: {
+      zh: '两个已加载结构间的接触对、跨结构埋藏面积与关键距离标准流程（叠合后以当前位姿为准）',
+      en: 'Contacts, cross-structure buried area, and key distances between two loaded structures in one standard workflow',
+    },
+    triggers: {
+      strong: {
+        zh: ['跨结构互作', '跨结构接触', '结构间互作', '两结构界面', '复合物界面分析', '跨结构分析'],
+        en: ['cross-structure interaction', 'cross-structure contacts', 'inter-structure interaction'],
+      },
+      weak: {
+        zh: ['跨结构', '结构间'],
+        en: ['xcontacts', 'between structures'],
+      },
+    },
+    workflow: [
+      { label: { zh: '位姿叠合', en: 'Pose alignment' }, cmd: 'superpose 1UBQ onto 1D3Z', check: { zh: 'A/B 换成场景中两个已加载结构；跨结构接触以当前位姿实时为准', en: 'Substitute the two loaded structures; cross-contacts track current poses live' } },
+      { label: { zh: '跨结构接触', en: 'Cross contacts' }, cmd: 'xcontacts 1UBQ:chain A | 1D3Z:chain A 5.0', check: { zh: '结构名与链按场景替换；cutoff 2.5-10Å（默认 5.0）', en: 'Substitute names & chains; cutoff 2.5-10 Å (default 5.0)' } },
+      { label: { zh: '跨结构埋藏面积', en: 'Cross buried area' }, cmd: 'xbsa', check: { zh: '界面 ΔSASA（后台计算，等回执）', en: 'Interface ΔSASA (background, wait for receipt)' } },
+      { label: { zh: '界面视角', en: 'Interface view' }, cmd: 'zoom', check: { zh: '两结构整体入框', en: 'Frame both structures' } },
+    ],
+    report: {
+      sections: [
+        { key: 'pair', label: { zh: '结构对', en: 'Structure pair' }, hint: { zh: '参与跨结构界面的两个结构名', en: 'The two structures at the interface' } },
+        { key: 'contacts', label: { zh: '接触对', en: 'Contact pairs' }, hint: { zh: 'xcontacts 输出的接触对总数（命令回执）', en: 'Total cross-contact pairs (receipt)' } },
+        { key: 'xbsa', label: { zh: '埋藏面积', en: 'Buried area' }, hint: { zh: 'xbsa 回执数值（Å²）；无回执写「后台计算中」', en: 'ΔSASA in Å²; "computing" if pending' } },
+        { key: 'distance', label: { zh: '最近距离', en: 'Closest distance' }, hint: { zh: '最近跨结构接触距离（Å）', en: 'Closest cross-structure contact (Å)' } },
+        { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
+      ],
+    },
+  },
+  {
+    id: 'morph-conformations',
+    name: { zh: '构象插值对比', en: 'Conformational Morph' },
+    description: {
+      zh: '两个/多个构象间的插值轨迹创建与播放标准流程（rigimol 风格帧精修）',
+      en: 'Create and play interpolation trajectories between conformers in one standard workflow (rigimol-style refinement)',
+    },
+    triggers: {
+      strong: {
+        zh: ['构象插值', '构象对比动画', '插值动画', '构象变化动画', '构象过渡', 'morph 动画'],
+        en: ['conformational morph', 'morph animation', 'interpolate conformations', 'conformational transition'],
+      },
+      weak: {
+        zh: ['构象', '插值'],
+        en: ['morph', 'conformation', 'interpolation'],
+      },
+    },
+    workflow: [
+      { label: { zh: '创建插值轨迹', en: 'Create morph' }, cmd: 'morph m1 = 1BQL 2LYZ 40', check: { zh: 'A/B 换成场景中已加载的两个构象；帧数 10-200（默认 48）；多构象用 morph multi', en: 'Substitute two loaded conformers; frames 10-200 (default 48); morph multi for >2 states' } },
+      { label: { zh: '轨迹对象适配', en: 'Frame morph' }, cmd: 'zoom', check: { zh: 'morph 对象整体入框', en: 'Frame the morph object' } },
+      { label: { zh: '播放构象动画', en: 'Play ensemble' }, cmd: 'ensemble play', check: { zh: 'P 键暂停；ensemble fps <0.5-60> 调速', en: 'P pauses; ensemble fps <0.5-60> adjusts speed' } },
+    ],
+    report: {
+      sections: [
+        { key: 'conformers', label: { zh: '构象对', en: 'Conformer pair' }, hint: { zh: '参与插值的构象名（A → B）', en: 'Conformers interpolated (A → B)' } },
+        { key: 'rmsd', label: { zh: '叠合 RMSD', en: 'RMSD' }, hint: { zh: '构象间 CA RMSD（Å，命令回执）', en: 'Inter-conformer CA RMSD (Å, receipt)' } },
+        { key: 'frames', label: { zh: '帧数', en: 'Frames' }, hint: { zh: '轨迹帧数（默认 48/模板 40）', en: 'Trajectory frame count' } },
+        { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
+      ],
+    },
+  },
+  {
+    id: 'symmetry-assembly',
+    name: { zh: '晶格组装展示', en: 'Symmetry Assembly' },
+    description: {
+      zh: '晶体学对称伴侣组装展示标准流程：主轴定向 → 对称伴侣 → 组装全景',
+      en: 'Crystallographic symmetry-mate assembly in one standard workflow: axis alignment → mates → full view',
+    },
+    triggers: {
+      strong: {
+        zh: ['晶格组装', '对称伴侣', '晶体堆积', '对称性组装', '晶格展示', '对称组装'],
+        en: ['symmetry assembly', 'symmetry mates', 'crystal packing', 'lattice assembly', 'symmetry operation'],
+      },
+      weak: {
+        zh: ['晶格', '晶体对称', '堆积'],
+        en: ['symmetry', 'lattice', 'packing'],
+      },
+    },
+    workflow: [
+      { label: { zh: '主轴定向', en: 'Axis alignment' }, cmd: 'orient', check: { zh: 'PCA 主轴对齐（晶格观感标配）', en: 'PCA axis alignment (standard for lattice views)' } },
+      { label: { zh: '生成对称伴侣', en: 'Symmetry mates' }, cmd: 'symmetry 20', check: { zh: '半径 5-80Å（默认 20）；结构名可前缀指定（如 symmetry 4HHB 30）；symmetry off 关闭', en: 'Radius 5-80 Å (default 20); structure prefix optional; symmetry off disables' } },
+      { label: { zh: '组装全景', en: 'Assembly view' }, cmd: 'zoom', check: { zh: '原体+伴侣整体入框；伴侣为视觉副本不参与拾取', en: 'Frame assembly; mates are visual copies, not pickable' } },
+    ],
+    report: {
+      sections: [
+        { key: 'radius', label: { zh: '组装半径', en: 'Assembly radius' }, hint: { zh: '对称伴侣生成半径（Å，默认 20）', en: 'Mate generation radius (Å, default 20)' } },
+        { key: 'mates', label: { zh: '伴侣数', en: 'Mate count' }, hint: { zh: '生成的对称伴侣数（命令回执）', en: 'Number of mates generated (receipt)' } },
+        { key: 'view', label: { zh: '组装观感', en: 'Assembly view' }, hint: { zh: '原体与伴侣的视角关系描述', en: 'Orientation of protomer vs mates' } },
+        { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
+      ],
+    },
+  },
 ]
 
 /** 全部技能 id 集（请求体 skillId 合法性校验用） */
@@ -254,22 +383,32 @@ export const SKILL_IDS = new Set(AGENT_SKILLS.map(s => s.id))
 /**
  * 从用户文本匹配标准技能（前端发送前调用）。
  * 计分：strong 触发词 ×2 / weak ×1；score ≥2 且唯一最高分才选中
- * （单个 weak 词如「配体」「膜」不足以选中——避免纯着色/纯显示类需求被误拉进分析流程；
- * 并列最高视为歧义，降级为普通对话）。
+ * （单个 weak 词如「配体」「膜」不足以选中——避免纯着色/纯显示类需求被误拉进分析流程）。
+ * r106 两项升级（技能库 6→10 后暴露的并列歧义）：
+ * ①技能内重叠去重——weak 词是其同技能已命中 strong 短语的子串时不计分
+ *   （「互作分析」强命中后「互作」弱词不再重复加分——同词族双计会虚抬分数）；
+ * ②跨技能特异性决胜——总分并列时以命中触发词总字长 spec 高者为先
+ *   （「跨结构互作分析」在 ligand-pocket（互作分析 4 字）与 xcontact-analysis
+ *   （跨结构互作 5 字）间 2:2 并列，更长触发词=更具体意图=更正确归属；
+ *   score 与 spec 双并列才视为真歧义降级普通对话）。
  */
 export function matchSkill(text: string): AgentSkill | null {
   const q = text.toLowerCase()
   let best: AgentSkill | null = null
   let bestScore = 0
+  let bestSpec = 0
   let tie = false
   for (const skill of AGENT_SKILLS) {
     let score = 0
-    for (const t of skill.triggers.strong.zh) if (q.includes(t.toLowerCase())) score += 2
-    for (const t of skill.triggers.strong.en) if (new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(q)) score += 2
-    for (const t of skill.triggers.weak.zh) if (q.includes(t.toLowerCase())) score += 1
-    for (const t of skill.triggers.weak.en) if (new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(q)) score += 1
-    if (score > bestScore) { bestScore = score; best = skill; tie = false }
-    else if (score === bestScore && score > 0 && best) tie = true
+    let spec = 0
+    const strongHits: string[] = []
+    for (const t of skill.triggers.strong.zh) if (q.includes(t.toLowerCase())) { score += 2; spec += t.length; strongHits.push(t.toLowerCase()) }
+    for (const t of skill.triggers.strong.en) if (new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(q)) { score += 2; spec += t.length; strongHits.push(t.toLowerCase()) }
+    // 技能内重叠去重：weak 词是已命中 strong 短语的子串 → 信息已被强词吸收，不计分
+    for (const t of skill.triggers.weak.zh) if (q.includes(t.toLowerCase()) && !strongHits.some(s => s.includes(t.toLowerCase()))) { score += 1; spec += t.length }
+    for (const t of skill.triggers.weak.en) if (new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(q) && !strongHits.some(s => s.includes(t.toLowerCase()))) { score += 1; spec += t.length }
+    if (score > bestScore || (score === bestScore && spec > bestSpec)) { bestScore = score; bestSpec = spec; best = skill; tie = false }
+    else if (score === bestScore && spec === bestSpec && score > 0 && best) tie = true
   }
   if (bestScore >= 2 && !tie) return best
   return null

@@ -995,6 +995,38 @@ check "agent协议skillId锚"     "skillId\?: string" "src/lib/molecular/agent/p
 # ⑪命令速查膜孔道词条锚（实测 1——COMMAND_REF 分析行的 membrane/pore 语法说明；删则 LLM 不知命令存在）
 check "agent速查膜孔道词条锚"  "membrane \[厚度Å\]\|off（脂双层示意板" "src/app/api/agent/route.ts" 1
 
+# ---- r106：mock-llm 技能感知 + 技能库扩容四支 + matchSkill 并列决胜 + 技能选择器 ----
+# 用户指令「进行下一阶段开发」——r105 建议清单第 1/2 项落地：
+# ①mock-llm 收到含技能注入段的 system 时按技能 workflow 生成命令序列与固定格式报告
+#   （技能遵循度的 QA 基础设施——E2E 技能链从「前端注入 localStorage」升级为真端到端）；
+# ②skills.ts 注册表 6→10（sasa 表面 / xcontacts 跨结构 / morph 构象 / symmetry 晶格）；
+# ③matchSkill 两项升级：技能内重叠去重（weak 是已命中 strong 的子串不计分）+ 跨技能
+#   特异性决胜（总分并列比命中触发词总字长——「跨结构互作分析」不再与 ligand-pocket
+#   平局判歧义、「蛋白蛋白互作分析」修正归属 interface）；④AgentPanel 技能选择器芯片栏
+#   （点选强制绑定 skillId——不依赖自然语言措辞也能走标准流程）。
+# 以下十锚防各环节被改写/删除静默退化（实测数见各行注释；括号为 rg 正则分组
+# alternation 沿 r105 手法，无 $/反引号——bash 双引号内安全）：
+# ①扩容四支 id 锚（实测 4——任一新技能被删即 FAIL）
+check "agent技能扩容四支锚"    "id: 'sasa-surface'|id: 'xcontact-analysis'|id: 'morph-conformations'|id: 'symmetry-assembly'" "src/lib/molecular/agent/skills.ts" 4
+# ②匹配特异性决胜锚（实测 3——bestSpec 声明+并列比较双站点；删则总分并列回到一律判歧义）
+check "agent匹配特异性决胜锚"  "bestSpec" "src/lib/molecular/agent/skills.ts" 3
+# ③技能内重叠去重锚（实测 2——weak 子串吸收判定中英双站点；删则同词族双计虚抬分数）
+check "agent匹配重叠去重锚"    "strongHits.some" "src/lib/molecular/agent/skills.ts" 2
+# ④技能选择器状态锚（实测 9——pinnedSkill 状态/发送优先级/预览/芯片/取消全链站点）
+check "agent技能选择器锚"      "pinnedSkill" "src/components/studio/AgentPanel.tsx" 8
+# ⑤技能选择器入口锚（实测 1——aria-label「选择标准技能」按钮；删则芯片栏不可达）
+check "agent技能选择器入口锚"  "选择标准技能" "src/components/studio/AgentPanel.tsx" 1
+# ⑥mock 注入段解析锚（实测 2——parseSkillDirective 定义+调用；删则技能感知退回关键词模板）
+check "mock注入段解析锚"       "parseSkillDirective" "mini-services/mock-llm/index.ts" 2
+# ⑦mock 场景快照解析锚（实测 2——parseSceneFacts 定义+调用；删则报告数值全为 —）
+check "mock场景快照解析锚"     "parseSceneFacts" "mini-services/mock-llm/index.ts" 2
+# ⑧mock 报告填值锚（实测 2——fillSkillReportValue 定义+调用；删则报告无章节行）
+check "mock报告填值锚"         "fillSkillReportValue" "mini-services/mock-llm/index.ts" 2
+# ⑨mock 场景结构替换锚（实测 2——substituteSceneStructs 定义+调用；删则 morph/xcontact 模板命令不随场景替换）
+check "mock场景结构替换锚"     "substituteSceneStructs" "mini-services/mock-llm/index.ts" 2
+# ⑩mock 注入段标记锚（实测 2——与 buildSkillDirective 输出的标记串一致〔注释+正则〕；标记改文案两侧不同步即 FAIL）
+check "mock注入段标记锚"       "本次任务命中标准技能" "mini-services/mock-llm/index.ts" 2
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

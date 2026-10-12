@@ -366,6 +366,10 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   const [providerOpen, setProviderOpen] = useState(false)
   /** 当前默认供应商（头部徽章 + 设置页保存后刷新） */
   const [provider, setProvider] = useState<ProviderInfo | null>(null)
+  // r106 技能选择器：点选芯片强制绑定 skillId（优先于自然语言匹配——不依赖措辞也能
+  // 走标准流程）；面板局部态（不持久化：面板重挂即回自然语言匹配的默认行为）
+  const [pinnedSkill, setPinnedSkill] = useState<string | null>(null)
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   /** 当前流式请求的中断器（停止生成按钮） */
@@ -580,10 +584,14 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       setMsgs(m => m.map(x => (x.id === aiId ? { ...x, ...patch } : x)))
     }
     try {
-      // r105 标准技能：发送前本地匹配用户意图（strong×2/weak×1 计分，唯一最高 ≥2 才选中）；
-      // 命中后 skillId 随请求上送 → 后端把「标准流程 + 固定报告格式」注入系统提示；
-      // 未命中/歧义 → undefined 走普通对话（行为与旧版完全一致，零回归面）
-      const skill: AgentSkill | null = matchSkill(q)
+      // r105 标准技能：发送前本地匹配用户意图（strong×2/weak×1 计分 + r106 重叠去重与
+      // 特异性决胜，唯一最高 ≥2 才选中）；命中后 skillId 随请求上送 → 后端把「标准流程 +
+      // 固定报告格式」注入系统提示。r106 技能选择器：点选固定的技能优先于自然语言匹配
+      // （强制绑定——不依赖措辞也能走标准流程）；未固定/未命中/歧义 → undefined 走普通
+      // 对话（行为与旧版完全一致，零回归面）
+      const skill: AgentSkill | null = pinnedSkill
+        ? (AGENT_SKILLS.find(s => s.id === pinnedSkill) ?? null)
+        : matchSkill(q)
       const r = await callAgentStream(buildApiHistory(history), buildSceneContext(), {
         signal: ctrl.signal,
         memory: buildMemoryDigest(history),
@@ -628,7 +636,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       setPhase('think')
       if (abortRef.current === ctrl) abortRef.current = null
     }
-  }, [msgs, busy, runTurn, buildApiHistory, buildMemoryDigest, visualOn])
+  }, [msgs, busy, runTurn, buildApiHistory, buildMemoryDigest, visualOn, pinnedSkill])
 
   /** confirm 卡片的「执行 / 跳过」与「重跑」（生成中禁止——并发执行会打架） */
   const act = useCallback(async (msgId: string, idx: number, mode: 'confirm-run' | 'confirm-skip' | 'rerun') => {
@@ -667,6 +675,11 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   const phaseHint = phase === 'visual' ? t({ zh: '审视渲染结果', en: 'Reviewing the render' }) : phase === 'exec' ? t({ zh: '命令将自动执行', en: 'Commands run automatically' }) : phase === 'stream' ? t({ zh: '逐字生成，可随时停止', en: 'Streaming — stop anytime' }) : t({ zh: '理解你的需求', en: 'Understanding your request' })
   // 思考/流式阶段 LLM 请求可中断；命令执行与视觉自查阶段不可（停止无意义）
   const canAbort = busy && (phase === 'think' || phase === 'stream')
+  // r106 技能选择器：输入预览所见的技能 = 固定技能优先，否则自然语言匹配（与发送时同一
+  // 决策链——所见即所得）；固定中状态在预览徽章上额外标注
+  const previewSkill: AgentSkill | null = pinnedSkill
+    ? (AGENT_SKILLS.find(s => s.id === pinnedSkill) ?? null)
+    : matchSkill(input)
 
   return (
     <div
@@ -960,16 +973,94 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
       {/* 输入区 */}
       <div className="shrink-0 border-t border-border p-2.5">
-        {/* r105 标准技能实时识别预览：输入即匹配（与发送时同一 matchSkill——所见即所得）；
+        {/* r106 技能选择器：标准技能芯片栏。点选强制绑定 skillId（不依赖自然语言匹配——
+            措辞不含触发词也能走标准流程）；固定后预览徽章与发送共用同一决策链；弹层列表
+            展示技能名与适用场景（向上弹出——输入区位于面板底部） */}
+        <div className="mb-1.5 flex items-center gap-1.5">
+          <Popover open={skillPickerOpen} onOpenChange={setSkillPickerOpen}>
+            <PopoverTrigger asChild>
+              <button
+                aria-label={t({ zh: '选择标准技能', en: 'Pick a standard skill' })}
+                aria-expanded={skillPickerOpen}
+                title={t({ zh: '标准技能库：点选后强制按标准流程执行并输出固定格式报告', en: 'Standard skill library: pick one to force the standard workflow and fixed-format report' })}
+                className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              >
+                <Sparkles className="h-3 w-3 shrink-0 text-primary" />
+                {t({ zh: '标准技能', en: 'Skills' })}
+                <ChevronDown className={cn('h-2.5 w-2.5 shrink-0 transition-transform', skillPickerOpen && 'rotate-180')} />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" side="top" className="w-72 rounded-lg border-border p-1.5 mol-elevate-lg">
+              <p className="px-1.5 pb-1 mol-micro text-muted-foreground">
+                {t({ zh: `${AGENT_SKILLS.length} 支标准技能 · 点选强制按标准流程执行；再次点选取消固定`, en: `${AGENT_SKILLS.length} standard skills · click to force the standard workflow; click again to unpin` })}
+              </p>
+              <div className="mol-scroll max-h-64 overflow-y-auto">
+                {AGENT_SKILLS.map(s => {
+                  const pinned = pinnedSkill === s.id
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        setPinnedSkill(p => (p === s.id ? null : s.id))
+                        setSkillPickerOpen(false)
+                        toast.info(tt({
+                          zh: pinned ? `已取消固定「${s.name.zh}」（回到自然语言识别）` : `已固定「${s.name.zh}」——本轮起按标准流程执行`,
+                          en: pinned ? `Unpinned "${s.name.en}" (back to natural-language detection)` : `Pinned "${s.name.en}" — the standard workflow will run from now on`,
+                        }))
+                      }}
+                      aria-pressed={pinned}
+                      title={t(s.description)}
+                      className={cn(
+                        'flex w-full items-start gap-1.5 rounded-md px-1.5 py-1.5 text-left transition',
+                        pinned ? 'bg-accent' : 'hover:bg-accent/60',
+                      )}
+                    >
+                      <span className="mt-px flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                        {pinned
+                          ? <Check className="h-3 w-3 text-primary" />
+                          : <Sparkles className="h-2.5 w-2.5 text-muted-foreground/50" />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[11px] font-medium">{t(s.name)}</span>
+                        <span className="mt-0.5 block text-[9.5px] leading-snug text-muted-foreground line-clamp-2">{t(s.description)}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
+          {/* 固定中的技能芯片（常态可见的强制绑定指示 + 一键取消） */}
+          {previewSkill && pinnedSkill && (
+            <div className="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-md border border-primary/30 bg-primary/[0.06] px-1.5 text-[10px] font-medium text-primary">
+              <span className="min-w-0 truncate">{t(previewSkill.name)}</span>
+              <button
+                onClick={() => setPinnedSkill(null)}
+                aria-label={t({ zh: '取消固定技能', en: 'Unpin skill' })}
+                title={t({ zh: '取消固定（回到自然语言识别）', en: 'Unpin (back to natural-language detection)' })}
+                className="ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded transition hover:bg-primary/15"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </div>
+          )}
+        </div>
+        {/* r105 标准技能实时识别预览：输入即匹配（与发送时同一决策链——所见即所得）；
+            r106 升级：固定技能优先于自然语言匹配，固定中额外标注「已固定」。
             命中显示技能徽章，用户提前知道本轮将按标准流程执行并产出固定格式报告 */}
-        {!busy && input.trim() && matchSkill(input) && (
+        {!busy && input.trim() && previewSkill && (
           <div className="mb-1.5 flex items-center gap-1.5 rounded-md border border-emerald-600/25 bg-emerald-600/[0.06] px-2 py-1 text-[9.5px] text-emerald-700 dark:text-emerald-400">
             <Sparkles className="h-3 w-3 shrink-0" />
             <span className="min-w-0 flex-1 truncate">
-              {t({
-                zh: `已识别标准技能：${matchSkill(input)!.name.zh} —— 将按标准流程执行并输出固定格式报告`,
-                en: `Skill detected: ${matchSkill(input)!.name.en} — runs a standard workflow and outputs a fixed-format report`,
-              })}
+              {pinnedSkill === previewSkill.id
+                ? t({
+                    zh: `已固定标准技能：${previewSkill.name.zh} —— 本轮起按标准流程执行并输出固定格式报告`,
+                    en: `Skill pinned: ${previewSkill.name.en} — the standard workflow and fixed-format report apply from now on`,
+                  })
+                : t({
+                    zh: `已识别标准技能：${previewSkill.name.zh} —— 将按标准流程执行并输出固定格式报告`,
+                    en: `Skill detected: ${previewSkill.name.en} — runs a standard workflow and outputs a fixed-format report`,
+                  })}
             </span>
           </div>
         )}

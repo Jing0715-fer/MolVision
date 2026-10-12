@@ -4521,3 +4521,40 @@ Stage Summary:
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
 
 （r105 段 cron 补记，2026-10-10）15min webDevReview 巡检任务 #449631 创建即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 19 次实证（r85-r104 连续 18 次 + 本轮），已删除清理。任务书已内嵌 r105 开发纪律（.agent/skills/ 四 SKILL 引用 + 门禁链口径 + kill 红线 + 下轮优先级）——配额恢复后可直接重建。devd 看门狗（绝对阈值 + 斜率双闸）+ 三级 CI 门禁（guards 604 + smoke 6 + visual-baseline 3）继续作为巡检缺席期的自愈防线；本轮 devd 内存换血实战首次实录（1566MB 触发 3s 恢复）。
+
+---
+Task ID: r106
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r105 建议清单第 1/2 项落地：mock-llm 技能感知（LLM 遵循度 QA 基础设施）+ 技能库扩容四支 + matchSkill 并列歧义根修 + AgentPanel 技能选择器；QA 门禁链全绿 + E2E 四组断言 + 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=4ea845d（r105 cron 补记态）；工作区有 12 个非语义改动（6 文件 mode 644→755 + 9 个同字节数 PNG 重生成产物——环境产物，按纪律不碰不提交）；guards 实跑 604/604 = 本轮基线数；dev 200；dev.log 尾部连续 GET / 200 零 error；worklog r105 段「下一轮建议」第 1 项【高】mock 技能感知 + 第 2 项【中】技能库扩容/选择器 = 本轮立项来源；.agent/skills/ 四 SKILL 按流程读取恢复语境
+- 【改动·mock-llm 技能感知】mini-services/mock-llm/index.ts +~150 行：①parseSkillDirective——扫描 assistant/system 消息中「## 本次任务命中标准技能：{名}（{id}）」标记（route.ts 以首条 assistant 消息注入；历史回复是【…报告】文稿无该标记——零假阳性），步骤行正则 ^\s+\d+\.\s[^：]+：(.+?)(?:\s+——\s.*)?$ 提取命令序列，▌节行正则提取报告章节；②parseSceneFacts——解析「【自动注入的当前场景信息」user 消息的结构行（段分隔符 ' · ' 带双侧空格——链内「蛋白·141残基」点号无空格不误切），提取结构名/原子数/链清单/配体/水；③fillSkillReportValue——场景可取的填实值（结构与配体/链组成/水与总量/构象对/结构对），命令回执类（接触数/氢键数/ΔSASA/RMSD/总面积——报告生成在命令执行之前）合规写「—」，建议节给静态短句（SKILL_ADVICE 10 支）；④substituteSceneStructs——workflow 模板示例 PDB ID（1BQL/1UBQ→首结构、2LYZ/1D3Z→次结构）按已加载结构名单趟替换（实测踩坑：链式 split/join 会把替换产物再替换——场景本身含 1BQL 时 morph m1 = 1BQL 1BQL 40 连环改写，改 replacer 函数单趟替换根修）；⑤buildDecision 新增 0.5 分支（VLM 分支后、关键词模板前——技能命中时标准流程优先，普通对话零影响）
+- 【改动·技能库扩容】src/lib/molecular/agent/skills.ts：AGENT_SKILLS 6→10——sasa-surface 表面暴露分析（sasa→color sasa→zoom）/ xcontact-analysis 跨结构互作分析（superpose→xcontacts→xbsa→zoom）/ morph-conformations 构象插值对比（morph→zoom→ensemble play）/ symmetry-assembly 晶格组装展示（orient→symmetry 20→zoom）；四支命令全部本就在 runner AUTO_PREFIXES 白名单（零 runner/route 改动）；顶部注释 6→10 同步
+- 【改动·matchSkill 升级】同文件 matchSkill 两项根修（G3 实测 2 缺口驱动）：①技能内重叠去重——weak 词是同技能已命中 strong 短语的子串时不计分（「互作分析」强命中后「互作」弱词不再重复加分——同词族双计虚抬分数）；②跨技能特异性决胜——总分并列时以命中触发词总字长 spec 高者为先（bestSpec：总分与字长双并列才判真歧义降级普通对话）；连带修正 r105 隐性误绑：「蛋白蛋白互作分析」旧版 ligand-pocket 3:2 误绑 → 新版 interface-analysis 正确归属（spec 6>4）；「跨结构互作分析一下」旧版 3:3 平局判歧义 → 新版 xcontact 正确归属；interface-analysis 补弱词「接触」（「分析界面接触」界面+接触双弱词达 2 分）；sasa-surface 补强词「表面暴露/暴露程度」+弱词「暴露」；r105 守卫锚 bestScore >= 2 && !tie 原样保留
+- 【改动·技能选择器】src/components/studio/AgentPanel.tsx：①pinnedSkill/skillPickerOpen 面板局部态（不持久化——重挂即回自然语言匹配默认）；②send 决策链升级 pinnedSkill 优先于 matchSkill（强制绑定——措辞不含触发词也走标准流程），deps 补 pinnedSkill；③previewSkill 派生值（与发送同一决策链——所见即所得），预览徽章固定态文案「已固定标准技能/Skill pinned:」与识别态区分；④输入区顶部技能芯片栏：Skills 按钮（Sparkles+ChevronDown）+ 向上弹层（Popover side=top）列 10 支技能（名称+适用场景双行，Check/Sparkles 选中态），点选固定+toast 双语确认、再次点选取消；⑤固定芯片（bg-primary/[0.06] 主色底 + 名称 + X 一键取消）；⑥r105 预览徽章块升级为 previewSkill 驱动
+- 【守卫 +10（604→614）】r106 独立注释块（r105 块后汇总段前，插入前 rg 复核零 r106 痕迹）：扩容四支 id 锚 4 / 特异性决胜锚 bestSpec 3 / 重叠去重锚 strongHits.some 2 / 选择器锚 pinnedSkill 8 / 入口锚「选择标准技能」1 / mock 注入段解析锚 2 / 场景快照解析锚 2 / 报告填值锚 2 / 场景结构替换锚 2 / 注入段标记锚 2——十锚全环节防退化（含 mock 与 buildSkillDirective 标记串双站点同步哨兵）
+- 【QA】lint 0 · tsc 全项目 5 历史基线错不变（mock-llm Bun 错行号 490 随文件增长位移、内容不变；src/ 零）· guards 614/614 · smoke 6/6（heavy 路径）· visual-baseline 3/3（漂移 0.00-0.02%）· dev.log 尾部零真 error
+- 【E2E-G3 纯函数（bun 直跑）】技能总数 10 ✓ · matchSkill 全量回归 27/27（r105 既有断言全保持 + 新四支命中 + 特异性决胜 3 例 + 误触发防线 6 例）· buildSkillDirective morph 注入段（含报告标题 + 4 章节行）✓ · isSkillReport 新报告标题检测 ✓
+- 【E2E-M mock 直测（curl 级）】ligand-pocket 注入段 →【配体口袋分析报告】+ 5 ▌节 + 场景实值「4HHB + HEM×4」+ 回执类 — + 建议短句 ✓ · commands 按序回放 5 条 ✓ · morph 双结构场景替换（1D3Z/1BQL 单趟替换正确）✓ · 无结构场景保留原命令+报告填 — ✓ · stream 路径拼接还原 ✓ · 无注入段普通模板路径零回归 ✓
+- 【E2E-G1 浏览器端到端（mock 供应商）】4HHB form submit 加载 ✓ · Ctrl+J 面板 ✓ · 输入 'analyze the ligand binding pocket' → 预览徽章「Skill detected: Ligand Pocket Analysis」✓ · fetch 拦截请求体 skillId="ligand-pocket" ✓ · 回复【配体口袋分析报告】+ 5 ▌章节全渲染 + Skill 徽章 + 场景实值（4HHB + HEM×4）+ 建议节 ✓ · 5 条 workflow 命令全执行（contacts→preset publication→hbonds 3.4→view from ligand→deselect）✓ · 视觉自查通过（真实 GLM 视觉通道兜底）✓ · 全程 console errors 零 ✓ ——r105 建议第 1 项「把 E2E 的 G1 断言升级为端到端」达成
+- 【E2E-G2 技能选择器】Skills 按钮 → 弹层 10 支技能 ✓ · 固定 Symmetry Assembly → 芯章 + toast「Pinned "Symmetry Assembly"」✓ · 无关文本 'hello there' → 徽章「Skill pinned: Symmetry Assembly」（固定优先于自然语言匹配实证）✓ · 发送 → skillId="symmetry-assembly" 强制上送 +【晶格组装展示报告】+ orient/symmetry 20 执行 + 技能徽章 ✓ · X 取消固定 → 芯章与徽章消失 ✓
+- 【E2E-G4 核心回归】语言 EN→中文（点目标语言钮铁律）→ lang=zh-CN + 技能选择器 10 支全中文（i18n 无漏）✓ · membrane on（命令面板）→ 引擎内部 membraneGroup.children=5 + membraneBox 在位（铁律 7 三方交叉之引擎侧）✓ · membrane off（PyMOL 命令行）→ children=0 场景还原 ✓ · 供应商测试配置清理（DELETE custom + setDefault zai，.molvision/agent-providers.json configs={} default=zai）✓
+- 【E2E 重大发现（真实 LLM 遵循度）】默认供应商 GLM-4.6（沙箱内置 SDK 直连）实测：技能注入后 workflow 命令序列严格遵循（5 步全对）但报告格式未遵循（英文散文而非【…报告】固定格式）——注入段在首条 assistant 消息（系统提示位），距回复生成隔全部对话历史，recency 弱于 PROTOCOL_SUFFIX（末条 user 消息协议提醒）；这正是 r105 建议第 1 项预言的缺口，实测坐实——下一轮最高优先级
+- 【坑（新入档）】①providers API 的 setDefault:true 走早退分支只设默认不存配置——apiKey/baseURL 须单独 POST 一次（两步分离）②命令面板（Ctrl+K）对原始文本按搜索匹配注册命令项执行——'membrane off' 会被匹配成 membrane（on）项；原始命令执行须走 PyMOL 命令行（Toolbar Terminal 钮/反引号键）③agent-browser eval 返回值序列化丢弃 null（{req: null} 显示为 {}——判空须 JSON.stringify 包装）④fetch 拦截器武装偶发失效（同代码重跑即恢复——拦截时序偶发，遇未记录先重跑再归因）
+
+Stage Summary:
+- 交付一（QA 基础设施）：mock-llm 技能感知——收到含技能注入段的 system 时按技能 workflow 生成命令序列 + 固定格式报告（场景实值自动填 + 回执类合规 — + 示例 PDB ID 场景替换单趟根修）；技能链 E2E 从「localStorage 注入消息」升级为真端到端
+- 交付二（技能库）：AGENT_SKILLS 6→10（表面暴露/跨结构互作/构象插值/晶格组装四类高频工作流技能化，命令零白名单改动）+ matchSkill 两项根修（重叠去重 + 特异性决胜——顺带修正 r105 隐性误绑「蛋白蛋白互作分析」）
+- 交付三（选择器 UI）：技能芯片栏 + 弹层全列表 + 固定芯片 + 所见即所得预览——点选强制绑定 skillId，不依赖自然语言措辞
+- 交付四（验证）：guards 604→614 全过 · smoke 6/6 · visual-baseline 3/3 · E2E 四组（G3 27/27 纯函数 / M mock 直测 / G1 端到端 / G2 选择器 / G4 回归）全绿零 console 错误
+- 与用户指令对位：①「进行下一阶段开发」——r105 建议清单高优先级 2 项落地 ②「qa测试和e2e测试」——六道门禁 + 四组 E2E ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【高】真实 LLM 报告格式遵循度根修（本轮 E2E 实测坐实）：技能指令的 recency 加固——route.ts 在 PROTOCOL_SUFFIX 旁追加技能报告格式提醒（末条 user 消息「reply 必须以【{技能名}报告】开头、每节一行 ▌ 开头」短句），与协议提醒同机制；必要时 buildSkillDirective 加 few-shot 输出示例；GLM-4.6 上 A/B 实测对比遵循率
+  2. 【高】技能报告两段式执行（架构升级）：报告回执类数值全为 — 的根因是单轮架构（报告生成在命令执行前）——命令执行完毕后把回执摘要二次送 LLM 填报告（「口袋残基 12 个：HIS58…」这类实测数值），或前端从命令 output 直接提取（contacts 回执的接触对数等结构化数据）；报告从「格式合规」升级到「数值真实」
+  3. 【中】技能选择器增强：芯片栏横向滚动布局（当前弹层 10 项全列表）+ 技能使用计数统计（会话内 badge）+ 报告卡片 ▌数值节点击跳转（如口袋残基节 → zoom 口袋）
+  4. 【中】r104 建议延续：命令级 per-rep 着色（colorOverrides 限制）/ 视觉基线场景扩容（4 支新膜类模板入基线）
+  5. 【中】mock-llm 技能感知升级：fix-turn（自动修正轮）也可携带技能上下文（当前修正轮不注入——命令替换建议可能偏离标准流程）；场景替换扩展到链 ID（xcontacts 的 chain A/B 按场景链替换）
+  6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
+
+（r106 段 cron 补记，2026-10-10）15min webDevReview 巡检任务 #452981 创建成功（`0 */15 * * * ?` 6 字段格式——首次 `*/15 * * * * ?` 被解析为 15 秒间隔拒建，秒字段须显式 0）。任务书已内嵌 r106 开发纪律（.agent/skills/ 四 SKILL 引用 + 门禁链 614 基线 + kill 红线 + E2E 新坑 4 条 + 下轮优先级）。若创建即 Disabled（配额硬限——r85-r105 连续 19 次实证）则按惯例删除清理并以此补记为准。

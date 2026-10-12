@@ -125,6 +125,146 @@ function dec(zh: boolean, zhReply: string, enReply: string, commands: string[]):
   return { reply: zh ? zhReply : enReply, commands }
 }
 
+// ---------- r106 技能感知（skill-aware mock） ----------
+// route.ts 命中标准技能时把 buildSkillDirective 的注入段（标准流程 + 固定报告格式）拼在
+// 系统提示尾部、以首条 assistant 消息发送。本分支模拟「遵循技能指令的合规 LLM」：
+// 从注入段原样解析步骤命令序列（commands 按序回放）与报告章节（reply 按【…报告】+
+// ▌节行固定格式生成）。报告数值：能从场景快照（【自动注入的当前场景信息】user 消息）
+// 取的取（结构名/配体/链/水/原子数）；命令回执类数值（接触数/氢键数/ΔSASA/RMSD——
+// 报告生成在命令执行之前）合规写法就是「—」。此分支先于关键词模板：技能命中时流程
+// 优先；普通对话（无注入段）零影响——这是把 E2E 的技能链升级为真端到端的 QA 基础设施。
+
+/** 场景快照解析结果（技能报告填值用；对应前端 buildSceneContext 的输出格式） */
+interface SceneFacts {
+  structureName: string
+  atoms: number
+  residues: number
+  chains: string[]
+  ligandInfo: string
+  waterCount: number
+  structureNames: string[]
+}
+
+/** 解析场景快照：route.ts 把「【自动注入的当前场景信息，非用户发言】」开头的 user 消息
+ *  放在系统提示之后。结构行格式：
+ *  `- 【活动】4HHB [PDB] 4779原子/574残基 · 链: A(蛋白·141残基) B(…) · 配体: HEM×4 · 水50`
+ *  （段分隔符是带双侧空格的 ' · '——链内“蛋白·141残基”的点号无空格，不会误切） */
+function parseSceneFacts(messages: MockMessage[]): SceneFacts | null {
+  const sceneMsg = messages.find(m => m?.role === 'user' && normalizeContent(m.content).startsWith('【自动注入的当前场景信息'))
+  if (!sceneMsg) return null
+  const text = normalizeContent(sceneMsg.content)
+  const facts: SceneFacts = { structureName: '', atoms: 0, residues: 0, chains: [], ligandInfo: '', waterCount: 0, structureNames: [] }
+  if (/未加载任何结构/.test(text)) return facts
+  const m = /已加载 (\d+) 个结构，活动结构：(.+)$/m.exec(text)
+  if (m) facts.structureName = m[2].trim()
+  let activeDone = false
+  for (const line of text.split('\n')) {
+    if (!/^\s*-\s/.test(line)) continue
+    const segs = line.trim().slice(2).split(' · ') // 去掉行首「- 」再按段切
+    const head = /^(?:【活动】)?([A-Za-z0-9_-]+)\s+\[\w+\]\s+(\d+)原子\/(\d+)残基/.exec(segs[0])
+    if (!head) continue
+    facts.structureNames.push(head[1])
+    const isActive = segs[0].startsWith('【活动】')
+    if (isActive && !activeDone) {
+      activeDone = true
+      facts.structureName = head[1]
+      facts.atoms = parseInt(head[2], 10)
+      facts.residues = parseInt(head[3], 10)
+      for (const seg of segs.slice(1)) {
+        if (seg.startsWith('链: ') && seg !== '链: 无') {
+          facts.chains = [...seg.matchAll(/([A-Za-z0-9]+)\(/g)].map(x => x[1])
+        } else if (seg.startsWith('配体: ')) {
+          facts.ligandInfo = seg.slice(3).trim()
+        } else if (/^水\d+/.test(seg)) {
+          facts.waterCount = parseInt(seg.slice(1), 10)
+        }
+      }
+    }
+  }
+  return facts
+}
+
+/** 注入段解析结果（commands = 标准流程命令序列；sectionLabels = 报告章节标签序列） */
+interface SkillDirective {
+  name: string
+  id: string
+  cmds: string[]
+  sectionLabels: string[]
+}
+
+/** 解析技能注入段：标记行「## 本次任务命中标准技能：{名}（{id}」只在 route.ts 注入时出现
+ *  （历史消息的 assistant 回复是【…报告】文稿，不含该标记——无假阳性）。步骤行：
+ *  `   1. 互作接触分析：contacts ligand | polymer 4.5 —— 验证说明`；章节行：`▌结构与配体：提示语` */
+function parseSkillDirective(messages: MockMessage[]): SkillDirective | null {
+  for (const msg of messages) {
+    if (msg?.role !== 'assistant' && msg?.role !== 'system') continue
+    const text = normalizeContent(msg.content)
+    const marker = /## 本次任务命中标准技能：(.+?)（([a-z-]+)）/.exec(text)
+    if (!marker) continue
+    const d: SkillDirective = { name: marker[1], id: marker[2], cmds: [], sectionLabels: [] }
+    let mm: RegExpExecArray | null
+    const stepRe = /^\s+\d+\.\s[^：]+：(.+?)(?:\s+——\s.*)?$/gm
+    while ((mm = stepRe.exec(text))) d.cmds.push(mm[1].trim())
+    const secRe = /^▌([^：]+)：/gm
+    while ((mm = secRe.exec(text))) d.sectionLabels.push(mm[1])
+    return d
+  }
+  return null
+}
+
+/** workflow 模板里的示例 PDB ID（morph/xcontact 类双结构流程）按已加载结构名替换——
+ *  真实 LLM 会按 check 提示「A/B 换成场景中的两个结构」做同样的事，mock 用机械替换模拟。
+ *  首结构替换 1BQL/1UBQ、次结构替换 2LYZ/1D3Z；结构不足两个时保留原样（命令诚实报错
+ *  走应用侧自动修正轮，不静默编造）。不含示例 ID 的命令不受影响。 */
+function substituteSceneStructs(cmd: string, names: string[]): string {
+  if (names.length < 2) return cmd
+  // 单趟替换（replacer 函数）：链式 split/join 会把「替换产物再替换」——场景本身含
+  // 1BQL/1D3Z 等示例名时命令被连环改写（实测踩坑：morph m1 = 1BQL 1BQL 40）
+  const map: Record<string, string> = { '1BQL': names[0], '2LYZ': names[1], '1UBQ': names[0], '1D3Z': names[1] }
+  return cmd.replace(/\b(1BQL|2LYZ|1UBQ|1D3Z)\b/g, m => map[m])
+}
+
+/** 各技能的建议短句（报告「建议」节静态填值——建议不依赖命令回执） */
+const SKILL_ADVICE: Record<string, string> = {
+  'ligand-pocket': '可 view from ligand 再看口袋；hbonds 3.2 可收紧判据',
+  'hbond-network': 'zoom in 看网络细节；hbonds off 清除虚线',
+  'interface-analysis': '分析面板可点选核心界面残基',
+  'pub-figure': 'ray 宽度可至 3000；配色可换 spectrum',
+  'structure-survey': '可 isolate <配体名> 聚焦辅基环境',
+  'membrane-context': '膜厚 30-40Å 可调；通道结构可加 pore',
+  'sasa-surface': '可 zoom 活性位点叠加渐变观察',
+  'xcontact-analysis': 'superpose 变换实时反映在跨结构接触中',
+  'morph-conformations': 'ensemble fps 可调速；record 可录制',
+  'symmetry-assembly': '半径 5-80Å 可调组装范围',
+}
+
+/** 报告章节填值：场景快照可取的填实值；命令回执类（报告生成在命令执行前——接触数/氢键数/
+ *  ΔSASA/RMSD/总面积等）合规写「—」；建议类给短句。default 分支即回执类的总出口。 */
+function fillSkillReportValue(skillId: string, label: string, scene: SceneFacts | null): string {
+  if (label === '建议') return SKILL_ADVICE[skillId] ?? '可结合场景继续调整视角与表示'
+  const has = !!scene?.structureName
+  switch (label) {
+    case '结构与配体': return has ? (scene!.ligandInfo ? `${scene!.structureName} + ${scene!.ligandInfo}` : `${scene!.structureName}（无配体）`) : '—'
+    case '分析范围': return has ? (scene!.ligandInfo ? '配体 4.5Å 内残基群（排除水）' : '活动结构主链（无配体回退）') : '—'
+    case '界面链对': return has && scene!.chains.length >= 2 ? `${scene!.chains[0]}-${scene!.chains[1]}` : '—'
+    case '图面目标': return has ? `${scene!.structureName}${scene!.ligandInfo ? ' 互作图' : ' 全貌图'}` : '—'
+    case '表示与配色': return 'publication（链色卡通 · 配体鲜绿 · 距离渐变）'
+    case '渲染参数': return '白底 · 描边 0.5/1px · 灯光默认'
+    case '导出规格': return 'ray 2400 · PNG'
+    case '链组成': return has && scene!.chains.length ? `${scene!.chains.join('/')}（${scene!.chains.length} 条链）` : '—'
+    case '配体与辅基': return has && scene!.ligandInfo ? scene!.ligandInfo : '—'
+    case '水与总量': return has ? `水${scene!.waterCount} · 共${scene!.atoms}原子` : '—'
+    case '主轴方位': return 'PCA 主轴已对齐（跨膜轴竖直）'
+    case '膜参数': return '厚度 34Å · 5 对象（双头基板+核心）'
+    case '构象对': return scene && scene.structureNames.length >= 2 ? `${scene.structureNames[0]} → ${scene.structureNames[1]}` : '—'
+    case '结构对': return scene && scene.structureNames.length >= 2 ? `${scene.structureNames[0]} | ${scene.structureNames[1]}` : '—'
+    case '帧数': return '40（默认）'
+    case '组装半径': return '20Å（默认）'
+    case '组装观感': return '原体 + 对称伴侣整体入框'
+    default: return '—'
+  }
+}
+
 /** 关键词 → AgentDecision 协议模板（commands 覆盖全命令面；顺序具体优先于宽泛） */
 function buildDecision(messages: MockMessage[]): { reply: string; commands: string[] } {
   // 多模态兼容：content 可能是 OpenAI 视觉格式的数组——归一化为纯文本再走模板
@@ -175,6 +315,20 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
       '视觉自查通过：渲染结果与用户目标一致，无需修正。',
       'Visual check passed: the render matches the goal — no corrections needed.',
       [])
+  }
+
+  // 0.5 r106 技能感知分支（先于关键词模板：技能命中时标准流程优先）。commands 按注入段
+  //     步骤序回放（示例 PDB ID 场景替换）；reply 按【…报告】+ ▌节行固定格式（章节标签
+  //     与数值由注入段 + 场景快照驱动——mock 不编造回执类数值）。
+  const directive = parseSkillDirective(messages)
+  if (directive) {
+    const scene = parseSceneFacts(messages)
+    const commands = directive.cmds.map(c => substituteSceneStructs(c, scene?.structureNames ?? []))
+    const replyLines = [`【${directive.name}报告】`]
+    for (const label of directive.sectionLabels) {
+      replyLines.push(`▌${label}：${fillSkillReportValue(directive.id, label, scene)}`)
+    }
+    return { reply: replyLines.join('\n'), commands }
   }
 
   // 1. 彩虹渐变（先于颜色类：「彩虹色/渐变」不能被色词匹配吞掉）
