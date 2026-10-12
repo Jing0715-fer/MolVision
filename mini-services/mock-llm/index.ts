@@ -224,6 +224,38 @@ function substituteSceneStructs(cmd: string, names: string[]): string {
   return cmd.replace(/\b(1BQL|2LYZ|1UBQ|1D3Z)\b/g, m => map[m])
 }
 
+/** r110-c 修正轮「真修正」：失败命令的语义改写（场景替换后应用）。
+ *  动机：r109 的 0.45 是「场景替换后回放原命令」——失败原因若不是场景参数（如无配体
+ *  结构跑配体技能：场景替换后命令仍是 contacts ligand），同名重试必再失败（应用侧
+ *  depth 兜底停，修正轮沦为仪式）。真实 LLM 的修正是「读错误信息换一种问法」：
+ *  按失败 output 的错误类型 + 命令形态改写为更可能成功的等价命令。
+ *  规则（失败 output 含「命中 0 个原子 / matched 0 atoms」时空选择错误才适用）：
+ *  ① ligand 依赖降级——命令含 ligand（典型：无配体结构跑配体技能）：
+ *     view from ligand → orient（视角兜底）/ zoom within N of (ligand) → zoom
+ *     （整框兜底）/ 其余命令 ligand 词级换 polymer（contacts 两段语法、hbonds 烘焙
+ *     scope、count/isolate 选择子均得到合法且非空的等价命令）；
+ *  ② 链不存在探测——命令含 chain X 而 output 报空选择（链不在场景）：回放
+ *     chains list（单轮 mock 无法「看链清单再重组」——需要消费命令输出，跨轮次；
+ *     诚实降级为探测命令，用户/LLM 下轮按清单重组）。
+ *  无规则命中保持原命令（场景替换后回放——r109 行为，适配场景参数失配类失败）。 */
+function fixRewriteCommand(cmd: string, failOutput: string): string {
+  // G1 实测补判据（两轮）：空选择文案共四族——①zoom/count 系「命中 0 个原子 / matched
+  // 0 atoms」②contacts 系「选择为空（A: 0 原子…）/ Empty selection (A: 0 atoms…)」
+  // ③hbonds scope「范围选择为空 / Scope selection is empty」④view/isolate「选择为空 /
+  // Selection is empty」。ZH 侧「选择为空」是②③④的公共子串、EN 侧「selection is empty」
+  // （不区分大小写）统一③④——正则五选一覆盖全族；否则某族失败恒不改写（G1 抓出
+  // contacts 与 hbonds/view 两轮漏判的教训：判据必须按产品代码实文案枚举，勿凭一族推全）
+  if (!/命中 0 个原子|matched 0 atoms|选择为空|Empty selection|selection is empty/i.test(failOutput)) return cmd
+  if (/\bligand\b/i.test(cmd)) {
+    if (/^view\s+from\s+ligand$/i.test(cmd.trim())) return 'orient'
+    if (/^zoom\s+within\s+\S+\s+of\s+\(ligand\)$/i.test(cmd.trim())) return 'zoom'
+    return cmd.replace(/\bligand\b/gi, 'polymer')
+  }
+  if (/\bchain\s+[A-Za-z0-9]\b/.test(cmd)) return 'chains list'
+  return cmd
+}
+
+
 /** r109-c 链 ID 场景替换（r106-parallel 遗留②）：workflow 模板里的示例链（chain A /
  *  chain B / interface A B）按场景链替换——真实 LLM 按 check 提示「A/B 换成场景中的
  *  两条链」做同样的事，mock 用机械替换模拟。保守条件：模板字母不在场景链清单时才替换
@@ -419,14 +451,26 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
   //      落地：修正轮无技能上下文时关键词模板回复会跑偏标准流程。先于 0.5（否则整段
   //      workflow 回放会重复已成功命令——与修正 prompt「不要重复已成功的命令」相悖）。
   if (/执行失败了，请修正|just failed\. Fix them/i.test(lastUser) && parseSkillDirective(messages)) {
-    const failedCmds = [...lastUser.matchAll(/^- (.+?) → .+$/gm)].map(m => m[1].trim())
+    // r110-c 提取升级：捕获失败 output（改写判据——空选择错误才触发规则；r109 只提
+    // 命令本体，改写无据可依）。matchAll 产出与命令一一配对的 (cmd, output) 序列。
+    const failedPairs = [...lastUser.matchAll(/^- (.+?) → (.+)$/gm)].map(m => [m[1].trim(), m[2].trim()] as const)
     const scene = parseSceneFacts(messages)
-    const commands = failedCmds
-      .map(c => substituteSceneStructs(c, scene?.structureNames ?? []))
-      .map(c => substituteSceneChains(c, scene?.chains ?? []))
+    // r110-c 真修正管线：场景替换（场景参数失配类失败）→ 语义改写（ligand 依赖降级 /
+    // 链不存在探测——错误类型类失败）。两道各自独立：前者治「参数写错」，后者治
+    // 「命令语义在本场景不成立」（同名重试必再失败的根因）。
+    const sceneSubbed = failedPairs
+      .map(([c, o]) => [substituteSceneStructs(c, scene?.structureNames ?? []), o] as const)
+      .map(([c, o]) => [substituteSceneChains(c, scene?.chains ?? []), o] as const)
+    const commands = sceneSubbed.map(([c, o]) => fixRewriteCommand(c, o))
+    // rewrote 只反映语义改写（与场景替换后的中间态比——场景替换改写不冒充「按失败原因修正」）
+    const rewrote = commands.some((c, i) => c !== sceneSubbed[i][0])
     return dec(zh,
-      `已按标准技能流程修正失败命令（按当前场景替换选择表达式后重试）。`,
-      `Failed commands corrected within the standard skill workflow (selection expressions re-substituted for the current scene).`,
+      rewrote
+        ? `已按失败原因修正命令（失败选择子按错误信息改写为等价命令后重试；链不存在时先 chains list 探测可用链）。`
+        : `已按标准技能流程修正失败命令（按当前场景替换选择表达式后重试）。`,
+      rewrote
+        ? `Commands fixed by failure cause (failed selectors rewritten to equivalent commands per the error message; chains list probes available chains when a chain is absent).`
+        : `Failed commands corrected within the standard skill workflow (selection expressions re-substituted for the current scene).`,
       commands)
   }
 

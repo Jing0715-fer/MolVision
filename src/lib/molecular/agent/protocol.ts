@@ -9,6 +9,10 @@ export interface AgentCmdRecord {
   status: 'pending' | 'running' | 'ok' | 'error' | 'confirm' | 'rejected' | 'blocked'
   /** 执行后从控制台捕获的输出摘要（out/err，截断展示） */
   output?: string
+  /** r110-b 跳转命令溯源：该命令由报告节点击跳转触发时记录节标签（如「口袋残基」，
+   *  命令卡头部徽章「跳转自报告节 · X」用——跳转回放与常规命令同卡渲染，溯源让
+   *  审计链可读：为什么突然多了一条 view 命令）。持久化字段（重载后徽章仍在）。 */
+  sourceJump?: string
 }
 
 /** 聊天消息（持久化到 localStorage，上限 AGENT_CHAT_MAX） */

@@ -6,7 +6,7 @@
 // 修正命令本身还会被再自查一轮（有界双轮：修到效果理想为止，不无限循环）
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Ban, Bot, Check, ChevronDown, Clock, CornerDownRight, Eye, EyeOff, Loader2, MessageSquarePlus, Pencil, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
+  Ban, Bot, Check, ChevronDown, Clock, CornerDownRight, Eye, EyeOff, Loader2, MessageSquarePlus, MousePointerClick, Pencil, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -705,7 +705,8 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     const next = msg.commands.map((c, i) => (i === idx ? { ...c, status: 'running' as const } : c))
     patchCmds(msgId, next)
     const r = await execAgentCmd(next[idx].cmd)
-    patchCmds(msgId, next.map((c, i) => (i === idx ? r : c)))
+    // G1 实测根修（与 jumpTo 同款）：r 整体替换抹掉 sourceJump——rerun 溯源也须保留
+    patchCmds(msgId, next.map((c, i) => (i === idx ? { ...r, sourceJump: c.sourceJump } : c)))
   }, [msgs, patchCmds, busy])
 
   const clearChat = useCallback(() => {
@@ -714,14 +715,17 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   }, [])
 
   /** r109-b 报告节点击跳转：执行解析出的命令并把命令卡追加到同一消息（复用既有命令卡
-   *  UI——状态/输出/展开全链审计）；生成中拒绝（并发执行打架，与 act 同口径） */
-  const jumpTo = useCallback(async (msgId: string, cmd: string) => {
+   *  UI——状态/输出/展开全链审计）；生成中拒绝（并发执行打架，与 act 同口径）。
+   *  r110-b 溯源：label（节标签）写入命令记录 sourceJump——命令卡头部「跳转自报告节」
+   *  徽章的数据源，审计链可读（为什么突然多了一条 view 命令）。 */
+  const jumpTo = useCallback(async (msgId: string, cmd: string, label: string) => {
     if (useAgentChatStore.getState().busy) return
     const prev = useAgentChatStore.getState().msgs.find(x => x.id === msgId)?.commands ?? []
-    const next: AgentCmdRecord[] = [...prev, { cmd, status: 'running' }]
+    const next: AgentCmdRecord[] = [...prev, { cmd, status: 'running', sourceJump: label }]
     patchCmds(msgId, next)
     const rec = await execAgentCmd(cmd)
-    patchCmds(msgId, next.map((c, i) => (i === next.length - 1 ? rec : c)))
+    // G1 实测根修：rec 整体替换会抹掉 sourceJump（写入 → 执行 → 替换丢失）——合并保留溯源
+    patchCmds(msgId, next.map((c, i) => (i === next.length - 1 ? { ...rec, sourceJump: label } : c)))
   }, [patchCmds])
 
   const startNewSession = useCallback(() => {
@@ -939,12 +943,12 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                           <button
                             key={li}
                             type="button"
-                            onClick={() => void jumpTo(m.id, jump)}
+                            onClick={() => void jumpTo(m.id, jump, t2.slice(0, sep).replace(/^▌/, ''))}
                             title={t({ zh: `点击跳转：${jump}`, en: `Click to jump: ${jump}` })}
                             aria-label={t({ zh: `跳转：${t2.slice(0, sep)}`, en: `Jump: ${t2.slice(0, sep)}` })}
                             className="group/jump -mx-1 flex w-full gap-1.5 rounded px-1 py-px text-left transition-colors duration-150 hover:bg-primary/[0.08]"
                           >
-                            <span className="shrink-0 font-medium text-foreground/85">{t2.slice(0, sep + 1)}</span>
+                            <span className="shrink-0 font-medium text-foreground/85 transition-colors duration-150 group-hover/jump:text-primary">{t2.slice(0, sep + 1)}</span>
                             <span className="min-w-0 flex-1 text-foreground/75 transition-colors group-hover/jump:text-foreground">{t2.slice(sep + 1)}</span>
                             <CornerDownRight aria-hidden className="h-3 w-3 shrink-0 self-center text-primary/0 transition-colors duration-150 group-hover/jump:text-primary/80" />
                           </button>
@@ -1009,6 +1013,16 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                           </button>
                         )}
                       </div>
+                      {/* r110-b 跳转命令溯源徽章：报告节点击触发的命令卡头部标注来源节——
+                          审计链可读（报告节 → 跳转 → 该命令卡），与视觉自查消息的 kind 标记同思路 */}
+                      {c.sourceJump && (
+                        <div className="mt-1 flex items-center gap-1 text-[9px] leading-none text-primary/75">
+                          <MousePointerClick aria-hidden className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate">
+                            {t({ zh: `跳转自报告节 · ${c.sourceJump}`, en: `Jumped from report section · ${c.sourceJump}` })}
+                          </span>
+                        </div>
+                      )}
                       {c.status === 'confirm' && (
                         <div className="mt-1.5 flex items-center gap-1.5">
                           <button

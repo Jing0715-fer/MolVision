@@ -1186,6 +1186,61 @@ check "mock修正轮识别锚"        "执行失败了，请修正" "mini-servic
 #    在 A/B 链不在场的场景恒报错、修正轮回放不替换链）
 check "mock链替换锚"            "substituteSceneChains" "mini-services/mock-llm/index.ts" 3
 
+# ---- r110：mockd 看门狗 + 跳转溯源 + 修正轮真修正 ----
+# 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」
+# ——r109 下一轮建议第 1【高】/ 第 4【中】落地：
+# ①r110-a mock-llm 看门狗（独立 scripts/mockd.py——r109 建议「devd 增 3999 探活」的
+#   独立守护实现路径：替换运行中 devd 须中断 dev server，独立进程零中断部署）：两级探活
+#   （L1 GET /v1/models 任何 HTTP 响应即活 30s 周期；L2 流式探针 POST stream:true 断言
+#   [DONE] 尾——r109 实测损坏态「非流式正常流式挂起」的表形态探针，120s 周期）；L1 连续
+#   3 败 / L2 连续 2 败触发单例重启（lsof 端口反查清旧 + /proc cwd 兜底 + Popen 脱离 +
+#   有界等活）；1h 窗 ≥3 次重启退避 30min。实战闭环验证：本轮 mock 热重载损坏（curl 实测
+#   流式只吐 1/3 无 [DONE]）被 mockd 2min15s 自愈（L2 streak2 → 重启 → L1/L2 复活单例）——
+#   r109 同款故障 40 分钟人工取证的缺口就此闭环；
+# ②r110-b 跳转命令溯源：AgentCmdRecord 增 sourceJump（节标签持久化），jumpTo 追加命令卡
+#   时写入，命令卡头部「跳转自报告节 · X」徽章（审计链可读：报告节 → 跳转 → 命令卡）；
+#   报告节 hover 标签变主色（r109 建议③ hover 细节增强的第一步）；
+# ③r110-c 修正轮真修正（r109 建议第 4 项）：mock 0.45 提取升级捕获失败 output（改写判据），
+#   fixRewriteCommand 语义改写——空选择错误 + 命令含 ligand（无配体结构跑配体技能）时
+#   view from ligand→orient / zoom within N of (ligand)→zoom / 其余 ligand→polymer 词级
+#   替换；命令含 chain X → chains list 探测（单轮 mock 无法探测后重组，诚实降级）；
+#   无规则命中保持 r109 场景替换回放（非空选择类失败不受影响）。
+# 以下十七锚防各环节被改写/删除静默退化（实测数见各行注释）：
+# ①mockd L1 探针锚（实测 3——探活 URL+docstring+注释；删则 L1 失明、死亡态无人发现）
+check "mockd L1探针锚"            "/v1/models" "scripts/mockd.py" 3
+# ②mockd L2 DONE 断言锚（实测 1——流式探针核心判据；删则热重载损坏态失明——r109 故障形态）
+check "mockd L2 DONE锚"           "data: \[DONE\]" "scripts/mockd.py" 1
+# ③mockd 重启阈值锚（实测 3——L1/L2 两阈值定义+判定行；放松 = 故障发现变慢或永不触发）
+check "mockd 阈值锚"              "FAILS_RESTART" "scripts/mockd.py" 3
+# ④mockd lsof 反查锚（实测 4——端口反查清旧〔r109 教训：pkill 按目录名失配〕+注释；删则重启 EADDRINUSE）
+check "mockd lsof锚"              "lsof" "scripts/mockd.py" 4
+# ⑤mockd 退避锚（实测 3——BACKOFF 常量+触发+注释；删则重启风暴无防护）
+check "mockd 退避锚"              "BACKOFF" "scripts/mockd.py" 3
+# ⑥mockd 防双实例锚（实测 2——already_running 定义+main 调用；删则双守护互踩+日志双写）
+check "mockd 防双实例锚"          "already_running" "scripts/mockd.py" 2
+# ⑦sourceJump 字段锚（实测 1——protocol.ts 字段定义；删则持久化与徽章数据源断链）
+check "sourceJump字段锚"          "sourceJump\?: string" "src/lib/molecular/agent/protocol.ts" 1
+# ⑧jumpTo 写入锚（实测 1——命令记录写入 sourceJump: label；删则徽章无来源数据）
+check "jumpTo写入锚"              "sourceJump: label" "src/components/studio/AgentPanel.tsx" 1
+# ⑨溯源徽章文案锚（实测 1——EN 徽章文案；删则审计链丢失跳转来源标注）
+check "溯源徽章文案锚"            "Jumped from report section" "src/components/studio/AgentPanel.tsx" 1
+# ⑩hover 主色锚（实测 1——节标签行 group-hover/jump:text-primary；删则 hover 细节退化回灰）
+check "hover主色锚"               "group-hover/jump:text-primary\"" "src/components/studio/AgentPanel.tsx" 1
+# ⑪MousePointerClick 锚（实测 2——图标 import+徽章使用；删则 tsc 挡住徽章渲染断链）
+check "MousePointerClick锚"       "MousePointerClick" "src/components/studio/AgentPanel.tsx" 2
+# ⑫fixRewrite 函数锚（实测 2——定义+0.45 接入；删则修正轮回退「同名重试必再失败」仪式态）
+check "fixRewrite函数锚"          "fixRewriteCommand" "mini-services/mock-llm/index.ts" 2
+# ⑬fixRewrite 空选择锚（实测 2——ZH/EN 错误文案正则+注释；放松 = 非空选择失败也可触发改写）
+check "fixRewrite空选择锚"        "matched 0 atoms" "mini-services/mock-llm/index.ts" 2
+# ⑭fixRewrite polymer 规则锚（实测 1——ligand 词级替换目标；删则 contacts/hbonds 类失败降级路径断）
+check "fixRewrite polymer锚"      "'polymer'" "mini-services/mock-llm/index.ts" 1
+# ⑮fixRewrite 链探测锚（实测 1——return 'chains list'；删则链不存在类失败无探测路径）
+check "fixRewrite链探测锚"        "return 'chains list'" "mini-services/mock-llm/index.ts" 1
+# ⑯提取配对锚（实测 1——matchAll 捕获 cmd+output 二元组；回退单捕获 = 改写无据可依）
+check "提取配对锚"                "\[m\[1\]\.trim\(\), m\[2\]\.trim\(\)\]" "mini-services/mock-llm/index.ts" 1
+# ⑰改写文案锚（实测 1——EN 改写发生文案；删则用户无法感知「按失败原因修正」动作）
+check "改写文案锚"                "fixed by failure cause" "mini-services/mock-llm/index.ts" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

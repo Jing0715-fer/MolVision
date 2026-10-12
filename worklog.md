@@ -4691,3 +4691,42 @@ Stage Summary:
 （r109 段 cron 补记，2026-10-12）15min webDevReview 巡检任务创建待配额探测——若创建即 Disabled（r85-r108 连续 23 次实证口径）则删除清理并以此补记为准。
 
 （r109 段 cron 补记更正，2026-10-12）巡检任务重建实测：#454270 创建（22:11:15）即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 24 次实证（r85-r109 连续 23 次 + 本轮），已删除清理。worklog r109 主段「创建待配额探测」表述据此定论：配额仍未恢复，巡检缺席期防线不变——devd 看门狗（绝对阈值 + 斜率双闸）+ 四级 CI 门禁（guards 660 + smoke 6 + visual-baseline 7）继续作为自愈防线；任务书已内嵌 r109 开发纪律（含 3999 探活缺口警示）——配额恢复后可直接重建。
+
+---
+Task ID: r110
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r109 下一轮建议第 1【高】/ 第 4【中】落地：①mock-llm 看门狗（独立 mockd.py——对 r109 建议「devd 增 3999 探活」的实现路径修正）②跳转命令溯源（sourceJump 字段 + 命令卡徽章 + hover 主色）③修正轮「真修正」（fixRewriteCommand 语义改写）；QA 门禁链全绿 + E2E 四组 + 结果驱动规划；另有 devd OOM 实战接管与两次 mockd 自愈闭环
+
+Work Log:
+- 【读基】HEAD=4f72d2e（r109 完成态）；工作区干净；guards 实跑 660/660 = 本轮基线数；dev 200；dev.log 尾部良性（7AHL 缓存通知口径）；.agent/skills 四 SKILL 按流程读取恢复语境；r109「下一轮建议」第 1【高】mockd 看门狗 + 第 4【中】真修正 = 本轮立项来源（第 3【中】跳转增强取溯源+hover 子项，3D 视口预览高亮留下轮）
+- 【改动·r110-a mockd.py 看门狗】新建 scripts/mockd.py 独立守护（r109 建议写「devd.py 增 3999 探活分支」，实现路径修正为独立进程：替换运行中 devd 须中断 dev server 守护链整体重启，独立守护零中断部署且职责分离）：double-fork 范式与 devd.py 同源；两级探活——L1 GET /v1/models 任何 HTTP 响应即活（30s 周期）、L2 流式探针 POST /v1/chat/completions stream:true 断言流尾含 data: [DONE]（120s 周期，L1 活时才跑——r109 实测损坏态「非流式正常流式挂起」的表形态探针）；L1 连续 3 败 / L2 连续 2 败触发单例重启（lsof 端口反查 + ss 兜底 + /proc cwd 兜底清旧 → 有界等端口释放 15s → SIGKILL 兜底 → Popen bun run dev start_new_session 脱离 → 有界等活 20s）；1h 滚动窗 ≥3 次重启退避 30min（计数清零防退避结束瞬间旧计数触发）；pid 文件 + /proc cmdline 双确认防双实例；日志 [mockd HH:MM:SS] 标记行入 dev.log
+- 【改动·r110-b 跳转溯源】①protocol.ts AgentCmdRecord 增 sourceJump?: string（节标签持久化——重载后徽章仍在）；②AgentPanel jumpTo 增 label 形参（t2.slice(0,sep) 剥▌前缀），追加命令记录写入 sourceJump；③命令卡头部溯源徽章（MousePointerClick 图标 + 「跳转自报告节 · X / Jumped from report section · X」双语）；④报告节 hover 标签变主色（group-hover/jump:text-primary 过渡）
+- 【改动·r110-c 修正轮真修正】mock-llm index.ts：①提取升级——matchAll 捕获 (cmd, output) 二元组（r109 只提命令本体，改写无据可依）；②fixRewriteCommand 纯函数：空选择错误（四族文案判据，见下）+ 命令含 ligand → view from ligand→orient / zoom within N of (ligand)→zoom / 其余 ligand→polymer 词级替换（contacts 两段语法、hbonds 烘焙 scope、count/isolate 选择子均得合法等价命令）；命令含 chain X 无 ligand → chains list 探测（单轮 mock 无法「看链清单再重组」，诚实降级）；无规则命中保持 r109 场景替换回放；③reply 双语文案分流（rewrote→「已按失败原因修正命令」，否则 r109 原文案）；④pipeline：场景替换（治参数失配）→ 语义改写（治命令语义在本场景不成立）两道独立，rewrote 与场景替换后中间态比（场景替换不冒充「按失败原因修正」）
+- 【改动·测试驱动根修 ①】G1 抓出 sourceJump 抹除 bug：jumpTo 里 execAgentCmd 返回的 rec 整体替换命令记录，把 sourceJump 丢了（写入→执行→替换丢失，徽章恒不渲染）——修为 { ...rec, sourceJump: label } 合并；act（rerun）路径同款根修 { ...r, sourceJump: c.sourceJump }（spread 保留原溯源）
+- 【改动·测试驱动根修 ②】空选择文案族两轮补全：首轮判据只覆盖「命中 0 个原子/matched 0 atoms」（zoom/count 族）——G1 实测 contacts 失败文案是「Empty selection (A: 0 atoms, B: 602 atoms)」（contacts.ts:276/332/445）恒不改写；补判据后二验又抓出 hbonds「Scope selection is empty」（commands.ts:2025）与 view「Selection is empty」（commands.ts:270/parser.ts:777）两族——终态正则 /命中 0 个原子|matched 0 atoms|选择为空|Empty selection|selection is empty/i（ZH「选择为空」为②③④族公共子串、EN「selection is empty」不区分大小写统一③④）；M 测试报文同步改为产品代码实抄文案（r109 坑②「测试脚本手抄文案与产品代码漂移」的 output 变体第三例）
+- 【守卫 +17（660→677）】r110 独立注释块（r109 块后汇总段前）：mockd 六锚（L1 探针 3 / L2 DONE 断言 1 / 阈值 3 / lsof 反查 4 / 退避 3 / 防双实例 2）+ 溯源五锚（sourceJump 字段 1 / jumpTo 写入 1 / 徽章文案 1 / hover 主色 1 / MousePointerClick 2）+ 真修正六锚（fixRewrite 函数 2 / 空选择判据 2 / polymer 规则 1 / 链探测 return 1 / 提取配对 1 / 改写文案 1）——十七锚全环节防退化
+- 【QA】lint 0 · bunx tsc 全项目 5 历史基线错不变（mock-llm 行号 605→649 位移、内容同款；src/ 零）· guards 677/677 · smoke 6/6（heavy 路径）· visual-baseline 7/7（漂移 0.00%）· dev.log 尾部零真 error（[mockd] 标记行与 7AHL 缓存通知为良性口径）
+- 【E2E-G3 纯函数】r109-g3.ts 回归 33/33 全过（r110 无 skills.ts 纯函数改动——jump 解析/回填 prompt 断言全保持）
+- 【E2E-M mock 直测】16/16 全过：T1 contacts ligand→polymer（Empty selection 实抄文案）+ T1b ZH「选择为空」+ T2 view from ligand→orient（Selection is empty 文案）+ T3 zoom within→zoom（matched 0 atoms 文案）+ T4 hbonds scope→polymer（Scope selection is empty 文案）+ T5 链不存在→chains list + T6 泛错误不改写（r109 场景替换行为保持）+ T7 EN 全路径 + T8 混合（改写与场景替换并存）+ T9 无注入段不走 0.45——四族文案 × ZH/EN 双语 × 三类改写规则全覆盖
+- 【E2E-G1 浏览器端到端】4HHB form submit ✓ · 技能消息 5 命令执行 + 报告 + 回填（fill-flash ×2）✓ · 跳转按钮 6 个（新旧会话报告）✓ · 点击跳转 → 溯源徽章「Jumped from report section · 氢键」/「Jumped from report section · 接触对」✓ · 1UBQ（无配体）配体技能 → contacts ligand/hbonds/view 三连失败（真实文案族）→ 修正轮改写 contacts polymer | polymer 4.5 + hbonds (polymer) 全部成功 ✓ · 「已按失败原因修正」文案 ✓ · **报告数值从「—」变实测（口袋残基 652 对（最近 A:THR9 ↔ A:GLY10 2.20 Å）+ 氢键 145 条）——真修正让无配体结构的报告数值回填闭环（r110-c 核心价值的端到端证明：改写后命令成功的回执回填进报告）** ✓ · 全程 console errors 零 ✓
+- 【E2E-G4 轻量双语】语言 EN→中文（点目标语言钮铁律）→ 跳转按钮 title「点击跳转：zoom within 6 of (ligand)」+ 徽章中文「跳转自报告节 · 接触对 / 跳转自报告节 · 氢键」✓ · 供应商清理（DELETE openai + setDefault zai）✓ · console 零错误 ✓
+- 【E2E 真实 LLM A/B】本轮跳过：r110 三项交付零涉及 LLM 侧路径（sourceJump 纯前端 / fixRewrite 纯 mock / mockd 基础设施），回填 prompt 与 route 未动——r109 的 14/14（报告格式+跨语回填）对本轮改动仍然有效，无需重跑；全量 10 技能抽样留给 LLM 侧路径有改动的轮次
+- 【实战一：mockd 两次自愈闭环】①本轮 mock-llm 两轮判据编辑触发 mid-write 热重载损坏（curl 实测流式只吐 1/3 无 [DONE]——r109 同款形态）：14:46:54 L2 streak1 → 14:49:06 streak2 → 14:49:09 restart ok（清旧+拉起+L1 活），自愈 2min15s；②15:19 二次损坏：15:19:23 streak1 → 15:21:35 streak2 → 15:21:38 restart ok，自愈 2min12s——**r109 同款故障 40 分钟人工取证 vs 本轮 mockd 两次全自动 ~2min15s**（交付价值的实战度量）；期间 G1 恰逢损坏窗的一条「generation interrupted」消息为预期症状（mockd 恢复后重发即通）
+- 【实战二：devd OOM 接管】smoke 首跑 FAIL 暴露 dev server 失守：dmesg 实锤 60s 前 OOM-kill next-server（anon-rss 1.95GB）且 dev.log 零 [devd] 行（本沙箱 devd 从未启动，dev server 为直起实例无人守护）——python3 scripts/devd.py 自救拉起（14:56:22 daemon up + spawned pid=21403）+ dev 200 恢复 + smoke 6/6 重过；**双守护格局落位：devd 管 3000（内存看门狗绝对阈值+斜率双闸）+ mockd 管 3999（两级探活+单例重启）**——两道防线均为本轮内实战触发验证
+- 【坑（新入档）】①execAgentCmd 返回 rec 整体替换命令记录会抹掉记录上的自定义字段（sourceJump 写入→执行→替换丢失）——追加类交互（跳转/rerun）的字段保留须显式合并 {...rec, sourceJump}；②mock 判据正则必须按产品代码实文案枚举全族（空选择四族：命中 0 个原子/Empty selection (A:…)/Scope selection is empty/Selection is empty）——凭一族推全会漏判（G1 两轮才补全）；③文档内首个 form 未必是目标表单（WelcomeScreen share form 在 PDB form 之前）——query by placeholder 最近 form 才稳；④agent-browser eval 里 const 声明会污染页面全局（后续 eval 同名 Identifier 报 already declared）——一律 IIFE 包裹；⑤mock-llm --hot 编辑期热重载损坏是高频事件（本轮两次触发）——mockd 120s×2 发现延迟为接受代价，编辑后主动验证 L2 或主动重启是可选加速项；⑥t() 双语与 LLM 生成文本可混排（UI 语言 EN + 报告中文标签）——跳转/徽章的标签匹配必须双语兜底（reportSectionJumpCmd 既有设计正确）
+
+Stage Summary:
+- 交付一（r110-a）：mock-llm 看门狗 mockd.py 独立守护——两级探活（L1 轻探 30s + L2 流式 [DONE] 探针 120s）+ 单例重启（lsof 反查清旧 + Popen 脱离 + 有界等活）+ 退避防护；**两次实战自愈闭环（2min15s / 2min12s）对比 r109 同款故障 40 分钟人工取证**——mock-llm 无人自愈的缺口（r109 建议①）就此闭环；对 r109 建议实现路径的修正（独立进程 vs devd 增分支）及理由入档
+- 交付二（r110-b）：跳转命令溯源——sourceJump 持久化字段 + jumpTo 写入 + 命令卡「跳转自报告节 · X」双语徽章 + 报告节 hover 标签主色；审计链（报告节 → 跳转 → 命令卡）浏览器双语实证
+- 交付三（r110-c）：修正轮「真修正」——失败 output 提取 + fixRewriteCommand 语义改写（空选择四族文案判据 + ligand 三级降级 + 链探测 chains list）+ 文案分流；**无配体结构跑配体技能的端到端闭环实证：contacts/hbonds 改写 polymer 成功 → 报告数值从「—」变实测（652 对 / 145 条 / 2.20 Å）**——修正轮从「同名重试仪式」升级为「读错误换问法」的真实修正
+- 交付四（测试驱动根修两处）：①sourceJump 被 execAgentCmd 返回值整体替换抹掉（G1 抓出，jumpTo/act 双路径合并保留）②空选择判据两轮补全四族文案（contacts Empty selection → hbonds Scope selection is empty → view Selection is empty——判据须按产品代码实文案枚举）
+- 交付五（验证）：guards 660→677 全过 · smoke 6/6 · visual-baseline 7/7（0.00%）· E2E 四组（G3 33/33 / M 16/16 / G1 全链含真修正与溯源徽章 / G4 双语）全绿零 console 错误；真实 LLM A/B 跳过的理由入档（本轮零涉及 LLM 侧路径，r109 14/14 仍有效）
+- 附带实战：devd OOM 接管（next-server 1.95GB OOM-kill 后 devd.py 自救 + 双守护格局落位）——devd（3000 内存双闸）+ mockd（3999 两级探活）两道防线均在本轮内被真实故障触发验证
+- 与用户指令对位：①「进行下一阶段开发」——r109 建议第 1【高】+ 第 4【中】+ 第 3【中】子项落地 + 测试驱动根修两处 ②「qa测试和e2e测试」——六道门禁 + 四组 E2E + 两场实战故障闭环 ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【高】mock-llm 编辑期热重载损坏高频化（本轮两次触发 mockd 自愈）：mockd 的 L2 探针周期 120s×2 发现延迟 ~2min15s 可接受，但「编辑后主动验证/重启」是零成本加速项——在 .zscripts 留 edit-verify 脚本惯例（编辑 mock 后跑 L2 探针 + 失败即调 mock_restart），或在 mockd 增 inotify 式文件监听（fs 简单轮询 mtime 变更后立即 L2 + 必要时重启）
+  2. 【中】devd 的 mockd 对称补位：devd.py 增 mockd 健康上报（devd 日志周期性汇总 mockd 状态——两守护互察：mockd 死亡 devd 报警反之亦然）；沙箱重启场景（uptime 2:57 的本沙箱 devd 从未自启）——dev.sh/start.sh 启动链带起双守护
+  3. 【中】真实 LLM 技能全量抽样（r108 建议第 2 项持续挂起）：10 技能各 1 轮三段实测产出遵循率矩阵——留给 LLM 侧路径有改动的轮次同场执行（本轮无 LLM 侧改动故跳过）
+  4. 【中】跳转交互增强剩余项（r109 建议③）：报告节 hover 时 3D 视口预览高亮（口袋残基节 hover → 口袋残基瞬时选框）；技能选择器芯片栏横向滚动
+  5. 【中】修正轮「真修正」扩容：fixRewrite 规则表扩展到非空选择类失败（如「链不存在」泛错误 → chains list 探测规则化——r110 只对空选择族生效）；mock 0.45 的 chains list 探测结果消费（多轮重组——需要 mock 侧会话记忆，工程量大需评估）
+  6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）；r104 命令级 per-rep 着色延续
