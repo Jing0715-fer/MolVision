@@ -4591,3 +4591,5 @@ Stage Summary:
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
 
 （r107 段 cron 补记，2026-10-12）15min webDevReview 巡检任务 #452981 创建成功但「Disabled due to exec limits exceeded」——账户级执行配额硬限第 20 次实证（r85-r106 连续 19 次 + 本轮），已删除清理。本轮重建待配额恢复；devd 看门狗（绝对阈值 + 斜率双闸）+ 三级 CI 门禁（guards 625 + smoke 6 + visual-baseline 3）继续作为巡检缺席期自愈防线。
+
+（r107 段 cron 补记更正，2026-10-12）巡检任务重建实测：#453107 创建（11:27:15）即「Disabled due to exec limits exceeded」（11:27:16）——账户级执行配额硬限第 21 次实证（r85-r107 连续 20 次 + 本轮），已删除清理。worklog r107 主段「本轮重建待配额恢复」表述据此更正为：配额仍未恢复，巡检缺席期防线不变——devd 看门狗（绝对阈值 + 斜率双闸）+ 三级 CI 门禁（guards 625 + smoke 6 + visual-baseline 3）。
