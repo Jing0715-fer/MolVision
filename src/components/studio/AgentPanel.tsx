@@ -6,7 +6,7 @@
 // 修正命令本身还会被再自查一轮（有界双轮：修到效果理想为止，不无限循环）
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Ban, Bot, Check, ChevronDown, Clock, Eye, EyeOff, Loader2, MessageSquarePlus, Pencil, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
+  Ban, Bot, Check, ChevronDown, Clock, CornerDownRight, Eye, EyeOff, Loader2, MessageSquarePlus, Pencil, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -19,7 +19,8 @@ import {
 } from '@/lib/molecular/agent/protocol'
 // r105 标准技能：发送前本地匹配（matchSkill），报告文稿标记检测（isSkillReport）驱动卡片渲染；
 // r107-b 两段式：buildReportFillPrompt 组回填消息（命令回执 → 实测数值）
-import { AGENT_SKILLS, matchSkill, isSkillReport, buildReportFillPrompt, type AgentSkill } from '@/lib/molecular/agent/skills'
+// r109-b 报告节跳转：reportSectionJumpCmd 解析节点击命令（回放该消息成功命令 + 静态兜底）
+import { AGENT_SKILLS, matchSkill, isSkillReport, buildReportFillPrompt, reportSectionJumpCmd, type AgentSkill } from '@/lib/molecular/agent/skills'
 // r107-b 运行时补充数值源：氢键网络实时计数（状态徽章同源——回执文本之外的数值补充）
 import { useHBondStore } from '@/lib/molecular/hbond-store'
 import { ProviderSettingsDialog, type ProviderInfo } from './ProviderSettingsDialog'
@@ -483,10 +484,12 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
    *   有界防循环，同时保证「修正 → 复查 → 直到效果理想」的闭环；修正轮的 imageBefore
    *   传入上一轮自查截图，VLM 可验证修正是否真实生效）。
    * imageBefore：本轮命令执行前的视口截图（视觉自查前后对比——判断变化是否真实发生）。
+   * skillId：r109-c 本轮命中的标准技能——自动修正轮随请求上送（后端重注入标准流程，
+   *   修正命令不偏离该技能的 workflow 命令域；mock 侧 0.45 分支按失败命令回放修正）。
    * 返回：本轮（含修正/视觉修正子轮递归合并）全部命令的执行记录——r107-b 两段式回填的
    * 回执来源（回执文本里的接触对数/ΔSASA 等实测数值）。
    */
-  const runTurn = useCallback(async (msgId: string, cmds: string[], depth: number, priorMsgs: AgentChatMessage[], visualBudget: number, imageBefore?: string): Promise<AgentCmdRecord[]> => {
+  const runTurn = useCallback(async (msgId: string, cmds: string[], depth: number, priorMsgs: AgentChatMessage[], visualBudget: number, imageBefore?: string, skillId?: string): Promise<AgentCmdRecord[]> => {
     const records: AgentCmdRecord[] = cmds.map(cmd => ({ cmd, status: 'pending' as const }))
     patchCmds(msgId, records)
     for (let i = 0; i < records.length; i++) {
@@ -518,7 +521,9 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       const okOuts = records.filter(r => r.status === 'ok' && r.output)
         .slice(-6).map(r => `- ${r.cmd} → ${(r.output ?? '').replace(/\s+/g, ' ').slice(0, 110)}`)
       const fixPrompt = tt({ zh: `刚才这些命令执行失败了，请修正（换正确的选择表达式 / 命令写法）后重新给出命令：\n${fails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}${okOuts.length ? `\n\n已成功命令的关键输出（含系统提示，供参考）：\n${okOuts.join('\n')}` : ''}\n只给出修正后需要执行的命令，不要重复已成功的命令。`, en: `These commands just failed. Fix them (correct selection expressions / command syntax) and give the commands again:\n${fails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}${okOuts.length ? `\n\nKey output of already-successful commands (system hints included, for reference):\n${okOuts.join('\n')}` : ''}\nOnly give the corrected commands to run; do not repeat the successful ones.` })
-      const fix = await callAgent([...buildApiHistory(priorMsgs), { role: 'user', content: fixPrompt }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs))
+      // r109-c：修正轮携带技能上下文（skillId 上送 → 后端重注入标准流程，修正命令不偏离
+      // workflow 命令域——r106-parallel 遗留①「fix-turn 不注入，替换建议可能偏离标准流程」）
+      const fix = await callAgent([...buildApiHistory(priorMsgs), { role: 'user', content: fixPrompt }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs), skillId)
       if (fix) {
         const fixCmds = splitCommands(fix.commands)
         const fixId = newId()
@@ -529,7 +534,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           commands: fixCmds.length ? fixCmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
         }
         setMsgs(m => [...m, fixMsg])
-        if (fixCmds.length) { records.push(...(await runTurn(fixId, fixCmds, depth + 1, [...priorMsgs, fixMsg], visualBudget, imageBefore))); fixTurnRan = true }
+        if (fixCmds.length) { records.push(...(await runTurn(fixId, fixCmds, depth + 1, [...priorMsgs, fixMsg], visualBudget, imageBefore, skillId))); fixTurnRan = true }
       }
     }
     // 视觉自查：修正轮已自带自查（同一画面不再重复检查，节省一次 VLM 调用）
@@ -562,7 +567,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
             if (revCmds.length) {
               setPhase('exec')
               // 修正轮消耗一次自查预算；上轮截图作为 before，VLM 可验证修正真实生效
-              records.push(...(await runTurn(revId, revCmds, depth, [...priorMsgs, revMsg], visualBudget - 1, shot)))
+              records.push(...(await runTurn(revId, revCmds, depth, [...priorMsgs, revMsg], visualBudget - 1, shot, skillId)))
             }
           }
         } catch { /* 截图/VLM 失败不影响主流程 */ }
@@ -634,7 +639,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
             } catch { before = undefined }
             if (!before) before = undefined
           }
-          const records = await runTurn(aiId, cmds, 0, [...history, aiMsg], 2, before)
+          const records = await runTurn(aiId, cmds, 0, [...history, aiMsg], 2, before, skill?.id)
           // r107-b 技能报告两段式：命令回执落地后二次回填。第一段报告以「—」占位流式呈现
           //（用户立刻看到结构），此处把「草稿 + 命令回执 + 运行时补充」送 LLM 回填实测数值
           //（接触对数/ΔSASA/氢键条数等——报告从「格式合规」升级到「数值真实」）。回填走普通
@@ -643,10 +648,25 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           if (skill && isSkillReport(r.decision.reply) && records.some(x => x.status === 'ok' && x.output)) {
             setPhase('fill')
             try {
+              // r109-a UI 层补抓（r108 G1 实测根修·方案 B）：技能轮渲染负载下 hbonds statLine
+              // 可能超 runner 5.25s 有界轮询未入回执。回填前 hbond-store 若已就绪，把键数
+              // 补进该命令回执——records 本地副本（回填 prompt 的回执源）与可见命令卡 output
+              // 同步更新（patchCmds 整组替换）；已含 statLine 或无 hbonds 命令时零改动。
+              let fillRecords = records
+              const hbNow = useHBondStore.getState()
+              if (hbNow.visible && !hbNow.computing) {
+                const statLine = tt({ zh: `氢键网络当前 ${hbNow.count} 条（其中涉水 ${hbNow.waterCount}）`, en: `H-bond network: currently ${hbNow.count} bonds (${hbNow.waterCount} water-involved)` })
+                const patched = records.map(rec => (
+                  /^(hbonds?|hbon)\b/i.test(rec.cmd.trim()) && !/^(off|0)$/i.test((rec.cmd.trim().split(/\s+/)[1] ?? '').toLowerCase())
+                    && rec.status === 'ok' && rec.output && !/氢键网络当前|H-bond network: currently/.test(rec.output)
+                ) ? { ...rec, output: `${rec.output}\n${statLine}`.slice(0, 300) } : rec)
+                // map 恒产新数组——逐项比较判定真实补抓（无 hbonds 命令/已含 statLine 时零改动）
+                if (patched.some((rec, i) => rec !== records[i])) { fillRecords = patched; patchCmds(aiId, patched) }
+              }
               const hb = useHBondStore.getState()
               const runtime = hb.visible ? `氢键网络当前 ${hb.count} 条（其中涉水 ${hb.waterCount}）` : ''
               const fill = await callAgent(
-                [{ role: 'user', content: buildReportFillPrompt(skill, r.decision.reply, records, runtime) }],
+                [{ role: 'user', content: buildReportFillPrompt(skill, r.decision.reply, fillRecords, runtime) }],
                 buildSceneContext(),
               )
               if (fill && isSkillReport(fill.reply)) {
@@ -671,7 +691,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
       setPhase('think')
       if (abortRef.current === ctrl) abortRef.current = null
     }
-  }, [msgs, busy, runTurn, buildApiHistory, buildMemoryDigest, visualOn, pinnedSkill])
+  }, [msgs, busy, runTurn, patchCmds, buildApiHistory, buildMemoryDigest, visualOn, pinnedSkill])
 
   /** confirm 卡片的「执行 / 跳过」与「重跑」（生成中禁止——并发执行会打架） */
   const act = useCallback(async (msgId: string, idx: number, mode: 'confirm-run' | 'confirm-skip' | 'rerun') => {
@@ -692,6 +712,17 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     useAgentChatStore.getState().clearMsgs()
     toast.info(tt({ zh: '当前会话已清空（历史会话不受影响）', en: 'Current session cleared (other sessions untouched)' }))
   }, [])
+
+  /** r109-b 报告节点击跳转：执行解析出的命令并把命令卡追加到同一消息（复用既有命令卡
+   *  UI——状态/输出/展开全链审计）；生成中拒绝（并发执行打架，与 act 同口径） */
+  const jumpTo = useCallback(async (msgId: string, cmd: string) => {
+    if (useAgentChatStore.getState().busy) return
+    const prev = useAgentChatStore.getState().msgs.find(x => x.id === msgId)?.commands ?? []
+    const next: AgentCmdRecord[] = [...prev, { cmd, status: 'running' }]
+    patchCmds(msgId, next)
+    const rec = await execAgentCmd(cmd)
+    patchCmds(msgId, next.map((c, i) => (i === next.length - 1 ? rec : c)))
+  }, [patchCmds])
 
   const startNewSession = useCallback(() => {
     if (useAgentChatStore.getState().newSession()) toast.info(tt({ zh: '已新建会话（上下文已清零）', en: 'New session created (context cleared)' }))
@@ -857,6 +888,9 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           const msgSkill = m.role === 'assistant' && m.skillId ? AGENT_SKILLS.find(s => s.id === m.skillId) : undefined
           // 报告文稿检测：reply 以「【…报告】」开头 → 结构化报告卡片渲染（标题行/▌ 节行分级）
           const isReport = m.role === 'assistant' && !m.streaming && isSkillReport(m.content)
+          // r109-b 报告节跳转回放源：该消息已成功执行的命令（场景实参已在其中——
+          // view from ligand / view from (chain A and chain B) / zoom 系 / ray 系 / preset 系）
+          const okCmds = (m.commands ?? []).filter(c => c.status === 'ok').map(c => c.cmd)
           return (
           <div key={m.id} className={cn('flex flex-col', m.role === 'user' ? 'items-end' : 'items-start')}>
             {m.kind === 'visual' && (
@@ -897,6 +931,25 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                     }
                     if (t2.startsWith('▌')) {
                       const sep = t2.indexOf('：')
+                      // r109-b 报告节点击跳转：节标签在技能注册表带 jump 定义时整行可点（回放
+                      // 该消息成功命令的视角/聚焦动作 + 静态兜底）；纯信息节保持只读文本行
+                      const jump = sep > 0 && m.role === 'assistant' ? reportSectionJumpCmd(m.skillId, t2.slice(0, sep), okCmds) : null
+                      if (jump) {
+                        return (
+                          <button
+                            key={li}
+                            type="button"
+                            onClick={() => void jumpTo(m.id, jump)}
+                            title={t({ zh: `点击跳转：${jump}`, en: `Click to jump: ${jump}` })}
+                            aria-label={t({ zh: `跳转：${t2.slice(0, sep)}`, en: `Jump: ${t2.slice(0, sep)}` })}
+                            className="group/jump -mx-1 flex w-full gap-1.5 rounded px-1 py-px text-left transition-colors duration-150 hover:bg-primary/[0.08]"
+                          >
+                            <span className="shrink-0 font-medium text-foreground/85">{t2.slice(0, sep + 1)}</span>
+                            <span className="min-w-0 flex-1 text-foreground/75 transition-colors group-hover/jump:text-foreground">{t2.slice(sep + 1)}</span>
+                            <CornerDownRight aria-hidden className="h-3 w-3 shrink-0 self-center text-primary/0 transition-colors duration-150 group-hover/jump:text-primary/80" />
+                          </button>
+                        )
+                      }
                       return (
                         <p key={li} className="flex gap-1.5">
                           <span className="shrink-0 font-medium text-foreground/85">{sep > 0 ? t2.slice(0, sep + 1) : ''}</span>

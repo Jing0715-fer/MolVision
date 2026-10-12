@@ -1132,6 +1132,60 @@ fi
 #    SCENES 数组 capture/check 双模式共用，场景锚①②+分派锚合证双模式对新场景的覆盖）
 check "视觉基线双模式分派锚"  'MODE" = "capture"|compare_baseline "\$name"' "scripts/visual-baseline.sh" 3
 
+# ---- r109：statLine UI 层补抓 + 报告节点击跳转 + 修正轮技能上下文 ----
+# 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」
+# ——r108 建议清单第 1【高】/第 3【中】 + r106-parallel 遗留①② 落地：
+# ①r109-a（r108 G1 实测根修·方案 B）：技能轮渲染负载下 hbonds statLine 超 runner 5.25s
+#   有界轮询未入回执——回填前 hbond-store 若已就绪，把键数补进该命令回执（records 本地
+#   副本 + patchCmds 可见命令卡 output 同步更新；已含 statLine 或无 hbonds 命令零改动）；
+# ②r109-b 报告节点击跳转：ReportSection 增 jump 字段（'view'/'zoom'/'ray'/'preset' 回放
+#   该消息最后一条成功同类命令——场景实参已在其中；静态命令原样执行；缺省不可跳），
+#   报告卡 ▌ 节行可点（hover 底色 + CornerDownRight 图标浮现），命令卡追加到同一消息
+#   （复用状态/输出/展开审计全链）——报告从只读文稿升级为可交互分析入口；
+# ③r109-c 修正轮技能上下文（r106-parallel 遗留①）：runTurn 增 skillId 形参，自动修正轮
+#   随请求上送（route 重注入标准流程）；mock 0.45 分支（先于 0.5——否则整段 workflow 回放
+#   重复已成功命令）：从修正 prompt 提取失败命令行，场景替换后回放——修正不偏离技能
+#   workflow 命令域；链 ID 场景替换（遗留②）：chain A/B、interface A B 按场景链保守替换
+#   （模板字母不在场景链清单时才动），0.5 workflow 命令同步接入。
+# 以下十七锚防各环节被改写/删除静默退化（实测数见各行注释）：
+# ①jump 字段锚（实测 1——ReportSection jump?: string；删则 tsc 挡住、节行恒不可点）
+check "jump字段锚"              "jump\?: string" "src/lib/molecular/agent/skills.ts" 1
+# ②jump 值分布锚（实测 27——10 技能 27 个可跳节；缩水 = 跳转覆盖面退化）
+check "jump值分布锚"            "jump: '" "src/lib/molecular/agent/skills.ts" 27
+# ③jump 解析函数锚（实测 1——reportSectionJumpCmd 纯函数定义；删则全部节行不可点）
+check "jump解析函数锚"          "reportSectionJumpCmd" "src/lib/molecular/agent/skills.ts" 1
+# ④jump 回放表锚（实测 2——JUMP_REPLAY 定义+查表；删则 view/zoom/ray/preset 退化为静态串）
+check "jump回放表锚"            "JUMP_REPLAY" "src/lib/molecular/agent/skills.ts" 2
+# ⑤节跳转接入锚（实测 3——import 注释+import+调用；删则报告卡与解析函数断链）
+check "节跳转接入锚"            "reportSectionJumpCmd" "src/components/studio/AgentPanel.tsx" 3
+# ⑥节跳转回放源锚（实测 4——okCmds 定义+调用〔r109 新增〕+ buildMemoryDigest 既有 2；
+#    新增 2 处被删 → 命中跌回 2 触发 FAIL）
+check "节跳转回放源锚"          "okCmds" "src/components/studio/AgentPanel.tsx" 4
+# ⑦jumpTo 锚（实测 2——定义+onClick 调用；删则点击无执行）
+check "jumpTo锚"                "jumpTo" "src/components/studio/AgentPanel.tsx" 2
+# ⑧节跳转按钮锚（实测 1——group/jump 命名组 className；删则 hover 联动全失效）
+check "节跳转按钮锚"            "group/jump" "src/components/studio/AgentPanel.tsx" 1
+# ⑨节跳转hover锚（实测 2——数值行+图标行 group-hover/jump 变体；删则视觉反馈缺失）
+check "节跳转hover锚"           "group-hover/jump" "src/components/studio/AgentPanel.tsx" 2
+# ⑩节跳转title锚（实测 3——注释+jumpTo 注释+title 提示；删则无障碍/悬浮提示丢失）
+check "节跳转title锚"           "点击跳转" "src/components/studio/AgentPanel.tsx" 3
+# ⑪补抓records锚（实测 3——let fillRecords+patched 判定+回填 prompt 组包；删则回填源回退未补抓态）
+check "补抓records锚"           "fillRecords" "src/components/studio/AgentPanel.tsx" 3
+# ⑫补抓注释锚（实测 1——r109-a 方案 B 注释块标识；删则补抓意图不可追溯）
+check "补抓注释锚"              "UI 层补抓" "src/components/studio/AgentPanel.tsx" 1
+# ⑬runTurn skillId 形参锚（实测 3——callAgent/callAgentStream/runTurn 三签名；runTurn 形参
+#    被删 → 命中跌回 2 触发 FAIL——修正轮技能上下文断链）
+check "runTurn skillId形参锚"   "skillId\?: string" "src/components/studio/AgentPanel.tsx" 3
+# ⑭修正轮传递锚（实测 3——fix callAgent 末参+fix 递归+视觉修正递归；删任一则该轮失去技能上下文）
+check "修正轮传递锚"            ", skillId\)" "src/components/studio/AgentPanel.tsx" 3
+# ⑮mock修正轮分支锚（实测 1——0.45 分支回执文案；删则修正轮回落关键词模板跑偏流程）
+check "mock修正轮分支锚"        "已按标准技能流程修正失败命令" "mini-services/mock-llm/index.ts" 1
+# ⑯mock修正轮识别锚（实测 2——条件正则+注释；改文案则 0.45 失配静默退化）
+check "mock修正轮识别锚"        "执行失败了，请修正" "mini-services/mock-llm/index.ts" 2
+# ⑰mock链替换锚（实测 3——substituteSceneChains 定义+0.45 接入+0.5 接入；删则 interface A B
+#    在 A/B 链不在场的场景恒报错、修正轮回放不替换链）
+check "mock链替换锚"            "substituteSceneChains" "mini-services/mock-llm/index.ts" 3
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

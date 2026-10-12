@@ -4649,3 +4649,45 @@ Stage Summary:
 - 遗留（供下轮参考）：①远端 r106 建议⑤「mock-llm 技能感知升级：fix-turn 修正轮携带技能上下文」与「场景替换扩展到链 ID」仍开放 ②本会话 E2E 证据截图（.zscripts/r106-e2e-report-card.png / r106b-chipbar-selected.png）留工作区未入库（历史惯例）；其记录的 UI 形态（横滚芯片栏）已随本线弃用被远端弹层版取代 ③并行会话协调：若 IM 网关重复投递再现，后完成方应先 fetch 再决策——避免重复轮次浪费
 
 （r106-parallel 段 cron 补记，2026-10-12）15min webDevReview 巡检任务 #454149 创建即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 23 次实证（r85-r108 连续 22 次 + 本轮），已删除清理。任务书已内嵌最新开发纪律（.agent/skills 四 SKILL 引用 + 门禁链 643 基线 + visual-baseline 7/7 口径 + kill 红线 + r106-parallel 遗留清单）。devd 看门狗（绝对阈值 + 斜率双闸）+ 四级 CI 门禁（guards 643 + smoke 6 + visual-baseline 7）继续作为巡检缺席期的自愈防线。
+
+---
+Task ID: r109
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r108 建议清单第 1【高】/第 3【中】+ r106-parallel 遗留①②落地：①hbonds statLine 超时 UI 层补抓（方案 B）②报告卡片 ▌数值节点击跳转（报告→可交互分析入口）③修正轮技能上下文（mock 0.45 分支 + 链 ID 场景替换）+ 测试中新发现的两处根修（▌前缀标签失配 / 真实 LLM 回填 prompt 锐化）；QA 门禁链全绿 + E2E 五组（G3/M/G1/真实 LLM A/B/G4 轻量）+ 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=f88460b（r106-parallel 后非语义 cron 提交，本地领先 origin 1）；工作区干净；guards 实跑 643/643 = 本轮基线数；dev 200；dev.log 尾部连续 GET 200 零真 error（7AHL 缓存通知为良性口径）；.agent/skills 四 SKILL 按流程读取恢复语境；r108 段「下一轮建议」第 1【高】statLine 根修方案 B + 第 3【中】报告节跳转 + r106-parallel 遗留①修正轮技能上下文②链 ID 场景替换 = 本轮立项来源
+- 【改动·r109-a statLine UI 层补抓】AgentPanel.tsx 回填段：回填前 hbond-store 若已就绪（visible && !computing），把「氢键网络当前 N 条（其中涉水 M）/H-bond network: currently N bonds」补进 hbonds 命令的回执——records 本地副本（回填 prompt 回执源）+ patchCmds 可见命令卡 output 同步更新；判据：/^(hbonds?|hbon)\b/i 且非 off/0 且 status ok 且 output 无 statLine；map 恒产新数组故逐项比较判真实补抓（无 hbonds 命令/已含 statLine 零改动）
+- 【改动·r109-b 报告节点击跳转】①skills.ts ReportSection 增 jump?: string 字段 + JUMP_REPLAY 回放表（view/zoom/ray/preset 四类特殊值——回放该消息最后一条成功同类命令，view→orient、zoom→bare zoom 静态兜底，ray/preset 无兜底不跳）+ reportSectionJumpCmd 纯函数（ZH/EN 双语标签匹配 + ▌前缀容错剥离——G1 实测抓出的形态缺口，函数单点修复）；②10 技能 27 个可跳节（ligand-pocket 3/hbond-network 2/interface-analysis 3/pub-figure 4/membrane-context 3/sasa-surface 3/xcontact-analysis 3/morph-conformations 3/symmetry-assembly 3；structure-survey 纯信息节不跳）；③AgentPanel 报告卡 ▌ 节行可点（group/jump hover 底色 + CornerDownRight 图标浮现 + 双语 title/aria-label）+ jumpTo 回调（命令卡追加到同一消息复用状态/输出/展开审计全链，busy 期间拒绝）
+- 【改动·r109-c 修正轮技能上下文】①AgentPanel runTurn 增 skillId 形参——fix callAgent 末参 + fix 递归 + 视觉修正递归三处传递（route 重注入标准流程，修正命令不偏离 workflow 命令域）；②mock-llm 0.45 分支（0.4 与 0.5 之间）：末条 user 匹配「执行失败了，请修正|just failed. Fix them」且注入段在场 → 从 prompt 提取失败命令行（^- cmd → output$gm 正则），场景替换后回放——先于 0.5 的关键：否则整段 workflow 回放重复已成功命令与修正 prompt 指令相悖；③mock substituteSceneChains：chain A/B、interface A B 按场景链保守替换（模板字母不在场景链清单才动；链 <2 保留原样诚实报错）——0.45 与 0.5 双分支接入（r106-parallel 遗留②）
+- 【改动·回填 prompt 锐化（测试驱动的新根修）】skills.ts buildReportFillPrompt：真实 GLM 实测把回填任务「确认完成」（reply=已完成配体口袋分析报告回填）而非输出回填后报告——r107-a 同款药方：reply 字段必须且只能是报告文本本身的显式指令 + 「回执可为英文报告保持中文」跨语提示 + 数值提取单行演示（91 residue-pair contacts → 91 对）+ commands 恒空数组
+- 【守卫 +17（643→660）】r109 独立注释块（r106-c 块后汇总段前，插入前 rg 复核零 r109 痕迹）：jump 字段/值分布(27)/解析函数/回放表锚 4 + AgentPanel 接入(3)/回放源(okCmds≥4——新增 2+既有 2)/jumpTo/按钮/hover/title 锚 6 + 补抓 records(3)/注释锚 2 + runTurn skillId 形参(≥3 三签名)/修正轮传递(`, skillId\)` 3)锚 2 + mock 修正轮分支/识别(2)/链替换(3)锚 3——十七锚全环节防退化
+- 【QA】lint 0 · bunx tsc 全项目 5 历史基线错不变（mock-llm 行号 567→605 位移、内容同款；src/ 零）· guards 660/660 · smoke 6/6（heavy 路径）· visual-baseline 7/7（漂移 0.00%）· dev.log 尾部零真 error（7AHL 缓存通知良性）
+- 【E2E-G3 纯函数】33/33 全过：技能总数 10 / jump 值 27 / 带跳技能 9（survey 无跳转）/ reportSectionJumpCmd 全分支（view 回放命中+缺失 orient 兜底 / zoom 回放+bare 兜底 / ray 回放+缺失不跳 / preset 回放 / 静态 color sasa·ensemble play / 无 jump 节·advice·无 skillId·非法 id·未注册标签不跳 / EN 双语 / 带▌前缀三形态——G1 缺口的回归锚）/ matchSkill·isSkillReport·buildReportFillPrompt 既有断言全保持
+- 【E2E-M mock 直测】22/22 全过（注入段用真实 buildSkillDirective 组装——r106-parallel 经验①纪律）：T1 修正轮 ZH（interface A B→H L 全量链替换）✓ · T2 半量替换（A 在场：chain B→C、interface 原样）✓ · T3 EN 修正轮 ✓ · T4 无注入段修正轮不走 0.5 全回放 ✓ · T5 0.5 workflow 三命令链替换（interface/contacts/view 全 H L）✓ · T6 A 在场部分替换+报告节值 A-C ✓ · T7 回填分支（口袋残基 91 对+氢键从回执 statLine 494 条——r109-a 回执源+草稿已有值不覆盖+commands 恒空）✓ · T8 sasa 正常路径 ✓。首测 T5 断言措辞错（技能名是「界面接触分析」非「界面分析」——r108 同款教训）修正后全绿
+- 【E2E-G1 浏览器端到端】4HHB form submit ✓ · 'analyze the ligand binding pocket' → 5 workflow 命令全执行 ✓ · 报告 5 节回填实测值（口袋残基 91 对最近 D:HEM148 ↔ D:LYS66 2.06 Å + 氢键 494 条 + 接触对 91 对）✓ · fill-flash ✓ · 回填请求体回执含 H-bond network statLine（r109-a）✓ · hbonds 可见命令卡 output 含完整 statLine（494 bonds (0 water-involved)）✓ · 跳转按钮 5 个（新报告 3：口袋残基 view 回放命中 view from ligand/氢键 zoom 静态/接触对 view 回放 + 旧氢键报告 2）✓ · 点击跳转 → view from ligand 命令卡追加同一消息 status ok ✓ · 全程 console errors 零 ✓
+- 【E2E-G1 中断事件根因】两次发送均「generation interrupted」同字节位截断——系统级取证（dev.log 零 error → curl 直测 mock stream 只吐 1/3 内容无 [DONE] → 非流式完整 → 最小复现 Bun ReadableStream/Bun.serve/--hot 三级全正常）定位为 mock-llm 11:58 旧实例热重载链损坏（编辑期 mid-write reload 的 Unexpected end of file ×4）；且重启脚本首轮 pkill 失配（进程命令行「bun --hot index.ts」不含目录名）+ 新实例 EADDRINUSE 假象——lsof 端口反查 + /proc cwd 匹配双保险清旧后才真正单例重启，流式恢复完整（3 内容帧+stop+[DONE]）
+- 【E2E 修正轮浏览器端到端（r109-c）】1UBQ（无配体）激活后发技能消息 → contacts ligand 失败 → 修正请求 body 尾部实证 skillId:"ligand-pocket" 上送 ✓ · mock 0.45 触发 → 「已按标准技能流程修正失败命令」消息渲染 ✓ · 失败命令按 workflow 域回放（contacts 2 张卡=原始+修正）✓ · console 零错误 ✓
+- 【E2E 真实 LLM A/B】14/14 全过（样本 1 ligand-pocket：第一段报告格式遵循 + 第二段锐化后回填数值跨语全对——91 对/494 条/2.06 Å EN 回执→ZH 报告，commands 恒空；样本 2 interface-analysis：报告 + 真实 GLM 自行把模板链换成场景链 interface A C——与 r109-c mock 机械替换同一语义的 LLM 侧行为对齐实证）。锐化前实测坐实缺口：GLM 回「已完成配体口袋分析报告回填」确认语而非报告文本（回填遵循度 0%）→ 锐化后 100%
+- 【E2E-G4 轻量】语言 EN→中文（点目标语言钮铁律）→ lang=zh-CN + 跳转按钮双语（点击跳转：orient/zoom within 6 of (ligand)——1UBQ 无配体轮回放源缺失诚实降级 orient 兜底）✓ · 供应商清理（DELETE openai + setDefault zai，configs={} default=zai）✓ · console 零错误 ✓
+- 【坑（新入档）】①调用侧截取「：」前整段天然含行首 ▌——纯函数测试必须覆盖「真实调用形态」的标签（G3 直测传无前缀全过，浏览器实测才暴露恒失配；修复走函数单点容错剥离 + 测试补三形态回归锚）②测试脚本手抄 prompt 文本会与产品代码漂移（r109-llm.ts 首测 4 FAIL 根因——改用真实 buildReportFillPrompt 组包后全过；「route 真实组装形态」纪律对测试脚本自身同样适用）③mock-llm 热重载链损坏的表形态：非流式 200 正常 + 流式挂起只吐 1/3（mid-write reload 后 serve 状态损坏）——系统级取证三级复现（Bun ReadableStream/Bun.serve/--hot 干净全正常）才锁死「实例态损坏」而非「代码回归」；修法=lsof 端口反查清旧实例单例重启（pkill -f 按目录名失配——命令行只有「bun --hot index.ts」）④真实 GLM 对「输出回填后报告」类任务的默认行为是确认语总结——reply 字段必须且只能是 X 本身 + 单行提取演示的锐化模板可根治（r107-a 药方的第二应用场景）⑤providers API 字段是 providerId（非 id——r108 记载的「custom id」实为 providerId 的误记，本轮 400 重查坐实）⑥agent-browser press c+j 不触发页面 Ctrl+J（window keydown 直派发 KeyboardEvent 可靠）
+
+Stage Summary:
+- 交付一（r109-a）：hbonds statLine UI 层补抓——技能轮渲染负载下 runner 5.25s 有界轮询超时的兜底闭环（浏览器实证：可见命令卡 output + 回填 prompt 回执双面含 statLine，报告氢键 494 条与 hbond-store 同源）
+- 交付二（r109-b）：报告节点击跳转——10 技能 27 节可跳（view/zoom/ray/preset 回放 + 静态兜底 + 诚实降级），报告从只读文稿升级为可交互分析入口；点击回放命令追加同消息命令卡（复用审计全链）
+- 交付三（r109-c）：修正轮技能上下文——runTurn skillId 三处传递 + mock 0.45 分支（失败命令场景替换回放，修正不偏离 workflow 命令域）+ 链 ID 场景替换（chain A/B、interface A B 保守替换，0.45/0.5 双接入）；真实 GLM 样本 2 侧证 LLM 同语义行为（interface A C）
+- 交付四（测试驱动根修）：①▌前缀标签失配（G1 抓出——函数单点容错 + 三形态回归锚）②真实 LLM 回填遵循度 0%→100%（prompt 锐化：显式 reply 约束 + 跨语提示 + 提取演示——r107-a 药方第二应用）③mock-llm 热重载链损坏流式挂起（系统级取证 + 单例重启修复，非代码回归）
+- 交付五（验证）：guards 643→660 全过 · smoke 6/6 · visual-baseline 7/7（0.00%）· E2E 五组（G3 33/33 / M 22/22 / G1 全链含修正轮浏览器实证 / 真实 LLM A/B 14/14 / G4 轻量双语）全绿零 console 错误
+- 与用户指令对位：①「进行下一阶段开发」——r108 建议第 1【高】+ 第 3【中】+ r106-parallel 遗留①②全落地 + 测试驱动新根修两处 ②「qa测试和e2e测试」——六道门禁 + 五组 E2E ③「根据测试结果规划后续」——见下
+- 遗留（供下轮参考）：①mock-llm 实例级故障的看门狗缺位——devd 只看 3000 端口 dev server，mock-llm 热重载损坏/静默死亡无人自愈（本轮人工取证 40 分钟）；建议 devd 增 3999 探活（/v1/models 或根 404 即活——404 是合法形态）②E2E 期两个「generation interrupted」消息残留在浏览器 localStorage 会话（功能性无害——下轮 E2E 新建会话即隔离）③真实 LLM A/B 仅 2 技能抽样（ligand-pocket/interface-analysis）——r108 建议「10 技能各抽 1 轮」未全量执行（每轮 ~40s GLM 调用 ×3 段，全量 ~10min；mock 侧 22 断言已覆盖全分支）
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【高】mock-llm 看门狗补位（本轮 40 分钟人工取证的教训）：devd.py 增 3999 探活分支——curl /v1/models 2xx 或根路径 404 即活，连续 N 败触发单例重启（复用本轮 .zscripts/restart-mock.sh 的 lsof 清理逻辑）；热重载损坏的「非流式正常流式挂起」表形态可加流式探针（POST stream:true 断言 [DONE] 尾）
+  2. 【中】真实 LLM 技能全量抽样（r108 建议第 2 项收尾）：10 技能各 1 轮三段实测（报告格式/命令域/回填数值），产出遵循率矩阵入 worklog——本轮 2 技能 14/14 已证机制，全量是覆盖面收口
+  3. 【中】跳转交互增强：报告节 hover 时 3D 视口预览高亮（如口袋残基节 hover → 口袋残基瞬时选框）；jump 命令卡加「跳转来源节」标注（命令卡 title 溯源）；技能选择器芯片栏横向滚动（r106 建议延续）
+  4. 【中】修正轮回放的「真修正」升级：mock 0.45 当前回放原命令（同名失败即再失败——depth 兜底停）；可加命令改写规则（contacts ligand 失败 → contacts polymer | polymer 回退、interface A B 失败 → chains list 探测后重组的模拟语义修正）
+  5. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
+  6. 【低】r104 建议延续：命令级 per-rep 着色（colorOverrides 限制）
+
+（r109 段 cron 补记，2026-10-12）15min webDevReview 巡检任务创建待配额探测——若创建即 Disabled（r85-r108 连续 23 次实证口径）则删除清理并以此补记为准。
+
+（r109 段 cron 补记更正，2026-10-12）巡检任务重建实测：#454270 创建（22:11:15）即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 24 次实证（r85-r109 连续 23 次 + 本轮），已删除清理。worklog r109 主段「创建待配额探测」表述据此定论：配额仍未恢复，巡检缺席期防线不变——devd 看门狗（绝对阈值 + 斜率双闸）+ 四级 CI 门禁（guards 660 + smoke 6 + visual-baseline 7）继续作为自愈防线；任务书已内嵌 r109 开发纪律（含 3999 探活缺口警示）——配额恢复后可直接重建。

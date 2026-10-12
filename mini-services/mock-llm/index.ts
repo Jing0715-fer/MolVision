@@ -224,6 +224,20 @@ function substituteSceneStructs(cmd: string, names: string[]): string {
   return cmd.replace(/\b(1BQL|2LYZ|1UBQ|1D3Z)\b/g, m => map[m])
 }
 
+/** r109-c 链 ID 场景替换（r106-parallel 遗留②）：workflow 模板里的示例链（chain A /
+ *  chain B / interface A B）按场景链替换——真实 LLM 按 check 提示「A/B 换成场景中的
+ *  两条链」做同样的事，mock 用机械替换模拟。保守条件：模板字母不在场景链清单时才替换
+ *  （场景真有 A/B 链时是实参不是占位符，绝不动）；链不足两条时保留原样（命令诚实报错
+ *  走应用侧自动修正轮，不静默编造）。 */
+function substituteSceneChains(cmd: string, chains: string[]): string {
+  if (chains.length < 2) return cmd
+  let out = cmd
+  if (!chains.includes('A')) out = out.replace(/\bchain A\b/g, `chain ${chains[0]}`)
+  if (!chains.includes('B')) out = out.replace(/\bchain B\b/g, `chain ${chains[1]}`)
+  if (!chains.includes('A') && !chains.includes('B')) out = out.replace(/\binterface A B\b/g, `interface ${chains[0]} ${chains[1]}`)
+  return out
+}
+
 /** 各技能的建议短句（报告「建议」节静态填值——建议不依赖命令回执） */
 const SKILL_ADVICE: Record<string, string> = {
   'ligand-pocket': '可 view from ligand 再看口袋；hbonds 3.2 可收紧判据',
@@ -397,13 +411,34 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
     return fillReportFromReceipts(lastUser)
   }
 
+  // 0.45 r109-c 修正轮技能上下文分支：末条 user 为应用侧自动修正 prompt（「刚才这些命令
+  //      执行失败了，请修正」/ "These commands just failed. Fix them"）且技能注入段在场
+  //      （runTurn 修正轮现随请求上送 skillId → route 重注入标准流程）时，按技能上下文
+  //      修正：从 prompt 提取失败命令行（`- cmd → output`），场景替换（结构名 + 链 ID）
+  //      后回放为修正命令——修正不偏离该技能的 workflow 命令域。r106-parallel 遗留①的
+  //      落地：修正轮无技能上下文时关键词模板回复会跑偏标准流程。先于 0.5（否则整段
+  //      workflow 回放会重复已成功命令——与修正 prompt「不要重复已成功的命令」相悖）。
+  if (/执行失败了，请修正|just failed\. Fix them/i.test(lastUser) && parseSkillDirective(messages)) {
+    const failedCmds = [...lastUser.matchAll(/^- (.+?) → .+$/gm)].map(m => m[1].trim())
+    const scene = parseSceneFacts(messages)
+    const commands = failedCmds
+      .map(c => substituteSceneStructs(c, scene?.structureNames ?? []))
+      .map(c => substituteSceneChains(c, scene?.chains ?? []))
+    return dec(zh,
+      `已按标准技能流程修正失败命令（按当前场景替换选择表达式后重试）。`,
+      `Failed commands corrected within the standard skill workflow (selection expressions re-substituted for the current scene).`,
+      commands)
+  }
+
   // 0.5 r106 技能感知分支（先于关键词模板：技能命中时标准流程优先）。commands 按注入段
-  //     步骤序回放（示例 PDB ID 场景替换）；reply 按【…报告】+ ▌节行固定格式（章节标签
-  //     与数值由注入段 + 场景快照驱动——mock 不编造回执类数值）。
+  //     步骤序回放（示例 PDB ID + 示例链 ID 场景替换）；reply 按【…报告】+ ▌节行固定格式
+  //     （章节标签与数值由注入段 + 场景快照驱动——mock 不编造回执类数值）。
   const directive = parseSkillDirective(messages)
   if (directive) {
     const scene = parseSceneFacts(messages)
-    const commands = directive.cmds.map(c => substituteSceneStructs(c, scene?.structureNames ?? []))
+    const commands = directive.cmds
+      .map(c => substituteSceneStructs(c, scene?.structureNames ?? []))
+      .map(c => substituteSceneChains(c, scene?.chains ?? []))
     const replyLines = [`【${directive.name}报告】`]
     for (const label of directive.sectionLabels) {
       replyLines.push(`▌${label}：${fillSkillReportValue(directive.id, label, scene)}`)

@@ -21,6 +21,12 @@ export interface ReportSection {
   label: { zh: string; en: string }
   /** 该节填写内容的说明（数值来自命令回执与场景信息，不许编造） */
   hint: { zh: string; en: string }
+  /** r109-b 报告节点击跳转命令：'view'/'zoom'/'ray'/'preset' = 回放该消息最后一条成功的
+   *  同类命令（view from/orient · zoom 系 · ray 系 · preset 系——场景实参已在该命令里，
+   *  如 view from (chain A and chain B) 已被 LLM 按场景替换过），回放源缺失时 view→orient、
+   *  zoom→bare zoom 静态兜底（恒安全），ray/preset 无兜底不跳；其余字符串 = 静态命令原样执行；
+   *  缺省 = 该节不可跳转（纯信息节）。报告从只读文稿升级为可交互分析入口 */
+  jump?: string
 }
 
 /** 标准技能定义 */
@@ -74,9 +80,9 @@ export const AGENT_SKILLS: AgentSkill[] = [
     report: {
       sections: [
         { key: 'struct', label: { zh: '结构与配体', en: 'Structure & ligand' }, hint: { zh: '结构名 + 配体名（含链与实例数）', en: 'Structure name + ligand name (chain & copies)' } },
-        { key: 'residues', label: { zh: '口袋残基', en: 'Pocket residues' }, hint: { zh: '4.5Å 内接触残基数与关键残基列举（≤6 个）', en: 'Contact residues within 4.5Å (list ≤6)' } },
-        { key: 'hbonds', label: { zh: '氢键', en: 'H-bonds' }, hint: { zh: '口袋范围氢键条数；点名配体-残基关键氢键（如有）', en: 'H-bond count in pocket; notable ligand-residue bonds' } },
-        { key: 'contacts', label: { zh: '接触对', en: 'Contact pairs' }, hint: { zh: 'contacts 命令输出的接触对总数与最近距离', en: 'Total contact pairs & closest distance' } },
+        { key: 'residues', label: { zh: '口袋残基', en: 'Pocket residues' }, hint: { zh: '4.5Å 内接触残基数与关键残基列举（≤6 个）', en: 'Contact residues within 4.5Å (list ≤6)' }, jump: 'view' },
+        { key: 'hbonds', label: { zh: '氢键', en: 'H-bonds' }, hint: { zh: '口袋范围氢键条数；点名配体-残基关键氢键（如有）', en: 'H-bond count in pocket; notable ligand-residue bonds' }, jump: 'zoom within 6 of (ligand)' },
+        { key: 'contacts', label: { zh: '接触对', en: 'Contact pairs' }, hint: { zh: 'contacts 命令输出的接触对总数与最近距离', en: 'Total contact pairs & closest distance' }, jump: 'view' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '基于上述数值的下一步操作建议（≤40 字）', en: 'Next-step suggestion based on the numbers (≤40 chars)' } },
       ],
     },
@@ -106,8 +112,8 @@ export const AGENT_SKILLS: AgentSkill[] = [
     report: {
       sections: [
         { key: 'scope', label: { zh: '分析范围', en: 'Scope' }, hint: { zh: '氢键烘焙的范围描述（选择表达式语义化）', en: 'Human-readable scope description' } },
-        { key: 'count', label: { zh: '氢键条数', en: 'H-bond count' }, hint: { zh: '状态栏/徽章显示的当前氢键总数', en: 'Total H-bonds from status badge' } },
-        { key: 'main', label: { zh: '主要相互作用', en: 'Key interactions' }, hint: { zh: '关键氢键对列举（残基-残基 / 配体-残基，≤4 对）', en: 'Notable H-bond pairs (≤4)' } },
+        { key: 'count', label: { zh: '氢键条数', en: 'H-bond count' }, hint: { zh: '状态栏/徽章显示的当前氢键总数', en: 'Total H-bonds from status badge' }, jump: 'zoom' },
+        { key: 'main', label: { zh: '主要相互作用', en: 'Key interactions' }, hint: { zh: '关键氢键对列举（残基-残基 / 配体-残基，≤4 对）', en: 'Notable H-bond pairs (≤4)' }, jump: 'zoom' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
       ],
     },
@@ -137,10 +143,10 @@ export const AGENT_SKILLS: AgentSkill[] = [
     ],
     report: {
       sections: [
-        { key: 'chains', label: { zh: '界面链对', en: 'Interface chains' }, hint: { zh: '参与界面的链对（如 A-C）', en: 'Chain pair (e.g. A-C)' } },
-        { key: 'residues', label: { zh: '接触残基', en: 'Contact residues' }, hint: { zh: '界面接触残基对数与关键热点残基（≤6）', en: 'Contact pairs & hot-spot residues (≤6)' } },
+        { key: 'chains', label: { zh: '界面链对', en: 'Interface chains' }, hint: { zh: '参与界面的链对（如 A-C）', en: 'Chain pair (e.g. A-C)' }, jump: 'view' },
+        { key: 'residues', label: { zh: '接触残基', en: 'Contact residues' }, hint: { zh: '界面接触残基对数与关键热点残基（≤6）', en: 'Contact pairs & hot-spot residues (≤6)' }, jump: 'view' },
         { key: 'bsa', label: { zh: '埋藏面积', en: 'Buried area' }, hint: { zh: 'bsa 回执数值（Å²）；无回执写「后台计算中」', en: 'ΔSASA in Å²; "computing" if pending' } },
-        { key: 'distance', label: { zh: '关键距离', en: 'Key distance' }, hint: { zh: '最近接触距离（contacts 输出的最小值）', en: 'Closest contact distance' } },
+        { key: 'distance', label: { zh: '关键距离', en: 'Key distance' }, hint: { zh: '最近接触距离（contacts 输出的最小值）', en: 'Closest contact distance' }, jump: 'view' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
       ],
     },
@@ -174,10 +180,10 @@ export const AGENT_SKILLS: AgentSkill[] = [
     ],
     report: {
       sections: [
-        { key: 'target', label: { zh: '图面目标', en: 'Figure target' }, hint: { zh: '结构 + 图面主题（互作图/全貌图）', en: 'Structure + figure theme' } },
-        { key: 'preset', label: { zh: '表示与配色', en: 'Representation' }, hint: { zh: '所用预设与关键配色（链色/配体鲜绿/距离渐变）', en: 'Preset & key colors used' } },
-        { key: 'render', label: { zh: '渲染参数', en: 'Render settings' }, hint: { zh: '背景/描边/灯光实值（默认 1 不动）', en: 'Bg / outline / lighting values' } },
-        { key: 'export', label: { zh: '导出规格', en: 'Export spec' }, hint: { zh: 'Ray 宽度与格式；导出完成回执', en: 'Ray width & format' } },
+        { key: 'target', label: { zh: '图面目标', en: 'Figure target' }, hint: { zh: '结构 + 图面主题（互作图/全貌图）', en: 'Structure + figure theme' }, jump: 'view' },
+        { key: 'preset', label: { zh: '表示与配色', en: 'Representation' }, hint: { zh: '所用预设与关键配色（链色/配体鲜绿/距离渐变）', en: 'Preset & key colors used' }, jump: 'preset' },
+        { key: 'render', label: { zh: '渲染参数', en: 'Render settings' }, hint: { zh: '背景/描边/灯光实值（默认 1 不动）', en: 'Bg / outline / lighting values' }, jump: 'preset' },
+        { key: 'export', label: { zh: '导出规格', en: 'Export spec' }, hint: { zh: 'Ray 宽度与格式；导出完成回执', en: 'Ray width & format' }, jump: 'ray' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '后续调整建议（≤40 字）', en: 'Follow-up suggestion (≤40 chars)' } },
       ],
     },
@@ -240,9 +246,9 @@ export const AGENT_SKILLS: AgentSkill[] = [
     ],
     report: {
       sections: [
-        { key: 'axis', label: { zh: '主轴方位', en: 'Axis orientation' }, hint: { zh: 'orient 后主轴与相机的方位关系', en: 'Principal axis vs camera after orient' } },
-        { key: 'membrane', label: { zh: '膜参数', en: 'Membrane params' }, hint: { zh: '膜厚实值（默认 34Å）与对象数（5 = 双头基板+核心）', en: 'Thickness value & object count' } },
-        { key: 'pore', label: { zh: '孔道剖面', en: 'Pore profile' }, hint: { zh: '收缩点半径与位置；非通道结构写「—」', en: 'Constriction radius & position; "—" if not a channel' } },
+        { key: 'axis', label: { zh: '主轴方位', en: 'Axis orientation' }, hint: { zh: 'orient 后主轴与相机的方位关系', en: 'Principal axis vs camera after orient' }, jump: 'view' },
+        { key: 'membrane', label: { zh: '膜参数', en: 'Membrane params' }, hint: { zh: '膜厚实值（默认 34Å）与对象数（5 = 双头基板+核心）', en: 'Thickness value & object count' }, jump: 'zoom' },
+        { key: 'pore', label: { zh: '孔道剖面', en: 'Pore profile' }, hint: { zh: '收缩点半径与位置；非通道结构写「—」', en: 'Constriction radius & position; "—" if not a channel' }, jump: 'zoom' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
       ],
     },
@@ -273,9 +279,9 @@ export const AGENT_SKILLS: AgentSkill[] = [
     ],
     report: {
       sections: [
-        { key: 'total', label: { zh: '总面积', en: 'Total area' }, hint: { zh: 'SASA 总面积（Å²，命令回执）', en: 'Total SASA (Å², from receipt)' } },
-        { key: 'ratio', label: { zh: '疏水与极性', en: 'Hydrophobic & polar' }, hint: { zh: '疏水/极性/水与配体分项面积（Å²）', en: 'Hydrophobic / polar / het areas (Å²)' } },
-        { key: 'top', label: { zh: '高暴露残基', en: 'Top exposed' }, hint: { zh: 'Top 暴露残基（分析面板，≤4 个）', en: 'Top-exposed residues (panel, ≤4)' } },
+        { key: 'total', label: { zh: '总面积', en: 'Total area' }, hint: { zh: 'SASA 总面积（Å²，命令回执）', en: 'Total SASA (Å², from receipt)' }, jump: 'zoom' },
+        { key: 'ratio', label: { zh: '疏水与极性', en: 'Hydrophobic & polar' }, hint: { zh: '疏水/极性/水与配体分项面积（Å²）', en: 'Hydrophobic / polar / het areas (Å²)' }, jump: 'color sasa' },
+        { key: 'top', label: { zh: '高暴露残基', en: 'Top exposed' }, hint: { zh: 'Top 暴露残基（分析面板，≤4 个）', en: 'Top-exposed residues (panel, ≤4)' }, jump: 'zoom' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
       ],
     },
@@ -305,10 +311,10 @@ export const AGENT_SKILLS: AgentSkill[] = [
     ],
     report: {
       sections: [
-        { key: 'pair', label: { zh: '结构对', en: 'Structure pair' }, hint: { zh: '参与跨结构界面的两个结构名', en: 'The two structures at the interface' } },
-        { key: 'contacts', label: { zh: '接触对', en: 'Contact pairs' }, hint: { zh: 'xcontacts 输出的接触对总数（命令回执）', en: 'Total cross-contact pairs (receipt)' } },
+        { key: 'pair', label: { zh: '结构对', en: 'Structure pair' }, hint: { zh: '参与跨结构界面的两个结构名', en: 'The two structures at the interface' }, jump: 'zoom' },
+        { key: 'contacts', label: { zh: '接触对', en: 'Contact pairs' }, hint: { zh: 'xcontacts 输出的接触对总数（命令回执）', en: 'Total cross-contact pairs (receipt)' }, jump: 'zoom' },
         { key: 'xbsa', label: { zh: '埋藏面积', en: 'Buried area' }, hint: { zh: 'xbsa 回执数值（Å²）；无回执写「后台计算中」', en: 'ΔSASA in Å²; "computing" if pending' } },
-        { key: 'distance', label: { zh: '最近距离', en: 'Closest distance' }, hint: { zh: '最近跨结构接触距离（Å）', en: 'Closest cross-structure contact (Å)' } },
+        { key: 'distance', label: { zh: '最近距离', en: 'Closest distance' }, hint: { zh: '最近跨结构接触距离（Å）', en: 'Closest cross-structure contact (Å)' }, jump: 'zoom' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
       ],
     },
@@ -337,9 +343,9 @@ export const AGENT_SKILLS: AgentSkill[] = [
     ],
     report: {
       sections: [
-        { key: 'conformers', label: { zh: '构象对', en: 'Conformer pair' }, hint: { zh: '参与插值的构象名（A → B）', en: 'Conformers interpolated (A → B)' } },
-        { key: 'rmsd', label: { zh: '叠合 RMSD', en: 'RMSD' }, hint: { zh: '构象间 CA RMSD（Å，命令回执）', en: 'Inter-conformer CA RMSD (Å, receipt)' } },
-        { key: 'frames', label: { zh: '帧数', en: 'Frames' }, hint: { zh: '轨迹帧数（默认 48/模板 40）', en: 'Trajectory frame count' } },
+        { key: 'conformers', label: { zh: '构象对', en: 'Conformer pair' }, hint: { zh: '参与插值的构象名（A → B）', en: 'Conformers interpolated (A → B)' }, jump: 'ensemble play' },
+        { key: 'rmsd', label: { zh: '叠合 RMSD', en: 'RMSD' }, hint: { zh: '构象间 CA RMSD（Å，命令回执）', en: 'Inter-conformer CA RMSD (Å, receipt)' }, jump: 'zoom' },
+        { key: 'frames', label: { zh: '帧数', en: 'Frames' }, hint: { zh: '轨迹帧数（默认 48/模板 40）', en: 'Trajectory frame count' }, jump: 'ensemble play' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
       ],
     },
@@ -368,9 +374,9 @@ export const AGENT_SKILLS: AgentSkill[] = [
     ],
     report: {
       sections: [
-        { key: 'radius', label: { zh: '组装半径', en: 'Assembly radius' }, hint: { zh: '对称伴侣生成半径（Å，默认 20）', en: 'Mate generation radius (Å, default 20)' } },
-        { key: 'mates', label: { zh: '伴侣数', en: 'Mate count' }, hint: { zh: '生成的对称伴侣数（命令回执）', en: 'Number of mates generated (receipt)' } },
-        { key: 'view', label: { zh: '组装观感', en: 'Assembly view' }, hint: { zh: '原体与伴侣的视角关系描述', en: 'Orientation of protomer vs mates' } },
+        { key: 'radius', label: { zh: '组装半径', en: 'Assembly radius' }, hint: { zh: '对称伴侣生成半径（Å，默认 20）', en: 'Mate generation radius (Å, default 20)' }, jump: 'zoom' },
+        { key: 'mates', label: { zh: '伴侣数', en: 'Mate count' }, hint: { zh: '生成的对称伴侣数（命令回执）', en: 'Number of mates generated (receipt)' }, jump: 'zoom' },
+        { key: 'view', label: { zh: '组装观感', en: 'Assembly view' }, hint: { zh: '原体与伴侣的视角关系描述', en: 'Orientation of protomer vs mates' }, jump: 'zoom' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
       ],
     },
@@ -485,13 +491,46 @@ export function buildReportFillPrompt(skill: AgentSkill, draft: string, receipts
   const runtimeLine = runtime?.trim() ? `\n\n运行时补充：${runtime.trim().slice(0, 160)}` : ''
   return `${REPORT_FILL_MARKER}（系统任务，非用户发言）
 标准技能「${skill.name.zh}」的报告草稿与命令执行回执如下。请把草稿回填为实测数值版报告：
-- 保持格式与节结构完全不变：首行【${skill.name.zh}报告】标题 + 每节一行 ▌ 开头、节名与顺序不动
-- 回执中有的数值以回执为准（覆盖草稿占位值）；回执中确实没有的保留草稿原值（「—」保持「—」，绝不编造）
-- 只输出回填后的完整报告文本，不要输出其他任何文字
+- reply 字段的值必须（且只能）是回填后的完整报告文本本身：首行【${skill.name.zh}报告】、每节一行 ▌ 开头、节名与顺序与草稿逐字一致——不要输出任何确认语、说明或总结（如「已完成回填」即错）
+- 回执中有的数值以回执为准（覆盖草稿占位值——回执可为英文，报告保持中文）；回执中确实没有的保留草稿原值（「—」保持「—」，绝不编造）
+- 数值提取示例：草稿「▌口袋残基：—」+ 回执「91 residue-pair contacts … nearest … 2.06 Å」→ 该节填「91 对（最近 … 2.06 Å）」
+- commands 恒为空数组 []
 
 报告草稿：
 ${draft}
 
 命令回执（cmd → output）：
 ${receiptLines}${runtimeLine}`
+}
+
+// ---------- r109-b：报告节点击跳转（报告 → 可交互分析入口） ----------
+// 动机：两段式回填后报告已是「数值真实」的只读文稿；数值节（口袋残基/氢键/界面链对…）
+// 天然对应一个视角/聚焦动作——点节即跳转，报告从阅读产物升级为分析入口。
+
+/** 回放类 jump 特殊值 → 该消息已成功命令的匹配前缀（回放源）；无兜底的命中失败返回 null */
+const JUMP_REPLAY: Record<string, { re: RegExp; fallback: string | null }> = {
+  view: { re: /^(view\s+from|orient)\b/i, fallback: 'orient' },
+  zoom: { re: /^zoom\b/i, fallback: 'zoom' },
+  ray: { re: /^ray\b/i, fallback: null },
+  preset: { re: /^preset\b/i, fallback: null },
+}
+
+/**
+ * 报告节点击跳转命令解析（纯函数）。sectionLabel 为报告行「▌标签：」里 localized 标签
+ * （zh/en 均可匹配；容错接受带 ▌ 前缀的形态——浏览器 G1 实测：调用侧截取「：」前整段
+ * 天然含行首 ▌，剥离在此单点完成）；okCmds 为该消息已成功执行的命令（回放源——场景
+ * 实参已在其中，如 view from (chain A and chain B) 已被 LLM 按场景链替换过）。
+ * 返回 null = 该节不可跳（无 jump 定义，或 ray/preset 回放源缺失）。
+ */
+export function reportSectionJumpCmd(skillId: string | undefined, sectionLabel: string, okCmds: string[]): string | null {
+  if (!skillId) return null
+  const label = sectionLabel.replace(/^▌/, '')
+  const skill = AGENT_SKILLS.find(s => s.id === skillId)
+  const sec = skill?.report.sections.find(s => label === s.label.zh || label === s.label.en)
+  const j = sec?.jump
+  if (!j) return null
+  const replay = JUMP_REPLAY[j]
+  if (!replay) return j
+  const hit = [...okCmds].reverse().find(c => replay.re.test(c.trim()))
+  return hit?.trim() ?? replay.fallback
 }
