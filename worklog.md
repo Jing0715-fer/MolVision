@@ -4647,3 +4647,5 @@ Stage Summary:
 - 交付：r106-c 视觉基线扩容移植至 r108 主线（4 膜类模板像素哨兵 3→7 场景 + 6 守卫 637→643 + check 7/7 漂移 0.00%）——本会话 r106 的全部交付中唯一未被远端并行线覆盖的部分，无损落位
 - 裁决记录：同指令双会话并行实证（IM 网关重复投递）；远端线 r107/r108 已根修两线共同发现的「真实 LLM 报告格式遵循度」缺口——主线归远端，本会话弃用本地重复 commit，并行处置模式（fetch 分歧检测→对比交付→弃重复→移植缺口）入档
 - 遗留（供下轮参考）：①远端 r106 建议⑤「mock-llm 技能感知升级：fix-turn 修正轮携带技能上下文」与「场景替换扩展到链 ID」仍开放 ②本会话 E2E 证据截图（.zscripts/r106-e2e-report-card.png / r106b-chipbar-selected.png）留工作区未入库（历史惯例）；其记录的 UI 形态（横滚芯片栏）已随本线弃用被远端弹层版取代 ③并行会话协调：若 IM 网关重复投递再现，后完成方应先 fetch 再决策——避免重复轮次浪费
+
+（r106-parallel 段 cron 补记，2026-10-12）15min webDevReview 巡检任务 #454149 创建即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 23 次实证（r85-r108 连续 22 次 + 本轮），已删除清理。任务书已内嵌最新开发纪律（.agent/skills 四 SKILL 引用 + 门禁链 643 基线 + visual-baseline 7/7 口径 + kill 红线 + r106-parallel 遗留清单）。devd 看门狗（绝对阈值 + 斜率双闸）+ 四级 CI 门禁（guards 643 + smoke 6 + visual-baseline 7）继续作为巡检缺席期的自愈防线。
