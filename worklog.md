@@ -5142,3 +5142,5 @@ Stage Summary:
   4. 【低】ColorsPanel 色卡 hover 预览（ChimeraX hover 试穿语义——点击即生效无预览的打磨项）
   5. 【低】粗采样像素断言的工具债：本轮 stride=3 粗采样 teal=14 误判 LOW，全采样 144 推翻——E2E 像素断言应固定用视口区域全采样或按区域占比阈值（防粗采样假阴性）
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线）
+
+（r121 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #457303 创建（03:39:56，expr 0 */15 * * * ?——6 段 cron 首字段是秒，*/15 会被判 15 秒间隔拒绝，0 */15 才是 15 分钟）——create 返回 success 但 list 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 35 次实证：r85-r120 连续 34 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 list 的 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r121 开发纪律（基线 78ad83c / guards 888 / 门禁链与 kill 红线 / E2E 铁律含 g1-lib 标准库使用与 rg 正则裸 | 新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 888 + smoke 6 + visual-baseline 7）。
