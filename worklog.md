@@ -5069,3 +5069,40 @@ Stage Summary:
   6. 【低】消费轮视觉自查的 VLM 兜底 429 观测（r116 遗留——mock-vision 主路径不受影响；生产高频视觉自查需重试/退避策略再议）
 
 （r119 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #457176 创建（02:21:03）——create 返回 success 但 list 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 33 次实证：r85-r118 连续 32 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 list 的 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r119 开发纪律（基线 3e74d81 / guards 852 / 门禁链与 E2E 铁律含 provider 两步三字段与 toast 观察窗新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 852 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r120
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r119 下一轮建议①②③全收口：①wait-toast.sh toast 观察窗 E2E 工具（收口 G1b「sonner 4s 退场 vs 9s 等待」观察窗错位债）②smoke.sh aria 锚升级（语言切换全元素 aria 主探针 + 骨架断言 PDB 结构锚共条件）③CommandPalette「恢复上次会话」命令（r117-r119 恢复入口主线收口——会话命令四件套补第五件）；QA 门禁链全绿 + E2E（M 11 新锚 + 122 回归 + G1 三组浏览器全链）+ 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=8d3df5e（r119 cron 补记后）；guards 实跑 852/852 = 本轮基线；dev 3000=200 + mock 3999=200（Bearer test-key-12345 探活）+ devd/mockd 双守护进程存活；dev.log 尾部零新错
+- 【改动·r120-a 工具】.zscripts/wait-toast.sh 新建：轮询 [data-sonner-toast] 元素族（sonner portal——不查全 body innerText 防按钮/面板同文案假阳性）；有界窗口默认 5s×0.5s（4.6s 在场窗数学：4s duration + 0.3s 触发渲染 + 0.3s dismiss 动画）；三分流退出码（0 FOUND 附在场文本 / 1 NOTFOUND 附空清单或失配清单双分支诊断 / 2 PIPE-FAIL 连续两轮空返回与环境故障严格分流）；模式串反斜杠/单引号双重转义（wait-stable-frame r118-c 同款）
+- 【坑（本轮最大，工具首跑实测）】**agent-browser 字符串返回的 JSON 编码层**——eval 返回 JSON.stringify 产物时输出形如 "{\"found\":true,...}"：内部引号全部反斜杠转义，bash 剥外层引号壳后 \"found\":true 与模式 "found":true **永不匹配**（r112「shell 引号壳」教训的字符串层变体——Python json.loads 可解，bash 无等价物）。首跑 G1a 实证：恢复实际发生（molData 0→1）+ 页内 +1s 直查 toast 在场（count=1 文案正确）但工具 10 轮全 MISS——页内单 eval 与跨工具观测双轨对照定位根因。修复：探针改**纯字符串协议**（HIT::<文本>/MISS::<数> 前缀，文本内引号/反斜杠预先剥离）——无内部引号即无转义层；布尔/裸词返回（smoke.sh has_lang 同款）是 agent-browser 的干净契约
+- 【改动·r120-b 冒烟】smoke.sh 断言 3/4 aria 升级：断言 3 语言切换——aria 主探针（全元素 [aria-label] 匹配 /^(语言|Language)$/i）+ textContent 诚实标注回退（回退命中仍 PASS 但文案标注「aria 锚未命中，guards 应拦截」——冒烟测渲染死亡，锚回归由 guards 拦截，两级职责分工）；断言 4 骨架——「structure/结构 文本标志 + PDB 输入框 aria 结构锚」共条件（渲染残缺态「文案在而控件亡」原纯文本探针测不到，非回退语义更严）
+- 【坑（新入档）】**aria-label 不总在 button 上**——LanguageToggle 的「语言/Language」挂在 div[role=group] 包装层（两按钮的父容器）；首版探针 button[aria-label] 恒 false 走了 textContent 回退（诚实标注设计的首次实战暴露——正是它把探针缺陷变成可见信号）；修复为全元素 [aria-label] 探针，smoke 复跑 aria 主探针命中实证
+- 【改动·r120-c 面板命令】CommandPalette「恢复上次会话」：QUICK_ACTIONS 条件项（id=qa-session-resume，ArchiveRestore 图标 emerald 色）；门控与 AgentPanel quickResumeStrip 同款（resumeSnap && !activeId && !resumeGone）；快照 useMemo 键 [open, activeId]——面板每次打开必新鲜（localStorage 存档关闭期间变化不读陈旧值）；execute 分支 restoreSession 同一路径（替换语义幂等）+ 成功 toast 与 quickResume 同款双语文案 + 失败 resumeGone 自隐藏诚实降级；deps 全量（activeId/resumeGone/resumeSnap 三引用入 quickActions deps——React exhaustive-deps 不变量入 M 锚）
+- 【守卫 852→869（+17）】r120-a 五锚（data-sonner-toast≥3 / FOUND 第≥1 / NOTFOUND≥2 / PIPE-FAIL≥1 / 转义管线≥1——通配 . 规避 bash 双引号→rg 正则双层反斜杠转义脆弱性）+ r120-b 四锚（has_lang_aria≥3 / 回退标注≥1 / pdb_input≥3 / 共条件文案≥2）+ r120-c 八锚（命令 id≥2 / 门控三条件≥1 / 快照新鲜度≥1 / 图标≥2 / 恢复调用≥1 / toast ZH+EN≥2 / 降级≥3）
+- 【QA】lint 0 · tsc 项目级 5 基线环境错不变（examples×2+mock×1+skills×2，src/ 零新错）· guards 869/869 · smoke 6/6（aria 主探针命中 + 断言 4 共条件命中 + heavy 路径假死哨兵）· visual-baseline 7/7（0.00% 漂移）· dev.log 零新错
+- 【E2E-M】.zscripts/r120-m.ts 11/11（工具契约级）：T1 wait-toast bash 语法 · T2 无参用法契约（非零退出+用法提示）· T3 退出码三分流文档 · T4 探针目标 [data-sonner-toast] 非 body.innerText · T5 smoke bash 语法 · T6 语言 aria 探针双语同正则 · T7 断言 4 共条件结构 · T8 deps 跨变量一致性（三引用全入 deps——guards 单串锚表达不了的不变量）· T9 门控三条件 · T10 execute 成败双路径 · T11 图标 import；M 组回归 122/122（r110 16 + r111 9 + r114 16 + r115 22 + r116 12 + r118 25 + r119 22）零破坏
+- 【E2E-G1a 工具实用全链】4HHB 装载（native setter 铁律）→ 存档确认（molvision-session-v1 在 localStorage）→ 刷新不恢复（molData=0 + 恢复卡在场）→ Ctrl+K 派发开面板 → 恢复项点击 → **wait-toast 'Previous session restored' FOUND 第 1 轮**（在场文本「Previous session restored1 structures · pinned-preview veils will restore automatically」完整捕获）→ molData 0→1 + 3D 视口 canvas 在场；NOMATCH 路径（不存在模式串）诚实 exit 1 + 空清单诊断；**修复前后对照**：JSON 协议版 10 轮全 MISS（转义层根因）→ 纯字符串协议版第 1 轮命中——工具修复的因果链完整实证
+- 【E2E-G1b 面板命令全链】恢复项在场（idx 9，紧邻 Save session 之前——会话族顺序 resume→save→export→share→new）+ **搜索发现路径**（面板输入 resume → 21 可见项中恢复命令居首——「键盘流自然动词入口」设计兑现）+ 搜索路径 Enter 执行全闭环（FOUND 第 1 轮 + molData=1）+ **门控负向**（4HHB 活动时 83 项 = 84-1，恢复项正确缺席）+ **ZH 双语全链**（切语言 → aria-label 同步变「语言」双语锚实证 → 刷新 → 面板项「恢复上次会话（1 个结构）4HHB · 与欢迎页恢复卡同一路径」→ 点击 → wait-toast '已恢复上次会话' FOUND 第 1 轮——CJK 文本过转义链无恙）
+- 【E2E-G1c 冒烟实跑】smoke 6/6 全链实跑（aria 主探针命中 + PDB 结构锚共条件 + heavy 路径哨兵 eval Date.now() 响应）；visual-baseline 7 场景 0.00%（r119-a aria 探针族回归）
+- 【坑（新入档，G1 操作层）】①**G1 断言须按页面 locale 选文案**——首查 '恢复上次会话' 在 EN 页面 NOITEM（应查 'Resume last session'）；agent-browser 会话 locale 持久化（localStorage），断言前先探或双语分次 ②**cmdk 项定位用 [cmdk-item] 且可见性过滤 offsetParent**——过滤后断言只认可见项（cmdk 空查询全渲染 84 项，输入 resume 后 21 可见）
+- 【存证】/tmp/r120-palette-resume.png（131KB 有效 PNG；wait-stable-frame --canvas-aria '3d' STABLE 第 1 轮 0.000% 后拍摄——恢复后 4HHB 渲染终态）
+- 【现场恢复】locale 回 EN ✓；浏览器会话 close ✓；4HHB 会话存档留 localStorage（下次恢复卡可见——无碍）
+
+Stage Summary:
+- 交付一（r120-a）：wait-toast.sh toast 观察窗工具——r119 建议①收口：[data-sonner-toast] 有界轮询 + 三分流退出 + 诚实诊断；**首跑发现并修复 agent-browser JSON 转义层坑**（纯字符串协议 HIT/MISS）；G1a 实证 FOUND 第 1 轮（EN+ZH 双语），r119 G1b 的「9s 等待必 miss」观察窗债正式闭案
+- 交付二（r120-b）：smoke.sh aria 锚升级——r119 建议②收口：断言 3 全元素 aria 主探针 + textContent 诚实标注回退（首跑实战暴露 button[aria-label] 探针缺陷——aria 在 div[role=group] 上的坑入档）；断言 4 文本+结构锚共条件；smoke 6/6 aria 主探针命中
+- 交付三（r120-c）：CommandPalette「恢复上次会话」命令——r119 建议③评估结论落地（零成本第三入口）：会话四件套补第五件；G1b 全链实证（在场/搜索居首/执行闭环/门控负向/ZH 双语）
+- 交付四（测试基建）：r120-m.ts 11 锚 + 守卫 852→869（+17）
+- 交付五（验证）：guards 869/869 · smoke 6/6 · visual-baseline 7/7（0.00%）· E2E M 11/11 + 回归 122/122 + G1 三组全链 · console 零错误 · dev.log 干净 · provider 全程默认无扰动
+- 与用户指令对位：①「进行下一阶段开发」——r119 建议①②③全收口 ②「qa测试和e2e测试」——六道门禁 + M/G1 三组（QA 实战中抓出两个真实缺陷：JSON 转义层 + button[aria-label] 探针）③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【中】wait-toast 的使用纪律扩散：G1 驱动里所有「点击后断言 toast」场景应统一改用本工具（历史 G1 的 hasToast 手查法仍在旧驱动习惯中）；可在 agent 层建 G1 驱动模板时把「click → wait-toast → 状态断言」固化为标准三步
+  2. 【中】纯字符串协议的外溢评估：agent-browser eval 返回复杂结构（JSON/带引号文本）在 bash 侧一律走纯字符串前缀协议（HIT::/SEEN::/EMPTY）——wait-stable-frame 的 rect JSON 走 Python json.loads 无此问题，但未来 bash 侧新工具应直接采用纯字符串契约（本轮教训的制度化）
+  3. 【低】恢复命令的 Enter 直达验证：cmdk 的键盘流（输入 resume 后按 Enter 而非 click）本轮走的是 vis[0].click()——真实键盘 Enter 派发路径可补一轮（cmdk onSelect 的 keydown 分支覆盖）
+  4. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线）
+  5. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
+  6. 【低】消费轮视觉自查的 VLM 兜底 429 观测（r116 遗留——mock-vision 主路径不受影响；生产高频视觉自查需重试/退避策略再议）
