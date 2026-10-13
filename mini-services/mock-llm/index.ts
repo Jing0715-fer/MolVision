@@ -583,6 +583,18 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
     const okDrop = uniqAll.filter(c => okCmds.has(c.trim())).length
     const failDrop = uniqAll.length - commands.length - okDrop
     const avail = [...available].join('、')
+    // r119-c（r118 建议③收口）：0 待执行场景文案切换——「无效链已替换为 A」在重组
+    // 产物全部被丢弃时是伪陈述（没有任何命令真的被替换后执行；旧文案「0 条待执行 +
+    // 替换说明」读起来像重组发生了但产物为空）。诚实口径：候选全部分类为已成功重复
+    // /既往失败同文已跳过，无可执行命令——并给用户下一步（换分析目标或人工核验链
+    // 清单）。commands.length===0 时 uniqAll.length===okDrop+failDrop 恒成立
+    // （recomposeByChainList 恒非空 + failedPairs 非空已前置校验——不存在 0 候选分支）。
+    if (!commands.length) {
+      return dec(zh,
+        `链清单核对完成：${uniqAll.length} 条候选命令全部与已成功命令重复或与既往失败命令同文（${okDrop} 条成功重复、${failDrop} 条失败同文），无可执行命令——请换一个分析目标，或人工执行 chains list 核验后重试。`,
+        `Chain-list check complete: all ${uniqAll.length} candidate commands are duplicates of already-successful commands or prior same-text failures (${okDrop} success duplicates, ${failDrop} failure same-text) — nothing to run. Try a different analysis target, or run chains list manually and retry.`,
+        [])
+    }
     return dec(zh,
       `已按链清单重组命令（场景可用链：${avail}；无效链已替换为 ${pick}——${commands.length} 条待执行${okDrop > 0 ? `，另有 ${okDrop} 条与已成功命令重复已跳过` : ''}${failDrop > 0 ? `，另有 ${failDrop} 条与既往失败命令同文已跳过` : ''}）。`,
       `Commands recomposed per the chain list (available chains: ${[...available].join(', ')}; invalid chains replaced with ${pick} — ${commands.length} to run${okDrop > 0 ? `, ${okDrop} skipped as duplicates of already-successful commands` : ''}${failDrop > 0 ? `, ${failDrop} skipped as prior same-text failures` : ''}).`,

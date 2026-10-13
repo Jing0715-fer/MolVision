@@ -43,9 +43,10 @@
 #   膜构建落地；截图前清洁视口两遍（隐藏 main 下 absolute/fixed 且不含 canvas 的
 #   元素 + __molEngine.settings.showAxes=false + autoPerf=false——r99 实锤
 #   SwiftShader 低帧率下 autoPerf 会静默拆 ssao/outline 降级）+ 收起序列条 +
-#   关闭命令行；canvas getBoundingClientRect 实测 + PIL 裁剪（只比 3D 视口，
-#   裁掉 DOM 噪音）；截图三败重试（r92 陈旧帧防护——先删旧 raw 再拍，防 PIL
-#   反复裁剪上一轮残帧伪造新图）。
+#   关闭命令行；canvas 按 aria-label '3d' 子串精选（r119-a：3D 视口画布自带 r118-c
+#   写入的 aria 锚——多画布场景不再被 DOM 首序辅助画布错抓）+ getBoundingClientRect
+#   实测 + PIL 裁剪（只比 3D 视口，裁掉 DOM 噪音）；截图三败重试（r92 陈旧帧防护
+#   ——先删旧 raw 再拍，防 PIL 反复裁剪上一轮残帧伪造新图）。
 #
 # 【比对算法与阈值（r104-b 首版经验值，改值须同步 regression-guards 守卫）】
 #   PIL ImageChops.difference（RGB 逐通道绝对差）→ convert('L') 灰度 →
@@ -271,8 +272,11 @@ run_scene() {
   sleep 1
 
   # 3) 清洁视口第一遍 + 关 autoPerf（必须在场景命令【前】——r99：SwiftShader 低帧率
-  #    <15fps 持续 ~3s 即自动关 ssao+outline，模板里的 ssao on 会被悄悄拆除）
-  probe=$(agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()" 2>/dev/null | tr -d '"')
+  #    <15fps 持续 ~3s 即自动关 ssao+outline，模板里的 ssao on 会被悄悄拆除）。
+  #    r119-a：canvas 锚定改 aria '3d' 子串精选（r118 建议①收口）——main 内首个
+  #    canvas 在多画布场景会错抓辅助画布（拉马散点等），清洁遍会把真视口的包裹层
+  #    当 overlay 误隐藏；aria 锚 = 确定性目标（wait-stable-frame --canvas-aria 同款）
+  probe=$(agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && [...main.querySelectorAll('canvas')].find(c => (c.getAttribute('aria-label') || '').toLowerCase().includes('3d')); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()" 2>/dev/null | tr -d '"')
   case "$probe" in
     hidden:*) ;;
     *) echo "PROBE-FAIL $name (clean viewport pass1: ${probe:-<no output>})"; return 1 ;;
@@ -315,15 +319,23 @@ run_scene() {
   fi
 
   # 7) 清洁视口第二遍（幂等；命令可能新造 overlay，截图前再扫一遍——r76 双遍范式）
-  probe=$(agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && main.querySelector('canvas'); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()" 2>/dev/null | tr -d '"')
+  #    r119-a：同首遍 aria '3d' 锚定（防多画布场景误隐藏真视口包裹层）
+  probe=$(agent-browser eval "(() => { const main = document.querySelector('main'); const canvas = main && [...main.querySelectorAll('canvas')].find(c => (c.getAttribute('aria-label') || '').toLowerCase().includes('3d')); if (!main || !canvas) return 'NOVIEW'; let n = 0; const walk = el => { for (const child of el.children) { if (child.contains(canvas)) { walk(child); continue } const cs = getComputedStyle(child); if (cs.position === 'absolute' || cs.position === 'fixed') { child.style.display = 'none'; n++; continue } walk(child) } }; walk(main); if (window.__molEngine && window.__molEngine.settings) { window.__molEngine.settings.showAxes = false; window.__molEngine.settings.autoPerf = false } return 'hidden:' + n })()" 2>/dev/null | tr -d '"')
   case "$probe" in
     hidden:*) ;;
     *) echo "PROBE-FAIL $name (clean viewport pass2: ${probe:-<no output>})"; return 1 ;;
   esac
   sleep 0.5
 
-  # 8) canvas rect 实测（裁剪用——不硬编码）
-  agent-browser eval "(() => { const c = document.querySelector('canvas'); const r = c.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }) })()" > "$CANVAS_JSON" 2>/dev/null
+  # 8) canvas rect 实测（裁剪用——不硬编码）。
+  #    r119-a：aria '3d' 子串精选（r118 建议①收口）——querySelector('canvas') 首个
+  #    在多画布场景会错抓辅助画布（r116 坑②同源）；3D 视口画布自带 r118-c 写入的
+  #    aria 锚 = 确定性目标。未匹配 → NOARIA 诚实 PROBE-FAIL（不静默回退首个）。
+  agent-browser eval "(() => { const cs = [...document.querySelectorAll('canvas')]; const c = cs.find(x => (x.getAttribute('aria-label') || '').toLowerCase().includes('3d')); if (!c) return JSON.stringify({ err: 'NOARIA', n: cs.length }); const r = c.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), n: cs.length, m: 'aria' }) })()" > "$CANVAS_JSON" 2>/dev/null
+  if grep -q 'NOARIA' "$CANVAS_JSON" 2>/dev/null; then
+    echo "PROBE-FAIL $name (canvas rect: 3D viewport aria-label missing — $(cat "$CANVAS_JSON" 2>/dev/null))"
+    return 1
+  fi
 
   # 9) 截图三败重试（r92：先删旧 raw 防 PIL 裁剪陈旧残帧伪造新图）
   rm -f "/tmp/visual-baseline-$name.raw.png"

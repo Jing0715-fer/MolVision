@@ -76,7 +76,10 @@ const scene1PHO = { role: 'user', content: '【自动注入的当前场景信息
 {
   const r = await mockReply([{ role: 'user', content: `The chain list has been probed. Recompose the failed commands per the list and give them again (substitute chain IDs that actually exist):\n- color red, chain Z → Chain Z not found\n\nchains list output:\nChain groups (1 total, 0 hidden):\n  ◉  00  A   protein  99 residues\n\nKey output of already-successful commands (do not repeat them when recomposing):\n- color red, chain A → colored 99 atoms\n\nOnly give the recomposed commands to run; do not repeat the successful ones.` }])
   eq('T4a EN 同名丢弃', r.commands.length, 0)
-  includes('T4b EN 丢弃计数文案', r.reply, 'skipped as duplicates')
+  // r119-c 同步：0 待执行场景改走「Chain-list check complete」新文案——丢弃分类
+  // 计数口径不变（1 success duplicates），断言随行为同步。
+  includes('T4b EN 丢弃分类计数文案', r.reply, '1 success duplicates')
+  includes('T4c EN 无可执行命令口径', r.reply, 'nothing to run')
 }
 
 // ---- T5：r115-a 视觉链域演练——fail drill chain → 修正命令带不存在的链 Z（空选择必报错族）----

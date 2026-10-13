@@ -1669,8 +1669,10 @@ check "mock同文跳过文案锚EN"       'skipped as prior same-text failures' 
 # 恢复卡；正文区顶部提示条补齐（sm:hidden 与顶栏按钮互斥成对，桌面端不重复渲染）。
 # ①互斥锚（sm:hidden = 2：提示条 className + 既有处；删则移动端入口消失）
 check "小屏补偿互斥锚"             'sm:hidden' "src/components/studio/AgentPanel.tsx" 1
-# ②门控锚（钉在场+无活动结构+有存档+未失败 四条件同款 = 1；删则无钉也渲染误导入口）
-check "小屏补偿门控锚"             'pinnedJumps.length > 0 && !molActiveId && sessionSnap && !resumeGone' "src/components/studio/AgentPanel.tsx" 1
+# ②门控锚（r119-b 同步：门控去钉化——无活动结构+有存档+未失败三条件即渲染；钉在场
+# 与否切色系/文案。旧四条件字面量随泛化重构移除，quickResumeStrip 定义 + 顶栏按钮
+# 两处 = 2；删则无钉小屏入口消失或死按钮渲染）
+check "小屏补偿门控锚"             '!molActiveId && sessionSnap && !resumeGone' "src/components/studio/AgentPanel.tsx" 2
 # ③主行文案锚（钉 N 待恢复 / N pins pending 双语同线 = 1；删则无上下文的裸动作）
 check "小屏补偿文案锚"             '待恢复）|pins pending' "src/components/studio/AgentPanel.tsx" 1
 # ④双入口复用锚（quickResume 定义+双 onClick = 4；顶栏与小屏条同一路径——删则两入口行为分叉）
@@ -1687,6 +1689,48 @@ check "aria失配诚实锚"             'NOMATCH' ".zscripts/wait-stable-frame.s
 check "视口aria标签锚"             '3D 分子视口|3D molecular viewport' "src/components/molecular/MolViewer.tsx" 1
 # ④标签写入锚（eng.canvas.setAttribute = 1；删则 3D 视口 aria 仍为空串）
 check "视口aria写入锚"             "setAttribute\\('aria-label'" "src/components/molecular/MolViewer.tsx" 1
+
+# ---- r119-a：visual-baseline canvas 探针 aria '3d' 精选（r118 建议①收口） ----
+# querySelector('canvas') 首个在多画布场景（拉马散点等辅助画布先入 DOM）会错抓——
+# 清洁遍会把真视口包裹层当 overlay 误隐藏、rect 裁剪对准错画布；3D 视口画布自带
+# r118-c 写入的 aria 锚 = 确定性目标（wait-stable-frame --canvas-aria 同款语义）。
+# ①aria 探针锚（三处 JS includes('3d')：清洁两遍 + rect 实测 = 3；删则回退首序错抓）
+check "视觉基线aria探针锚"         "includes\\('3d'\\)" "scripts/visual-baseline.sh" 3
+# ②失配诚实锚（NOARIA JS 返回 + grep 检查 + PROBE-FAIL 消息 = 3；删则失配被吞）
+check "视觉基线NOARIA锚"           'NOARIA' "scripts/visual-baseline.sh" 3
+# ③rect 诊断标记锚（m:'aria' 附 JSON 诊断——与 wait-stable-frame 同款 = 1）
+check "视觉基线rect诊断锚"         "m: 'aria'" "scripts/visual-baseline.sh" 1
+
+# ---- r119-b：小屏补偿条结构态泛化（r118 建议②收口） ----
+# 门控去钉化：无钉小屏用户此前只有被浮层面板盖住的欢迎页恢复卡——同一条提示条按钉
+# 在场与否自适应（琥珀待恢复 / 翡翠纯会话恢复），不新增入口防泛滥。
+# ①泛化对象锚（quickResumeStrip 定义+色系/文案/aria 全引用 = 14；删则泛化回退钉专属）
+check "泛化条对象锚"               'quickResumeStrip' "src/components/studio/AgentPanel.tsx" 6
+# ②双态文案锚（继续上次会话/Resume last session 双语 = 3；删则无钉态无文案）
+check "泛化条双态文案锚"           '继续上次会话|Resume last session' "src/components/studio/AgentPanel.tsx" 3
+# ③快照并入锚（snap: sessionSnap——TS 收窄经对象携带 = 1；删则 JSX 内 null 收窄失败）
+check "泛化条快照锚"               'snap: sessionSnap' "src/components/studio/AgentPanel.tsx" 1
+# ④翡翠色系锚（无钉态 primary/30 + [0.06] 弱底 = 1；删则双态同色失语义区分）
+check "泛化条翡翠色系锚"           "border-primary/30 bg-primary/\[0\.06\]" "src/components/studio/AgentPanel.tsx" 1
+
+# ---- r119-c：mock 0.46「0 待执行」文案切换（r118 建议③收口） ----
+# 旧文案「无效链已替换为 A——0 条待执行」在重组产物全部被丢弃时是伪陈述（没有任何
+# 命令真的被替换后执行）；0 待执行改走「链清单核对完成」诚实口径 + 分类计数 + 下一步
+# 建议；1+ 待执行路径旧句式原样保留（分支边界精确切换）。
+# ①分支边界锚（if (!commands.length) 先于旧 return = 1；删则新文案永不触发）
+check "mock零命令分支锚"           'if \(!commands\.length\)' "mini-services/mock-llm/index.ts" 1
+# ②新文案标题锚 ZH（链清单核对完成 = 1；删则 ZH 0 待执行回退伪陈述）
+check "mock零命令标题锚ZH"         '链清单核对完成' "mini-services/mock-llm/index.ts" 1
+# ③新文案标题锚 EN（Chain-list check complete = 1）
+check "mock零命令标题锚EN"         'Chain-list check complete' "mini-services/mock-llm/index.ts" 1
+# ④无可执行命令锚（双语两行 + 注释 = 3；删则口径断——E2E 断言链断）
+check "mock零命令口径锚"           '无可执行命令|nothing to run' "mini-services/mock-llm/index.ts" 2
+# ⑤分类计数锚（N 条成功重复、M 条失败同文 双语 = 2；删则丢弃分类不可见）
+check "mock零命令分类锚"           '条成功重复|success duplicates' "mini-services/mock-llm/index.ts" 2
+# ⑥旧文案保留锚（1+ 待执行路径原样 = 1；删则分支切换变成整体替换——回归风险）
+check "mock重组旧文案锚"           '已按链清单重组命令' "mini-services/mock-llm/index.ts" 1
+# ⑦下一步建议锚（换分析目标/人工核验 = 1；删则死胡同无出路）
+check "mock零命令建议锚"           '请换一个分析目标' "mini-services/mock-llm/index.ts" 1
 
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条

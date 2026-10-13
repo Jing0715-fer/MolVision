@@ -65,7 +65,10 @@ const scene1A2N = { role: 'user', content: '【自动注入的当前场景信息
 {
   const r = await mockReply([{ role: 'assistant', content: ifDirective }, scene1A2N, { role: 'user', content: `链清单已探测，请按清单重组刚才失败的命令后重新给出（链号换成清单中实际存在的链）：\n- zoom chain Z, 5 → 命中 0 个原子\n- interface A Z → 选择为空\n\nchains list 输出：\n链组（1 个，隐藏 0 个）：\n  ◉  00  A   蛋白  690 残基\n\n已成功命令的关键输出（重组时不要重复这些命令）：\n- interface A A → 界面残基 689/689\n- view from (chain A and chain A) → 已对准界面\n- zoom chain A, 5 → 已聚焦\n\n只给出重组后需要执行的命令，不要重复已成功的命令。` }])
   eq('T2a 同文重发重组产物全丢弃（零命令）', r.commands.length, 0)
-  includes('T2b 丢弃计数诚实口径（2 条）', r.reply, '2 条与已成功命令重复已跳过')
+  // r119-c 同步：0 待执行场景改走「链清单核对完成」新文案（r118 建议③收口）——
+  // 丢弃分类计数口径不变（2 成功重复、0 失败同文），断言随行为同步。
+  includes('T2b 丢弃分类计数诚实口径（2 成功重复）', r.reply, '2 条成功重复')
+  includes('T2c 无可执行命令口径', r.reply, '无可执行命令')
 }
 
 // ---- T3：结构切换后的新探测（probe2 语义）——首轮后结构换成 1PRC（链 C/H/L/M），
