@@ -5030,3 +5030,5 @@ Stage Summary:
   4. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线）
   5. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
   6. 【低】消费轮视觉自查的 VLM 兜底 429 观测（r116 遗留——mock-vision 主路径不受影响；生产高频视觉自查需重试/退避策略再议）
+
+（r118 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #457076 创建（01:30:37）——create 返回 success 但 list 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 32 次实证：r85-r117 连续 31 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 list 的 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r118 开发纪律（基线 0a5224b / guards 838 / 门禁链与 kill 红线 / E2E 铁律含 provider 两步配置与双按钮可见性区分新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 838 + smoke 6 + visual-baseline 7）。
