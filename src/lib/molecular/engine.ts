@@ -83,6 +83,10 @@ interface StructureView {
   reps: Map<string, RepView>
   repContainer: THREE.Group
   highlight: THREE.InstancedMesh | null
+  /** r111-b 报告节 hover 预览高亮（青色薄纱——与选择光晕 amber 分色）：挂
+   * repContainer 直属（不在 reps Map，不参与拾取缓存）；无 rev 派生通道，由
+   * AgentPanel 显式 previewHighlight/clearPreviewHighlight 控制（无副作用预览） */
+  preview: THREE.InstancedMesh | null
   selectionRev: number
   labelGroup: THREE.Group
   labelsKey: string
@@ -1793,6 +1797,7 @@ export class MolEngine {
           reps: new Map(),
           repContainer: new THREE.Group(),
           highlight: null,
+          preview: null,
           selectionRev: -1,
           labelGroup: new THREE.Group(),
           labelsKey: '',
@@ -1886,6 +1891,7 @@ export class MolEngine {
         this.scene.remove(view.group)
         for (const rv of view.reps.values()) rv.build.dispose()
         if (view.highlight) { view.highlight.geometry.dispose(); (view.highlight.material as THREE.Material).dispose() }
+        if (view.preview) { view.preview.geometry.dispose(); (view.preview.material as THREE.Material).dispose(); view.preview = null }
         this.views.delete(id)
         this.symmetryGroups.delete(id)
         this.hbondCache.delete(id)
@@ -3865,6 +3871,57 @@ export class MolEngine {
     })
     // 新建材质按当前封盖生效状态切 side（封盖开启时 FrontSide 材质转双面）
     if (capState.on) applyCapSides(build.group, true)
+  }
+
+  // ---------- r111-b 报告节 hover 预览高亮（公开 API——无副作用预览通道） ----------
+
+  /** 跨结构清旧 preview（hover 切节/切结构时上一预览不留残影）。 */
+  private clearPreviewMeshes() {
+    for (const view of this.views.values()) {
+      if (!view.preview) continue
+      view.repContainer.remove(view.preview)
+      view.preview.geometry.dispose()
+      ;(view.preview.material as THREE.Material).dispose()
+      view.preview = null
+    }
+  }
+
+  /** r111-b：报告节 hover 瞬时预览——选择子原子以青色薄纱罩亮（点击跳转前的「先看
+   *  一眼」）。与选择光晕（amber）分色；不写 store、不进 sync 派生链、不参与拾取
+   * （挂 repContainer 直属）；原子数与 updateHighlight 同限（0 / >40000 不画）。 */
+  previewHighlight(structureId: string, indices: number[]) {
+    this.clearPreviewMeshes()
+    if (!indices.length || indices.length > 40000) return
+    const view = this.views.get(structureId)
+    const data = dataRegistry.get(structureId)
+    if (!view || !data) return
+    const n = indices.length
+    const halo = n <= 32 ? { scale: 1.06, pad: 0.26, opacity: 0.5 }
+      : n <= 2000 ? { scale: 1.03, pad: 0.14, opacity: 0.3 }
+      : { scale: 1.01, pad: 0.07, opacity: 0.18 }
+    const geo = new THREE.SphereGeometry(1, 14, 10)
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x14b8a6, transparent: true, opacity: halo.opacity, depthWrite: false,
+    })
+    const mesh = new THREE.InstancedMesh(geo, mat, n)
+    const m = new THREE.Matrix4()
+    const pos = data.atoms.positions
+    for (let k = 0; k < n; k++) {
+      const i = indices[k]
+      const r = elementInfo(data.atoms.elements[i]).vdw * halo.scale + halo.pad
+      m.makeScale(r, r, r)
+      m.setPosition(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2])
+      mesh.setMatrixAt(k, m)
+    }
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.renderOrder = 7 // 预览叠加在选择光晕（6）之上仍可见
+    view.preview = mesh
+    view.repContainer.add(mesh)
+  }
+
+  /** r111-b：清除 hover 预览（mouseleave/blur/组件卸载时）。 */
+  clearPreviewHighlight() {
+    this.clearPreviewMeshes()
   }
 
   private updateHighlight(view: StructureView, data: StructureData, indices: number[]) {

@@ -7,7 +7,7 @@
   mock-llm 损坏/静默死亡无人自愈，r109 E2E 期两次 generation interrupted 全靠
   人工系统级取证 + 单例重启（.zscripts/restart-mock.sh）修复。
 
-本守护解决三件事：
+本守护解决四件事：
   1) 两级探活——L1 轻探（GET /v1/models：任何 HTTP 响应即活，含 404——探的是
      HTTP 层存活而非业务正确性；30s 周期）；L2 流式探针（POST /v1/chat/completions
      stream:true，断言响应流含 [DONE] 尾——正是 r109 损坏态「非流式正常流式挂起」
@@ -18,7 +18,12 @@
      → /proc cwd 兜底清残留 → 有界等端口释放（SIGKILL 兜底）→ Popen
      bun run dev（start_new_session 脱离会话回收）→ 有界等 L1 探活成功；
   3) 重启风暴防护——1 小时滚动窗内 ≥3 次重启则退避 30 分钟（退避期只探活记日志
-     不重启；计数同时清零，防退避结束瞬间凭旧计数立即重启）。
+     不重启；计数同时清零，防退避结束瞬间凭旧计数立即重启）；
+  4) r111-a 源码变更即时验证——主循环从 30s 粗粒度改为 1s 小步进，每秒比对
+     mini-services/mock-llm/index.ts 的 mtime：变更即立即 L2 探针（留 1s 热重载
+     完成宽限）；失败再等 3s 复验一次（热重载可能仍在途）；仍失败才重启——
+     mid-write 热重载损坏的自愈从「L2 周期发现」的 ~2min15s 缩到 ~5s（r110 两次
+     实战自愈的响应加速；正常编辑 L2 通过零动作只记日志，不误杀）。
 
 与 devd.py 的关系：独立守护而非 devd 增分支（对 r109 建议①的实现路径修正）——
   替换运行中的 devd 必须中断 dev server（守护链整体重启），独立进程零中断部署；
@@ -46,8 +51,8 @@ MOCK_LOG = os.path.join(PROJECT, ".zscripts", "mini-service-mock-llm.log")
 PID_FILE = os.path.join(PROJECT, ".zscripts", "mockd.pid")
 BASE = "http://127.0.0.1:3999"
 
-CHECK_S = 30          # 主循环周期（L1 每圈轻探）
-L2_EVERY = 4          # L2 流探周期 = 4 圈 = 120s
+CHECK_S = 30          # L1 轻探周期（秒）
+L2_EVERY = 120        # L2 流探周期（秒）——r111-a 起主循环 1s 粒度，改按秒数直接计量
 L1_FAILS_RESTART = 3  # L1 连续 3 败 → 重启（90s 内发现死亡）
 L2_FAILS_RESTART = 2  # L2 连续 2 败 → 重启（~4 分钟内发现损坏态）
 L1_TIMEOUT_S = 4      # 轻探超时（正常毫秒级；4s 都不通 = HTTP 层死）
@@ -55,6 +60,9 @@ L2_TIMEOUT_S = 12     # 流探超时（正常 ~150ms；损坏态挂起 12s 判�
 RESTART_WINDOW_S = 3600  # 重启风暴防护：1 小时滚动窗
 RESTART_MAX_IN_WINDOW = 3
 BACKOFF_S = 1800      # 窗内达上限后的退避时长（30 分钟）
+WATCH_TICK_S = 1      # r111-a：主循环粒度（源码 mtime 检测分辨率）
+HOT_RELOAD_GRACE_S = 1.0  # r111-a：检测到变更后留给 bun --hot 完成热重载的宽限
+EDIT_RETRY_S = 3.0    # r111-a：变更后首验失败到复验的间隔（热重载仍在途的窗口）
 
 
 def stamp() -> str:
@@ -104,6 +112,14 @@ def mock_l2_stream_ok() -> bool:
             return "data: [DONE]" in body
     except Exception:
         return False
+
+
+def mock_source_mtime() -> float | None:
+    """r111-a：被守护源文件的 mtime（不存在/不可读返回 None——视为无可监听）。"""
+    try:
+        return os.stat(os.path.join(MOCK_DIR, "index.ts")).st_mtime
+    except OSError:
+        return None
 
 
 # ---------------- 重启（复用 .zscripts/restart-mock.sh 的清理逻辑，移植为 Python） ----------------
@@ -248,42 +264,71 @@ def main() -> None:
     daemonize()
     with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()))
-    log_line("daemon up (double-fork); supervising mock-llm :3999 (L1 30s / L2 120s)")
-    l1_fails = 0
-    l2_fails = 0
-    tick = 0
-    restarts: list[float] = []  # 1h 滚动窗内的重启时间戳
-    backoff_until = 0.0
-    while True:
-        time.sleep(CHECK_S)
-        tick += 1
-        if mock_l1_alive():
-            l1_fails = 0
-            if tick % L2_EVERY == 0:
-                if mock_l2_stream_ok():
-                    l2_fails = 0
-                else:
-                    l2_fails += 1
-                    log_line(f"L2 stream probe failed (streak {l2_fails}) — no [DONE] tail")
-        else:
-            l1_fails += 1
-        if l1_fails < L1_FAILS_RESTART and l2_fails < L2_FAILS_RESTART:
-            continue
-        # 触发重启（或退避）
+    log_line("daemon up (double-fork); supervising mock-llm :3999 (L1 30s / L2 120s / watch 1s)")
+
+    def do_restart(reason: str, l1_streak: int, l2_streak: int,
+                   restarts: list[float], backoff_until: float) -> float:
+        """统一重启路径（周期性失败 / 编辑后验证失败共用）：返回新的 backoff_until。"""
         now = time.time()
         if now < backoff_until:
-            log_line("unhealthy but in restart backoff (storm guard); counters reset")
-            l1_fails = l2_fails = 0
-            continue
-        log_line(f"restart triggered (L1 streak {l1_fails} / L2 streak {l2_fails})")
+            log_line(f"unhealthy but in restart backoff (storm guard): {reason}; counters reset")
+            return backoff_until
+        log_line(f"restart triggered ({reason}; L1 streak {l1_streak} / L2 streak {l2_streak})")
         ok = mock_restart()
-        restarts = [t for t in restarts if t > now - RESTART_WINDOW_S]
+        restarts[:] = [t for t in restarts if t > now - RESTART_WINDOW_S]
         restarts.append(now)
         log_line(f"single-instance restart {'ok (L1 alive)' if ok else 'FAILED (L1 still dead)'}")
-        l1_fails = l2_fails = 0
         if len(restarts) >= RESTART_MAX_IN_WINDOW:
             backoff_until = now + BACKOFF_S
             log_line(f"{len(restarts)} restarts within 1h window — backoff {BACKOFF_S}s (probe-only)")
+        return backoff_until
+
+    l1_fails = 0
+    l2_fails = 0
+    elapsed = 0  # r111-a：主循环秒数（1s 粒度小步进——mtime 检测分辨率）
+    last_mtime = mock_source_mtime()
+    restarts: list[float] = []  # 1h 滚动窗内的重启时间戳
+    backoff_until = 0.0
+    while True:
+        time.sleep(WATCH_TICK_S)
+        elapsed += WATCH_TICK_S
+        # ---- r111-a 源码变更即时验证（每秒比对 mtime）----
+        mtime = mock_source_mtime()
+        if mtime is not None and mtime != last_mtime:
+            last_mtime = mtime
+            log_line("source change detected — immediate L2 probe")
+            time.sleep(HOT_RELOAD_GRACE_S)  # 留给 bun --hot 完成热重载
+            if mock_l2_stream_ok():
+                log_line("L2 ok after hot-reload — no action")
+                l2_fails = 0
+            else:
+                time.sleep(EDIT_RETRY_S)  # 热重载可能仍在途——复验一次再定罪
+                if mock_l2_stream_ok():
+                    log_line("L2 recovered after edit retry — no action")
+                    l2_fails = 0
+                else:
+                    log_line("L2 still failing after edit — treating as mid-write reload corruption")
+                    backoff_until = do_restart(
+                        "edit verify failed", l1_fails, l2_fails, restarts, backoff_until)
+                    l1_fails = l2_fails = 0
+                    continue
+        # ---- 周期性探活（秒数计量——与原 tick 语义等价）----
+        if elapsed % CHECK_S == 0:
+            if mock_l1_alive():
+                l1_fails = 0
+                if elapsed % L2_EVERY == 0:
+                    if mock_l2_stream_ok():
+                        l2_fails = 0
+                    else:
+                        l2_fails += 1
+                        log_line(f"L2 stream probe failed (streak {l2_fails}) — no [DONE] tail")
+            else:
+                l1_fails += 1
+            if l1_fails >= L1_FAILS_RESTART or l2_fails >= L2_FAILS_RESTART:
+                backoff_until = do_restart(
+                    f"probe streaks (L1 {l1_fails}/L2 {l2_fails})", l1_fails, l2_fails,
+                    restarts, backoff_until)
+                l1_fails = l2_fails = 0
 
 
 if __name__ == "__main__":

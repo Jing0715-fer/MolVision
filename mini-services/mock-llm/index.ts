@@ -239,6 +239,12 @@ function substituteSceneStructs(cmd: string, names: string[]): string {
  *     诚实降级为探测命令，用户/LLM 下轮按清单重组）。
  *  无规则命中保持原命令（场景替换后回放——r109 行为，适配场景参数失配类失败）。 */
 function fixRewriteCommand(cmd: string, failOutput: string): string {
+  // r111-c 链不存在族优先分支：文案「未找到链 X——可用链：… / Chain X not found —
+  // available: …」（chains hide/show 参数链不存在 + 一切链域失败）→ chains list 探测。
+  // 单列于空选择判据之前：该族无论命令形态（chains hide X 连 \bchain\s+X\b 词式都不
+  // 匹配——逐形态规则必漏），探测可用链都是统一正确答案；且与空选择四族文案互斥
+  // （空选择族不含「未找到链」字样），先判不抢 ligand 降级规则。
+  if (/未找到链|Chain \S+ not found/i.test(failOutput)) return 'chains list'
   // G1 实测补判据（两轮）：空选择文案共四族——①zoom/count 系「命中 0 个原子 / matched
   // 0 atoms」②contacts 系「选择为空（A: 0 原子…）/ Empty selection (A: 0 atoms…)」
   // ③hbonds scope「范围选择为空 / Scope selection is empty」④view/isolate「选择为空 /

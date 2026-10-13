@@ -1241,6 +1241,58 @@ check "提取配对锚"                "\[m\[1\]\.trim\(\), m\[2\]\.trim\(\)\]" 
 # ⑰改写文案锚（实测 1——EN 改写发生文案；删则用户无法感知「按失败原因修正」动作）
 check "改写文案锚"                "fixed by failure cause" "mini-services/mock-llm/index.ts" 1
 
+# ---- r111：mockd 编辑监听 + 报告节 hover 预览 + 修正轮链族扩容 ----
+# 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」
+# ——r110 下一轮建议第 1【高】/ 第 4【中】（r109 建议③ 剩余子项）落地：
+# ①r111-a mockd 源码变更即时验证（r110 建议①：热重载损坏高频化的响应加速）——主循环
+#   30s 粗粒度改 1s 小步进，每秒比对 mini-services/mock-llm/index.ts 的 mtime；变更即
+#   立即 L2 探针（1s 热重载宽限）；失败再等 3s 复验（热重载可能在途）；仍失败才重启
+#   ——mid-write 损坏自愈从 ~2min15s（L2 周期发现）缩到 ~5s。正常编辑 L2 通过零动作只
+#   记日志（不误杀）。实战首验：本轮编辑 mock-llm 后 mockd 1s 内检测 + L2 确认健康 +
+#   零重启；
+# ②r111-b 报告节 hover 3D 预览（r109 建议③/r110 建议④ 剩余子项）：跳转命令携带的选择子
+#   （view from (chain A and chain B) 的括号内表达式 / zoom within N of (ligand) 的
+#   目标子）无副作用求值（store.previewExpr——不落全局选择）→ engine.previewHighlight
+#   青色薄纱罩亮（与选择光晕 amber 分色、不参与拾取）；点击跳转/blur/卸载时清除——
+#   「先看一眼再跳」的两段式交互；zoom/orient/ray/preset 结构级命令无局部选择子不预览；
+# ③r111-c 修正轮链族扩容（r110 建议⑤）：链不存在族文案「未找到链 X——可用链：…/
+#   Chain X not found — available: …」单列优先分支 → chains list 探测（该族与空选择
+#   四族文案互斥先判不抢 ligand 降级；chains hide X 形态不含 \bchain\s+X\b 词式——
+#   逐形态规则必漏，文案族单列是唯一全覆盖路径）。
+# 以下十六锚防各环节被改写/删除静默退化（实测数见各行注释）：
+# ①mockd mtime 函数锚（实测 3——定义+启动基线+循环内比对；删则编辑监听失明回退 2min 周期发现）
+check "mockd mtime函数锚"         "mock_source_mtime" "scripts/mockd.py" 3
+# ②mockd 变更检测日志锚（实测 1——source change detected 行；删则编辑检测静默失联）
+check "mockd 变更检测锚"          "source change detected" "scripts/mockd.py" 1
+# ③mockd 热重载宽限锚（实测 2——HOT_RELOAD_GRACE_S 常量+sleep；删则热重载未完成即探针误判）
+check "mockd 热重载宽限锚"        "HOT_RELOAD_GRACE_S" "scripts/mockd.py" 2
+# ④mockd 编辑复验锚（实测 2——EDIT_RETRY_S 常量+sleep；删则单次探针失败即重启误杀正常编辑）
+check "mockd 编辑复验锚"          "EDIT_RETRY_S" "scripts/mockd.py" 2
+# ⑤mockd 主循环粒度锚（实测 3——WATCH_TICK_S 常量+sleep+elapsed 累计；回退 30s = 监听分辨率退化）
+check "mockd 主循环粒度锚"        "WATCH_TICK_S" "scripts/mockd.py" 3
+# ⑥engine 预览 API 锚（实测 2——previewHighlight 定义+StructureView 注释；删则 hover 无渲染通道）
+check "engine 预览API锚"          "previewHighlight" "src/lib/molecular/engine.ts" 2
+# ⑦engine 预览清理锚（实测 3——clearPreviewMeshes 定义+两公开方法调用；删则预览残影叠加新视角）
+check "engine 预览清理锚"         "clearPreviewMeshes" "src/lib/molecular/engine.ts" 3
+# ⑧store 无副作用求值锚（实测 2——previewExpr 声明+实现；删则预览退回 selectFromExpr 改用户选择）
+check "store 无副作用求值锚"      "previewExpr" "src/lib/molecular/store.ts" 2
+# ⑨skills 预览表达式锚（实测 1——previewExprFromJumpCmd 定义；删则 hover 无选择子可提取）
+check "skills 预览表达式锚"       "previewExprFromJumpCmd" "src/lib/molecular/agent/skills.ts" 1
+# ⑩skills 括号包裹判断锚（实测 3——isWrappedExpr 定义+两调用；删则 (A) or (B) 形态误剥外层括号致求值失败）
+check "skills 括号包裹锚"         "isWrappedExpr" "src/lib/molecular/agent/skills.ts" 3
+# ⑪hover 接线锚（实测 1——onMouseEnter；删则鼠标悬停无预览）
+check "hover 接线锚"              'onMouseEnter=\{\(\) => previewJump\(jump\)\}' "src/components/studio/AgentPanel.tsx" 1
+# ⑫focus 接线锚（实测 1——onFocus 键盘可达；删则键盘用户无预览）
+check "focus 接线锚"              'onFocus=\{\(\) => previewJump\(jump\)\}' "src/components/studio/AgentPanel.tsx" 1
+# ⑬AgentPanel 预览清除锚（实测 3——clearPreviewJump 定义+jumpTo 点击清除+useEffect 卸载清理；删则残影/泄漏）
+check "AgentPanel 预览清除锚"     "clearPreviewHighlight" "src/components/studio/AgentPanel.tsx" 3
+# ⑭mock 链族 ZH 锚（实测 3——「未找到链」正则+注释×2；删则链不存在失败不改写回仪式态）
+check "mock 链族ZH锚"             "未找到链" "mini-services/mock-llm/index.ts" 3
+# ⑮mock 链族 EN 锚（实测 1——Chain \S+ not found 正则；删则 EN 界面链族漏判）
+check "mock 链族EN锚"             'Chain \\S\+ not found' "mini-services/mock-llm/index.ts" 1
+# ⑯mock 链族优先注释锚（实测 1——单列于空选择判据之前的顺序说明；重排则链族分支被空选择 return 拦截）
+check "mock 链族优先锚"           "单列于空选择判据之前" "mini-services/mock-llm/index.ts" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

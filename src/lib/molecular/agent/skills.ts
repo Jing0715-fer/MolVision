@@ -534,3 +534,37 @@ export function reportSectionJumpCmd(skillId: string | undefined, sectionLabel: 
   const hit = [...okCmds].reverse().find(c => replay.re.test(c.trim()))
   return hit?.trim() ?? replay.fallback
 }
+
+// ---------- r111-b：报告节 hover 预览选择子（跳转命令 → 可预览表达式） ----------
+// 动机：跳转命令天然携带「关注域」——view from (chain A and chain B) 的括号内表达式、
+// zoom within 6 of (ligand) 的目标子。hover 报告节时先以该表达式无副作用求值原子集
+// （store.previewExpr）→ engine.previewHighlight 青色薄纱罩亮（点击跳转前的「先看一眼」
+// 预览——与点击后的真实视角跳转形成两段式交互）。zoom/orient/ray/preset 等结构级
+// 命令无局部选择子，返回 null 不预览。
+
+/** 首组括号是否包裹整个字符串（防 (A) or (B) 形态误剥——首组在尾前闭合即非整体包裹）。 */
+function isWrappedExpr(t: string): boolean {
+  if (!t.startsWith('(') || !t.endsWith(')')) return false
+  let depth = 0
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === '(') depth++
+    else if (t[i] === ')') {
+      depth--
+      if (depth === 0 && i < t.length - 1) return false
+    }
+  }
+  return depth === 0
+}
+
+/** 从跳转命令提取可预览的选择子表达式（纯函数）：
+ *  - view from <arg> → arg（(chain A and chain B) 剥外层包裹括号；ligand 裸词原样）
+ *  - zoom within <N> of <arg> → arg（同上）
+ *  - 其余（zoom / orient / ray / preset / color / ensemble 等结构级或静态兜底命令）→ null */
+export function previewExprFromJumpCmd(cmd: string): string | null {
+  const c = cmd.trim()
+  let m = /^view\s+from\s+(.+)$/i.exec(c)
+  if (m) return isWrappedExpr(m[1].trim()) ? m[1].trim().slice(1, -1).trim() : m[1].trim()
+  m = /^zoom\s+within\s+\S+\s+of\s+(.+)$/i.exec(c)
+  if (m) return isWrappedExpr(m[1].trim()) ? m[1].trim().slice(1, -1).trim() : m[1].trim()
+  return null
+}

@@ -4732,3 +4732,41 @@ Stage Summary:
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）；r104 命令级 per-rep 着色延续
 
 （r110 段 cron 补记，2026-10-12）15min webDevReview 巡检任务 #454443 创建（23:28:40）即「Disabled due to exec limits exceeded」（23:28:41）——账户级执行配额硬限第 25 次实证（r85-r109 连续 24 次 + 本轮），已删除清理。任务书已内嵌 r110 开发纪律（基线 9aba967 / guards 677 / 双守护格局与自愈纪律 / kill 红线 / E2E 铁律含 IIFE 新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 内存双闸）+ mockd（3999 两级探活+单例重启）双守护 + 四级 CI 门禁（guards 677 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r111
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r110 下一轮建议第 1【高】/ 第 4【中】+ r108 建议第 2 项收口：①mockd 源码变更即时验证（mtime 监听）②报告节 hover 3D 预览高亮（青色薄纱无副作用通道）③修正轮链族扩容（未找到链 → chains list）；QA 门禁链全绿 + E2E 五组（G3/M/G1 hover 像素级实证/真实 LLM 10 技能全量抽样 100%）+ 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=54a73f3（r110 cron 补记后）；工作区「脏」为纯 mode 位变化（100644→100755 零内容差，chmod 644 恢复干净）；guards 实跑 677/677 = 本轮基线；dev 200；.agent/skills 四 SKILL 读取恢复语境；r110「下一轮建议」第 1【高】mockd 编辑监听 + 第 4【中】跳转交互增强（取 3D 预览子项）+ r108 建议「10 技能全量抽样」持续挂起 = 本轮立项来源
+- 【环境噪声清理】tsc 突现 13 错（基线 5）——8 个新增全来自环境预置 untracked 组件（calendar/carousel/chart/drawer/form/input-otp/resizable，依赖未装且零引用）——逐一 rg 引用计数 0 后删除，tsc 回 5 基线；另有孤儿 rama.ts（9/21 遗留、tsc 干净、零引用）保守保留不动
+- 【改动·r111-a mockd 编辑监听】mockd.py：主循环 30s 粗粒度 → 1s 小步进（WATCH_TICK_S）；每秒比对 mini-services/mock-llm/index.ts 的 mtime（mock_source_mtime）；变更 → 1s 热重载宽限（HOT_RELOAD_GRACE_S）→ 立即 L2 探针；失败 → 3s 复验（EDIT_RETRY_S，热重载可能在途）→ 仍败才重启（do_restart 统一路径含退避）——mid-write 损坏自愈 ~2min15s → ~5s；正常编辑 L2 通过零动作只记日志。部署：kill 旧守护 + 重启（mockd 自身不在监听范围，无重启链）
+- 【改动·r111-b 报告节 hover 3D 预览】四层接线：①engine.previewHighlight/clearPreviewHighlight 公开 API（teal 0x14b8a6 薄纱与选择光晕 amber 分色；挂 repContainer 直属不进 reps Map 故不参与拾取缓存；renderOrder 7 叠加选择光晕之上；0/>40000 原子不画与 updateHighlight 同限；StructureView.preview 字段 + 初始化 + dispose 链）②store.previewExpr 无副作用求值（与 selectFromExpr 同源 evaluateSelection + buildNamedMasks，末步不调 setSelection——预览绝不改用户选中态，返回 indices+structureId）③skills.previewExprFromJumpCmd 纯函数（view from <arg>/zoom within N of <arg> 提取选择子；isWrappedExpr 首组括号包裹性判断防 (A) or (B) 误剥；zoom/orient/ray/preset 结构级返回 null 不预览）④AgentPanel 接线（onMouseEnter/onFocus → previewJump；onMouseLeave/onBlur → clearPreviewJump；jumpTo 点击先清薄纱防残影叠新视角；useEffect 卸载清理）
+- 【改动·r111-c 修正轮链族扩容】fixRewriteCommand 增链族优先分支：「未找到链|Chain \S+ not found」（commands.ts:328 chains hide/show 参数链不存在实抄文案族）单列于空选择判据之前 → chains list 探测。设计修正（相对初版）：初版把链族并进空选择正则——但 chains hide Z 命令形态不含 \bchain\s+X\b 词式，逐形态规则必漏；改为文案族单列优先（该族与空选择四族互斥先判不抢 ligand 降级）
+- 【守卫 +16（677→693）】r111 独立注释块（r110 块后汇总段前，插入前 rg 复核零 r111 痕迹）：mockd 五锚（mtime 函数 3/变更检测 1/热重载宽限 2/编辑复验 2/主循环粒度 3）+ 预览八锚（engine API 2/清理 3/store 求值 2/skills 表达式 1/括号包裹 3/hover 接线 1/focus 接线 1/AgentPanel 清除 3）+ 链族三锚（ZH 3/EN 1/优先顺序 1）——十六锚全环节防退化
+- 【QA】lint 0 · bunx tsc 5 历史基线错不变（src/ 零——环境噪声 7 组件清理后）· guards 693/693 · smoke 6/6（heavy 路径）· visual-baseline 7/7（漂移 0.00%）· dev.log 尾部零真 error
+- 【E2E-G3 纯函数】27/27 全过：previewExprFromJumpCmd 全分支（view from 裸词/单包裹/嵌套包裹/非包裹并列不剥/前后空白/大小写；zoom within 三形态；裸 zoom/orient/ray/preset/color sasa/ensemble play/空串/chains list 九 null 分支）+ reportSectionJumpCmd 回归抽样（口袋残基回放/▌前缀三形态/EN 标签/静态兜底/无 jump 节）+ buildReportFillPrompt 回归抽样（标记/回执行/运行时补充）· r109-g3.ts 回归 33/33
+- 【E2E-M mock 直测】9/9 全过（buildSkillDirective 真实组装纪律）：T1 chains hide Z ZH 链族 → chains list + rewrote 文案 · T2 EN 链族（Chain Z not found — available: A）· T3 无 chain 词式命令（contacts (chain A) | (chain Z) 报未找到链）同样 chains list（文案族单列的价值实证）· T4/T5 空选择族回归（ligand→polymer / view→orient 不被链族抢）· T6 泛错误场景替换回归 · T7 混合报文各按各文案族改写 · r110-m.ts 回归 16/16
+- 【E2E-G1 浏览器全链】4HHB 加载 · 技能消息 workflow+报告回填 · **hover 预览像素级实证两轮**：v1 发现「固化差异」4.61% 存疑 → 干净复验（重新加载+等待派生渲染落屏）定位真相——固化差异=stable 基线拍到异步派生计算（口袋表面类后台渲染）落屏前的中间态（now-vs-cleared 0.12% 定论），与 r111 改动无关；薄纱本体渲染+清除链路完全可逆实证（hover-vs-stable 5.78%/cleared-vs-hover 3.37% 可逆差 + 青色像素 2314 采样 + mouseout 派发清除生效而 mouseleave 派发不生效——React 17+ 合成事件由 mouseout 推断 enter/leave 的机制实证）· 点击跳转 → 命令卡 10→11 + 溯源徽章 ✓ · console 零错误（agent-browser errors 真实口径——eval 自埋 hook 变量在刷新后失效的无效断言坑）· rehover 与首 hover 逐位一致（预览渲染确定性）
+- 【E2E-G4 双语】语言切换后跳转按钮 title「点击跳转：view from ligand」+ 输入框中文 placeholder ✓
+- 【E2E 真实 LLM 全量抽样】10/10（100%）遵循率矩阵：决策到达 10/10 · 固定标题 10/10 · ▌节行结构 10/10（≥3 节，多为全节数）· 命令域 10/10（首命令族全匹配——xcontact 的 superpose 1UBQ onto 1D3Z 与 morph 的 morph m1 = 1BQL 2LYZ 40 场景实参替换正确）· 时延 1044-2584ms；r108 建议「10 技能各抽 1 轮」就此收口（r109 已双技能验证回填段，本轮收口第一段全量）
+- 【r111-a 实战检验】本轮编辑 mock-llm/index.ts 两次（r111-c 改动）——mockd 均在 1s 内检测到变更（04:09:39/第二次同）+ 1s 宽限后 L2 通过（L2 ok after hot-reload — no action）+ 零误杀零重启——「正常编辑零动作」设计目标实战实证（损坏态自愈加速的端到端形态为日志链推演，实际损坏未在本轮复现——诚实口径）
+- 【坑（新入档）】①E2E 截图基线必须等异步派生渲染落屏（报告回填完成后 ~15s+）再拍——口袋表面/接触着色类后台计算落屏前的「中间态基线」会产生恒定假差异（v1 实验 40 分钟排查的教训；判定法：now-vs-cleared≈0 则 cleared 即终态、差异属基线拍早）②React 17+ 的 onMouseLeave/onMouseEnter 合成事件由原生 mouseout/mouseover 冒泡推断——eval 派发原生 mouseleave（bubbles: false）恒不触发 React 清除逻辑；E2E 须派发 mouseout（bubbles: true）③eval 自埋 window.__e2eConsoleErrors 类 hook 在页面刷新后失效（?? [] 兜底吞掉无效性）——console 断言须用 agent-browser errors 命令真实口径④守卫 rg 正则的 JSX 字面量锚须转义 {}()（onMouseEnter={() => previewJump(jump)} 的 { 在 rg 正则是量词边界）⑤shadcn 环境预置组件（依赖未装+零引用）会污染 tsc 全项目基线——入基线口径前先清⑥mock 判据族单列优先 vs 并入大正则：文案互斥时单列优先分支更稳（命令形态规则对 chains hide X 这类无词式命中的形态必漏——文案族是唯一全覆盖维度）
+
+Stage Summary:
+- 交付一（r111-a）：mockd 源码变更即时验证——mtime 监听（1s 粒度）+ 热重载宽限 + 复验 + 统一重启路径；编辑期热重载损坏自愈 ~2min15s → ~5s（推算）；正常编辑零误杀实战实证（本轮两次 mock 编辑均「检测→L2 通过→零动作」）
+- 交付二（r111-b）：报告节 hover 3D 预览——「先看一眼再跳」两段式交互落地：engine 青色薄纱通道（无 store 派生、无拾取、与 amber 分色）+ store 无副作用求值 + 命令→选择子纯函数 + hover/focus/blur/卸载全生命周期接线；像素级实证（渲染 2314 青色采样 + 可逆清除 + 确定性复现）
+- 交付三（r111-c）：修正轮链族扩容——「未找到链/Chain not found」文案族单列优先 → chains list（对 chains hide X 等无 chain 词式命令形态的全覆盖路径）；ZH/EN + 混合报文 + 回归全绿
+- 交付四（收口）：真实 LLM 10 技能全量遵循率矩阵 100%（r108 建议第 2 项挂起三轮后收口）——决策/标题/节行/命令域四维全过，场景实参替换（superpose/morph 双结构链）正确
+- 交付五（验证）：guards 677→693 全过 · smoke 6/6 · visual-baseline 7/7（0.00%）· E2E 五组（G3 27+33 / M 9+16 / G1 hover 像素级两轮 / G4 双语 / LLM 全量 10/10）全绿零 console 错误
+- 与用户指令对位：①「进行下一阶段开发」——r110 建议第 1【高】+ 第 4【中】子项 + r108 建议收口 ②「qa测试和e2e测试」——六道门禁 + 五组 E2E ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【中】devd/mockd 互察 + 沙箱重启自启（r110 建议②持续挂起）：dev.sh/start.sh 启动链带起双守护（本轮沙箱 devd 又是后补启动）；devd 日志周期汇总 mockd 状态（互察防「守护的守护」盲区）
+  2. 【中】报告节 hover 预览增强：多节同时预览的场景（当前 hover 即换）；预览期间视口外原子 dim（聚焦感更强——需要 rep 级透明度通道，工程量中）；3D 预览的 ARIA 描述（屏幕阅读器感知预览态）
+  3. 【中】修正轮 chains list 探测结果消费（r110 建议⑤延续）：mock 侧会话记忆（跨轮次消费命令输出重组命令）——r111 已把链族失败统一引到 chains list，下一跳是「看清单再重组」的真闭环；真实 LLM 侧天然支持（多轮上下文），mock 侧需场景快照扩展
+  4. 【中】E2E 视觉自查基线化：本轮「异步派生落屏时序坑」的工程化收口——G1 类截图断言前统一等「渲染稳定帧」（连续两截图 0.00% 才拍基线），固化为 .zscripts 约定或 smoke 断言
+  5. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）；r104 命令级 per-rep 着色延续
+  6. 【低】孤儿 rama.ts（212 行 QC 模块，零引用）——either 接入 UI（拉马钱德兰图面板）或删除归档（占位代码的处置决策）
+
+（r111 段 cron 补记，2026-10-13）15min webDevReview 巡检任务待创建探测——若创建即 Disabled（r85-r110 连续 25 次实证口径）则删除清理并以此补记为准。

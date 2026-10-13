@@ -81,6 +81,10 @@ export interface MolState {
   resetColors: (scope: 'selection' | 'structure') => void
   setSelection: (structureId: string | null, indices: number[], mode?: 'replace' | 'add' | 'remove') => void
   selectFromExpr: (expr: string) => { count: number; error?: string }
+  /** r111-b 报告节 hover 预览：无副作用求值——同 selectFromExpr 的表达式解析，但
+   *  不落全局选择（预览只是「看一眼」，绝不改变用户当前选中态）。返回原子索引供
+   *  engine.previewHighlight 直接渲染。 */
+  previewExpr: (expr: string) => { count: number; indices: number[]; structureId: string | null; error?: string }
   invertSelection: () => void
   /** 氢键范围烘焙设置（hbonds in <表达式>）；null 清除 */
   setHBondScope: (scope: { structureId: string; indices: number[] } | null) => void
@@ -653,6 +657,21 @@ export const useMolStore = create<MolState>()((set, get) => ({
     if (res.error) return { count: 0, error: res.error }
     get().setSelection(entry.id, maskToIndices(res.mask))
     return { count: res.count }
+  },
+
+  previewExpr: (expr) => {
+    // r111-b：与 selectFromExpr 同源解析（命名掩码 + 表达式求值），差异只在末步——
+    // 不调 setSelection（预览无副作用），把 indices + structureId 交给调用方渲染
+    const s = get()
+    const entry = s.structures.find(x => x.id === s.activeId)
+    if (!entry) return { count: 0, indices: [], structureId: null, error: tt({ zh: '没有加载结构', en: 'No structure loaded' }) }
+    const data = dataRegistry.get(entry.id)
+    if (!data) return { count: 0, indices: [], structureId: null, error: tt({ zh: '结构数据缺失', en: 'Structure data missing' }) }
+    const named = buildNamedMasks(entry.id, data)
+    const res = evaluateSelection(expr, { structure: data, named })
+    if (res.error) return { count: 0, indices: [], structureId: null, error: res.error }
+    const indices = maskToIndices(res.mask)
+    return { count: res.count, indices, structureId: entry.id }
   },
 
   invertSelection: () => {

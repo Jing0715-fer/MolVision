@@ -20,7 +20,7 @@ import {
 // r105 标准技能：发送前本地匹配（matchSkill），报告文稿标记检测（isSkillReport）驱动卡片渲染；
 // r107-b 两段式：buildReportFillPrompt 组回填消息（命令回执 → 实测数值）
 // r109-b 报告节跳转：reportSectionJumpCmd 解析节点击命令（回放该消息成功命令 + 静态兜底）
-import { AGENT_SKILLS, matchSkill, isSkillReport, buildReportFillPrompt, reportSectionJumpCmd, type AgentSkill } from '@/lib/molecular/agent/skills'
+import { AGENT_SKILLS, matchSkill, isSkillReport, buildReportFillPrompt, reportSectionJumpCmd, previewExprFromJumpCmd, type AgentSkill } from '@/lib/molecular/agent/skills'
 // r107-b 运行时补充数值源：氢键网络实时计数（状态徽章同源——回执文本之外的数值补充）
 import { useHBondStore } from '@/lib/molecular/hbond-store'
 import { ProviderSettingsDialog, type ProviderInfo } from './ProviderSettingsDialog'
@@ -714,12 +714,34 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     toast.info(tt({ zh: '当前会话已清空（历史会话不受影响）', en: 'Current session cleared (other sessions untouched)' }))
   }, [])
 
+  /** r111-b 报告节 hover/focus 预览：跳转命令携带的选择子无副作用求值 → engine 青色
+   *  薄纱罩亮（点击前的「先看一眼」）。previewExpr 不落全局选择（不碰用户当前选中态）；
+   *  无表达式 / 求值失败 / 原子数为 0 时零动作（静默降级，不报错不打断 hover）。 */
+  const previewJump = useCallback((cmd: string) => {
+    const expr = previewExprFromJumpCmd(cmd)
+    if (!expr) return
+    const res = useMolStore.getState().previewExpr(expr)
+    if (res.error || !res.structureId || !res.indices.length) return
+    engineRef.current?.previewHighlight(res.structureId, res.indices)
+  }, [])
+
+  /** r111-b：清除 hover 预览（mouseleave/blur/点击跳转/组件卸载）。 */
+  const clearPreviewJump = useCallback(() => {
+    engineRef.current?.clearPreviewHighlight()
+  }, [])
+
+  // r111-b：卸载时清预览（面板收起时视口不留残影——preview 无 store 通道，须显式清）
+  useEffect(() => () => { engineRef.current?.clearPreviewHighlight() }, [])
+
   /** r109-b 报告节点击跳转：执行解析出的命令并把命令卡追加到同一消息（复用既有命令卡
    *  UI——状态/输出/展开全链审计）；生成中拒绝（并发执行打架，与 act 同口径）。
    *  r110-b 溯源：label（节标签）写入命令记录 sourceJump——命令卡头部「跳转自报告节」
-   *  徽章的数据源，审计链可读（为什么突然多了一条 view 命令）。 */
+   *  徽章的数据源，审计链可读（为什么突然多了一条 view 命令）。
+   *  r111-b：点击时先清 hover 预览薄纱（真实跳转命令即将改视角/改选择，残影会叠加
+   *  在新视角上误导）。 */
   const jumpTo = useCallback(async (msgId: string, cmd: string, label: string) => {
     if (useAgentChatStore.getState().busy) return
+    engineRef.current?.clearPreviewHighlight()
     const prev = useAgentChatStore.getState().msgs.find(x => x.id === msgId)?.commands ?? []
     const next: AgentCmdRecord[] = [...prev, { cmd, status: 'running', sourceJump: label }]
     patchCmds(msgId, next)
@@ -944,6 +966,10 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                             key={li}
                             type="button"
                             onClick={() => void jumpTo(m.id, jump, t2.slice(0, sep).replace(/^▌/, ''))}
+                            onMouseEnter={() => previewJump(jump)}
+                            onMouseLeave={clearPreviewJump}
+                            onFocus={() => previewJump(jump)}
+                            onBlur={clearPreviewJump}
                             title={t({ zh: `点击跳转：${jump}`, en: `Click to jump: ${jump}` })}
                             aria-label={t({ zh: `跳转：${t2.slice(0, sep)}`, en: `Jump: ${t2.slice(0, sep)}` })}
                             className="group/jump -mx-1 flex w-full gap-1.5 rounded px-1 py-px text-left transition-colors duration-150 hover:bg-primary/[0.08]"
