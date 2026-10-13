@@ -4845,3 +4845,5 @@ Stage Summary:
   3. 【中】多节同时预览（r111 建议②延续）：hover 即换的瞬态预览升级为「钉住」模式（点击节旁 pin 图标固定预览，多节叠加比对）
   4. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
   5. 【低】拉马离群与 MolProbity 口径对齐评估（当前 Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
+
+（r113 段 cron 补记，2026-10-13）15min webDevReview 巡检任务 #455998 创建（16:29:45）即「Disabled due to exec limits exceeded」——账户级执行配额硬限第 27 次实证（r85-r112 连续 26 次 + 本轮，含一次 expr 格式返工：6 字段 cron 的 `0/15 * * * * ?` 被解析为 15 秒间隔拒建，正确写法 `0 */15 * * * ?`——秒字段通配须显式 */15），已删除清理。任务书已内嵌 r113 开发纪律（基线 1dda8d2 / guards 751 / daemon.log 新口径 / E2E 铁律含 [m 显示伪影与 WebGL 空缓冲新坑 / 下轮优先级五条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘（r113 起与 tee 零交集）+ 四级 CI 门禁（guards 751 + smoke 6 + visual-baseline 7）。
