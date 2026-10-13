@@ -4883,4 +4883,4 @@ Stage Summary:
   5. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
   6. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
 
-（r114 段 cron 补记，2026-10-13）15min webDevReview 巡检任务 #456214 创建（11:26:35）——创建成功未即时报 Disabled（第 28 次尝试，前 27 次连续配额硬限）——本轮配额疑似恢复，巡检任务在位生效。任务书已内嵌 r114 开发纪律（基线 3961864 / guards 780 / 门禁链与 kill 红线 / E2E 铁律含水合竞态与卡片断言新坑 / 下轮优先级六条）。
+（r114 段 cron 补记，2026-10-13）15min webDevReview 巡检任务 #456214 创建（18:23:42）——create 接口返回 success 但 list 详情 status=Disabled due to exec limits exceeded（账户级执行配额硬限第 28 次实证（r85-r113 连续 27 次 + 本轮）），已删除清理。教训入档：create 成功 ≠ 任务生效——判定须以 list 的 execution.info 为准。任务书已内嵌 r114 开发纪律（基线 3961864 / guards 780 / 门禁链与 kill 红线 / E2E 铁律含水合竞态与卡片断言新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 780 + smoke 6 + visual-baseline 7）。
