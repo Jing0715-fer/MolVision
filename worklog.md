@@ -4994,3 +4994,5 @@ Stage Summary:
   3. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线）
   4. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
   5. 【低】稳定帧工具的「指定 canvas」参数化：max-area 择优已覆盖主场景，但「按 aria 精选」（3D 视口 aria-label 缺失——本轮实测 aria 为空串）可作为显式覆盖入口（--canvas-aria <pattern>），供未来多 3D 视口场景
+
+（r117 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #456947 创建（00:31:50）——create 返回 success 但 list 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 31 次实证：r85-r116 连续 30 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 list 的 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r117 开发纪律（基线 145b70d / guards 825 / 门禁链与 kill 红线 / E2E 铁律含 fill 后按钮解禁与消息气泡定位新坑 / 下轮优先级五条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 825 + smoke 6 + visual-baseline 7）。
