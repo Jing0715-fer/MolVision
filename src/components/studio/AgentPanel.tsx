@@ -6,7 +6,7 @@
 // 修正命令本身还会被再自查一轮（有界双轮：修到效果理想为止，不无限循环）
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Ban, Bot, Check, ChevronDown, Clock, CornerDownRight, Eye, EyeOff, Loader2, MessageSquarePlus, MousePointerClick, Pencil, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
+  Ban, Bot, Check, ChevronDown, Clock, CornerDownRight, Eye, EyeOff, Loader2, MessageSquarePlus, MousePointerClick, Pencil, Pin, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -534,7 +534,40 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           commands: fixCmds.length ? fixCmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
         }
         setMsgs(m => [...m, fixMsg])
-        if (fixCmds.length) { records.push(...(await runTurn(fixId, fixCmds, depth + 1, [...priorMsgs, fixMsg], visualBudget, imageBefore, skillId))); fixTurnRan = true }
+        if (fixCmds.length) {
+          const fixRecords = await runTurn(fixId, fixCmds, depth + 1, [...priorMsgs, fixMsg], visualBudget, imageBefore, skillId)
+          records.push(...fixRecords)
+          fixTurnRan = true
+          // r114-b 链清单探测结果消费（r110/r111 持续挂起项收口）：修正轮跑过 chains list
+          // 探测且原始失败中含链域命令时，把「原始失败 + 链清单输出」再送一轮 LLM——
+          // 「看清单再重组」的真闭环（旧链路止步于探测，原命令永远无人重组）。
+          // 链域判定与 fixRewrite/recomposeByChainList 的命令域三族对称（app/mock 两侧
+          // 同一规则族防单侧漏判）：chains hide/show 形态 + chain X 词式 + interface 裸链
+          // 字母形态——覆盖「未找到链」文案族与空选择族两类（均发出 chains list 探测）。
+          // depth+2 执行：不再有后续修正轮（depth < 1 上限），有界防循环。
+          const probe = fixRecords.find(r => /^chains\s+(list|ls)\s*$/i.test(r.cmd.trim()) && r.status === 'ok' && r.output)
+          const chainFails = fails.filter(f => /\bchain\s+[A-Za-z0-9]\b/i.test(f.cmd) || /^(chains|chain)\s+(hide|show)\b/i.test(f.cmd) || /^interface\s+[A-Za-z0-9]/i.test(f.cmd))
+          if (probe && chainFails.length) {
+            setPhase('think')
+            const consumePrompt = tt({
+              zh: `链清单已探测，请按清单重组刚才失败的命令后重新给出（链号换成清单中实际存在的链）：\n${chainFails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n\nchains list 输出：\n${probe.output}\n只给出重组后需要执行的命令，不要重复已成功的命令。`,
+              en: `The chain list has been probed. Recompose the failed commands per the list and give them again (substitute chain IDs that actually exist):\n${chainFails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n\nchains list output:\n${probe.output}\nOnly give the recomposed commands to run; do not repeat the successful ones.`,
+            })
+            const recomp = await callAgent([...buildApiHistory(priorMsgs), fixMsg, { role: 'user', content: consumePrompt }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs), skillId)
+            if (recomp) {
+              const recompCmds = splitCommands(recomp.commands)
+              const recompId = newId()
+              const recompMsg: AgentChatMessage = {
+                id: recompId, role: 'assistant',
+                content: `${tt({ zh: '链清单消费：', en: 'Chain-list consumption: ' })}${recomp.reply}`,
+                time: nowTime(),
+                commands: recompCmds.length ? recompCmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
+              }
+              setMsgs(m => [...m, recompMsg])
+              if (recompCmds.length) records.push(...(await runTurn(recompId, recompCmds, depth + 2, [...priorMsgs, recompMsg], visualBudget, imageBefore, skillId)))
+            }
+          }
+        }
       }
     }
     // 视觉自查：修正轮已自带自查（同一画面不再重复检查，节省一次 VLM 调用）
@@ -711,12 +744,52 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
   const clearChat = useCallback(() => {
     useAgentChatStore.getState().clearMsgs()
+    setPinnedJumps([]) // r114-c：钉住节随消息清空而失去取消入口——同步清钉防孤儿薄纱
     toast.info(tt({ zh: '当前会话已清空（历史会话不受影响）', en: 'Current session cleared (other sessions untouched)' }))
   }, [])
 
   /** r112-b 预览态 ARIA 文案：hover 预览开始时写入（目标节标签 + 原子数），清屏静默
    *  （清屏不播报——hover 往返刷屏噪音；下次预览开始即覆盖）。 */
   const [previewAria, setPreviewAria] = useState('')
+
+  /** r114-c 报告节预览钉住（r113 建议③：hover 即换 → 钉住叠加比对）：key = msgId#行号
+   *  （同一节重复点击取消）；cmd/label 与 hover 预览同源。钉住集变更时统一重建薄纱
+   *  （并集求值——多节叠加为一个薄纱集）；hover 仍为瞬态（覆盖钉住集，离开后恢复）。 */
+  const [pinnedJumps, setPinnedJumps] = useState<{ key: string; cmd: string; label: string }[]>([])
+
+  /** r114-c：把当前钉住集重建为薄纱（并集求值；跨结构取首个非空组——previewHighlight
+   *  单结构通道的诚实降级，注释写明不静默丢弃）。空集 = 清除薄纱 + 清空 ARIA（E2E
+   *  实测抓出：取消最后一钉后 live region 残留「Pinned previews: …」——屏幕阅读器
+   *  误以为仍有钉住态）。 */
+  const applyPinned = useCallback((list: { key: string; cmd: string; label: string }[]) => {
+    if (!list.length) { engineRef.current?.clearPreviewHighlight(); setPreviewAria(''); return }
+    const union = new Map<string, { set: Set<number>; labels: string[] }>()
+    for (const p of list) {
+      const expr = previewExprFromJumpCmd(p.cmd)
+      if (!expr) continue
+      const res = useMolStore.getState().previewExpr(expr)
+      if (res.error || !res.structureId || !res.indices.length) continue // 求值失败/结构已关——该钉静默失效
+      const u = union.get(res.structureId) ?? { set: new Set<number>(), labels: [] }
+      for (const i of res.indices) u.set.add(i) // Set 去重：多节覆盖同一原子域时不重复罩亮
+      u.labels.push(p.label)
+      union.set(res.structureId, u)
+    }
+    const first = [...union.entries()][0]
+    if (!first) { engineRef.current?.clearPreviewHighlight(); setPreviewAria(''); return }
+    engineRef.current?.previewHighlight(first[0], [...first[1].set])
+    setPreviewAria(tt({
+      zh: `已钉住预览：${first[1].labels.join('、')}（${first[1].set.size} 个原子）`,
+      en: `Pinned previews: ${first[1].labels.join(', ')} (${first[1].set.size} atoms)`,
+    }))
+  }, [])
+
+  // r114-c：钉住集变更 → 重建薄纱（含清空——取消最后一个钉即恢复无薄纱态）
+  useEffect(() => { applyPinned(pinnedJumps) }, [pinnedJumps, applyPinned])
+
+  /** r114-c：报告节钉住切换（再次点击取消）。key 稳定于 msgId#行号。 */
+  const togglePin = useCallback((key: string, cmd: string, label: string) => {
+    setPinnedJumps(list => list.some(p => p.key === key) ? list.filter(p => p.key !== key) : [...list, { key, cmd, label }])
+  }, [])
 
   /** r111-b 报告节 hover/focus 预览：跳转命令携带的选择子无副作用求值 → engine 青色
    *  薄纱罩亮（点击前的「先看一眼」）。previewExpr 不落全局选择（不碰用户当前选中态）；
@@ -735,11 +808,14 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   }, [])
 
   /** r111-b：清除 hover 预览（mouseleave/blur/点击跳转/组件卸载）。
-   *  r112-b：同步清空 ARIA live region（清屏静默）与 engine 侧 rep dim 复位。 */
+   *  r112-b：同步清空 ARIA live region（清屏静默）与 engine 侧 rep dim 复位。
+   *  r114-c：有钉住节时不清到底——hover 离开后恢复钉住集薄纱（钉住语义：固定预览，
+   *  hover 只是临时覆盖；无钉时行为与旧版完全一致）。 */
   const clearPreviewJump = useCallback(() => {
     engineRef.current?.clearPreviewHighlight()
-    setPreviewAria('')
-  }, [])
+    if (pinnedJumps.length) applyPinned(pinnedJumps)
+    else setPreviewAria('')
+  }, [pinnedJumps, applyPinned])
 
   // r111-b：卸载时清预览（面板收起时视口不留残影——preview 无 store 通道，须显式清）
   useEffect(() => () => { engineRef.current?.clearPreviewHighlight() }, [])
@@ -762,7 +838,10 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
   }, [patchCmds])
 
   const startNewSession = useCallback(() => {
-    if (useAgentChatStore.getState().newSession()) toast.info(tt({ zh: '已新建会话（上下文已清零）', en: 'New session created (context cleared)' }))
+    if (useAgentChatStore.getState().newSession()) {
+      setPinnedJumps([]) // r114-c：同 clearChat——新会话后旧报告节不可达，钉同步清零
+      toast.info(tt({ zh: '已新建会话（上下文已清零）', en: 'New session created (context cleared)' }))
+    }
     else toast.info(tt({ zh: '生成中——结束后再新建会话', en: 'Generating — create a new session after it finishes' }))
   }, [])
 
@@ -979,24 +1058,56 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                       // r112-b：跳转节标签（剰▌前缀）提取一次三用——onClick 溯源 / hover
                       // 预览 ARIA / focus 预览 ARIA（同一文本源，避免三处手抄漂移）
                       const jumpLabel = t2.slice(0, sep).replace(/^▌/, '')
+                      // r114-c：可预览的节（选择子非结构级）才给钉住按钮——钉住 = 固定薄纱
+                      // 叠加比对；结构级命令（orient/ray/preset）无局部选择子不可钉
+                      const pinKey = `${m.id}#${li}`
+                      const pinned = pinnedJumps.some(p => p.key === pinKey)
+                      const pinnable = jump !== null && previewExprFromJumpCmd(jump) !== null
                       if (jump) {
                         return (
-                          <button
-                            key={li}
-                            type="button"
-                            onClick={() => void jumpTo(m.id, jump, jumpLabel)}
-                            onMouseEnter={() => previewJump(jump, jumpLabel)}
-                            onMouseLeave={clearPreviewJump}
-                            onFocus={() => previewJump(jump, jumpLabel)}
-                            onBlur={clearPreviewJump}
-                            title={t({ zh: `点击跳转：${jump}`, en: `Click to jump: ${jump}` })}
-                            aria-label={t({ zh: `跳转：${t2.slice(0, sep)}`, en: `Jump: ${t2.slice(0, sep)}` })}
-                            className="group/jump -mx-1 flex w-full gap-1.5 rounded px-1 py-px text-left transition-colors duration-150 hover:bg-primary/[0.08]"
-                          >
-                            <span className="shrink-0 font-medium text-foreground/85 transition-colors duration-150 group-hover/jump:text-primary">{t2.slice(0, sep + 1)}</span>
-                            <span className="min-w-0 flex-1 text-foreground/75 transition-colors group-hover/jump:text-foreground">{t2.slice(sep + 1)}</span>
-                            <CornerDownRight aria-hidden className="h-3 w-3 shrink-0 self-center text-primary/0 transition-colors duration-150 group-hover/jump:text-primary/80" />
-                          </button>
+                          // r114-c 行重组：外层 div + 双按钮（嵌套 button 非法 HTML）——主按钮
+                          // 跳转（flex-1，与旧版视觉等价）；钉钮钉住薄纱（aria-pressed 表达
+                          // 开关态；钉住时 fill-current 实心图标 + 主色）。group/jump 上移到
+                          // 行容器：钉钮是主按钮的兄弟而非后代，留在主按钮上则钉钮的
+                          // group-hover 永不生效。
+                          <div key={li} className="group/jump flex w-full items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => void jumpTo(m.id, jump, jumpLabel)}
+                              onMouseEnter={() => previewJump(jump, jumpLabel)}
+                              onMouseLeave={clearPreviewJump}
+                              onFocus={() => previewJump(jump, jumpLabel)}
+                              onBlur={clearPreviewJump}
+                              title={t({ zh: `点击跳转：${jump}`, en: `Click to jump: ${jump}` })}
+                              aria-label={t({ zh: `跳转：${t2.slice(0, sep)}`, en: `Jump: ${t2.slice(0, sep)}` })}
+                              className="-mx-1 flex min-w-0 flex-1 gap-1.5 rounded px-1 py-px text-left transition-colors duration-150 hover:bg-primary/[0.08]"
+                            >
+                              <span className="shrink-0 font-medium text-foreground/85 transition-colors duration-150 group-hover/jump:text-primary">{t2.slice(0, sep + 1)}</span>
+                              <span className="min-w-0 flex-1 text-foreground/75 transition-colors group-hover/jump:text-foreground">{t2.slice(sep + 1)}</span>
+                              <CornerDownRight aria-hidden className="h-3 w-3 shrink-0 self-center text-primary/0 transition-colors duration-150 group-hover/jump:text-primary/80" />
+                            </button>
+                            {pinnable && (
+                              <button
+                                type="button"
+                                onClick={() => togglePin(pinKey, jump, jumpLabel)}
+                                title={pinned
+                                  ? t({ zh: '取消钉住预览', en: 'Unpin preview' })
+                                  : t({ zh: '钉住预览：固定青色薄纱，可多节叠加比对（再点取消）', en: 'Pin preview: keep the teal veil, stack multiple sections for comparison (click again to unpin)' })}
+                                aria-label={pinned
+                                  ? t({ zh: `取消钉住预览：${jumpLabel}`, en: `Unpin preview: ${jumpLabel}` })
+                                  : t({ zh: `钉住预览：${jumpLabel}`, en: `Pin preview: ${jumpLabel}` })}
+                                aria-pressed={pinned}
+                                className={cn(
+                                  'shrink-0 rounded p-0.5 transition-colors',
+                                  pinned
+                                    ? 'text-primary hover:text-primary/80'
+                                    : 'text-muted-foreground/0 group-hover/jump:text-muted-foreground/70 hover:!text-primary',
+                                )}
+                              >
+                                <Pin aria-hidden className={cn('h-3 w-3', pinned && 'fill-current')} />
+                              </button>
+                            )}
+                          </div>
                         )
                       }
                       return (

@@ -5,8 +5,9 @@
 // 交互约定与接触图谱（AnalysisPanel ContactMap）同源：canvas dpr 缩放、hover DOM 提示、
 // 点击行/点选择残基原子（复用全局选择通道 → 3D amber 光晕）。
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Spline, Crosshair } from 'lucide-react'
-import { dataRegistry, useMolStore } from '@/lib/molecular/store'
+import { Spline, Crosshair, Clapperboard } from 'lucide-react'
+import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
+import { runCommand } from '@/lib/molecular/commands'
 import { computeRama, classifyRama, residueAtomRange, type RamaPoint } from '@/lib/molecular/rama'
 import type { StructureData } from '@/lib/molecular/parser'
 import { useI18n, tt } from '@/i18n'
@@ -209,15 +210,40 @@ export function RamaSection() {
     setHover({ x: a.x, y: a.y, p: best })
   }
 
-  /** 选择单个残基（点/离群行共用；复用全局选择通道 → 3D amber 光晕联动） */
-  const selectResidue = (p: RamaPoint) => {
+  /** 选择单个残基（点/离群行共用；复用全局选择通道 → 3D amber 光晕联动）。
+   *  r114-a：离群行点击追加 focus——相机平滑聚焦该残基（fitView + 8Å 缓冲，与
+   *  zoom <选择>, 8 同一通道）；散点画布点击保持仅选择（密集散点下镜头频繁跳动刺眼，
+   *  行点击才是「审阅某个离群」的刻意动作）。 */
+  const selectResidue = (p: RamaPoint, opts?: { focus?: boolean }) => {
     if (!activeId || !data) return
     const r = data.residues[p.resIdx]
     if (!r) return
-    setSelection(activeId, residueAtomRange(data, p.resIdx))
+    const indices = residueAtomRange(data, p.resIdx)
+    setSelection(activeId, indices)
+    if (opts?.focus) engineRef.current?.fitView([{ structureId: activeId, indices }], { buffer: 8 })
     appendLog('out', tt({
-      zh: `拉马钱德兰：已选择 ${r.chainId.trim()}:${r.resName}${r.resSeq}（φ ${p.phi.toFixed(0)}° · ψ ${p.psi.toFixed(0)}° · ${['优势区', '允许区', '离群'][p.cls]}）`,
-      en: `Ramachandran: selected ${r.chainId.trim()}:${r.resName}${r.resSeq} (φ ${p.phi.toFixed(0)}° · ψ ${p.psi.toFixed(0)}° · ${['favored', 'allowed', 'outlier'][p.cls]})`,
+      zh: `拉马钱德兰：已选择${opts?.focus ? '并聚焦' : ''} ${r.chainId.trim()}:${r.resName}${r.resSeq}（φ ${p.phi.toFixed(0)}° · ψ ${p.psi.toFixed(0)}° · ${['优势区', '允许区', '离群'][p.cls]}）`,
+      en: `Ramachandran: selected${opts?.focus ? ' and focused on' : ''} ${r.chainId.trim()}:${r.resName}${r.resSeq} (φ ${p.phi.toFixed(0)}° · ψ ${p.psi.toFixed(0)}° · ${['favored', 'allowed', 'outlier'][p.cls]})`,
+    }))
+  }
+
+  /** r114-a 影视级检视：离群残基一键 zoom + isolate + label 三连（r113 建议①）。
+   *  全部走 runCommand（与命令行同一条代码路径——行为一致、console 审计免费）：
+   *  select（建立选择）→ isolate（隔离到残基所在链——同链 ID 配体/水连带保留）→
+   *  zoom（聚焦残基， 10Å 缓冲留出侧链环境）→ label（残基原子标注）。
+   *  选择子用 (chain X and resi N)（同链同号残基在多链结构中唯一限定）。 */
+  const cinematicInspect = (p: RamaPoint) => {
+    if (!activeId || !data) return
+    const r = data.residues[p.resIdx]
+    if (!r) return
+    const sel = `(chain ${r.chainId.trim() || 'A'} and resi ${r.resSeq})`
+    runCommand(`select ${sel}`)
+    runCommand(`isolate ${sel}`)
+    runCommand(`zoom ${sel}, 10`)
+    runCommand('label')
+    appendLog('out', tt({
+      zh: `拉马钱德兰：影视级检视 ${r.chainId.trim()}:${r.resName}${r.resSeq}——已聚焦 + 隔离所在链 + 原子标注（isolate off 恢复全部链 · label off 清除标签）`,
+      en: `Ramachandran: cinematic inspection of ${r.chainId.trim()}:${r.resName}${r.resSeq} — focused + isolated to its chain + atom labels (isolate off restores all chains · label off clears labels)`,
     }))
   }
 
@@ -346,16 +372,28 @@ export function RamaSection() {
                 const r = data.residues[p.resIdx]
                 if (!r) return null
                 return (
-                  <button
-                    key={p.resIdx}
-                    onClick={() => selectResidue(p)}
-                    className="flex w-full items-center gap-2 px-2 py-1 text-left transition hover:bg-accent/50"
-                    aria-label={t({ zh: `选择离群残基 ${r.chainId.trim()}:${r.resName}${r.resSeq}`, en: `Select outlier residue ${r.chainId.trim()}:${r.resName}${r.resSeq}` })}
-                  >
-                    <span className="w-[74px] shrink-0 truncate font-mono text-[10px] font-medium">{r.chainId.trim()}:{r.resName}{r.resSeq}</span>
-                    <span className="flex-1 font-mono text-[9px] tabular-nums text-muted-foreground">φ {p.phi.toFixed(0)}° · ψ {p.psi.toFixed(0)}°</span>
-                    <Crosshair className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-                  </button>
+                  // r114-a 行重组：外层 div + 双按钮（嵌套 button 非法 HTML）——行点击
+                  // 选择+聚焦（r113 建议①前半）；场记板图标一键影视级检视（后半）。
+                  // 图标按钮 title 常显（触屏无 hover；44px 触达由行高保障）。
+                  <div key={p.resIdx} className="flex items-center gap-0.5 transition hover:bg-accent/50">
+                    <button
+                      onClick={() => selectResidue(p, { focus: true })}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left"
+                      aria-label={t({ zh: `选择并聚焦离群残基 ${r.chainId.trim()}:${r.resName}${r.resSeq}`, en: `Select and focus outlier residue ${r.chainId.trim()}:${r.resName}${r.resSeq}` })}
+                    >
+                      <span className="w-[74px] shrink-0 truncate font-mono text-[10px] font-medium">{r.chainId.trim()}:{r.resName}{r.resSeq}</span>
+                      <span className="flex-1 font-mono text-[9px] tabular-nums text-muted-foreground">φ {p.phi.toFixed(0)}° · ψ {p.psi.toFixed(0)}°</span>
+                      <Crosshair className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                    </button>
+                    <button
+                      onClick={() => cinematicInspect(p)}
+                      title={t({ zh: '影视级检视：聚焦 + 隔离所在链 + 原子标注', en: 'Cinematic inspection: focus + isolate to its chain + atom labels' })}
+                      aria-label={t({ zh: `影视级检视 ${r.chainId.trim()}:${r.resName}${r.resSeq}`, en: `Cinematic inspection of ${r.chainId.trim()}:${r.resName}${r.resSeq}` })}
+                      className="mr-1 shrink-0 rounded p-1 text-muted-foreground/70 transition hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Clapperboard className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 )
               })}
               {outliers.length > 60 && (

@@ -1439,6 +1439,81 @@ check "tee根治理由锚"              "tee 双写踩踏根治" "scripts/devd.p
 # ⑧诊断修正锚（实测 2——mockd 侧同款理由注释；删则 r112-a 坑②误诊断（tee 背锅）无更正）
 check "mockd根治理由锚"            "tee 双写踩踏根治" "scripts/mockd.py" 2
 
+# ---- r114-a：拉马离群 3D 聚焦 + 影视级检视（r113 建议①收口） ----
+# 离群行点击选择+聚焦（fitView + 8Å 缓冲——zoom within 同一通道）；场记板图标一键
+# zoom+isolate+label 三连（全走 runCommand——与命令行同一条代码路径，console 审计免费）。
+# E2E 实证见 r114 段（1A2N 双离群行点击镜头聚焦 + 三连命令链 console 回显）。
+# ①聚焦通道锚（实测 2——fitView 调用+engineRef import；删则行点击无镜头聚焦（只选不亮镜头回归））
+check "拉马聚焦通道锚"             "fitView" "src/components/studio/panels/RamaSection.tsx" 2
+# ②聚焦缓冲锚（实测 1——buffer: 8（残基 bounding sphere 外扩 8Å 留侧链上下文）；删则贴脸无语境）
+check "拉马聚焦缓冲锚"             "buffer: 8" "src/components/studio/panels/RamaSection.tsx" 1
+# ③影视检视函数锚（实测 2——cinematicInspect 定义+onClick；删则一键三连断链）
+check "影视检视函数锚"             "cinematicInspect" "src/components/studio/panels/RamaSection.tsx" 2
+# ④影视命令链锚（实测 6——runCommand import+四条命令（select/isolate/zoom/label）；删则绕开命令行路径）
+check "影视命令链锚"               "runCommand" "src/components/studio/panels/RamaSection.tsx" 6
+# ⑤影视隔离锚（实测 1——isolate ${sel}（隔离到残基所在链）；删则三连缺隔离）
+check "影视隔离锚"                 'isolate \$\{sel\}' "src/components/studio/panels/RamaSection.tsx" 1
+# ⑥影视标注锚（实测 1——runCommand('label')（残基原子标注）；删则三连缺标注）
+check "影视标注锚"                 "runCommand\\('label'\\)" "src/components/studio/panels/RamaSection.tsx" 1
+# ⑦场记板图标锚（实测 2——Clapperboard import+使用；删则按钮图标缺失）
+check "场记板图标锚"               "Clapperboard" "src/components/studio/panels/RamaSection.tsx" 2
+# ⑧聚焦日志锚（实测 2——「并聚焦」按 opts.focus 分支（zh 日志+注释）；删则审计回显不分聚焦态）
+check "拉马聚焦日志锚"             "并聚焦" "src/components/studio/panels/RamaSection.tsx" 2
+# ⑨影视日志锚（实测 5——「影视级检视」注释+日志+title 双语族；删则一键动作无审计）
+check "影视日志锚"                 "影视级检视" "src/components/studio/panels/RamaSection.tsx" 5
+
+# ---- r114-b：修正轮 chains list 探测结果消费（「看清单再重组」真闭环——r110/r111 持续挂起项收口） ----
+# 旧链路：链族失败 → 修正轮发 chains list 探测 → 探测成功即止（原命令永远无人重组）。
+# 新链路：AgentPanel 探测成功检测（probe）+ 链域原始失败筛选（chainFails）→ 消费轮 prompt
+# （自包含：原失败+清单输出——「跨轮次记忆」转化为「单轮自包含上下文」）→ mock 0.46 机械
+# 重组（无效链→首个蛋白链）→ depth+2 执行（有界）。附带修复：0.45 okOuts 节污染（成功命令
+# 被当失败重跑）+ 探测命令精确去重 + interface 形态入链族探测。
+# ①消费轮入口锚（实测 1——「链清单已探测」zh prompt 模板；删则消费 prompt 不再可辨识）
+check "消费轮入口锚"               "链清单已探测" "src/components/studio/AgentPanel.tsx" 1
+# ②探测检测锚（实测 1——probe 正则 chains list/ls + ok + output；删则探测结果无人消费）
+check "探测检测锚"                 'chains\\s\+\(list\|ls\)' "src/components/studio/AgentPanel.tsx" 1
+# ③链域失败锚（实测 4——chainFails 筛选（chain X 词式或 chains hide/show 形态）；删则消费轮无候选）
+check "链域失败锚"                 "chainFails" "src/components/studio/AgentPanel.tsx" 4
+# ④消费消息锚（实测 1——「链清单消费」assistant 消息前缀；删则 E2E 断言链断）
+check "消费消息锚"                 "链清单消费" "src/components/studio/AgentPanel.tsx" 1
+# ⑤消费深度上界锚（实测 1——depth + 2（重组轮不再有后续修正——有界防循环）；删则无界风险回归）
+check "消费深度上界锚"             "depth \\+ 2" "src/components/studio/AgentPanel.tsx" 1
+# ⑥mock 清单解析锚（实测 2——parseChainsFromProbeOutput 定义+调用（◉/⊘ 行式）；删则 0.46 恒降级）
+check "mock清单解析锚"             "parseChainsFromProbeOutput" "mini-services/mock-llm/index.ts" 2
+# ⑦mock 重组锚（实测 2——recomposeByChainList 定义+调用（hide/show 形态+chain 词式+interface 形态三规则））
+check "mock重组锚"                 "recomposeByChainList" "mini-services/mock-llm/index.ts" 2
+# ⑧mock 消费分支锚（实测 2——EN prompt 判定 regex+分支内 split；删则 EN 消费轮落到技能回放）
+check "mock消费分支锚"             "chain list has been probed" "mini-services/mock-llm/index.ts" 2
+# ⑨mock 消费中文锚（实测 2——zh prompt 判定 regex+注释；删则 ZH 消费轮落到技能回放）
+check "mock消费中文锚"             "链清单已探测" "mini-services/mock-llm/index.ts" 2
+# ⑩okOuts 隔离锚（实测 2——失败节/成功节切分（mock 侧 split 锚+注释）；删则成功命令被当失败重跑回归）
+check "okOuts隔离锚"               "已成功命令的关键输出" "mini-services/mock-llm/index.ts" 2
+# ⑪mock 去重锚（实测 1——new Set(rewritten)（多链域失败→单条探测）；删则 chains list×3 噪音回归）
+check "mock去重锚"                 'new Set\(rewritten\)' "mini-services/mock-llm/index.ts" 1
+# ⑫interface 形态探测锚（实测 1——fixRewrite 的 interface 裸链字母形态正则；删则 interface 失败 futile 重跑）
+check "interface形态探测锚"        'interface\\s\+\[A-Za-z0-9\]' "mini-services/mock-llm/index.ts" 1
+
+# ---- r114-c：报告节预览「钉住」模式（r113 建议③——hover 即换 → 钉住叠加比对） ----
+# 钉住 = 固定青色薄纱（并集求值：多节叠加为一个薄纱集，Set 去重防重复罩亮）；hover 仍瞬态
+# （覆盖钉住集，离开恢复——clearPreviewJump 恢复链）；钉钮 aria-pressed 开关态；clearChat/
+# newSession 同步清钉（消息消失后钉失去取消入口——孤儿薄纱防线）。
+# ①钉住状态锚（实测 5——pinnedJumps state+判定+依赖族；删则钉住态无载体）
+check "钉住状态锚"                 "pinnedJumps" "src/components/studio/AgentPanel.tsx" 5
+# ②钉住应用锚（实测 4——applyPinned 定义+effect+恢复链+注释（并集求值重建薄纱）；删则钉住不渲染）
+check "钉住应用锚"                 "applyPinned" "src/components/studio/AgentPanel.tsx" 4
+# ③钉住恢复锚（实测 2——applyPinned(pinnedJumps)（effect+clearPreviewJump 两处——hover 离开后恢复钉住集））
+check "钉住恢复锚"                 'applyPinned\(pinnedJumps\)' "src/components/studio/AgentPanel.tsx" 2
+# ④钉住切换锚（实测 2——togglePin 定义+onClick（再点取消）；删则无法钉/取消）
+check "钉住切换锚"                 "togglePin" "src/components/studio/AgentPanel.tsx" 2
+# ⑤钉钮图标锚（实测 1——<Pin aria-hidden（lucide Pin，钉住时 fill-current 实心）；删则按钮空图标）
+check "钉钮图标锚"                 '<Pin aria-hidden' "src/components/studio/AgentPanel.tsx" 1
+# ⑥钉住 ARIA 锚（实测 1——「已钉住预览」（live region 播报钉住集标签+原子数）；删则屏幕阅读器不知钉住态）
+check "钉住ARIA锚"                 "已钉住预览" "src/components/studio/AgentPanel.tsx" 1
+# ⑦钉住开关态锚（实测 4——aria-pressed（钉钮开关语义；pinnable 门控同族）；删则辅助技术无法辨识开关）
+check "钉住开关态锚"               "aria-pressed" "src/components/studio/AgentPanel.tsx" 4
+# ⑧清钉防孤儿锚（实测 2——setPinnedJumps([])（clearChat+newSession：消息消失后钉失去取消入口））
+check "清钉防孤儿锚"               'setPinnedJumps\(\[\]\)' "src/components/studio/AgentPanel.tsx" 2
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

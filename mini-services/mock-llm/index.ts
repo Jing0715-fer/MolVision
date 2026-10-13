@@ -224,6 +224,43 @@ function substituteSceneStructs(cmd: string, names: string[]): string {
   return cmd.replace(/\b(1BQL|2LYZ|1UBQ|1D3Z)\b/g, m => map[m])
 }
 
+/** r114-b 链清单消费：从探测输出解析可用链（行式：`  ◉  00  A   蛋白  141 残基` /
+ *  EN `  ◉  00  A   protein  141 residues`——chains list 的每链一行格式）。返回按序
+ *  [id, type] 对；空数组 = 清单为空或格式异常（诚实降级路径）。 */
+function parseChainsFromProbeOutput(text: string): { id: string; type: string }[] {
+  const out: { id: string; type: string }[] = []
+  for (const m of text.matchAll(/^\s*[\u25c9\u2298]\s+\d+\s+(\S+)\s+(\S+)/gm)) {
+    out.push({ id: m[1], type: m[2].toLowerCase() })
+  }
+  return out
+}
+
+/** r114-b 链清单消费：按可用链重组失败命令（mock 的机械版「看清单再重组」）。
+ *  规则（与 fixRewrite 发探测的命令域同族）：
+ *  ① chains hide/show <args>——参数 token 逐个替换（无效链 → pick，保留分隔结构）；
+ *  ② chain X 词式（select/zoom/isolate/contacts/hide/color…一切选择表达式域）——无效链换 pick；
+ *  ③ interface X Y 形态——两侧分别替换。pick = 清单首个蛋白链（无蛋白链取首链）。
+ *  命令不含链 token 时原样返回（探测清单对它无增量——不首造改写）。 */
+function recomposeByChainList(cmd: string, available: Set<string>, pick: string): string {
+  const hideShow = /^(chains|chain)\s+(hide|show)\s+(.+)$/i.exec(cmd.trim())
+  if (hideShow) {
+    // 失败的 chains hide X+Y 必然全部无效（app 侧部分命中即成功不报错）——逐 token 换
+    // pick 后去重（X+Y → H+H 归一为 H；真实 LLM 同样不会写 hide H+H）
+    const args = [...new Set(hideShow[3].split(/[+\s,]+/)
+      .map(tok => { const T = tok.trim().toUpperCase(); return T && !available.has(T) ? pick : tok })
+      .filter(Boolean))].join('+')
+    return `${hideShow[1].toLowerCase()} ${hideShow[2].toLowerCase()} ${args}`
+  }
+  let out = cmd.replace(/\bchain\s+([A-Za-z0-9])\b/gi, (whole, ch: string) =>
+    available.has(ch.toUpperCase()) ? whole : `chain ${pick}`)
+  out = out.replace(/\binterface\s+([A-Za-z0-9])(?:\s+([A-Za-z0-9]))?\b/gi, (whole, a: string, b?: string) => {
+    const fa = available.has(a.toUpperCase()) ? a : pick
+    const fb = b !== undefined ? (available.has(b.toUpperCase()) ? b : pick) : undefined
+    return `interface ${fa}${fb !== undefined ? ` ${fb}` : ''}`
+  })
+  return out
+}
+
 /** r110-c 修正轮「真修正」：失败命令的语义改写（场景替换后应用）。
  *  动机：r109 的 0.45 是「场景替换后回放原命令」——失败原因若不是场景参数（如无配体
  *  结构跑配体技能：场景替换后命令仍是 contacts ligand），同名重试必再失败（应用侧
@@ -258,6 +295,10 @@ function fixRewriteCommand(cmd: string, failOutput: string): string {
     return cmd.replace(/\bligand\b/gi, 'polymer')
   }
   if (/\bchain\s+[A-Za-z0-9]\b/.test(cmd)) return 'chains list'
+  // r114-b interface 形态补入：interface A B [cutoff] 裸链字母（无 chain 词式）——空选择
+  // 失败同样源于链不在场景，futile 同名重跑不如探测（与 r111-c 链族单列同一设计哲学：
+  // 命令形态规则对无词式命中必漏，形态枚举是词式规则外的第二全覆盖维度）。
+  if (/^interface\s+[A-Za-z0-9](\s+[A-Za-z0-9])?(\s+\d+(\.\d+)?)?\s*$/i.test(cmd.trim())) return 'chains list'
   return cmd
 }
 
@@ -459,7 +500,11 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
   if (/执行失败了，请修正|just failed\. Fix them/i.test(lastUser) && parseSkillDirective(messages)) {
     // r110-c 提取升级：捕获失败 output（改写判据——空选择错误才触发规则；r109 只提
     // 命令本体，改写无据可依）。matchAll 产出与命令一一配对的 (cmd, output) 序列。
-    const failedPairs = [...lastUser.matchAll(/^- (.+?) → (.+)$/gm)].map(m => [m[1].trim(), m[2].trim()] as const)
+    // r114-b 修复：prompt 尾部「已成功命令的关键输出」节同样以 `- cmd → output` 行式
+    // 出现——旧正则全量吞入会把成功命令当失败重跑（违反 prompt 自己的「不要重复已
+    // 成功命令」）。先按节头切分，只取失败节。
+    const failSection = lastUser.split(/已成功命令的关键输出|Key output of already-successful/)[0]
+    const failedPairs = [...failSection.matchAll(/^- (.+?) → (.+)$/gm)].map(m => [m[1].trim(), m[2].trim()] as const)
     const scene = parseSceneFacts(messages)
     // r110-c 真修正管线：场景替换（场景参数失配类失败）→ 语义改写（ligand 依赖降级 /
     // 链不存在探测——错误类型类失败）。两道各自独立：前者治「参数写错」，后者治
@@ -467,9 +512,13 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
     const sceneSubbed = failedPairs
       .map(([c, o]) => [substituteSceneStructs(c, scene?.structureNames ?? []), o] as const)
       .map(([c, o]) => [substituteSceneChains(c, scene?.chains ?? []), o] as const)
-    const commands = sceneSubbed.map(([c, o]) => fixRewriteCommand(c, o))
+    // r114-b 去重：多个链域失败会各自改写出同一条 chains list 探测（真实 LLM 不会
+    // 把同一探测命令重复三遍）——精确重复去重保序（不同命令的改写产物不受影响）。
+    // rewrote 先于去重计算（去重后索引错位会误判改写态）。
+    const rewritten = sceneSubbed.map(([c, o]) => fixRewriteCommand(c, o))
+    const commands = [...new Set(rewritten)]
     // rewrote 只反映语义改写（与场景替换后的中间态比——场景替换改写不冒充「按失败原因修正」）
-    const rewrote = commands.some((c, i) => c !== sceneSubbed[i][0])
+    const rewrote = rewritten.some((c, i) => c !== sceneSubbed[i][0])
     return dec(zh,
       rewrote
         ? `已按失败原因修正命令（失败选择子按错误信息改写为等价命令后重试；链不存在时先 chains list 探测可用链）。`
@@ -477,6 +526,36 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
       rewrote
         ? `Commands fixed by failure cause (failed selectors rewritten to equivalent commands per the error message; chains list probes available chains when a chain is absent).`
         : `Failed commands corrected within the standard skill workflow (selection expressions re-substituted for the current scene).`,
+      commands)
+  }
+
+  // 0.46 r114-b 链清单消费分支（「看清单再重组」的真闭环——r110/r111 持续挂起项收口）：
+  //      末条 user 为应用侧探测消费 prompt（「链清单已探测 / chain list has been probed」
+  //      ——AgentPanel r114-b 接线在修正轮 chains list 探测成功后发出）。解析「失败命令
+  //      + chains list 输出」→ 按清单机械重组（无效链 → 首个蛋白链）。真实 LLM 天然可从
+  //      同一 prompt 语义重组（无需 mock 侧会话记忆——prompt 自包含探测结果，这就是把
+  //      「跨轮次记忆」问题转化为「单轮自包含上下文」的架构决策）。先于 0.5（技能注入
+  //      在场时会拦截一切消息——0.46 的自包含性不依赖技能上下文）。
+  if (/链清单已探测|chain list has been probed/i.test(lastUser)) {
+    const failSection = lastUser.split(/chains list 输出|chains list output/)[0]
+    const failedPairs = [...failSection.matchAll(/^- (.+?) → (.+)$/gm)].map(m => [m[1].trim(), m[2].trim()] as const)
+    const probeSection = lastUser.split(/chains list 输出|chains list output/)[1] ?? ''
+    const chains = parseChainsFromProbeOutput(probeSection)
+    if (!failedPairs.length || !chains.length) {
+      // 诚实降级：解析不出失败命令或清单为空（格式漂移/输出截断）——不编造重组
+      return dec(zh,
+        '未能从链清单输出中解析出可用链或失败命令（清单为空或格式异常）——请人工执行 chains list 查看后重发。',
+        'Could not parse available chains or failed commands from the chain-list output (empty or malformed) — run chains list manually and resend.',
+        [])
+    }
+    const available = new Set(chains.map(c => c.id))
+    const protein = chains.find(c => c.type === 'protein' || c.type === '蛋白')
+    const pick = protein?.id ?? chains[0].id
+    const commands = failedPairs.map(([c]) => recomposeByChainList(c, available, pick))
+    const avail = [...available].join('、')
+    return dec(zh,
+      `已按链清单重组命令（场景可用链：${avail}；无效链已替换为 ${pick}——${commands.length} 条待执行）。`,
+      `Commands recomposed per the chain list (available chains: ${[...available].join(', ')}; invalid chains replaced with ${pick} — ${commands.length} to run).`,
       commands)
   }
 
