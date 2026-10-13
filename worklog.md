@@ -4769,4 +4769,4 @@ Stage Summary:
   5. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）；r104 命令级 per-rep 着色延续
   6. 【低】孤儿 rama.ts（212 行 QC 模块，零引用）——either 接入 UI（拉马钱德兰图面板）或删除归档（占位代码的处置决策）
 
-（r111 段 cron 补记，2026-10-13）15min webDevReview 巡检任务待创建探测——若创建即 Disabled（r85-r110 连续 25 次实证口径）则删除清理并以此补记为准。
+（r111 段 cron 补记，2026-10-13）15min webDevReview 巡检任务 #455597 创建（12:37:18）即「Disabled due to exec limits exceeded」（12:37:19）——账户级执行配额硬限第 26 次实证（r85-r110 连续 25 次 + 本轮），已删除清理。任务书已内嵌 r111 开发纪律（基线 f87a6c0 / guards 693 / 双守护+kill 红线 / E2E 铁律含异步落屏时序新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 四级 CI 门禁（guards 693 + smoke 6 + visual-baseline 7）。
