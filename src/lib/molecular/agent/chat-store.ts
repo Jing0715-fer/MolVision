@@ -11,7 +11,7 @@
 // 保护执行链完整性（与模块级 store 的动机同源）。
 import { create } from 'zustand'
 import { tt } from '@/i18n'
-import { AGENT_CHAT_KEY, AGENT_CHAT_MAX, AGENT_VISUAL_KEY, type AgentChatMessage, type AgentCmdRecord } from './protocol'
+import { AGENT_CHAT_KEY, AGENT_CHAT_MAX, AGENT_PINS_KEY, AGENT_VISUAL_KEY, type AgentChatMessage, type AgentCmdRecord, type AgentPinnedJump } from './protocol'
 
 /** 忙碌阶段（思考 → 流式生成 → 执行 → 视觉自查） */
 export type BusyPhase = 'think' | 'stream' | 'exec' | 'visual' | 'fill'
@@ -142,6 +142,28 @@ function newSessionObj(): AgentSession {
   return { id: sid(), title: tt({ zh: '新会话', en: 'New session' }), autoTitle: true, createdAt: Date.now(), updatedAt: Date.now(), messages: [] }
 }
 
+// ---------- r115-c 钉住集持久化（独立键，不与 sessions 序列化耦合一格式演进互不牵连） ----------
+
+/** 装载：形状校验（key/cmd/label 三字段非空字符串）；损坏/缺席 → 空（诚实降级） */
+function loadPins(): AgentPinnedJump[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(AGENT_PINS_KEY)
+    if (!raw) return []
+    const arr = JSON.parse(raw) as unknown
+    if (!Array.isArray(arr)) return []
+    return arr.filter((x): x is AgentPinnedJump =>
+      typeof (x as AgentPinnedJump)?.key === 'string' && (x as AgentPinnedJump).key.length > 0
+      && typeof (x as AgentPinnedJump)?.cmd === 'string'
+      && typeof (x as AgentPinnedJump)?.label === 'string')
+  } catch { return [] }
+}
+
+function persistPins(pins: AgentPinnedJump[]) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(AGENT_PINS_KEY, JSON.stringify(pins)) } catch { /* 配额满静默 */ }
+}
+
 interface AgentChatState {
   sessions: AgentSession[]
   activeId: string | null
@@ -150,11 +172,19 @@ interface AgentChatState {
   busy: boolean
   phase: BusyPhase
   visualOn: boolean
+  /** r115-c 报告节钉住集（从组件 useState 迁入 store + localStorage 持久化）：刷新不丢
+   *  （比对工作不因页面刷新中断）；会话切换/新建/清空/删除活动会话时清零（钉的取消入口
+   *  在消息行上——消息不可达即孤儿，r114-c 防孤儿语义不变；跨会话比对取舍见 AgentPanel
+   *  r115-c 注释）。结构未加载时 applyPinned 求值失败自然清薄纱（钉数据保留——结构重载后
+   *  effect 重跑恢复薄纱，AgentPanel 侧 effect 依赖含 activeId）。 */
+  pinnedJumps: AgentPinnedJump[]
   setMsgs: (update: AgentChatMessage[] | ((prev: AgentChatMessage[]) => AgentChatMessage[])) => void
   patchCmds: (msgId: string, cmds: AgentCmdRecord[]) => void
   setBusy: (busy: boolean) => void
   setPhase: (phase: BusyPhase) => void
   setVisualOn: (on: boolean) => void
+  /** 钉住集更新（togglePin 增删/清空共用；直接替换语义与组件 useState setState 同构） */
+  setPinnedJumps: (update: AgentPinnedJump[] | ((prev: AgentPinnedJump[]) => AgentPinnedJump[])) => void
   clearMsgs: () => void
   /** 新建会话并激活（busy 期间拒绝返回 null）；返回会话 id */
   newSession: () => string | null
@@ -175,6 +205,13 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => ({
   busy: false,
   phase: 'think',
   visualOn: (typeof window !== 'undefined' && (() => { try { return localStorage.getItem(AGENT_VISUAL_KEY) !== 'off' } catch { return true } })()),
+  pinnedJumps: loadPins(),
+
+  setPinnedJumps: (update) => set(s => {
+    const pinnedJumps = typeof update === 'function' ? update(s.pinnedJumps) : update
+    persistPins(pinnedJumps)
+    return { pinnedJumps }
+  }),
 
   setMsgs: (update) => set(s => {
     // 无活动会话：自动开一个（首条消息即会话标题）
@@ -214,18 +251,23 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => ({
     const sess = s.sessions.find(x => x.id === s.activeId)
     if (!sess) return {}
     const next = { ...sess, messages: [], title: tt({ zh: '新会话', en: 'New session' }), autoTitle: true, updatedAt: Date.now() }
+    // r115-c：清会话即清钉（消息行不可达 → 钉失去取消入口，r114-c 防孤儿语义）
+    persistPins([])
     return {
       sessions: s.sessions.map(x => (x.id === next.id ? next : x)),
       msgs: next.messages,
+      pinnedJumps: [],
     }
   }),
 
   newSession: () => {
     if (get().busy) return null
     const sess = newSessionObj()
+    // r115-c：新会话同 clearChat——旧报告节不可达，钉同步清零
+    persistPins([])
     set(s => {
       const sessions = [sess, ...s.sessions].slice(0, SESSIONS_MAX)
-      return { sessions, activeId: sess.id, msgs: sess.messages }
+      return { sessions, activeId: sess.id, msgs: sess.messages, pinnedJumps: [] }
     })
     return sess.id
   },
@@ -234,7 +276,9 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => ({
     if (get().busy) return false
     const sess = get().sessions.find(x => x.id === id)
     if (!sess) return false
-    set({ activeId: id, msgs: sess.messages })
+    // r115-c：切换会话同新建——钉属于旧会话的消息行；跨会话比对取舍见 AgentPanel 注释
+    persistPins([])
+    set({ activeId: id, msgs: sess.messages, pinnedJumps: [] })
     return true
   },
 
@@ -253,7 +297,9 @@ export const useAgentChatStore = create<AgentChatState>((set, get) => ({
     const sessions = s.sessions.filter(x => x.id !== id)
     const activeId = s.activeId === id ? (sessions[0]?.id ?? null) : s.activeId
     const msgs = sessions.find(x => x.id === activeId)?.messages ?? []
-    set({ sessions, activeId, msgs })
+    // r115-c：删除活动会话后活动切到最新剩余——同 switchSession 清钉；删非活动会话钉不动
+    if (s.activeId === id) { persistPins([]); set({ sessions, activeId, msgs, pinnedJumps: [] }) }
+    else set({ sessions, activeId, msgs })
     return true
   },
 }))

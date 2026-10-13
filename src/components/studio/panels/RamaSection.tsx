@@ -5,7 +5,7 @@
 // 交互约定与接触图谱（AnalysisPanel ContactMap）同源：canvas dpr 缩放、hover DOM 提示、
 // 点击行/点选择残基原子（复用全局选择通道 → 3D amber 光晕）。
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Spline, Crosshair, Clapperboard } from 'lucide-react'
+import { Spline, Crosshair, Clapperboard, Layers } from 'lucide-react'
 import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { runCommand } from '@/lib/molecular/commands'
 import { computeRama, classifyRama, residueAtomRange, type RamaPoint } from '@/lib/molecular/rama'
@@ -60,7 +60,16 @@ export function RamaSection() {
   const [filter, setFilter] = useState<RamaFilter>('all')
   const [hover, setHover] = useState<{ x: number; y: number; p: RamaPoint } | null>(null)
   const [themeTick, setThemeTick] = useState(0)
+  // r115-b 离群行「隔离其余链」开关（r114 建议②后半）：多链结构（1PRC 类四链）中离群
+  // 常被其他链遮挡——开启后行点击附带 isolate（只留残基所在链，同链配体/水连带保留），
+  // 与影视级检视的区别：不 label 不 slab（轻量去遮挡，保留用户自己的表示与光照）。
+  // 单/双链结构不渲染开关（isolate 语义上无其余链可隔，诚实隐藏而非无效展示）。
+  const [rowIsolate, setRowIsolate] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  // 聚合物链数（蛋白 + 核酸）——多链判定驱动隔离开关的渲染
+  const polymerChains = useMemo(() =>
+    (data?.chains ?? []).filter(c => c.type === 'protein' || c.type === 'nucleic'), [data])
 
   // 主题切换重绘（canvas 填充色随 isDark 取值——MutationObserver 监听 html class）
   useEffect(() => {
@@ -213,17 +222,21 @@ export function RamaSection() {
   /** 选择单个残基（点/离群行共用；复用全局选择通道 → 3D amber 光晕联动）。
    *  r114-a：离群行点击追加 focus——相机平滑聚焦该残基（fitView + 8Å 缓冲，与
    *  zoom <选择>, 8 同一通道）；散点画布点击保持仅选择（密集散点下镜头频繁跳动刺眼，
-   *  行点击才是「审阅某个离群」的刻意动作）。 */
-  const selectResidue = (p: RamaPoint, opts?: { focus?: boolean }) => {
+   *  行点击才是「审阅某个离群」的刻意动作）。
+   *  r115-b：rowIsolate 开启时行点击附带 isolate（隔离其余链——多链去遮挡）；走
+   *  runCommand 与命令行同路径，console 审计免费；顺序 isolate → fitView（先去遮挡
+   *  再聚焦，镜头落位即干净画面）。 */
+  const selectResidue = (p: RamaPoint, opts?: { focus?: boolean; isolate?: boolean }) => {
     if (!activeId || !data) return
     const r = data.residues[p.resIdx]
     if (!r) return
     const indices = residueAtomRange(data, p.resIdx)
     setSelection(activeId, indices)
+    if (opts?.isolate) runCommand(`isolate (chain ${r.chainId.trim() || 'A'} and resi ${r.resSeq})`)
     if (opts?.focus) engineRef.current?.fitView([{ structureId: activeId, indices }], { buffer: 8 })
     appendLog('out', tt({
-      zh: `拉马钱德兰：已选择${opts?.focus ? '并聚焦' : ''} ${r.chainId.trim()}:${r.resName}${r.resSeq}（φ ${p.phi.toFixed(0)}° · ψ ${p.psi.toFixed(0)}° · ${['优势区', '允许区', '离群'][p.cls]}）`,
-      en: `Ramachandran: selected${opts?.focus ? ' and focused on' : ''} ${r.chainId.trim()}:${r.resName}${r.resSeq} (φ ${p.phi.toFixed(0)}° · ψ ${p.psi.toFixed(0)}° · ${['favored', 'allowed', 'outlier'][p.cls]})`,
+      zh: `拉马钱德兰：已选择${opts?.focus ? '并聚焦' : ''}${opts?.isolate ? '（已隔离其余链，isolate off 恢复）' : ''} ${r.chainId.trim()}:${r.resName}${r.resSeq}（φ ${p.phi.toFixed(0)}° · ψ ${p.psi.toFixed(0)}° · ${['优势区', '允许区', '离群'][p.cls]}）`,
+      en: `Ramachandran: selected${opts?.focus ? ' and focused on' : ''}${opts?.isolate ? ' (other chains isolated; isolate off restores)' : ''} ${r.chainId.trim()}:${r.resName}${r.resSeq} (φ ${p.phi.toFixed(0)}° · ψ ${p.psi.toFixed(0)}° · ${['favored', 'allowed', 'outlier'][p.cls]})`,
     }))
   }
 
@@ -231,7 +244,10 @@ export function RamaSection() {
    *  全部走 runCommand（与命令行同一条代码路径——行为一致、console 审计免费）：
    *  select（建立选择）→ isolate（隔离到残基所在链——同链 ID 配体/水连带保留）→
    *  zoom（聚焦残基， 10Å 缓冲留出侧链环境）→ label（残基原子标注）。
-   *  选择子用 (chain X and resi N)（同链同号残基在多链结构中唯一限定）。 */
+   *  选择子用 (chain X and resi N)（同链同号残基在多链结构中唯一限定）。
+   *  r115-b 一镜到底（r114 建议②前半）：三连后 slab 切层到残基平面（±10Å 沿视线裁剪，
+   *  前后遮挡剩侧链环境——影视感切层镜头）+ 环境光压暗（1 → 0.6，对比度戏剧化）；
+   *  恢复链四件套在日志明示（slab off · set ambient 1 · isolate off · label off）。 */
   const cinematicInspect = (p: RamaPoint) => {
     if (!activeId || !data) return
     const r = data.residues[p.resIdx]
@@ -241,9 +257,11 @@ export function RamaSection() {
     runCommand(`isolate ${sel}`)
     runCommand(`zoom ${sel}, 10`)
     runCommand('label')
+    runCommand('slab 20')
+    runCommand('set ambient 0.6')
     appendLog('out', tt({
-      zh: `拉马钱德兰：影视级检视 ${r.chainId.trim()}:${r.resName}${r.resSeq}——已聚焦 + 隔离所在链 + 原子标注（isolate off 恢复全部链 · label off 清除标签）`,
-      en: `Ramachandran: cinematic inspection of ${r.chainId.trim()}:${r.resName}${r.resSeq} — focused + isolated to its chain + atom labels (isolate off restores all chains · label off clears labels)`,
+      zh: `拉马钱德兰：影视级检视 ${r.chainId.trim()}:${r.resName}${r.resSeq}——聚焦 + 隔离所在链 + 原子标注 + 切层镜头 + 环境光压暗（恢复：isolate off · label off · slab off · set ambient 1）`,
+      en: `Ramachandran: cinematic inspection of ${r.chainId.trim()}:${r.resName}${r.resSeq} — focused + isolated to its chain + atom labels + slab clipping + dimmed ambient (restore: isolate off · label off · slab off · set ambient 1)`,
     }))
   }
 
@@ -365,8 +383,25 @@ export function RamaSection() {
         {outliers.length > 0 && (
           <>
             <div className="mol-scroll panel-card mt-1.5 max-h-40 overflow-y-auto">
-              <p className="mol-micro sticky top-0 bg-card px-2 py-1 text-muted-foreground">
-                {t({ zh: `离群残基（φ/ψ 落在 3.5σ 之外）`, en: `Outlier residues (φ/ψ beyond 3.5σ)` })}
+              <p className="mol-micro sticky top-0 z-[1] flex items-center gap-1 bg-card px-2 py-1 text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate">{t({ zh: `离群残基（φ/ψ 落在 3.5σ 之外）`, en: `Outlier residues (φ/ψ beyond 3.5σ)` })}</span>
+                {polymerChains.length > 1 && (
+                  <button
+                    onClick={() => setRowIsolate(v => !v)}
+                    aria-pressed={rowIsolate}
+                    title={rowIsolate
+                      ? t({ zh: '已开启：点击离群行同时隔离其余链（isolate off 恢复）', en: 'On: clicking an outlier row also isolates other chains (isolate off restores)' })
+                      : t({ zh: '开启后点击离群行时隔离其余链——多链结构去遮挡', en: 'When on, clicking an outlier row isolates other chains — declutter for multi-chain structures' })}
+                    aria-label={rowIsolate ? t({ zh: '关闭点击行时隔离其余链', en: 'Turn off isolate-other-chains on row click' }) : t({ zh: '开启点击行时隔离其余链', en: 'Turn on isolate-other-chains on row click' })}
+                    className={cn(
+                      'ml-auto shrink-0 rounded px-1 py-px font-mono text-[9px] transition',
+                      rowIsolate ? 'bg-primary/15 font-semibold text-primary' : 'text-muted-foreground/70 hover:bg-accent hover:text-foreground',
+                    )}
+                  >
+                    <Layers className="mr-0.5 inline h-2.5 w-2.5" aria-hidden />
+                    {t({ zh: '隔离其余链', en: 'isolate' })}
+                  </button>
+                )}
               </p>
               {outliers.slice(0, 60).map(p => {
                 const r = data.residues[p.resIdx]
@@ -377,7 +412,7 @@ export function RamaSection() {
                   // 图标按钮 title 常显（触屏无 hover；44px 触达由行高保障）。
                   <div key={p.resIdx} className="flex items-center gap-0.5 transition hover:bg-accent/50">
                     <button
-                      onClick={() => selectResidue(p, { focus: true })}
+                      onClick={() => selectResidue(p, { focus: true, isolate: rowIsolate })}
                       className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left"
                       aria-label={t({ zh: `选择并聚焦离群残基 ${r.chainId.trim()}:${r.resName}${r.resSeq}`, en: `Select and focus outlier residue ${r.chainId.trim()}:${r.resName}${r.resSeq}` })}
                     >

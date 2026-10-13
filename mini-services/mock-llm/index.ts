@@ -471,6 +471,18 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
       }
       return draft as unknown as { reply: string; commands: string[] }
     }
+    if (/失败演练链域|fail drill chain/i.test(lastUser)) {
+      // r115-a 链域失败演练：修正命令带不存在的链（Z 在任何场景都不存在）→ 应用侧视觉
+      // 自查子轮的命令失败走链域路径——r115 消费救济（chainFails 全量扫描）的 G1 驱动器。
+      // 命令选用「空选择必报错」族（zoom chain Z, 5 → 命中 0 原子错误；interface A Z →
+      // Empty selection 错误）——select/color 对 0 原子选择是 ok 态（G1 实测：Colored:
+      // #e04545 (chain Z)），不产生 error 记录就无法并入 chainFails。先于通用失败演练
+      // （具体优先于宽泛）：前者验证链域失败闭环，后者验证通用修正透传。
+      return dec(zh,
+        '视觉自查未达标：修正命令引用了不存在的链，已下发链域修正命令（将失败并触发链清单消费救济）。',
+        'Visual check failed: corrective commands reference a nonexistent chain (they will fail and trigger the chain-list consumption relief).',
+        ['zoom chain Z, 5', 'interface A Z'])
+    }
     if (/失败演练|fail drill/i.test(lastUser)) {
       return dec(zh,
         '视觉自查未达标：目标颜色未生效，已自动下发修正命令。',
@@ -537,7 +549,13 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
   //      「跨轮次记忆」问题转化为「单轮自包含上下文」的架构决策）。先于 0.5（技能注入
   //      在场时会拦截一切消息——0.46 的自包含性不依赖技能上下文）。
   if (/链清单已探测|chain list has been probed/i.test(lastUser)) {
-    const failSection = lastUser.split(/chains list 输出|chains list output/)[0]
+    // r115-d：先切掉尾部「已成功命令的关键输出 / Key output of already-successful」节
+    //（与 0.45 的 r114-b 同款隔离——成功命令的 `- cmd → output` 行式与失败节同形，
+    // 不切会把成功命令当失败重组重跑）；从中提取已成功命令集，重组产物同名时丢弃
+    //（防重发：视觉修正命令 color red, chain A 已成功 → 重组再出同名命令不执行）。
+    const okSection = lastUser.split(/已成功命令的关键输出|Key output of already-successful/)[1] ?? ''
+    const okCmds = new Set(okSection.matchAll(/^- (.+?) → /gm).map(m => m[1].trim()))
+    const failSection = lastUser.split(/已成功命令的关键输出|Key output of already-successful/)[0].split(/chains list 输出|chains list output/)[0]
     const failedPairs = [...failSection.matchAll(/^- (.+?) → (.+)$/gm)].map(m => [m[1].trim(), m[2].trim()] as const)
     const probeSection = lastUser.split(/chains list 输出|chains list output/)[1] ?? ''
     const chains = parseChainsFromProbeOutput(probeSection)
@@ -551,11 +569,16 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
     const available = new Set(chains.map(c => c.id))
     const protein = chains.find(c => c.type === 'protein' || c.type === '蛋白')
     const pick = protein?.id ?? chains[0].id
-    const commands = failedPairs.map(([c]) => recomposeByChainList(c, available, pick))
+    // r115-d 双重去重：①重组产物精确去重（不同失败命令可重组出同名命令——原失败与
+    // 视觉重发同文时）；②与已成功命令同名时丢弃（防重发——真实 LLM 同样不会重发已
+    // 成功的命令）。丢弃计数进 reply（诚实口径：重组了几条、丢了几条重复、为什么丢）。
+    const recomposedAll = failedPairs.map(([c]) => recomposeByChainList(c, available, pick))
+    const commands = [...new Set(recomposedAll)].filter(c => !okCmds.has(c))
+    const dropped = [...new Set(recomposedAll)].length - commands.length
     const avail = [...available].join('、')
     return dec(zh,
-      `已按链清单重组命令（场景可用链：${avail}；无效链已替换为 ${pick}——${commands.length} 条待执行）。`,
-      `Commands recomposed per the chain list (available chains: ${[...available].join(', ')}; invalid chains replaced with ${pick} — ${commands.length} to run).`,
+      `已按链清单重组命令（场景可用链：${avail}；无效链已替换为 ${pick}——${commands.length} 条待执行${dropped > 0 ? `，另有 ${dropped} 条与已成功命令重复已跳过` : ''}）。`,
+      `Commands recomposed per the chain list (available chains: ${[...available].join(', ')}; invalid chains replaced with ${pick} — ${commands.length} to run${dropped > 0 ? `, ${dropped} skipped as duplicates of already-successful commands` : ''}).`,
       commands)
   }
 

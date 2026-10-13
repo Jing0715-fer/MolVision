@@ -4884,3 +4884,41 @@ Stage Summary:
   6. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
 
 （r114 段 cron 补记，2026-10-13）15min webDevReview 巡检任务 #456214 创建（18:23:42）——create 接口返回 success 但 list 详情 status=Disabled due to exec limits exceeded（账户级执行配额硬限第 28 次实证（r85-r113 连续 27 次 + 本轮）），已删除清理。教训入档：create 成功 ≠ 任务生效——判定须以 list 的 execution.info 为准。任务书已内嵌 r114 开发纪律（基线 3961864 / guards 780 / 门禁链与 kill 红线 / E2E 铁律含水合竞态与卡片断言新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 780 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r115
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r114 下一轮建议①②③④全收口：①视觉修正轮失败并入链清单消费救济（chainFails 全量扫描）②拉马影视级检视一镜到底（slab 切层 + 环境光压暗）+ 离群行隔离其余链开关③钉住集持久化（store 迁移 + localStorage）+ 头部汇总徽章④消费 prompt 已成功上下文 + mock 0.46 防重发三件套；QA 门禁链全绿 + E2E（M 21 + G1 三组浏览器全链）+ 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=229970f（r114 cron 补记更正后）；guards 实跑 780/780 = 本轮基线；dev 3000=200 + mock 3999 completions=200 + 双守护活（daemon.log mockd L2 ok）；会话摘要为 r92 时代旧档（项目实际已 r114）——以 worklog 为准
+- 【改动·r115-a 应用侧】AgentPanel：isChainDomainCmd helper（三族形态单一出处——chains hide/show 形态 + chain X 词式 + interface 裸链字母，app/mock 对称）+ chainFails 从 fails.filter 改 records 全量循环扫描（records 此刻已含修正轮+视觉子轮递归合并记录——fixRecords 含视觉子轮）+ seenFail cmd 文本去重（首次出现优先保留——VLM 修正命令常与原始失败同文重发）；单次消费轮覆盖全部失败来源，不为视觉失败单独再开一轮（有界纪律不变：depth+2 仍无后续救济）
+- 【改动·r115-d 应用侧】consumePrompt 附带 okOuts 节（「已成功命令的关键输出（重组时不要重复这些命令）」——与 fixPrompt 同款；典型场景：视觉修正命令 color red, chain A 已成功 → 原始 color red, chain B 重组同名 → 重复执行无意义且淹没审计）
+- 【改动·r115-d mock 侧 0.46】①okSection 先切（已成功命令的 `- cmd → output` 行式与失败节同形——不切会把成功命令当失败重组重跑，与 0.45 的 r114-b 同款隔离）→ okCmds 集合②重组产物精确去重 new Set（不同失败命令重组同名命令）③同名已成功命令丢弃 + dropped 计数诚实口径进 reply（ZH「另有 N 条与已成功命令重复已跳过」/ EN「N skipped as duplicates」）
+- 【改动·r115-a mock 视觉链域演练】0.x 视觉分支新增 `失败演练链域|fail drill chain`（先于通用失败演练——具体优先于宽泛）→ 修正命令 zoom chain Z, 5 + interface A Z。**G1 实测驱动的二次修正**：初版用 select chain Z / color red, chain Z——应用侧对 0 原子选择是 ok 态（"0 atoms selected" / "Colored: #e04545 (chain Z)"）不产生 error 记录，无法并入 chainFails；改用「空选择必报错」族（zoom → matched 0 atoms 错误 / interface → Empty selection 错误）——命令族与错误语义的映射入档
+- 【改动·r115-b】RamaSection：①cinematicInspect 三连→六连（select → isolate → zoom → label → slab 20（±10Å 沿视线切层——前后遮挡剩侧链环境）→ set ambient 0.6（对比度戏剧化））；恢复链四件套日志明示（slab off · set ambient 1 · isolate off · label off）②离群行「隔离其余链」开关：rowIsolate state + polymerChains（蛋白+核酸链）> 1 门控渲染（单链诚实隐藏）+ selectResidue 增 isolate 通道（runCommand 同路径 console 审计免费；顺序 isolate → fitView 先去遮挡再聚焦）+ 开关 title/aria-label/aria-pressed 双语
+- 【改动·r115-c】①protocol.ts：AgentPinnedJump 类型 + AGENT_PINS_KEY 键（独立键不与 sessions 序列化耦合——格式演进互不牵连）②chat-store：pinnedJumps state + setPinnedJumps + loadPins（形状校验诚实降级）+ persistPins；clearMsgs/newSession/switchSession/deleteSession（活动删除）四入口统一清零含持久化（钉的取消入口在消息行上——防孤儿薄纱语义与 r114-c 一致）③AgentPanel：useState → store 订阅迁移；applyPinned effect 依赖增 molActiveId（刷新后结构未加载时求值失败只清薄纱不清钉数据；结构重载时 effect 重跑恢复薄纱——持久化闭环最后一环）；头部钉住汇总徽章（钉 N 计数 + Pin 图标 + 点击一键清全部 clearAllPins + toast/ARIA 双反馈）；跨会话比对取舍：钉按会话语境清零而非跨会话保留（报告节属于具体会话——跨会话叠加会让薄纱标签失去溯源；切回来重钉两下的 UI 成本低于孤儿风险）
+- 【守卫 780→803（+23）】r115-a/d 八锚（helper 2/seenFail 3/视觉救济注释 1/okOuts 文案 1/mock 演练 1/okSection 2/okCmds 2/重组去重 2）+ r115-b 七锚（slab 切层 1/环境光 1/恢复链 3/开关 7/多链门控 2/透传 1/隔离日志 1）+ r115-c 八锚（store 字段 9/持久化键 1/装载 2/写盘 6/订阅 1/结构重载 3/一键清 2/徽章文案 1）；r114-c ①⑧两锚随迁移同步（pinnedJumps 5→12；清钉防孤儿改守 chat-store persistPins([])×4）
+- 【QA】lint 0 · bunx tsc src/ 零错误（基线 5 环境错不变）· guards 803/803 · smoke 6/6 · visual-baseline 7/7（漂移 0.00%）· dev.log 尾部零真 error · provider 现场恢复（DELETE custom → zai 默认，历史纪律）
+- 【E2E-M】r115-m.ts 21/21：T1 okOuts 节隔离（orient/hbonds 不进重组）· T2 同名丢弃 + 计数诚实口径 · T3 同文双失败重组去重 · T4 EN 节头切分 + 同名丢弃 + EN 计数文案 · T5 链域演练新命令族（zoom chain Z, 5 / interface A Z）· T6 通用演练不被链域分支抢 · T7 默认通过回归 · T8 无 okOuts 节时基础重组不变（r114 行为零回归）· T9 0.45 okOuts 隔离回归；r114-m 16/16 · r111-m 9/9 · r110-m 16/16 零破坏
+- 【E2E-G1a 消费救济全链】1A2N + custom 供应商（mock-vision——文本与视觉同路由 mock）+ 固定 interface-analysis + "fail drill chain: analyze the interface between chain A and chain B"：主轮 4 失败（chain B 空选择）→ 修正轮 chains list 探测（1A2N 单链 A 690 残基）→ 深度 1 视觉自查 → mock 链域演练修正命令 zoom chain Z, 5（matched 0 atoms 错误）+ interface A Z（Empty selection 错误）→ **消费轮 4 条待执行**（3 原始 + 评审失败并入的 zoom chain A, 5；interface A Z 重组为 interface A A 与原始 interface A B 的重组产物去重——3+2 失败 → 4 命令的实测证据）→ 4 命令全部执行成功；对照轮（演练旧命令族 select/color——ok 态零 error 记录）消费轮仅 3 条——评审失败并入与否的行为分界实证；视觉自查有界（每 depth-0 轮 ≤2 次：修正轮检查 + 消费轮检查，消费轮的评审失败在 depth 2 无救济属设计边界）
+- 【E2E-G1b 一镜到底 + 隔离开关】1A2N 拉马（416 点 2 离群）：场记板点击 → 六连命令 console 审计全在（select/isolate/zoom (chain A and resi 67), 10/label/slab 20/set ambient 0.6）+ "Ambient light → 0.6" 生效输出 + 恢复链四件套日志；1A2N 单链 → 隔离开关正确隐藏（多链门控）；1PRC（四链 C/H/L/M，3 离群）装载 → 开关渲染（aria-pressed false→true）→ 离群行点击 C:ALA126 → isolate (chain C and resi 126) 执行 + "Isolated: kept C (protein), C (water) (incl. same-ID linked)"（同链连带保留实战）+ "selected and focused on" + "other chains isolated" 日志；清理四件套（isolate off / label off / slab off → "Clipping off" / set ambient 1 → "Ambient light → 1"）全恢复
+- 【E2E-G1c 钉住持久化】1PRC + ligand-pocket 技能（interface 报告节全 orient 结构级跳转——pinnable 门控正确不给钉钮）→ 报告 3 可钉节（口袋残基/氢键/接触对）→ 钉「口袋残基」→ 头部徽章「钉 1」+ aria-label "Unpin all 1 pinned previews" + ARIA "Pinned previews: 口袋残基 (750 atoms)"；**刷新页面 → localStorage 键值在（[{key, cmd: view from ligand, label}]）→ 面板重开徽章恢复（ARIA 空为预期——结构未载只清薄纱不清钉数据）→ 重载 1PRC → ARIA "Pinned previews: 口袋残基 (750 atoms)"（molActiveId effect 依赖驱动薄纱自动重建——持久化闭环最后一环）**；徽章点击一键清 → 徽章消失 + ARIA 清空 + storage 变 []
+- 【坑（新入档）】①**应用侧 select/color 对 0 原子选择是 ok 态**（"0 atoms selected" / "Colored: #e04545 (chain Z)"）——E2E 演练要制造链域 error 记录必须用「空选择必报错」命令族（zoom → matched 0 atoms / interface → Empty selection / view from → Selection is empty / contacts → 选择为空）；select/color 不报错就无法并入 chainFails（本轮演练命令二次修正的根因）②**视觉自查按 depth-0 轮为界各有界**：修正轮检查 + 消费轮检查各一次（visualBudget 2 → 1 → 0 递减）；消费轮（depth 2）自己的视觉修正失败无救济——消费救济只在 depth-0 修正轮后的消费站点，depth≥1 的失败止于视觉预算耗尽（有界 vs 闭环的既定取舍）③**agent-browser eval 大数组遍历超时**：`[...document.querySelectorAll('div')].find(d => d.textContent.includes(...))` 全 DOM 文本拼接易超 30s——改按 button title/aria-label 精确定位（本轮两次超时的教训）④**命令历史下拉与日志输出同文本源**：命令行的命令词（slab off 等）在下拉历史里也出现——断言命令 OUTPUT 文案（"Clipping off"）而非命令词本身（"slab off" 会命中历史下拉假阳性）
+- 【现场恢复】provider DELETE custom → zai 默认 ✓；isolate/label/slab/ambient 四件套恢复 ✓；浏览器会话 close（内存纪律）✓
+
+Stage Summary:
+- 交付一（r115-a）：视觉修正轮失败并入链清单消费救济——r114 建议①收口：chainFails 全量扫描 records（修正轮+视觉子轮递归合并记录），单次消费轮覆盖全部失败来源；G1 实测 3+2 失败 → 4 命令（评审失败重组 + 同名去重的行为分界：对照组零 error 时恒 3 条）
+- 交付二（r115-d）：消费闭环防重发三件套——consumePrompt okOuts 上下文节 + mock 0.46 okSection 隔离/同名丢弃/重组去重 + dropped 计数诚实口径；r114 建议④收口
+- 交付三（r115-b）：拉马影视级检视一镜到底（六连：select → isolate → zoom → label → slab 20 切层 + ambient 0.6 压暗，恢复链四件套日志明示）+ 多链结构离群行「隔离其余链」开关（polymerChains > 1 门控、轻量去遮挡不 label 不 slab）；r114 建议②收口
+- 交付四（r115-c）：钉住集持久化——useState → chat-store + localStorage 独立键（刷新不丢、结构重载薄纱自动重建、会话四入口统一清零防孤儿）+ 头部「钉 N」汇总徽章（一键清全部 + toast/ARIA 双反馈）；r114 建议③收口
+- 交付五（测试基建）：r115-m.ts 21 锚 + 守卫 780→803（r114-c 两锚随 store 迁移同步）
+- 交付六（验证）：guards 803/803 · smoke 6/6 · visual-baseline 7/7（0.00%）· E2E M 21/21 + 回归 41/41 + G1 三组全链（消费救济行为分界 / 一镜到底六连+门控+隔离实战 / 持久化闭环含刷新与重建）· console 零错误 · provider 现场恢复
+- 与用户指令对位：①「进行下一阶段开发」——r114 建议①②③④全收口 ②「qa测试和e2e测试」——六道门禁 + M/G1 三组 ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【中】消费轮（depth 2）视觉修正失败的救济对称：本轮实证消费轮自己的视觉自查修正命令失败后无救济（消费站点只在 depth-0）——可把消费轮的 runTurn 返回记录带回 depth-0 再做一次链域消费判定（有界二次消费，或视觉修正命令预检链域直接探测）
+  2. 【中】钉住集的会话恢复提示：刷新后钉恢复但结构未载时 ARIA 静默——面板头部徽章 hover 可展示「待结构加载后恢复薄纱」提示（当前恢复是隐式的，用户可能不解为何薄纱没出现）
+  3. 【中】拉马隔离开关与影视级检视的偏好记忆：rowIsolate 状态刷新即失（useState）——若用户工作流是「隔离审阅多个离群」，可随 AGENT_VISUAL_KEY 同款 localStorage 键持久化
+  4. 【低】一镜到底的视觉快照断言：本轮六连命令以 console 审计 + 设置输出验证，未做 slab 前后像素 diff（切层效果理论上可像素实证——留 E2E 基线化时统一做）
+  5. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
+  6. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）

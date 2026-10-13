@@ -15,7 +15,7 @@ import { buildSceneContext } from '@/lib/molecular/agent/context'
 import { classifyCmd, execAgentCmd, splitCommands } from '@/lib/molecular/agent/runner'
 import { SESSIONS_MAX, sessionTimeLabel, useAgentChatStore } from '@/lib/molecular/agent/chat-store'
 import {
-  AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentStreamEvent,
+  AGENT_VISUAL_KEY, extractPartialReply, type AgentChatMessage, type AgentCmdRecord, type AgentDecision, type AgentPinnedJump, type AgentStreamEvent,
 } from '@/lib/molecular/agent/protocol'
 // r105 标准技能：发送前本地匹配（matchSkill），报告文稿标记检测（isSkillReport）驱动卡片渲染；
 // r107-b 两段式：buildReportFillPrompt 组回填消息（命令回执 → 实测数值）
@@ -34,6 +34,13 @@ const SUGGESTION_GROUPS: { label: DualText; items: DualText[] }[] = [
   { label: { zh: '分析测量', en: 'Analyze & measure' }, items: [{ zh: '测一下血红素和最近残基的距离', en: 'Measure the distance from the heme to the nearest residue' }, { zh: '链 A 和链 B 的界面接触分析', en: 'Analyze interface contacts between chain A and chain B' }] },
   { label: { zh: '构象动画', en: 'Conformations & animation' }, items: [{ zh: '加载两个构象生成插值动画', en: 'Load two conformations and generate a morph animation' }, { zh: '轮廓线再粗一点，亮度再高一些', en: 'Make the outline a bit thicker and brighter' }] },
 ]
+
+/** r115-a 链域命令判定（与 mock 侧 fixRewrite/recomposeByChainList 的命令域三族对称——
+ *  app/mock 两侧同一规则族防单侧漏判）：chains hide/show 形态 + chain X 词式 +
+ *  interface 裸链字母形态。覆盖「未找到链」文案族与空选择族两类失败。 */
+function isChainDomainCmd(cmd: string): boolean {
+  return /\bchain\s+[A-Za-z0-9]\b/i.test(cmd) || /^(chains|chain)\s+(hide|show)\b/i.test(cmd) || /^interface\s+[A-Za-z0-9]/i.test(cmd)
+}
 
 /** 非视觉命令（执行后无需视觉自查） */
 const NON_VISUAL_HEADS = new Set(['count_atoms', 'count', 'help', 'history', 'get_view', 'perf', 'session', 'save'])
@@ -546,12 +553,31 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           // 字母形态——覆盖「未找到链」文案族与空选择族两类（均发出 chains list 探测）。
           // depth+2 执行：不再有后续修正轮（depth < 1 上限），有界防循环。
           const probe = fixRecords.find(r => /^chains\s+(list|ls)\s*$/i.test(r.cmd.trim()) && r.status === 'ok' && r.output)
-          const chainFails = fails.filter(f => /\bchain\s+[A-Za-z0-9]\b/i.test(f.cmd) || /^(chains|chain)\s+(hide|show)\b/i.test(f.cmd) || /^interface\s+[A-Za-z0-9]/i.test(f.cmd))
+          // r115-a：视觉修正轮失败并入 chainFails 候选（r114 建议①：深度 1 视觉自查的
+          // 修正命令失败后无救济——旧 chainFails 只看 depth-0 原始失败 fails）。records
+          // 此时已含修正轮与视觉自查子轮的全部记录（runTurn 返回值递归合并——fixRecords
+          // 含视觉子轮），全量扫描链域错误一次消费：单次消费轮覆盖全部失败来源，不为
+          // 视觉失败单独再开一轮（有界纪律不变：depth+2 仍无后续救济）。cmd 文本去重
+          // （首次出现优先保留——原始失败先于视觉重发）：VLM 修正命令常与原始失败同文
+          // 重发，重复列出会让 mock 重组出双份命令。
+          const chainFails: AgentCmdRecord[] = []
+          const seenFail = new Set<string>()
+          for (const r of records) {
+            if (r.status !== 'error' || !r.output || !isChainDomainCmd(r.cmd) || seenFail.has(r.cmd)) continue
+            seenFail.add(r.cmd)
+            chainFails.push(r)
+          }
           if (probe && chainFails.length) {
             setPhase('think')
+            // r115-d：消费 prompt 附带已成功命令的关键输出（与 fixPrompt 的 okOuts 同款）——
+            // 供 LLM/mock 防重发：重组产物与已成功命令同名时不再执行（mock 0.46 侧过滤）。
+            // 典型场景：视觉修正命令 color red, chain A 已成功 → 原始 color red, chain B
+            // 重组为 color red, chain A → 重复执行无意义且淹没审计。
+            const okOuts = records.filter(r => r.status === 'ok' && r.output)
+              .slice(-6).map(r => `- ${r.cmd} → ${(r.output ?? '').replace(/\s+/g, ' ').slice(0, 110)}`)
             const consumePrompt = tt({
-              zh: `链清单已探测，请按清单重组刚才失败的命令后重新给出（链号换成清单中实际存在的链）：\n${chainFails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n\nchains list 输出：\n${probe.output}\n只给出重组后需要执行的命令，不要重复已成功的命令。`,
-              en: `The chain list has been probed. Recompose the failed commands per the list and give them again (substitute chain IDs that actually exist):\n${chainFails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n\nchains list output:\n${probe.output}\nOnly give the recomposed commands to run; do not repeat the successful ones.`,
+              zh: `链清单已探测，请按清单重组刚才失败的命令后重新给出（链号换成清单中实际存在的链）：\n${chainFails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n\nchains list 输出：\n${probe.output}${okOuts.length ? `\n\n已成功命令的关键输出（重组时不要重复这些命令）：\n${okOuts.join('\n')}` : ''}\n只给出重组后需要执行的命令，不要重复已成功的命令。`,
+              en: `The chain list has been probed. Recompose the failed commands per the list and give them again (substitute chain IDs that actually exist):\n${chainFails.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n\nchains list output:\n${probe.output}${okOuts.length ? `\n\nKey output of already-successful commands (do not repeat them when recomposing):\n${okOuts.join('\n')}` : ''}\nOnly give the recomposed commands to run; do not repeat the successful ones.`,
             })
             const recomp = await callAgent([...buildApiHistory(priorMsgs), fixMsg, { role: 'user', content: consumePrompt }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs), skillId)
             if (recomp) {
@@ -744,7 +770,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
   const clearChat = useCallback(() => {
     useAgentChatStore.getState().clearMsgs()
-    setPinnedJumps([]) // r114-c：钉住节随消息清空而失去取消入口——同步清钉防孤儿薄纱
+    // r114-c 清钉防孤儿薄纱 + r115-c 迁入 store：clearMsgs 内统一清零（含持久化）
     toast.info(tt({ zh: '当前会话已清空（历史会话不受影响）', en: 'Current session cleared (other sessions untouched)' }))
   }, [])
 
@@ -754,14 +780,20 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
   /** r114-c 报告节预览钉住（r113 建议③：hover 即换 → 钉住叠加比对）：key = msgId#行号
    *  （同一节重复点击取消）；cmd/label 与 hover 预览同源。钉住集变更时统一重建薄纱
-   *  （并集求值——多节叠加为一个薄纱集）；hover 仍为瞬态（覆盖钉住集，离开后恢复）。 */
-  const [pinnedJumps, setPinnedJumps] = useState<{ key: string; cmd: string; label: string }[]>([])
+   *  （并集求值——多节叠加为一个薄纱集）；hover 仍为瞬态（覆盖钉住集，离开后恢复）。
+   *  r115-c 迁入 chat-store + localStorage 持久化：刷新不丢（比对工作不因页面刷新中断），
+   *  会话切换/新建/清空由 store 统一清零（钉的取消入口在消息行上——防孤儿薄纱语义与
+   *  r114-c 一致）。跨会话比对的取舍：钉按会话语境清零而非跨会话保留——报告节属于
+   *  具体会话的技能报告，跨会话叠加会让薄纱标签失去「哪条报告哪个节」的溯源；需要
+   *  比对时切回来重钉两下即可（UI 成本低于孤儿风险）。 */
+  const pinnedJumps = useAgentChatStore(s => s.pinnedJumps)
+  const setPinnedJumps = useAgentChatStore(s => s.setPinnedJumps)
 
   /** r114-c：把当前钉住集重建为薄纱（并集求值；跨结构取首个非空组——previewHighlight
    *  单结构通道的诚实降级，注释写明不静默丢弃）。空集 = 清除薄纱 + 清空 ARIA（E2E
    *  实测抓出：取消最后一钉后 live region 残留「Pinned previews: …」——屏幕阅读器
    *  误以为仍有钉住态）。 */
-  const applyPinned = useCallback((list: { key: string; cmd: string; label: string }[]) => {
+  const applyPinned = useCallback((list: AgentPinnedJump[]) => {
     if (!list.length) { engineRef.current?.clearPreviewHighlight(); setPreviewAria(''); return }
     const union = new Map<string, { set: Set<number>; labels: string[] }>()
     for (const p of list) {
@@ -783,13 +815,27 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     }))
   }, [])
 
-  // r114-c：钉住集变更 → 重建薄纱（含清空——取消最后一个钉即恢复无薄纱态）
-  useEffect(() => { applyPinned(pinnedJumps) }, [pinnedJumps, applyPinned])
+  // r114-c：钉住集变更 → 重建薄纱（含清空——取消最后一个钉即恢复无薄纱态）。
+  // r115-c：依赖增 molActiveId（结构 id）——刷新后结构未加载时求值失败只清薄纱不清钉
+  //  数据（持久化保留）；结构重载/切换时 effect 重跑，持久化的钉自动恢复薄纱（持久化
+  //  闭环的最后一环——钉的生命周期 = 会话而非页面）。
+  const molActiveId = useMolStore(s => s.activeId)
+  useEffect(() => { applyPinned(pinnedJumps) }, [pinnedJumps, applyPinned, molActiveId])
 
   /** r114-c：报告节钉住切换（再次点击取消）。key 稳定于 msgId#行号。 */
   const togglePin = useCallback((key: string, cmd: string, label: string) => {
     setPinnedJumps(list => list.some(p => p.key === key) ? list.filter(p => p.key !== key) : [...list, { key, cmd, label }])
-  }, [])
+  }, [setPinnedJumps])
+
+  /** r115-c：一键清全部钉（头部汇总徽章的点击动作——多钉时逐个取消繁琐）；
+   *  toast + ARIA 双反馈（薄纱清除即时可见，徽章随 store 消失）。 */
+  const clearAllPins = useCallback(() => {
+    if (!pinnedJumps.length) return
+    setPinnedJumps([])
+    engineRef.current?.clearPreviewHighlight()
+    setPreviewAria('')
+    toast.info(tt({ zh: `已取消全部 ${pinnedJumps.length} 个钉住的预览`, en: `Unpinned all ${pinnedJumps.length} pinned previews` }))
+  }, [pinnedJumps, setPinnedJumps])
 
   /** r111-b 报告节 hover/focus 预览：跳转命令携带的选择子无副作用求值 → engine 青色
    *  薄纱罩亮（点击前的「先看一眼」）。previewExpr 不落全局选择（不碰用户当前选中态）；
@@ -839,7 +885,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
 
   const startNewSession = useCallback(() => {
     if (useAgentChatStore.getState().newSession()) {
-      setPinnedJumps([]) // r114-c：同 clearChat——新会话后旧报告节不可达，钉同步清零
+      // r114-c 同 clearChat + r115-c 迁入 store：newSession 内统一清零（含持久化）
       toast.info(tt({ zh: '已新建会话（上下文已清零）', en: 'New session created (context cleared)' }))
     }
     else toast.info(tt({ zh: '生成中——结束后再新建会话', en: 'Generating — create a new session after it finishes' }))
@@ -902,6 +948,19 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70 led-dot" />
             {t({ zh: '记忆', en: 'Memory' })} {msgs.length - 12}
           </span>
+        )}
+        {/* r115-c 钉住汇总徽章：钉住的报告节跨滚动可见（取消入口在消息行上，钉多了滚走
+            就找不到）；计数 + 点击一键清全部。与记忆徽章同格（顶栏信息徽章族） */}
+        {pinnedJumps.length > 0 && (
+          <button
+            onClick={clearAllPins}
+            aria-label={t({ zh: `取消全部 ${pinnedJumps.length} 个钉住的预览`, en: `Unpin all ${pinnedJumps.length} pinned previews` })}
+            title={t({ zh: `已钉住 ${pinnedJumps.length} 个报告节预览（青色薄纱叠加中）——点击全部取消`, en: `${pinnedJumps.length} report-section previews pinned (teal veils active) — click to unpin all` })}
+            className="hidden min-w-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-px font-mono text-[9px] font-medium tabular-nums text-primary transition hover:border-primary/50 hover:bg-primary/15 sm:flex"
+          >
+            <Pin className="h-2.5 w-2.5 shrink-0" aria-hidden />
+            {t({ zh: '钉', en: 'Pin' })} {pinnedJumps.length}
+          </button>
         )}
         <div className="ml-auto flex items-center gap-0.5">
           <button

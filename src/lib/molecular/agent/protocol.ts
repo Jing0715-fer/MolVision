@@ -84,6 +84,17 @@ export const AGENT_CHAT_MAX = 40
 /** 视觉自查开关持久化键（'off' = 关闭，缺席 = 默认开启） */
 export const AGENT_VISUAL_KEY = 'molvision-agent-visual'
 
+/** r115-c 报告节钉住集持久化键（跨页面刷新保留——会话切换/新建/清空时由 store 清零） */
+export const AGENT_PINS_KEY = 'molvision-agent-pins-v1'
+
+/** r115-c 钉住的报告节预览（key = msgId#行号稳定；cmd/label 与 hover 预览同源）。
+ *  详见 AgentPanel r114-c 钉住模式与 r115-c 持久化。 */
+export interface AgentPinnedJump {
+  key: string
+  cmd: string
+  label: string
+}
+
 /** 单轮命令条数上限（防止 LLM 失控刷命令） */
 export const AGENT_CMDS_MAX = 10
 
