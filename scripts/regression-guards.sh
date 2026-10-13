@@ -1378,6 +1378,67 @@ check "skill稳定帧规则锚"          "wait-stable-frame" ".agent/skills/molv
 # ⑥skill 长sleep规则锚（实测 2——≤90s 铁律（断言纪律行+规则内文）；删则 r112-a 断会话坑重现无防线）
 check "skill长sleep规则锚"         "90s" ".agent/skills/molvision-e2e/SKILL.md" 2
 
+# ---- r113-a：拉马钱德兰图 QC 面板（孤儿模块 rama.ts 接入 UI——r111 建议⑥收口） ----
+# φ/ψ 散点 + favored/allowed 分区背景 + 离群残基审计与选择（点击行/点 → 全局选择通道
+# → 3D amber 光晕联动）。E2E 实证：4HHB 566 点 0 离群（99.3% favored）；1A2N 416 点
+# 2 离群（A:ASN67 φ175° / A:SER349 φ52°）全链路（清单渲染 + 单行点击 + 全选 2 残基
+# 14 原子）；Gly 筛选 40 点 + ε 独有区渲染；亮暗主题 MutationObserver 重绘。
+# ①组件挂载锚（实测 2——AnalysisPanel import+渲染；删则面板不可达（孤儿模块回归））
+check "拉马挂载锚"                 "RamaSection" "src/components/studio/panels/AnalysisPanel.tsx" 2
+# ②计算内核接线锚（实测 3——computeRama 调用+类型引用族；删则散点恒空）
+check "拉马计算锚"                 "computeRama" "src/components/studio/panels/RamaSection.tsx" 3
+# ③分区背景采样锚（实测 3——classifyRama 网格采样（favored/allowed 双层底色）；删则背景无分区）
+check "拉马分区锚"                 "classifyRama" "src/components/studio/panels/RamaSection.tsx" 3
+# ④单残基选择锚（实测 3——selectResidue 定义+点点击+离群行点击；删则点击无选择）
+check "拉马选择锚"                 "selectResidue" "src/components/studio/panels/RamaSection.tsx" 3
+# ⑤残基原子展开锚（实测 3——residueAtomRange import+单选+全选（rama.ts 选择辅助）；删则选择集空）
+check "拉马原子展开锚"             "residueAtomRange" "src/components/studio/panels/RamaSection.tsx" 3
+# ⑥全选离群锚（实测 2——selectAllOutliers 定义+onClick；删则批量审计断链）
+check "拉马全选锚"                 "selectAllOutliers" "src/components/studio/panels/RamaSection.tsx" 2
+# ⑦离群清单锚（实测 1——slice(0, 60) 截断渲染（大离群数不爆列表）；删则长列表无界）
+check "拉马离群清单锚"             "outliers\.slice" "src/components/studio/panels/RamaSection.tsx" 1
+# ⑧类型筛选锚（实测 4——FILTERS 全部/通用/Gly/Pro（Gly/Pro 容差体系独立——背景随之切）；删则筛选退化）
+check "拉马筛选锚"                 "FILTERS" "src/components/studio/panels/RamaSection.tsx" 4
+# ⑨hover 探测锚（实测 2——onMove 最近点（≤7px 命中）+ onMouseMove 接线；删则 tooltip 失效）
+check "拉马hover锚"                "onMove" "src/components/studio/panels/RamaSection.tsx" 2
+# ⑩区域标签光环锚（实测 1——strokeText（密集散点下标签可读——VLM 实测 αR 被遮后加）；删则标签被散点淹没）
+check "拉马标签光环锚"             "strokeText" "src/components/studio/panels/RamaSection.tsx" 1
+# ⑪主题重绘锚（实测 2——MutationObserver 声明+observe（亮暗切换 canvas 重绘）；删则主题切换画布陈旧）
+check "拉马主题重绘锚"             "MutationObserver" "src/components/studio/panels/RamaSection.tsx" 2
+# ⑫canvas ARIA 锚（实测 1——role=img + aria-label（散点数/离群数/点击语义，双语）；删则屏幕阅读器不可感知）
+check "拉马ARIA锚"                 'role="img"' "src/components/studio/panels/RamaSection.tsx" 1
+# ⑬统计卡锚（实测 1——Favored 占比卡（favored/allowed/outlier 三卡同族）；删则 QC 概览缺失）
+check "拉马统计卡锚"               "Favored" "src/components/studio/panels/RamaSection.tsx" 1
+# ⑭离群清单标题锚（实测 1——「离群残基（φ/ψ 落在 3.5σ 之外）」（3.5σ 口径与 D2_ALLOWED 同源）；删则清单无题）
+check "拉马离群题锚"               "离群残基（φ/ψ" "src/components/studio/panels/RamaSection.tsx" 1
+# ⑮选择日志双语锚（实测 2——Ramachandran: selected（单选/全选两处英文文案族——离群行点击复用单选）；删则审计回显缺失）
+check "拉马日志锚"                 "Ramachandran:" "src/components/studio/panels/RamaSection.tsx" 2
+# ⑯空态锚（实测 2——无连续氨基酸（核苷酸/仅配体结构——注释+文案）；删则空态误渲染空画布）
+check "拉马空态锚"                 "无连续氨基酸" "src/components/studio/panels/RamaSection.tsx" 2
+
+# ---- r113-b：tee 双写踩踏根治（守护标记行独立落盘 .zscripts/daemon.log） ----
+# r112-a 遗留①：采纳模式下被收养实例父链含 `next dev | tee dev.log`——tee 持非追加
+# 偏移 fd 与守护 O_APPEND 写至相竞（r112-a 实测标记行 2s 内被覆盖）。根治：标记行
+# 全量迁移 daemon.log（与 tee 零交集）；spawn 子进程 stdout 重定向仍写 dev.log（应用
+# 日志本职去向）。附带诊断修正：r112-a 坑②「丢前 2 字符」实为启动态源码笔误（写
+# "ockd]"）非 tee 踩踏——笔误入库前已修，dev.log 内 11 条 ockd 行均出自陈旧守护。
+# ①devd 独立日志常量锚（实测 2——DAEMON_LOG 定义+log_line 引用；删则标记行回 dev.log 重遭踩踏）
+check "devd独立日志锚"             "DAEMON_LOG" "scripts/devd.py" 2
+# ②mockd 独立日志常量锚（实测 2——同上；删则同上）
+check "mockd独立日志锚"            "DAEMON_LOG" "scripts/mockd.py" 2
+# ③devd 标记行迁移锚（实测 1——log_line open(DAEMON_LOG)（全部 [devd] 标记的唯一落盘点）；删则标记回 dev.log）
+check "devd标记落盘锚"             'open\(DAEMON_LOG' "scripts/devd.py" 1
+# ④mockd 标记行迁移锚（实测 1——同上（[mockd] 标记唯一落盘点））
+check "mockd标记落盘锚"            'open\(DAEMON_LOG' "scripts/mockd.py" 1
+# ⑤mockd 前缀完整性锚（实测 3——[mockd 前缀族（docstring×2+f-string）；丢前缀则 grep 断链（r112-a 坑②的防线））
+check "mockd前缀锚"                '\[mockd' "scripts/mockd.py" 3
+# ⑥spawn stdout 仍写 dev.log 锚（实测 2——open(LOG（next dev stdout + mockd 重定向；改掉则崩溃回溯无去处）
+check "devd应用日志锚"             'open\(LOG' "scripts/devd.py" 2
+# ⑦根治理由锚（实测 2——tee 双写踩踏根治（docstring+注释）；删则后续维护者不知为何两套日志）
+check "tee根治理由锚"              "tee 双写踩踏根治" "scripts/devd.py" 2
+# ⑧诊断修正锚（实测 2——mockd 侧同款理由注释；删则 r112-a 坑②误诊断（tee 背锅）无更正）
+check "mockd根治理由锚"            "tee 双写踩踏根治" "scripts/mockd.py" 2
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

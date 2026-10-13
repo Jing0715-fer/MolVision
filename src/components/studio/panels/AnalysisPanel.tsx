@@ -14,6 +14,7 @@ import type { StructureData } from '@/lib/molecular/parser'
 import { useI18n, tt } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { SectionTitle, PanelHint } from '../LeftPanel'
+import { RamaSection } from './RamaSection'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 
@@ -892,6 +893,9 @@ export function AnalysisPanel() {
               {t({ zh: 'DSSP 重算二级结构', en: 'Recompute secondary structure (DSSP)' })}
             </button>
           </div>
+
+          {/* r113：拉马钱德兰图 QC（孤儿模块 rama.ts 接入 UI——φ/ψ 散点 + 分区背景 + 离群审计/选择） */}
+          <RamaSection />
         </>
       )}
 

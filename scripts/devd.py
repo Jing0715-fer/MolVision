@@ -46,7 +46,10 @@ r112-a 三项扩展：
     采纳运行中的实例，符合 r112-a 收养监护哲学）。
 
 用法：python3 scripts/devd.py   （前台父进程立即退出，守护转入后台）
-日志：/home/z/my-project/dev.log（追加；调用方可在启动前自行截断）
+日志：守护标记行 → /home/z/my-project/.zscripts/daemon.log（r113 tee 双写踩踏根治：
+      采纳模式下被收养实例父链含 `next dev | tee dev.log`——tee 持非追加偏移 fd，
+      与守护 O_APPEND 写入至相竞，标记行可被覆盖丢失；标记行独立落盘后与 tee 零交集。
+      spawn 子进程 stdout 重定向仍写 dev.log——那是应用日志的本职去向）；
 pid：.zscripts/devd.pid（防双实例；pid 文件 + /proc cmdline 双确认）
 """
 import os
@@ -58,6 +61,8 @@ import subprocess
 
 PROJECT = "/home/z/my-project"
 LOG = os.path.join(PROJECT, "dev.log")
+# r113：守护标记行独立日志（tee 双写踩踏根治——与 mockd 共用同一文件，前缀区分）
+DAEMON_LOG = os.path.join(PROJECT, ".zscripts", "daemon.log")
 PORT = 3000
 RESTART_DELAY_S = 3
 # r91 内存看门狗：OOM 击杀线 ~1.67GB；r91 实测热身稳态 ~1.22GB（.next 热缓存）；
@@ -151,8 +156,9 @@ def stamp() -> str:
 
 
 def log_line(text: str) -> None:
-    """以追加模式向 dev.log 落一行守护标记（每次独立打开，避免长持 fd）。"""
-    with open(LOG, "ab", buffering=0) as lf:
+    """以追加模式向 .zscripts/daemon.log 落一行守护标记（r113 前为 dev.log；
+    每次独立打开，避免长持 fd；独立文件与 tee 零交集——踩踏根因消除）。"""
+    with open(DAEMON_LOG, "ab", buffering=0) as lf:
         lf.write(f"\n[devd {stamp()}] {text}\n".encode())
 
 

@@ -38,7 +38,10 @@
   本就是 1s 粒度，60s 检查零额外成本）。
 
 用法：python3 scripts/mockd.py   （前台父进程立即退出，守护转入后台）
-日志：/home/z/my-project/dev.log（[mockd HH:MM:SS] 标记行——与 [devd] 前缀区分）
+日志：守护标记行 → .zscripts/daemon.log（r113 tee 双写踩踏根治：标记行与 tee
+      零交集。附注：r112-a 坑②「启动行 2s 内丢前 2 字符」实为当时启动态源码
+      笔误（写 "ockd]"）——非 tee 踩踏；笔误已在入库前修复但守护未重启，
+      dev.log 中 11 条 ockd 行均出自旧代码，重启后即为 [mockd 前缀）
       + mock 服务自身日志 .zscripts/mini-service-mock-llm.log（Popen 重定向）
 pid：.zscripts/mockd.pid（防双实例：启动前发现活 mockd 进程即静默退出）
 """
@@ -54,6 +57,8 @@ import urllib.request
 PROJECT = "/home/z/my-project"
 MOCK_DIR = os.path.join(PROJECT, "mini-services", "mock-llm")
 LOG = os.path.join(PROJECT, "dev.log")
+# r113：守护标记行独立日志（tee 双写踩踏根治——与 devd 共用同一文件，前缀区分）
+DAEMON_LOG = os.path.join(PROJECT, ".zscripts", "daemon.log")
 MOCK_LOG = os.path.join(PROJECT, ".zscripts", "mini-service-mock-llm.log")
 PID_FILE = os.path.join(PROJECT, ".zscripts", "mockd.pid")
 BASE = "http://127.0.0.1:3999"
@@ -83,8 +88,9 @@ def stamp() -> str:
 
 
 def log_line(text: str) -> None:
-    """以追加模式向 dev.log 落一行 [mockd] 标记行（与 devd 的 [devd] 前缀区分）。"""
-    with open(LOG, "ab", buffering=0) as lf:
+    """以追加模式向 .zscripts/daemon.log 落一行 [mockd] 标记（r113 前为 dev.log；
+    与 devd 的 [devd] 前缀区分；独立文件与 tee 零交集——踩踏根因消除）。"""
+    with open(DAEMON_LOG, "ab", buffering=0) as lf:
         lf.write(f"\n[mockd {stamp()}] {text}\n".encode())
 
 

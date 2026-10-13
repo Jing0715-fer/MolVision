@@ -4797,3 +4797,51 @@ Stage Summary:
 - 验证：部署后双守护双活（19384/19362）+ 双端口 200（3000 next-server pid 1070 / 3999 bun pid 2107 均原 pid 零触碰）+ 互察零误报 + guards 711/711；lint/tsc/全量门禁由 r112 主轮收尾统一跑
 - 与任务书偏差：子代理 MCP 断连致守卫块/worklog 段/全量实跑三项未做——main 按其最终报告 + 落盘副产物复核后补齐（守卫 18 锚为其拟 13 锚的扩充：+supervise_adopted/stop_pid/server_pid_rss/cross_check_mockd 等函数级锚）
 - 遗留（供下轮参考）：①tee 双写踩踏的根治（守护标记行落独立日志文件——.zscripts/devd.log 之类，工程量小价值中）②互察实战演练（人为停一个守护验证对方拉起——本轮只验证了「活着不误报」单向，kill 守护的演练受红线约束须走脚本旁路设计）③沙箱真实重启场景的端到端验证（dev.sh 是否真被启动链调用未实证）
+
+---
+Task ID: r112-b/c（补记）
+Agent: main（r113 会话——上一会话提交 b7861a6 含 r112-b/c 全部代码但未及写 worklog 即失上下文；本段按 git diff 与文件内注释重建，标注重建口径）
+Task: r111「下一轮建议」第 2【中】条（报告节 hover 预览增强）+ 第 4【中】条（E2E 视觉自查基线化）——r112-b：预览期间视口外原子 dim 聚焦（rep 材质透明度 save/restore 通道）+ ARIA live region 预览态播报；r112-c：wait-stable-frame.sh 渲染稳定帧工具（r111 坑①异步落屏时序的工程化收口）+ e2e skill 铁律固化
+
+Work Log（重建自 b7861a6 diff + 源码注释 + 守卫锚块描述）:
+- 【r112-b engine 侧】PREVIEW_DIM_FACTOR=0.3 常量 + setRepDim(on) 材质级透明度 save/restore（userData.dim0/dimT0 幂等标记；对称克隆与原 rep 共享材质自动连坐；depthWrite 保持原值不破遮挡）；previewHighlight 入口先复位旧 dim（早退路径不留全暗态）+ 成功施加薄纱后 dim 全场
+- 【r112-b AgentPanel 侧】previewAria state + 常驻 role=status aria-live=polite sr-only live region；previewJump 增 label 形参（tt 双语文案「正在预览：label（N 个原子）/Previewing: label (N atoms)」）；clearPreviewJump 同步清空（清屏静默防刷屏）；jumpLabel 单源三用（onClick 溯源/hover ARIA/focus ARIA 防手抄漂移）
+- 【r112-c 工具】.zscripts/wait-stable-frame.sh：连续两截图 canvas 区像素漂移 ≤0.15% 判 STABLE（与 visual-baseline 同源 PIL 灰度差分 bins 13..）；两次实跑根修入注释——①rect 探针输出不剥引号（tr -d '"' 连 JSON 内部引号一并剥致 json.loads 崩恒假 UNSTABLE）②渲染活性守卫 perfLastT 双探（SwiftShader 重场景 tick 间隔 4-8s——零新帧的 0.000% 是同帧假稳定，STALE-FRAME 分支继续轮询）；退出码 0/1/2/3 分流（STABLE/UNSTABLE/管线故障/Python 异常——防崩溃假报不稳定）
+- 【r112-c skill 固化】molvision-e2e SKILL.md 规则 9（截图断言前等稳定帧）+ ≤90s 单调用铁律（r112-a 断会话坑）
+- 【守卫 +16（711→727）】r112-b 八锚（dim 因子/开关函数/dim 存取标记/ARIA 状态/live region/ARIA 写入/标签三用/中文文案）+ r112-c 八锚（工具存在/diff 算法/容差/UNSTABLE 诚实口径/活性守卫/同帧分支/skill 规则 9/长 sleep 铁律）
+
+Stage Summary（重建）:
+- r112-b：hover 预览从「罩亮目标」升级为「罩亮 + 全场退居幕后」的聚焦式交互 + 无障碍播报（屏幕阅读器感知预览态）
+- r112-c：r111 坑①（异步派生落屏拍早基线→恒定假差异，40 分钟排查）工程化收口为工具 + 铁律
+- 【r113 会话补验证】r112-b/c 代码在当前 HEAD 实测：ARIA live region hover 播报「Previewing: 氢键条数 (174 atoms)」✓；dim 像素级实证（视口亮度 71.2→46.3，比 0.651，40.2% 像素显著变化）✓；wait-stable-frame 实跑「STABLE 第 1 轮 0.005% 含新帧渲染」✓——三件交付现均有 worklog 记录 + 本轮独立复验
+
+---
+Task ID: r113
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r111 建议⑥收口（孤儿 rama.ts 接入 UI：拉马钱德兰 QC 面板）+ r112-a 遗留①（tee 双写踩踏根治：守护标记行独立落盘 daemon.log）+ r112-b/c 补记与复验；QA 门禁链全绿 + E2E（G3 新 21 锚 + G1 浏览器全链）+ 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=b7861a6（r112-a 提交，其中实际含 r112-b/c 未入档工作）；工作区干净；guards 实跑 727/727 = 本轮基线；dev 200 + mockd/devd 双守护活（devd 采纳模式收养 pid 1070 实例）；worklog 尾部 r112-a 段——发现提交与 worklog 的 r112-b/c 缺口（守卫 727 > r112-a 记录的 711，wait-stable-frame.sh 注释自引 r112-c）→ 先补记再开发
+- 【改动·r113-a 拉马钱德兰 QC 面板】新建 src/components/studio/panels/RamaSection.tsx（374 行）挂载于 AnalysisPanel 二级结构节后（r111 建议⑥「孤儿 rama.ts either 接入 or 删除」——选择接入：212 行完备 QC 内核（Lovell 2003 椭圆高斯分区）零修改直接消费）。①φ/ψ 散点 canvas（232×224，dpr 缩放，4° 网格采样 classifyRama 铺 favored/allowed 双层底色）②区域标签带同色描边光环（strokeText——VLM 实测密集散点下 αR 被遮后加）③Gly/Pro/通用筛选芯片（Gly/Pro 容差体系独立——背景与散点随之切，Gly 特有 ε 区）④hover 最近点探测（≤7px）+ DOM tooltip（残基名/φψ/分类三色徽章）⑤点击散点/离群行 → residueAtomRange → 全局选择通道（3D amber 光晕联动）+ 双语审计日志⑥三分类统计卡（favored/allowed/outlier 占比+计数）⑦离群清单（≤60 行截断 + 全选离群按钮——「模型局部位错/精修问题候选」审计闭环）⑧空态（核苷酸/仅配体结构提示）⑨MutationObserver 监听 html class 主题切换重绘 ⑩canvas role=img aria-label（散点数/离群数/点击语义）
+- 【测试驱动修正（拉马渲染三轮）】①VLM 全景截图报「区域标签不可见」→ 标签移到散点后绘制 + halo；②VLM 报「φ/ψ 轴标不可见」→ canvas RGBA dump alpha 通道分析证明墨迹存在 + PIL 渲染 DejaVu Mono 参考位图逐像素比对证明字形真实（VLM 把 11px 像素化小字形误读为 tofu）——字号提到 13px 增可读性；③区域标签字体设置在编辑中丢失 → 显式 ctx.font 补回
+- 【改动·r113-b tee 双写踩踏根治】devd.py/mockd.py 的 log_line()（全部守护标记行）迁移 .zscripts/daemon.log（O_APPEND——与 tee 持有的非追加偏移 fd 零交集）；spawn 子进程 stdout 重定向仍写 dev.log（应用日志本职去向——next dev stdout/mockd 重定向）。**附带诊断修正**：r112-a 坑②「mockd 启动行 2s 内丢前 2 字符」曾归因 tee 踩踏——本轮 byte 级核查（Python in-string 布尔判定绕过显示层）证明：源码（HEAD 与工作区）[mockd 前缀**从未损坏**，此前 rg/sed 输出的「ockd」是 Bash 工具显示层把 [m 当 ANSI reset 转义吃掉的伪影；dev.log 内 11 条裸 ockd 行出自**陈旧守护进程**（05:54 启动时源码确实带笔误、入库前已修但守护未重启）——误诊断在 mockd.py docstring 内更正记录
+- 【部署实跑】restart-mockd.sh（旧 19362→新 16381，3999=200 零触碰 bun 服务）+ restart-devd.sh（直接拉起 16409 采纳模式收养在跑实例，3000=200）；daemon.log 落盘验证：双守护启动行 + **[devd 08:02:32] mockd ok (pid=16381) 互察行**（5min 周期跨查新 pid 正确）——tee 根治 + 互察链双实证
+- 【E2E-G3 纯函数（新）】.zscripts/r113-g3.ts 21/21：classifyRama 三体系（通用五主区核心 favored/真离群两点/Gly ε 特有+宽容差分层/Pro φ 锁收紧）×大小写/缺省 resName×±180 wrap 等价 + wrap 交界 favored 正向断言（(170,-170) 经 wrap 落扩展 β 上缘——初版预期错的测试驱动修正）
+- 【E2E-G1 浏览器全链（拉马）】4HHB 566 点 0 离群（99.3% favored 562）· hover tooltip（B:LEU3 favored φ -120.9° ψ 142.2°）· 点击散点→选择+双语日志（「Ramachandran: selected B:LEU3」×4 次派发全生效——初判失败实为 ConsoleBar 关闭态不渲染+面板切换卸载画布两重误判）· Gly 筛选 40 点+ε 区渲染 · 亮暗主题切换画布重绘（填色调色板 (45,212,191)↔(13,148,136) 切换实证）· **离群路径：1A2N 416 点 2 离群**（本地批量筛查脚本 r113-rama-scan.ts 10 结构选定——A:ASN67 φ175°/A:SER349 φ52°）离群清单渲染+单行点击选择+「Select all 2 outliers」→14 原子选择日志 ✓ 全程 console 零错误
+- 【E2E-G1 浏览器（r112-b 复验）】技能消息（强触发词「analyze the hydrogen bond network」——弱词「show me the hydrogen bonds」不达 bestScore≥2 不触发，初卡死会话重载后通）→ 报告 2 节 + 2 跳转按钮 → hover 跳转按钮：ARIA live region 播报「Previewing: 氢键条数 (174 atoms)」+ dim 像素级实证（视口亮度 71.2→46.3 比 0.651、40.2% 像素显著变化——WebGL canvas toDataURL 无 preserveDrawingBuffer 拿空缓冲，改截图对比）· wait-stable-frame 实跑 STABLE 第 1 轮 0.005% 含新帧
+- 【QA】lint 0 · bunx tsc 5 历史基线错不变（src/ 零）· guards 727→751（+24：拉马十六锚 + tee 根治八锚）· smoke 6/6 · visual-baseline 7/7（漂移 0.00%）· dev.log 尾部零真 error · daemon.log 双守护+互察正常
+- 【坑（新入档）】①**Bash 工具输出显示层把「[m」当 ANSI reset 转义吃掉**——rg/sed/python print 的行内 [mockd 显示为 ockd；字符串内容判定必须用 Python in 布尔（不打印内容本身）②**r112-a 坑②误诊断更正**：mockd 前缀「丢 2 字符」非 tee 踩踏——启动态源码笔误（入库前已修）+ 守护陈旧代码；教训：log 异常先核源码字节再归因并发写③WebGL canvas toDataURL 在无 preserveDrawingBuffer 时返回空缓冲——3D 视口像素断言必须走 screenshot④**agent-browser mouse click 非法命令**（valid: move/down/up/wheel）——合成点击用 mouse down+up 或 eval 派发 MouseEvent(bubbles:true)⑤**技能触发词强弱分级**：bestScore≥2 才命中——「show me the hydrogen bonds」弱词计 1 分不触发；E2E 驱动技能流须用强触发词（「analyze the hydrogen bond network」）⑥ConsoleBar 关闭态 return null——appendLog 消息写入 store 但 DOM 无处渲染，E2E 断言日志前先开命令行⑦技能流可中途卡死（多轮流式中断后续轮不再到达）——重载页面重发即恢复（会话级瞬态，非产品 bug）
+
+Stage Summary:
+- 交付一（r113-a）：拉马钱德兰 QC 面板——孤儿模块 rama.ts（r111 建议⑥挂起两轮）接入 UI：φ/ψ 散点 + 分区背景 + 区域标签光环 + Gly/Pro 体系筛选 + hover/点击选择 + 离群审计闭环（清单/单选/全选）+ 双语 + ARIA + 主题重绘；4HHB/1A2N 双结构全链路浏览器实证（含 2 离群残基真值路径）
+- 交付二（r113-b）：tee 双写踩踏根治（r112-a 遗留①）——守护标记行独立落盘 daemon.log 与 tee 零交集；部署后互察行 [devd 08:02:32] mockd ok (pid=16381) 正确落新文件；附带 r112-a 坑②误诊断更正（源码笔误 vs tee 背锅——byte 级证据链）
+- 交付三（文档债清偿）：r112-b/c worklog 补记段（重建口径诚实标注）+ 本轮独立复验三件交付（ARIA/dim/稳定帧工具）
+- 交付四（测试基建）：r113-g3.ts 21 锚（classifyRama 三体系全分支）+ r113-rama-scan.ts 离群结构批量筛查工具（10 结构选定 1A2N/2OCC/1PRC 离群用例库）
+- 交付五（验证）：guards 727→751 全过 · smoke 6/6 · visual-baseline 7/7（0.00%）· E2E G3 21/21 + G1 拉马全链 + G1 r112-b 复验全绿零 console 错误；M/真实 LLM 抽样跳过理由：本轮零涉及 mock/LLM 侧路径（r111 的 10/10 矩阵仍有效）
+- 与用户指令对位：①「进行下一阶段开发」——r111 建议⑥收口 + r112-a 遗留① + r112-b/c 文档债 ②「qa测试和e2e测试」——六道门禁 + G3/G1 双组 + 三轮 VLM/像素级测试驱动修正 ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【中】拉马图增强：点击离群行时 3D 视口聚焦该残基（当前只选择不高亮镜头——复用 zoom within 通道）；离群残基一键「影视级检视」按钮（zoom + isolate + label 三连）
+  2. 【中】修正轮 chains list 探测结果消费（r110/r111 持续挂起）：mock 侧会话记忆——链族失败统一引到 chains list 后「看清单再重组」的真闭环
+  3. 【中】多节同时预览（r111 建议②延续）：hover 即换的瞬态预览升级为「钉住」模式（点击节旁 pin 图标固定预览，多节叠加比对）
+  4. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
+  5. 【低】拉马离群与 MolProbity 口径对齐评估（当前 Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
