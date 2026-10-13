@@ -4922,3 +4922,5 @@ Stage Summary:
   4. 【低】一镜到底的视觉快照断言：本轮六连命令以 console 审计 + 设置输出验证，未做 slab 前后像素 diff（切层效果理论上可像素实证——留 E2E 基线化时统一做）
   5. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
   6. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
+
+（r115 段 cron 补记，2026-10-13）15min webDevReview 巡检任务 #456413 创建（19:50:21）——create 返回 success 但 list 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 29 次实证：r85-r114 连续 28 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 list 的 execution.info 为准」再次应验），已删除清理。任务书已内嵌 r115 开发纪律（基线 266a62b / guards 803 / 门禁链与 kill 红线 / E2E 铁律含空选择命令族语义与按钮定位新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 803 + smoke 6 + visual-baseline 7）。
