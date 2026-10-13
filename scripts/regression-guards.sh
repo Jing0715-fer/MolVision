@@ -1781,6 +1781,54 @@ check "面板恢复toast锚EN"         'Previous session restored' "src/componen
 # ⑦诚实降级锚（resumeGone state + 门控 + 失败分支 = 3；删则失效存档入口常驻）
 check "面板恢复降级锚"            'resumeGone' "src/components/studio/CommandPalette.tsx" 3
 
+# ---- r121-a：g1-lib.sh E2E 驱动标准库（r120 建议①②制度化收口） ----
+# 历史驱动散写 eval/断言三教训制度化：click→wait-toast→状态断言三步固化 +
+# 纯字符串前缀协议（JSON 转义层坑的制度化拦截——探针返回 JSON 当场判违规，
+# 不是「永不匹配」之后排查）。
+# ①标准库函数族锚（五个函数签名 = 5；删任一则 source 后命令族断供）
+check "g1lib函数族锚"             'g1_strip\(\)|g1_eval\(\)|g1_wait_state\(\)|g1_click_toast\(\)|g1_fail\(\)' ".zscripts/g1-lib.sh" 5
+# ②协议违规拦截锚（PROTOCOL-VIOLATION 判定 + 诊断文案 = 2；删则 JSON 探针回退静默失配）
+check "g1lib协议拦截锚"           'PROTOCOL-VIOLATION' ".zscripts/g1-lib.sh" 2
+# ③纯字符串协议注册表锚（制度化载体本体 = 1；删则未来新工具无前缀登记处）
+check "g1lib协议注册表锚"         '纯字符串协议注册表' ".zscripts/g1-lib.sh" 1
+# ④标准三步锚（click → 立即 wait-toast → 退出码透传 = 2；删则回退「先 sleep 再查」观察窗错位）
+check "g1lib三步固化锚"           'wait-toast\.sh.*\$pattern|g1_click_toast 触发步' ".zscripts/g1-lib.sh" 2
+# ⑤管线故障哨兵锚（G1_PIPE_EMPTY 连续空返回计数 = 3；删则 daemon 掉线假报断言失配）
+check "g1lib管线哨兵锚"           'G1_PIPE_EMPTY' ".zscripts/g1-lib.sh" 3
+
+# ---- r121-c：疏水性 Kyte-Doolittle 着色方案（色系第 10 命名空间） ----
+# PyMOL/ChimeraX 标配能力补位：残基级 KD 疏水梯度（亲水青 −4.5 Arg → 疏水琥珀
+# +4.5 Ile）只染碳、杂原子保元素色（项目「杂原子醒目可辨」纪律）；图例卡 + 命令
+# 别名族 + 面板色卡 + mock 模板全链。
+# ①KD 标度表锚（表定义 + hydropathy 函数引用 = 2；删则全部残基退化元素色）
+check "KD标度表锚"                'KYTE_DOOLITTLE' "src/lib/molecular/chemistry.ts" 2
+# ②标度界锚（KD_MIN/KD_MAX 归一化界 + 图例刻度 = 2；删则 t 值计算 NaN）
+check "KD标度界锚"                'KD_MIN|KD_MAX' "src/lib/molecular/chemistry.ts" 2
+# ③hydropathy 函数锚（导出函数 + null 兜底 = 2；删则表外残基误染）
+check "KD取值函数锚"              'export function hydropathy' "src/lib/molecular/chemistry.ts" 1
+# ④方案分支锚（computeAtomColors 分支 + 类型联合 = 2；删则 color kd 退化元素色）
+check "疏水方案分支锚"            "'hydrophobicity'" "src/lib/molecular/colors.ts" 2
+# ⑤渐变停靠点锚（导出 + hydroColor 引用 = 4；删则图例与着色脱同步）
+check "疏水渐变锚"                'HYDRO_STOPS' "src/lib/molecular/colors.ts" 4
+# ⑥两段插值锚（低中/中高双 lerp = 2；删则中点硬切）
+check "疏水插值锚"                'hydroMidColor' "src/lib/molecular/colors.ts" 2
+# ⑦命令别名族锚（hydrophobicity/hydropathy/hydrophobic/kd/byhydrophobicity 五别名 = 2+；删则 ChimeraX 风格不可达）
+check "疏水命令别名锚"            "hydrophobicity: 'hydrophobicity'|kd: 'hydrophobicity'" "src/lib/molecular/commands.ts" 2
+# ⑧回执统计锚（残基构成三类计数 = 2；删则「有数说话」口径回退）
+check "疏水回执统计锚"            '残基构成' "src/lib/molecular/commands.ts" 2
+# ⑨store 方案表锚（schemes 数组含 hydrophobicity = 1；删则 applyColor 不识别退 css 解析失败）
+check "疏水store表锚"             "'hydrophobicity', 'uniform'" "src/lib/molecular/store.ts" 1
+# ⑩RepsPanel 下拉锚（SCHEMES 数组 = 1；删则 rep 级方案选择不可达）
+check "疏水面板下拉锚"            "'hydrophobicity', 'sasa'" "src/components/studio/panels/RepsPanel.tsx" 1
+# ⑪ColorsPanel 色卡锚（方案入口 + 五阶色卡 = 2；删则点选入口缺失）
+check "疏水面板色卡锚"            "key: 'hydrophobicity'" "src/components/studio/panels/ColorsPanel.tsx" 1
+# ⑫图例卡锚（kind 判定 + HYDRO_STOPS import + 刻度文案 = 3+；删则着色无标尺）
+check "疏水图例卡锚"              'hydrophobicity' "src/components/studio/ColorLegend.tsx" 3
+# ⑬图例刻度锚（左端 −4.5 Arg 行 + 右端 +4.5 hydrophobic 行 = 2；删则用户无法读梯度方向）
+check "疏水图例刻度锚"            '−4\.5 \(Arg\)|\+4\.5 hydrophobic' "src/components/studio/ColorLegend.tsx" 2
+# ⑭mock 模板锚（color kd 命令族 = 3；删则 E2E 疏水请求被泛色词模板吞掉）
+check "疏水mock模板锚"            'color kd' "mini-services/mock-llm/index.ts" 3
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

@@ -1,11 +1,11 @@
-// 颜色方案：element(CPK) / chain / spectrum / residue / ss / bfactor / sasa / uniform
+// 颜色方案：element(CPK) / chain / spectrum / residue / ss / bfactor / sasa / hydrophobicity / uniform
 import * as THREE from 'three'
-import { elementInfo, residueClass, type ResidueClass } from './chemistry'
+import { elementInfo, residueClass, hydropathy, KD_MIN, KD_MAX, type ResidueClass } from './chemistry'
 import type { StructureData } from './parser'
 import { maxAtomSasa } from './sasa'
 import type { DualText } from '@/i18n'
 
-export type ColorScheme = 'element' | 'chain' | 'spectrum' | 'residue' | 'ss' | 'bfactor' | 'sasa' | 'uniform' | 'pocket'
+export type ColorScheme = 'element' | 'chain' | 'spectrum' | 'residue' | 'ss' | 'bfactor' | 'sasa' | 'hydrophobicity' | 'uniform' | 'pocket'
 
 export const COLOR_SCHEME_LABELS: Record<ColorScheme, DualText> = {
   element: { zh: '元素 (CPK)', en: 'Element (CPK)' },
@@ -15,6 +15,7 @@ export const COLOR_SCHEME_LABELS: Record<ColorScheme, DualText> = {
   ss: { zh: '二级结构', en: 'Secondary structure' },
   bfactor: { zh: 'B 因子', en: 'B-factor' },
   sasa: { zh: '溶剂可及 (SASA)', en: 'Solvent accessibility (SASA)' },
+  hydrophobicity: { zh: '疏水性 (Kyte-Doolittle)', en: 'Hydrophobicity (Kyte-Doolittle)' },
   uniform: { zh: '统一颜色', en: 'Uniform color' },
   pocket: { zh: '口袋 (配体距离)', en: 'Pocket (ligand distance)' },
 }
@@ -73,6 +74,13 @@ export const SASA_STOPS: [number, string][] = [
  *  距离渐变只染碳原子，杂原子永远按元素色醒目可辨（PyMOL 出版图惯例） */
 export const POCKET_STOPS: [number, string][] = [
   [0.0, '#a02fd0'], [0.5, '#c76fdd'], [1.0, '#f4b6e4'],
+]
+
+/** 疏水性渐变停靠点（0 亲水青 → 0.5 中性沙 → 1 疏水琥珀）——图例卡与着色共用。
+ *  r121-c：色相递进刻意避开 B 因子/SASA 的蓝→红主轴（同为「属性渐变」家族时
+ *  图例并置仍可分辨）；中间停靠点取沙色而非纯白——低饱和底色上仍可见梯度带 */
+export const HYDRO_STOPS: [number, string][] = [
+  [0.0, '#177e91'], [0.5, '#ded8c2'], [1.0, '#d97e04'],
 ]
 
 /** 口袋方案里配体碳的专属色（鲜绿）——与距离渐变紫粉、杂原子黄蓝红、铁锈橙全部拉开 */
@@ -165,6 +173,18 @@ const pocketFarColor = new THREE.Color(POCKET_STOPS[POCKET_STOPS.length - 1][1])
 function pocketDistColor(d: number, out: THREE.Color): THREE.Color {
   const t = Math.max(0, Math.min(1, (d - POCKET_D_NEAR) / (POCKET_D_FAR - POCKET_D_NEAR)))
   return out.copy(pocketNearColor).lerp(pocketFarColor, t)
+}
+
+/** KD 疏水值 → 渐变色（-4.5 青青 → 0 沙 → +4.5 琥珀，两段线性插值——
+ *  三停靠点 4 段插值的精简版，与 BFACTOR_STOPS 多段 lerp 同族） */
+const hydroLowColor = new THREE.Color(HYDRO_STOPS[0][1])
+const hydroMidColor = new THREE.Color(HYDRO_STOPS[1][1])
+const hydroHighColor = new THREE.Color(HYDRO_STOPS[2][1])
+function hydroColor(kd: number, out: THREE.Color): THREE.Color {
+  const t = Math.max(0, Math.min(1, (kd - KD_MIN) / (KD_MAX - KD_MIN)))
+  return t < 0.5
+    ? out.copy(hydroLowColor).lerp(hydroMidColor, t * 2)
+    : out.copy(hydroMidColor).lerp(hydroHighColor, (t - 0.5) * 2)
 }
 
 /** 计算整个结构的逐原子颜色（rgb Float32Array，线性空间） */
@@ -303,6 +323,33 @@ export function computeAtomColors(
     for (let i = 0; i < n; i++) {
       const c = sasa ? sasaExposureColor(sasa[i], atoms.elements[i], 1.4) : fallback
       out[i * 3] = c.r; out[i * 3 + 1] = c.g; out[i * 3 + 2] = c.b
+    }
+    return out
+  }
+
+  if (scheme === 'hydrophobicity') {
+    // r121-c 疏水性（Kyte-Doolittle 1982）着色：
+    //  · 聚合物标准氨基酸残基：碳 = 残基 KD 值的青(亲水 -4.5 Arg)→沙(0)→琥珀(+4.5 Ile)
+    //    三段渐变（残基级统一色——读作完整氨基酸，与口袋方案同构）
+    //  · 杂原子一律元素色（N 蓝/O 红/S 黄——渐变只染碳，项目「杂原子醒目可辨」纪律）
+    //  · 核酸/配体/水/修饰残基（KD 表无值）：整体退化为元素色
+    const elemCache = new Map<string, THREE.Color>()
+    const resCache = new Map<number, THREE.Color>()
+    for (let i = 0; i < n; i++) {
+      const el = atoms.elements[i]
+      const ri = structure.atomResidue[i]
+      const kd = structure.residues[ri]?.polymer ? hydropathy(atoms.resNames[i]) : null
+      let col: THREE.Color
+      if (kd != null && el === 'C') {
+        let rc = resCache.get(ri)
+        if (!rc) { rc = hydroColor(kd, new THREE.Color()); resCache.set(ri, rc) }
+        col = rc
+      } else {
+        let e = elemCache.get(el)
+        if (!e) { e = new THREE.Color(elementInfo(el).color); elemCache.set(el, e) }
+        col = e
+      }
+      out[i * 3] = col.r; out[i * 3 + 1] = col.g; out[i * 3 + 2] = col.b
     }
     return out
   }

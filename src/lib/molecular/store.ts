@@ -511,7 +511,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
       ? new Set(s.selection.indices)
       : null // null = 全结构
     // 目标可能是 scheme 名或 css 颜色
-    const schemes: ColorScheme[] = ['element', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'sasa', 'uniform', 'pocket']
+    const schemes: ColorScheme[] = ['element', 'chain', 'spectrum', 'residue', 'ss', 'bfactor', 'sasa', 'hydrophobicity', 'uniform', 'pocket']
     const isScheme = schemes.includes(target as ColorScheme)
     // —— r99-f1 E：无选择域的整体改色改写 reps 配色，不再逐原子烘焙 ——
     // 旧版 25k 原子结构 `color red` 烘焙 25k 条 colorOverrides（~10-20MB Record）：

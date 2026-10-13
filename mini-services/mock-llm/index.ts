@@ -686,6 +686,16 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
       ['color sasa'])
   }
 
+  // 7.5 r121-c 疏水性着色（先于颜色类：「疏水着色」不可落到链染色；也须先于 SASA
+  //     之外的泛色词——「疏水」不含色词不冲突，但「疏水性蓝色」会被色词吞，故置于 8 前）。
+  //     真实语法：color kd（Kyte-Doolittle 残基疏水梯度：亲水青 −4.5 → 疏水琥珀 +4.5，碳渐变）
+  if (/疏水|hydrophob|\bkd\b|hydropath|亲水/.test(t)) {
+    return dec(zh,
+      '已按 Kyte-Doolittle 疏水性着色（color kd：亲水青 −4.5 Arg → 疏水琥珀 +4.5 Ile，残基级碳渐变，杂原子保元素色）——表面化学语境的疏水斑块一眼可辨。',
+      'Colored by Kyte-Doolittle hydropathy (color kd: hydrophilic teal −4.5 Arg → hydrophobic amber +4.5 Ile, residue-level carbon gradient; heteroatoms keep element colors) — hydrophobic patches stand out instantly in surface-chemistry context.',
+      ['color kd'])
+  }
+
   // 8. 链染色（r64-b 既有模板升级双语）：显式上色动词，或消息本身就带颜色词（如「B 链蓝色」）
   const colorHit = COLOR_WORDS.find(([re]) => re.test(t))
   if (/颜色|染色|染[成为红蓝绿黄黑白灰橙紫青]|上色|\bcolou?r\b/.test(t) || colorHit) {

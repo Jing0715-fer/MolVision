@@ -5,6 +5,7 @@ import { FIGURE_TEMPLATES, runTemplateCommands, adaptTemplateCommands, logAdaptN
 import { saveSession, clearSession, sessionInfo, exportSessionFile, newSession } from './session'
 import { buildShareLink } from './share-link'
 import { parseCssColor, COLOR_SCHEME_LABELS, type ColorScheme } from './colors'
+import { hydropathy } from './chemistry'
 import { REP_LABELS, type RepType } from './types'
 import { useEnsembleStore } from './ensemble-store'
 import { useRecordStore } from './record-store'
@@ -75,6 +76,10 @@ const SCHEME_ALIASES: Record<string, ColorScheme> = {
   ss: 'ss', secondary: 'ss', secstr: 'ss',
   bfactor: 'bfactor', b: 'bfactor', temp: 'bfactor',
   sasa: 'sasa', sas: 'sasa', accessibility: 'sasa',
+  // r121-c：疏水性（Kyte-Doolittle）——hydrophobicity/hydropathy 全称、hydrophobic/kd 短名、
+  // ChimeraX byX 双词风格兼容（byelement/bychain 同族）
+  hydrophobicity: 'hydrophobicity', hydropathy: 'hydrophobicity', hydrophobic: 'hydrophobicity',
+  kd: 'hydrophobicity', byhydrophobicity: 'hydrophobicity',
   uniform: 'uniform',
   pocket: 'pocket', liganddist: 'pocket',
 }
@@ -125,7 +130,7 @@ export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; exampl
   { cmd: 'alter (选择), 属性=值', cmdEn: 'alter (selection), property=value', desc: { zh: '修改原子属性（b/q/name）', en: 'Modify atom properties (b/q/name)' }, example: 'alter (resi 100-110), b=b+10' },
   { cmd: 'show <rep> [sel]', desc: { zh: '添加表示法（逗号/空格分隔皆可）', en: 'Add a representation (comma or space separated)' }, example: 'show ballstick, ligand · show cartoon protein' },
   { cmd: 'hide <rep> [sel]', desc: { zh: '移除匹配的表示法', en: 'Remove matching representations' }, example: 'hide lines' },
-  { cmd: 'color <方案|颜色> [sel]', cmdEn: 'color <scheme|color> [sel]', desc: { zh: '给选择上色（pocket=配体距离渐变）', en: 'Color a selection (pocket = ligand-distance gradient)' }, example: 'color red chain A · color pocket' },
+  { cmd: 'color <方案|颜色> [sel]', cmdEn: 'color <scheme|color> [sel]', desc: { zh: '给选择上色（pocket=配体距离渐变 · hydrophobicity=KD 疏水梯度）', en: 'Color a selection (pocket = ligand-distance gradient · hydrophobicity = KD hydropathy ramp)' }, example: 'color red chain A · color pocket · color kd' },
   { cmd: 'util cbc|cnc|ss|cbss|cbao|cbaw', desc: { zh: '实用着色（链/灰/SS卡通/元素+AO/元素+白碳）', en: 'Utility coloring (by-chain / gray / SS cartoon / element+AO / element+white-C)' }, example: 'util cbc · util cbss' },
   { cmd: 'set <项> <值>', cmdEn: 'set <setting> <value>', desc: { zh: '渲染设置（灯光/fov/质量/过渡手感 transition…）', en: 'Render settings (lighting / fov / quality / transition feel…)' }, example: 'set ambient 0.5 · set transition cinematic' },
   { cmd: 'bg <颜色>', cmdEn: 'bg <color>', desc: { zh: '设置背景色', en: 'Set background color' }, example: 'bg black' },
@@ -726,7 +731,30 @@ export function runCommand(raw: string): void {
     }
     s.applyColor(scheme ?? css!)
     restoreSelection(prevSel)
-    ok(tt({ zh: `已上色: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}`, en: `Colored: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}` }))
+    // r121-c：疏水性回执附残基构成统计（同族方案 sasa 的「有数说话」口径——
+    // 疏水 KD>0 / 亲水 KD<0 / 表外(核酸配体等)三类计数，图例刻度方向一并提示）
+    let hydroNote = ''
+    if (scheme === 'hydrophobicity') {
+      const data = dataRegistry.get(s.activeId)
+      if (data) {
+        let nPhob = 0, nPhil = 0, nOther = 0
+        const seen = new Set<number>()
+        for (let i = 0; i < data.atoms.count; i++) {
+          const ri = data.atomResidue[i]
+          if (seen.has(ri)) continue
+          seen.add(ri)
+          const kd = data.residues[ri]?.polymer ? hydropathy(data.atoms.resNames[i]) : null
+          if (kd == null) nOther++
+          else if (kd > 0) nPhob++
+          else nPhil++
+        }
+        hydroNote = tt({
+          zh: `——亲水青 −4.5 → 疏水琥珀 +4.5（碳渐变，杂原子保元素色）；残基构成：疏水 ${nPhob} · 亲水 ${nPhil} · 表外 ${nOther}（核酸/配体/水）`,
+          en: ` — hydrophilic teal −4.5 → hydrophobic amber +4.5 (carbons gradient; heteroatoms keep element colors); residues: ${nPhob} hydrophobic · ${nPhil} hydrophilic · ${nOther} off-scale (nucleic/ligands/water)`,
+        })
+      }
+    }
+    ok(tt({ zh: `已上色: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}${hydroNote}`, en: `Colored: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}${hydroNote}` }))
     return
   }
 

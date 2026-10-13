@@ -177,6 +177,26 @@ export const AA_ONE_LETTER: Record<string, string> = {
   MSE: 'M', SEC: 'U', PYL: 'O', UNK: 'X',
 }
 
+// ---------- Kyte-Doolittle 疏水标度（r121-c） ----------
+
+/** Kyte-Doolittle 疏水标度（J Mol Biol 1982, 157:105-132）：正 = 疏水，负 = 亲水。
+ *  MSE（硒代蛋氨酸）按 MET 同值处理（结构生物学惯例——大肠杆菌表达体系常见） */
+export const KYTE_DOOLITTLE: Record<string, number> = {
+  ALA: 1.8, ARG: -4.5, ASN: -3.5, ASP: -3.5, CYS: 2.5, GLN: -3.5, GLU: -3.5,
+  GLY: -0.4, HIS: -3.2, ILE: 4.5, LEU: 3.8, LYS: -3.9, MET: 1.9, PHE: 2.8,
+  PRO: -1.6, SER: -0.8, THR: -0.7, TRP: -0.9, TYR: -1.3, VAL: 4.2,
+  MSE: 1.9,
+}
+
+/** KD 标度界：ARG -4.5（最亲水）/ ILE +4.5（最疏水）——归一化与图例刻度共用 */
+export const KD_MIN = -4.5
+export const KD_MAX = 4.5
+
+/** 残基 Kyte-Doolittle 疏水值（标准 20 氨基酸 + MSE；其余——核酸/配体/水/修饰——null） */
+export function hydropathy(resName: string): number | null {
+  return KYTE_DOOLITTLE[resName.toUpperCase()] ?? null
+}
+
 export const NA_ONE_LETTER: Record<string, string> = {
   A: 'A', DA: 'A', ADE: 'A', AMP: 'A', RA: 'A',
   C: 'C', DC: 'C', CYT: 'C', CMP: 'C', RC: 'C',

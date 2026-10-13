@@ -1,14 +1,15 @@
 'use client'
 
-// 颜色标尺图例（视口左下角浮层）：B 因子/putty 渐变条 + 管径映射；SASA 暴露度条
-// 出现条件：活动结构存在可见 putty 表示法、或 bfactor/sasa 配色的可见表示法
+// 颜色标尺图例（视口左下角浮层）：B 因子/putty 渐变条 + 管径映射；SASA 暴露度条；
+// 疏水性 KD 条（r121-c）
+// 出现条件：活动结构存在可见 putty 表示法、或 bfactor/hydrophobicity/sasa 配色的可见表示法
 import { useMemo } from 'react'
 import { useMolStore, dataRegistry } from '@/lib/molecular/store'
 import { useI18n } from '@/i18n'
-import { BFACTOR_STOPS, SASA_STOPS, stopsToGradient } from '@/lib/molecular/colors'
+import { BFACTOR_STOPS, SASA_STOPS, HYDRO_STOPS, stopsToGradient } from '@/lib/molecular/colors'
 import type { RepConfig } from '@/lib/molecular/types'
 
-type LegendKind = 'putty' | 'bfactor' | 'sasa'
+type LegendKind = 'putty' | 'bfactor' | 'hydrophobicity' | 'sasa'
 
 /** putty 管径 SVG 路径：与 representations.ts 同映射 r = rMin + (rMax−rMin)·sqrt(t)，
  *  半高按 (r−rMin)/(rMax−rMin) = sqrt(t) 归一化到 1.1..5.5px（viewBox 高 12） */
@@ -40,10 +41,11 @@ export function ColorLegend() {
 
   const legend = useMemo(() => {
     if (!st) return null
-    // 优先级：putty（管径+颜色双映射）> bfactor > sasa（需已有 SASA 数据）
+    // 优先级：putty（管径+颜色双映射）> bfactor > hydrophobicity > sasa（需已有 SASA 数据）
     const visible = st.reps.filter((r: RepConfig) => r.visible)
     const puttyRep = visible.find(r => r.type === 'putty')
     const bfactorRep = visible.find(r => r.colorScheme === 'bfactor')
+    const hydroRep = visible.find(r => r.colorScheme === 'hydrophobicity')
     const sasaRep = visible.find(r => r.colorScheme === 'sasa')
     const data = dataRegistry.get(st.id)
 
@@ -51,12 +53,15 @@ export function ColorLegend() {
     let rep: RepConfig | null = null
     if (puttyRep) { kind = 'putty'; rep = puttyRep }
     else if (bfactorRep) { kind = 'bfactor'; rep = bfactorRep }
+    // r121-c：疏水性固定标度（KD -4.5..+4.5）——无逐结构数据依赖，静态图例即可
+    else if (hydroRep) { kind = 'hydrophobicity'; rep = hydroRep }
     else if (sasaRep && data?.sasa) { kind = 'sasa'; rep = sasaRep }
     if (!kind || !rep) return null
 
-    // B 范围（着色用全原子；putty 管径用 CA + puttyRange 钳制）
+    // B 范围（着色用全原子；putty 管径用 CA + puttyRange 钳制）——
+    // hydrophobicity 用固定 KD 标度，无逐结构 B 范围需求
     let bRange: { min: number; max: number; cap?: number } | null = null
-    if (kind !== 'sasa' && data) {
+    if ((kind === 'putty' || kind === 'bfactor') && data) {
       let min = Infinity, max = -Infinity
       const b = data.atoms.bfactors
       const n = data.atoms.count
@@ -84,7 +89,11 @@ export function ColorLegend() {
     >
       <div className="mb-1 flex items-center justify-between">
         <span className="text-[10px] font-semibold tracking-wide text-foreground/80">
-          {kind === 'sasa' ? t({ zh: 'SASA 暴露度', en: 'SASA exposure' }) : t({ zh: 'B 因子 (Å²)', en: 'B-factor (Å²)' })}
+          {kind === 'sasa'
+            ? t({ zh: 'SASA 暴露度', en: 'SASA exposure' })
+            : kind === 'hydrophobicity'
+              ? t({ zh: '疏水性 (KD)', en: 'Hydrophobicity (KD)' })
+              : t({ zh: 'B 因子 (Å²)', en: 'B-factor (Å²)' })}
         </span>
         {kind === 'putty' && (
           <span className="text-[9px] text-muted-foreground/80">{t({ zh: 'putty 管径', en: 'putty tube radius' })}</span>
@@ -94,14 +103,20 @@ export function ColorLegend() {
       {/* 渐变条 */}
       <div
         className="h-2.5 w-full rounded-[3px] border border-border/50"
-        style={{ background: stopsToGradient(kind === 'sasa' ? SASA_STOPS : BFACTOR_STOPS) }}
+        style={{ background: stopsToGradient(kind === 'sasa' ? SASA_STOPS : kind === 'hydrophobicity' ? HYDRO_STOPS : BFACTOR_STOPS) }}
       />
 
       {/* 数值刻度 */}
       <div className="mt-0.5 flex items-baseline justify-between font-mono text-[9px] leading-none text-muted-foreground">
         {kind === 'sasa'
           ? <><span>{t({ zh: '埋藏 0%', en: 'buried 0%' })}</span><span className="text-[8px]">{t({ zh: '暴露分数', en: 'exposure' })}</span><span>{t({ zh: '100% 暴露', en: '100% exposed' })}</span></>
-          : <>
+          : kind === 'hydrophobicity'
+            ? <>
+              <span>{t({ zh: '亲水 −4.5 (Arg)', en: 'hydrophilic −4.5 (Arg)' })}</span>
+              <span className="text-[8px]">KD</span>
+              <span>{t({ zh: '+4.5 疏水 (Ile)', en: '+4.5 hydrophobic (Ile)' })}</span>
+            </>
+            : <>
             <span>{bRange ? bRange.min.toFixed(1) : '—'}</span>
             <span>{bRange ? ((bRange.min + (bRange.cap ?? bRange.max)) / 2).toFixed(0) : ''}</span>
             <span>
