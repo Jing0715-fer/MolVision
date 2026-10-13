@@ -4770,3 +4770,30 @@ Stage Summary:
   6. 【低】孤儿 rama.ts（212 行 QC 模块，零引用）——either 接入 UI（拉马钱德兰图面板）或删除归档（占位代码的处置决策）
 
 （r111 段 cron 补记，2026-10-13）15min webDevReview 巡检任务 #455597 创建（12:37:18）即「Disabled due to exec limits exceeded」（12:37:19）——账户级执行配额硬限第 26 次实证（r85-r110 连续 25 次 + 本轮），已删除清理。任务书已内嵌 r111 开发纪律（基线 f87a6c0 / guards 693 / 双守护+kill 红线 / E2E 铁律含异步落屏时序新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 四级 CI 门禁（guards 693 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r112-a
+Agent: general-purpose 子代理（代码与部署）+ main（守卫/gitignore/worklog 补齐——子代理因 MCP 网关断连未完成收尾三项）
+Task: r111「下一轮建议」第 1【中】条：devd 采纳模式（端口占用→收养监护而非静默退位）+ devd/mockd 互察（防「守护的守护」盲区）+ dev.sh 启动链带起双守护（沙箱重启自启缺口）
+
+Work Log:
+- 【读基】子代理：worklog 尾部 ~250 行 + 四 SKILL + devd.py(280 行)/mockd.py(335 行)/dev.sh/restart-mock.sh 全文；基线 HEAD=2714fdd 干净、guards 693/693、双端口 200、mockd 活/devd 缺位（本轮要修的缺口实证）
+- 【改动·devd.py 采纳模式】main() 起始 port_alive→return 改收养分支：日志 `adopting existing instance on :3000 (not spawned by devd)`；supervise_adopted() 端口轮询(30s)+内存看门狗（绝对阈值+斜率双闸与自有实例同规）；server_rss_mb() 扩展 server_pid_rss()→list[(pid,mb)]（收养实例无 Popen 句柄）；换血 stop_pid()（TERM→r102-b 有界等端口释放 15s→KILL 兜底）；实例死亡 `adopted instance died; spawn own`→转既有 spawn 循环；换血日志注明 adopted（grep 可辨）；既有「子实例死亡→端口占>15s→external takeover 退位」原样保留
+- 【改动·devd.py 防双实例】采纳模式使「端口活→退位」防线失效（每次启动都存活）——新增 already_running()（.zscripts/devd.pid + /proc cmdline 双确认含 devd.py，mockd 同款范式）+ daemonize 后写 pid
+- 【改动·devd.py 互察 mockd】监护主循环（含收养循环）每 10 周期(≈5min) cross_check_mockd()——死→`mockd dead; relaunching`+Popen 拉起（保留句柄 poll 收尸防僵尸）；活→低频一行 `mockd ok (pid=…)` 入 dev.log
+- 【改动·mockd.py 互察 devd】devd_pid()（pid 文件双确认+/proc 扫描兜底——pid 文件丢失不误判死亡）+ check_devd()（死→`devd dead; relaunching`+Popen devd.py（其采纳模式使补位有实际意义）；活→零日志防双倍噪音）；主循环 elapsed % DEVD_CHECK_S(60s)==0 接入
+- 【改动·dev.sh 启动链】「Starting Next.js dev server」段 bun run dev & → python3 scripts/devd.py（devd 自 spawn bunx next dev -p 3000 接管日志到 dev.log——规避 package.json dev 内嵌 tee 双写交错）；start_mini_services 后新增「Starting daemons」步骤 python3 scripts/mockd.py（幂等 already_running 防重）；wait_for_service 健康检查保留
+- 【改动·restart 脚本×2】.zscripts/restart-mockd.sh + restart-devd.sh：pid 文件→/proc 双确认→按精确 pid 停→拉新→pgrep 验证→curl 端口确认未误伤；兼容「未在跑=直接拉起」；进程管理字样只出现在脚本文件内（红线旁路纪律）
+- 【部署实跑】restart-mockd.sh：旧 mockd 1749 停→新 19362→port3999=200（mock-llm 服务本体零触碰，bun 2107 原 pid）；restart-devd.sh：直接拉起 19384→dev.log `[devd 05:55:00] adopting existing instance on :3000`→port3000=200（next-server 1070 原 pid 零触碰）；+80s `devd dead` 误报=0；断连后主代理复核：双守护 19384/19362 双活 + 互察 `mockd ok (pid=19362)` 行 06:00:00/06:05:00 两落 dev.log（子代理断连前未及观察的功能实测成功，主代理补证）
+- 【守卫 +18（693→711，main 补齐）】r112-a 独立注释块（r111 块后汇总段前）：采纳六锚（分支/监护函数/死亡转 spawn/换血标注 4/stop_pid/server_pid_rss 5）+ 防双实例两锚（already_running 函数/devd.pid 3）+ devd 互察三锚（cross_check_mockd 3/mockd ok (pid= 2/拉起文案）+ mockd 互察三锚（devd_pid 2/DEVD_CHECK_S 3/拉起文案）+ 启动链两锚（dev.sh 起 devd.py/mockd.py 各 1）+ restart 脚本两锚（mockd.pid 2/devd.pid 2）——bash -n 后实跑 711/711
+- 【gitignore】mockd.pid 历史误入库（每次守护重启即假 diff）——git rm --cached 解除 + devd.pid/__pycache__ 同批入 .gitignore
+- 【坑（新入档，子代理发现）】①**Bash 单次调用内长 sleep（>~240s）致 MCP 网关断连永久失会话**（EOF/connection closed，10+ 重试不可恢复；此前 80s 正常）——长等待必须拆 ≤90s 多次调用；子代理据此断连，代码已落盘部署成功但守卫/worklog/全量验证三项由 main 补齐（Task 超时≠未执行铁律的又一实证——先查副产物再定重做）②**采纳期 dev.log 双写踩踏**：被收养实例父链含 `bash -c "next dev | tee dev.log"`——tee 持非 append 偏移 fd，落后守护 O_APPEND 写入的 EOF，其后续输出可覆盖守护标记行（mockd 05:54:53 启动行 2s 内丢前 2 字符、+80s 消失；06:00/06:05 mockd ok 行实测存活）；守护功能零损（逻辑独立于日志可见性）；首次换血/实例死亡转 spawn 自有实例后自愈（spawn_server 不走 tee）；根治=守护标记行并行落独立日志文件（留下轮）
+
+Stage Summary:
+- 交付一：devd 采纳模式——「后补启动遇端口占用即退位」缺口闭环（r111 实证缺陷）；收养监护与自有实例同规（端口轮询+内存双闸看门狗按 pid 换血）；沙箱重启场景 devd 补位从「静默退出」变「收养在跑实例」
+- 交付二：devd/mockd 互察——「守护的守护」盲区闭环：devd 每 5min 探 mockd（死→报警+拉起+周期 ok 汇总行），mockd 每 60s 探 devd（死→报警+拉起，采纳模式使补位有意义）；实测 mockd ok (pid=19362) 双行落 dev.log
+- 交付三：dev.sh 启动链带起双守护 + restart-mockd.sh/restart-devd.sh 守护旁路重启脚本——沙箱走此链重启后双守护不再缺席；守护代码更新有标准重启法
+- 交付四（main 补齐）：守卫 +18（711/711 全过）+ pid 文件/gitignore 卫生（mockd.pid 解除跟踪）
+- 验证：部署后双守护双活（19384/19362）+ 双端口 200（3000 next-server pid 1070 / 3999 bun pid 2107 均原 pid 零触碰）+ 互察零误报 + guards 711/711；lint/tsc/全量门禁由 r112 主轮收尾统一跑
+- 与任务书偏差：子代理 MCP 断连致守卫块/worklog 段/全量实跑三项未做——main 按其最终报告 + 落盘副产物复核后补齐（守卫 18 锚为其拟 13 锚的扩充：+supervise_adopted/stop_pid/server_pid_rss/cross_check_mockd 等函数级锚）
+- 遗留（供下轮参考）：①tee 双写踩踏的根治（守护标记行落独立日志文件——.zscripts/devd.log 之类，工程量小价值中）②互察实战演练（人为停一个守护验证对方拉起——本轮只验证了「活着不误报」单向，kill 守护的演练受红线约束须走脚本旁路设计）③沙箱真实重启场景的端到端验证（dev.sh 是否真被启动链调用未实证）

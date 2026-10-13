@@ -23,12 +23,19 @@
      mini-services/mock-llm/index.ts 的 mtime：变更即立即 L2 探针（留 1s 热重载
      完成宽限）；失败再等 3s 复验一次（热重载可能仍在途）；仍失败才重启——
      mid-write 热重载损坏的自愈从「L2 周期发现」的 ~2min15s 缩到 ~5s（r110 两次
-     实战自愈的响应加速；正常编辑 L2 通过零动作只记日志，不误杀）。
+     实战自愈的响应加速；正常编辑 L2 通过零动作只记日志，不误杀）；
+  5) r112-a 互察 devd——主循环每 60s 检查 devd 存活（.zscripts/devd.pid +
+     /proc cmdline 双确认，pid 文件缺失/失效时回退 /proc 扫描）：死亡则日志
+     报警 + Popen 拉起 devd.py（其采纳模式使这次拉起有实际意义——收养运行中
+     的 dev server，零中断）；存活不打扰（devd 侧已有 mockd ok 低频汇总行，
+     此处零日志防双倍噪音）——「守护的守护」盲区（r110/r111 建议②）闭环。
 
 与 devd.py 的关系：独立守护而非 devd 增分支（对 r109 建议①的实现路径修正）——
   替换运行中的 devd 必须中断 dev server（守护链整体重启），独立进程零中断部署；
   职责分离（devd 管 next dev :3000，mockd 管 mock-llm :3999），double-fork
-  范式与 devd.py 同源。
+  范式与 devd.py 同源；r112-a 起两守护互察（devd 每 ≈5min 查 mockd 并低频
+  汇总，mockd 每 60s 查 devd 只在死亡事件打点——频率不对称因 mockd 主循环
+  本就是 1s 粒度，60s 检查零额外成本）。
 
 用法：python3 scripts/mockd.py   （前台父进程立即退出，守护转入后台）
 日志：/home/z/my-project/dev.log（[mockd HH:MM:SS] 标记行——与 [devd] 前缀区分）
@@ -63,6 +70,12 @@ BACKOFF_S = 1800      # 窗内达上限后的退避时长（30 分钟）
 WATCH_TICK_S = 1      # r111-a：主循环粒度（源码 mtime 检测分辨率）
 HOT_RELOAD_GRACE_S = 1.0  # r111-a：检测到变更后留给 bun --hot 完成热重载的宽限
 EDIT_RETRY_S = 3.0    # r111-a：变更后首验失败到复验的间隔（热重载仍在途的窗口）
+# r112-a 互察 devd：devd 的 pid 文件（读 pid + /proc cmdline 双确认；pid 文件
+# 缺失/失效时回退 /proc 扫描——pid 文件丢失不能误判「devd 死亡」触发拉起）
+DEVD_PID_FILE = os.path.join(PROJECT, ".zscripts", "devd.pid")
+# r112-a 互察周期：主循环 1s 粒度下每 60s 查一次 devd 存活（devd 死亡 ≤60s
+# 内发现并拉起；存活零动作零日志——防与 devd 侧 mockd ok 行双倍噪音）
+DEVD_CHECK_S = 60
 
 
 def stamp() -> str:
@@ -258,6 +271,70 @@ def already_running() -> bool:
         return False
 
 
+def devd_pid() -> int | None:
+    """r112-a 互察：查 devd 的 pid（pid 文件 + /proc cmdline 双确认优先，
+    pid 文件缺失/失效时回退 /proc 扫描；None = 不在跑）。
+
+    兜底理由与 mockd_pid 对称：pid 文件丢失不能误判「devd 死亡」——
+    /proc cmdline 扫描是第二道事实源（devd 若真在跑必能扫到）。"""
+    try:
+        with open(DEVD_PID_FILE) as f:
+            pid = int(f.read().strip())
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            cmd = f.read().replace(b"\0", b" ").decode("utf-8", "replace")
+        if "devd.py" in cmd:
+            return pid
+    except (OSError, ValueError):
+        pass
+    try:
+        for d in os.listdir("/proc"):
+            if not d.isdigit():
+                continue
+            try:
+                with open(f"/proc/{d}/cmdline", "rb") as f:
+                    cmd = f.read().replace(b"\0", b" ").decode("utf-8", "replace")
+            except OSError:
+                continue
+            if "devd.py" in cmd:
+                return int(d)
+    except OSError:
+        pass
+    return None
+
+
+_devd_child: subprocess.Popen | None = None
+
+
+def check_devd() -> None:
+    """r112-a 互察（主循环每 DEVD_CHECK_S 秒调用）：devd 死亡 → 日志报警 +
+    Popen 拉起 devd.py——其采纳模式使这次拉起有实际意义（收养运行中的
+    dev server，零中断；端口空则直接 spawn 自有实例）；存活不打扰（零日志
+    ——devd 侧已有 mockd ok 低频汇总行，双份噪音无益）。
+
+    直接子进程是 devd 的 double-fork 前台父进程（秒级退出）——保留 Popen
+    句柄在下一次检查时 poll 收尸，避免僵尸累积。stdout 重定向到 dev.log
+    （追加）：devd 启动期若崩溃，traceback 落 dev.log 可查。"""
+    global _devd_child
+    if _devd_child is not None:
+        _devd_child.poll()  # 收上次拉起父进程的尸（若已退出）
+    pid = devd_pid()
+    if pid is None:
+        log_line("devd dead; relaunching")
+        logf = open(LOG, "ab", buffering=0)
+        try:
+            _devd_child = subprocess.Popen(
+                ["python3", "scripts/devd.py"],
+                cwd=PROJECT,
+                stdin=subprocess.DEVNULL,
+                stdout=logf,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,  # 自成会话：本守护死亡不连坐 devd
+            )
+        finally:
+            logf.close()
+        log_line(f"devd relaunch child pid={_devd_child.pid}")
+
+
 def main() -> None:
     if already_running():
         return  # 绝不双守护（双重启互踩 + 日志双写交错）
@@ -292,6 +369,10 @@ def main() -> None:
     while True:
         time.sleep(WATCH_TICK_S)
         elapsed += WATCH_TICK_S
+        # ---- r112-a 互察 devd（每 60s：死亡则拉起——其采纳模式收养运行中的
+        #      dev server；存活零动作零日志，防与 devd 侧汇总行双倍噪音）----
+        if elapsed % DEVD_CHECK_S == 0:
+            check_devd()
         # ---- r111-a 源码变更即时验证（每秒比对 mtime）----
         mtime = mock_source_mtime()
         if mtime is not None and mtime != last_mtime:

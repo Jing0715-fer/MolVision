@@ -67,3 +67,8 @@ agent-ctx/
 
 # devd 运行时 PID（每次自愈重启即变，解除跟踪避免假 diff）
 .zscripts/dev.pid
+
+# r112-a：双守护运行时 PID 同类（mockd.pid 历史误入库，git rm --cached 解除）+ import 级测试产物
+.zscripts/mockd.pid
+.zscripts/devd.pid
+__pycache__/

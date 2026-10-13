@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""devd.py — Next.js dev server 守护进程（r88 热修；r91 内存看门狗升级；r102-b 双竞态修复；r103-b 斜率检测）
+"""devd.py — Next.js dev server 守护进程（r88 热修；r91 内存看门狗升级；r102-b 双竞态修复；
+r103-b 斜率检测；r112-a 采纳模式 + pid 文件守卫 + devd⇄mockd 互察）
 
 背景（r88 根因）：
   dmesg 实锤 next-server(pid 1535) 被 OOM-killer 静默击杀
@@ -19,15 +20,34 @@
      4 分钟窗内 RSS 单调不减且总涨 ≥300MB 即判泄漏嫌疑提前换血，
      与绝对阈值双闸互补。
 
-防双实例：
-  - 启动前若 3000 已被监听 → 守护静默退出（不与存量实例打架）；
+r112-a 三项扩展：
+  5) 采纳模式——启动时若 3000 端口已有活实例（沙箱重启后环境先直起
+     `bun run dev` / 手动 next dev），不再静默退位：adopting existing
+     instance 收养监护（端口轮询 + 内存看门狗按 pid 终止——收养实例没有
+     Popen 句柄）；实例死亡或换血完成后转入既有 spawn 循环拉起自有实例。
+     r111 实证缺口：后补启动的 devd 因端口占用静默退出，3000 处于
+     「无守护」状态直至 OOM 无人自愈；
+  6) devd⇄mockd 互察——监护主循环每 10 个周期（≈5min）检查 mockd 存活
+     （pid 文件 + /proc 双确认，缺文件时 /proc 扫描兜底）：死亡则报警并
+     拉起，存活则低频一行 mockd ok 汇总；mockd.py 对称检查 devd（60s
+     周期，只在死亡事件打点）——「守护的守护」盲区（r110/r111 建议②）闭环；
+  7) pid 文件守卫（.zscripts/devd.pid + /proc cmdline 双确认）——采纳
+     模式让「端口活→退位」防线失效（每轮启动都存活），防双实例改由
+     pid 文件承担（mockd.py already_running 同款范式）。
+
+防双实例（r112-a 起 dual-line）：
+  - pid 文件守卫：启动前发现活 devd 进程（旧 pid 的 cmdline 含 devd.py）
+    → 静默退出（pid 复用误判防护：pid 文件残留 + pid 被他进程复用不算）；
   - 重启间隙先有界等待旧端口释放（r102-b：SIGKILL 路径的进程可处不可中断
     D 态，监听 socket 内核侧迟滞数秒——单次探测会误判「外部接管」而过早
     退位；0.5s 间隔至多 30 次 ≈15s），仍被占用才判外部实例抢占 → 守护退出
-    （避免 EADDRINUSE 循环拉起）。
+    （避免 EADDRINUSE 循环拉起）——该「子实例死亡路径」的退位逻辑保留，
+    与启动采纳路径不同（外部接管退位后 mockd 互察 ≤60s 会拉回 devd 并
+    采纳运行中的实例，符合 r112-a 收养监护哲学）。
 
 用法：python3 scripts/devd.py   （前台父进程立即退出，守护转入后台）
 日志：/home/z/my-project/dev.log（追加；调用方可在启动前自行截断）
+pid：.zscripts/devd.pid（防双实例；pid 文件 + /proc cmdline 双确认）
 """
 import os
 import signal
@@ -58,6 +78,18 @@ PORT_RELEASE_POLLS = 30
 SLOPE_SAMPLES = 8
 SLOPE_RISE_MB = 300
 SLOPE_FLOOR_MB = 1000
+# r112-a pid 文件守卫：采纳模式让「端口活→退位」防线失效（每轮启动都存活），
+# 防双实例改由 pid 文件承担（mockd.py already_running 同款范式：pid 文件 +
+# /proc cmdline 双确认，pid 复用误判防护——cmdline 须含 devd.py 才判已在跑）
+PID_FILE = os.path.join(PROJECT, ".zscripts", "devd.pid")
+# r112-a 互察：mockd 的 pid 文件（读 pid + /proc 双确认；pid 文件缺失/失效时
+# 回退 /proc cmdline 扫描——pid 文件丢失不能误判「mockd 死亡」触发拉起，
+# 否则与其自身 already_running 双盲 → 双实例互踩）
+MOCKD_PID_FILE = os.path.join(PROJECT, ".zscripts", "mockd.pid")
+# r112-a 互察周期数：监护主循环每 10 个周期查一次 mockd 存活
+# （10 × MEM_CHECK_S = 10 × 30s ≈ 5min——低频：存活的 mockd ok 汇总行
+# 5min 一行可接受，死亡的发现延迟 ≤5min 亦远好于无人管）
+MOCKD_CHECK_CYCLES = 10
 
 
 def slope_restart_needed(samples: list[float]) -> tuple[bool, str | None]:
@@ -136,15 +168,18 @@ def rss_mb(pid: int) -> float:
     return 0.0
 
 
-def server_rss_mb() -> float:
-    """找属于本项目的 next-server 进程（bunx 包装器的孙进程）的 RSS。
+def server_pid_rss() -> list[tuple[int, float]]:
+    """找属于本项目的 next-server 进程（bunx 包装器的孙进程），返回 (pid, RSS_MB) 清单。
+
     扫 /proc/*/comm 匹配 next-server，且要求 readlink /proc/<pid>/cwd ==
     PROJECT 才计入（r102-b cwd 归属过滤）——多项目沙箱下「端口防双实例保证
     全机至多一个」不成立（他项目根可各自跑 next dev），/proc 遍历序不确定时
     首中他项目进程：其 RSS 偏高 → 错杀本项目健康 server（杀完仍超限，重启
     风暴）；其 RSS 偏低 → 漏看本项目真凶（看门狗失明直至 OOM 硬杀）。同项目
-    多匹配（罕见孤儿残留）取最大值——看门狗须对本项目任意内存大户敏感。"""
-    best = 0.0
+    多匹配（罕见孤儿残留）全部返回——看门狗须对本项目任意内存大户敏感。
+    r112-a：由「只返回最大 RSS」改为返回 (pid, mb) 全列——采纳模式的收养
+    实例没有 Popen 句柄，内存换血须按 pid 终止（os.kill）。"""
+    result: list[tuple[int, float]] = []
     try:
         for d in os.listdir("/proc"):
             if not d.isdigit():
@@ -157,11 +192,19 @@ def server_rss_mb() -> float:
                     continue  # 他项目 / 外来进程（cwd 不可读者同样跳过）——不计入
             except OSError:
                 continue
-            mb = rss_mb(int(d))
-            if mb > best:
-                best = mb
+            result.append((int(d), rss_mb(int(d))))
     except OSError:
         pass
+    return result
+
+
+def server_rss_mb() -> float:
+    """本项目 next-server 进程中的最大 RSS（r112-a：server_pid_rss 的薄封装，
+    自有实例看门狗循环的单值语义不变；多匹配取最大值）。"""
+    best = 0.0
+    for _pid, mb in server_pid_rss():
+        if mb > best:
+            best = mb
     return best
 
 
@@ -211,17 +254,187 @@ def spawn_server() -> subprocess.Popen:
         lf.close()
 
 
+def stop_pid(pid: int) -> None:
+    """r112-a 采纳实例终止（收养实例无 Popen 句柄，须按 pid）：
+    SIGTERM → 有界等端口释放（复用 r102-b 参数：0.5s × 30 ≈ 15s）→
+    SIGKILL 兜底 → 再等 10s。
+
+    不做进程组杀：收养实例由环境链拉起（bun run dev → tee 管道 →
+    next dev → next-server），其进程组可能与 start.sh 共享成员（组杀误伤）；
+    监听 socket 由 next-server 进程本身持有（ss 实测 :3000 仅该 pid）——
+    TERM 该 pid 后整条父链自然塌缩（各父进程等子退出后相继退出），
+    端口即释放。term 后端口仍占用 >15s 判顽固残留，KILL 兜底。"""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
+    for _ in range(PORT_RELEASE_POLLS):
+        if not port_alive(PORT):
+            return
+        time.sleep(PORT_RELEASE_POLL_S)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+    for _ in range(20):
+        if not port_alive(PORT):
+            return
+        time.sleep(0.5)
+
+
+def already_running() -> bool:
+    """r112-a 防双实例：pid 文件 + /proc cmdline 双确认（mockd.py 同款范式）。
+
+    采纳模式让「端口活→退位」防线失效（每轮启动都存活并收养），必须由
+    pid 文件挡住第二个 devd（双重启互踩 + 日志双写交错）。pid 复用误判
+    防护：pid 文件残留的旧 pid 被他进程复用时，cmdline 不含 devd.py →
+    不算活 devd，放行启动。"""
+    try:
+        with open(PID_FILE) as f:
+            pid = int(f.read().strip())
+        if pid == os.getpid():
+            return False
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            cmd = f.read().replace(b"\0", b" ").decode("utf-8", "replace")
+        return "devd.py" in cmd
+    except (OSError, ValueError):
+        return False
+
+
+def mockd_pid() -> int | None:
+    """r112-a 互察：查 mockd 的 pid（pid 文件 + /proc cmdline 双确认优先，
+    pid 文件缺失/失效时回退 /proc 扫描；None = 不在跑）。
+
+    兜底理由：pid 文件丢失（.zscripts 被清理等）不能误判「mockd 死亡」
+    触发拉起——彼时 mockd 自身 already_running 同样看不到活同类（pid 文件
+    也缺），双实例互踩；/proc cmdline 扫描是第二道事实源。"""
+    try:
+        with open(MOCKD_PID_FILE) as f:
+            pid = int(f.read().strip())
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            cmd = f.read().replace(b"\0", b" ").decode("utf-8", "replace")
+        if "mockd.py" in cmd:
+            return pid
+    except (OSError, ValueError):
+        pass
+    try:
+        for d in os.listdir("/proc"):
+            if not d.isdigit():
+                continue
+            try:
+                with open(f"/proc/{d}/cmdline", "rb") as f:
+                    cmd = f.read().replace(b"\0", b" ").decode("utf-8", "replace")
+            except OSError:
+                continue
+            if "mockd.py" in cmd:
+                return int(d)
+    except OSError:
+        pass
+    return None
+
+
+_mockd_child: subprocess.Popen | None = None
+
+
+def cross_check_mockd() -> None:
+    """r112-a 互察（监护主循环每 MOCKD_CHECK_CYCLES 周期 ≈5min 调用一次）：
+    mockd 死亡 → 日志报警 + 拉起（mockd.py 自带 already_running 防双实例，
+    重复拉起无害）；存活 → 低频一行 mockd ok (pid=...) 汇总入 dev.log。
+
+    直接子进程是 mockd 的 double-fork 前台父进程（秒级退出）——保留 Popen
+    句柄在下一次互察时 poll 收尸，避免僵尸累积（不能设 SIGCHLD=SIG_IGN：
+    会连带打断本守护对 spawn 子实例的 poll/wait）。stdout 重定向到 dev.log
+    （追加）：mockd 启动期若崩溃（如语法错误），traceback 落 dev.log 可查。"""
+    global _mockd_child
+    if _mockd_child is not None:
+        _mockd_child.poll()  # 收上次拉起父进程的尸（若已退出）
+    pid = mockd_pid()
+    if pid is None:
+        log_line("mockd dead; relaunching")
+        logf = open(LOG, "ab", buffering=0)
+        try:
+            _mockd_child = subprocess.Popen(
+                ["python3", "scripts/mockd.py"],
+                cwd=PROJECT,
+                stdin=subprocess.DEVNULL,
+                stdout=logf,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,  # 自成会话：本守护死亡不连坐 mockd
+            )
+        finally:
+            logf.close()
+    else:
+        log_line(f"mockd ok (pid={pid})")
+
+
+def supervise_adopted() -> None:
+    """r112-a 采纳模式监护循环：对外部实例做端口轮询 + 内存看门狗
+    （绝对阈值 + 斜率双闸，判据与自有实例同规——收养期同样存在
+    「HMR reload risk」须提前换血的压力）。返回时机二选一：
+    ①实例死亡（端口灭）——日志 adopted instance died; spawn own；
+    ②内存换血执行完毕（stop_pid 已有界等端口释放）。
+    两者之后 main 均转入既有 spawn 循环拉起自有实例。换血日志行注明
+    adopted——与自有实例换血区分，事后 grep dev.log 可辨。
+
+    端口活但 server_pid_rss 找不到本项目 next-server（他类服务占端口等）：
+    看门狗无目标，只续端口轮询不盲杀。"""
+    rss_window: list[float] = []
+    tick = 0
+    while True:
+        time.sleep(MEM_CHECK_S)
+        tick += 1
+        if tick % MOCKD_CHECK_CYCLES == 0:
+            cross_check_mockd()  # r112-a 互察：收养期同样查 mockd
+        if not port_alive(PORT):
+            log_line("adopted instance died; spawn own")
+            return
+        procs = server_pid_rss()
+        if not procs:
+            continue
+        pid, mb = max(procs, key=lambda t: t[1])
+        rss_window.append(mb)
+        del rss_window[:-SLOPE_SAMPLES]  # 滑窗：超出窗长的旧采样出队
+        if mb > MEM_LIMIT_MB:
+            log_line(f"rss {mb:.0f}MB > {MEM_LIMIT_MB}MB (HMR reload risk); "
+                     f"memory restart on adopted instance (pid={pid})")
+            stop_pid(pid)
+            return
+        slope_hit, slope_reason = slope_restart_needed(rss_window)
+        if slope_hit and slope_reason:
+            log_line(f"{slope_reason}; adopted instance pid={pid}")
+            stop_pid(pid)
+            return
+
+
 def main() -> None:
-    if port_alive(PORT):
-        # 已有实例在跑：绝不二次守护（防 EADDRINUSE 循环 + 双写日志）
-        return
+    # r112-a 防双实例改 pid 文件守卫（见 already_running docstring）——须在
+    # daemonize 前由前台父进程检查（与 mockd.py 同位）；采纳模式让旧的
+    # 「端口活→退位」防线失效，此处不再看端口
+    if already_running():
+        return  # 绝不双守护（双重启互踩 + 日志双写交错）
+    adopted = port_alive(PORT)
     daemonize()
-    log_line("daemon up (double-fork); supervising next dev -p 3000")
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+    if adopted:
+        # r112-a 采纳模式：端口已有活实例（沙箱重启后环境先直起 dev server /
+        # 手动 next dev）→ 收养监护而非静默退位——r111 实证缺口：后补启动的
+        # devd 因端口占用静默退出，3000 处于「无守护」状态直至 OOM 无人自愈
+        log_line(f"daemon up (double-fork); adopting existing instance on :{PORT} "
+                 "(not spawned by devd)")
+        supervise_adopted()
+        # 收养监护结束（实例死亡 / 换血完成，端口已空或已释）→ 与 spawn 循环
+        # 同节奏小憩后拉起自有实例（此后看门狗恢复 Popen 句柄路径）
+        time.sleep(RESTART_DELAY_S)
+    else:
+        log_line("daemon up (double-fork); supervising next dev -p 3000")
     while True:
         proc = spawn_server()
         log_line(f"spawned next dev pid={proc.pid}")
         # r91 看门狗循环：轮询退出状态 + 周期性内存体检
         mem_restarted = False
+        # r112-a 互察周期计数：每 MOCKD_CHECK_CYCLES 个监护周期（≈5min）查一次 mockd
+        cycles = 0
         # r103-b 斜率采样窗：只存最近 SLOPE_SAMPLES 个 RSS 值——采样间隔恒为
         # MEM_CHECK_S（循环内 sleep 固定 30s），序列下标即等差时间轴，无需再存
         # 采样时刻；生命周期与 mem_restarted 同届：换血重启与进程死亡两路 break
@@ -234,6 +447,9 @@ def main() -> None:
             time.sleep(MEM_CHECK_S)
             if proc.poll() is not None:
                 break
+            cycles += 1
+            if cycles % MOCKD_CHECK_CYCLES == 0:
+                cross_check_mockd()  # r112-a 互察：mockd 死亡则拉起，存活低频报一行
             mb = server_rss_mb()
             rss_window.append(mb)
             del rss_window[:-SLOPE_SAMPLES]  # 滑窗：超出窗长的旧采样出队

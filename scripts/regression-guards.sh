@@ -1280,10 +1280,11 @@ check "store 无副作用求值锚"      "previewExpr" "src/lib/molecular/store.
 check "skills 预览表达式锚"       "previewExprFromJumpCmd" "src/lib/molecular/agent/skills.ts" 1
 # ⑩skills 括号包裹判断锚（实测 3——isWrappedExpr 定义+两调用；删则 (A) or (B) 形态误剥外层括号致求值失败）
 check "skills 括号包裹锚"         "isWrappedExpr" "src/lib/molecular/agent/skills.ts" 3
-# ⑪hover 接线锚（实测 1——onMouseEnter；删则鼠标悬停无预览）
-check "hover 接线锚"              'onMouseEnter=\{\(\) => previewJump\(jump\)\}' "src/components/studio/AgentPanel.tsx" 1
-# ⑫focus 接线锚（实测 1——onFocus 键盘可达；删则键盘用户无预览）
-check "focus 接线锚"              'onFocus=\{\(\) => previewJump\(jump\)\}' "src/components/studio/AgentPanel.tsx" 1
+# ⑪hover 接线锚（实测 1——onMouseEnter；删则鼠标悬停无预览。r112-b 同步更新：调用形态
+# previewJump(jump) → previewJump(jump, jumpLabel)（ARIA 标签入参——功能合法演进非回滚））
+check "hover 接线锚"              'onMouseEnter=\{\(\) => previewJump\(jump, jumpLabel\)\}' "src/components/studio/AgentPanel.tsx" 1
+# ⑫focus 接线锚（实测 1——onFocus 键盘可达；删则键盘用户无预览。r112-b 同步更新同⑪）
+check "focus 接线锚"              'onFocus=\{\(\) => previewJump\(jump, jumpLabel\)\}' "src/components/studio/AgentPanel.tsx" 1
 # ⑬AgentPanel 预览清除锚（实测 3——clearPreviewJump 定义+jumpTo 点击清除+useEffect 卸载清理；删则残影/泄漏）
 check "AgentPanel 预览清除锚"     "clearPreviewHighlight" "src/components/studio/AgentPanel.tsx" 3
 # ⑭mock 链族 ZH 锚（实测 3——「未找到链」正则+注释×2；删则链不存在失败不改写回仪式态）
@@ -1292,6 +1293,90 @@ check "mock 链族ZH锚"             "未找到链" "mini-services/mock-llm/inde
 check "mock 链族EN锚"             'Chain \\S\+ not found' "mini-services/mock-llm/index.ts" 1
 # ⑯mock 链族优先注释锚（实测 1——单列于空选择判据之前的顺序说明；重排则链族分支被空选择 return 拦截）
 check "mock 链族优先锚"           "单列于空选择判据之前" "mini-services/mock-llm/index.ts" 1
+
+# ---- r112-a：devd 采纳模式 + devd/mockd 互察 + 启动链带起双守护 ----
+# r111 建议①（r110 建议②持续挂起项）：沙箱重启后环境先直起 dev server、后补 devd 因端口
+# 占用静默退位（3000 无守护缺口，r111 实证）。采纳模式=端口活→收养监护（端口轮询+内存
+# 看门狗按 pid 换血）→实例死亡转 spawn 循环；互察=双方周期探对方 pid 死亡报警+拉起（防
+# 「守护的守护」盲区）；dev.sh 启动链带起双守护（沙箱走此链重启不再缺席）。
+# ①采纳分支锚（实测 1——adopting 日志行；删则后补 devd 又静默退位，3000 无守护回归）
+check "devd 采纳分支锚"            "adopting existing instance" "scripts/devd.py" 1
+# ②采纳监护函数锚（实测 1——supervise_adopted；删则收养态无人轮询端口与内存）
+check "devd 采纳监护锚"            "def supervise_adopted" "scripts/devd.py" 1
+# ③采纳死亡转spawn锚（实测 1——收养实例死亡日志；删则收养实例死后无人拉起自有实例）
+check "devd 采纳死亡锚"            "adopted instance died; spawn own" "scripts/devd.py" 1
+# ④采纳换血标注锚（实测 4——adopted instance 日志族（死亡+换血绝对阈值+斜率+文档）；删则收养实例内存失控）
+check "devd 采纳换血锚"            "adopted instance" "scripts/devd.py" 4
+# ⑤按pid终止锚（实测 1——stop_pid：收养实例无 Popen 句柄，换血须按 pid 终止）
+check "devd 按pid终止锚"           "def stop_pid" "scripts/devd.py" 1
+# ⑥pid-RSS扫描锚（实测 5——server_pid_rss（定义+调用+注释）；删则看门狗对收养实例失明）
+check "devd pidRSS扫描锚"          "server_pid_rss" "scripts/devd.py" 5
+# ⑦防双实例锚（实测 1——devd.py already_running 函数定义；采纳模式使端口防线失效，pid 文件是唯一防双闸）
+check "devd 防双实例锚"            "def already_running" "scripts/devd.py" 1
+# ⑧pid文件锚（实测 3——devd.pid（PID_FILE 组装+注释×2）；删则双 devd 互踩收养同一端口）
+check "devd pid文件锚"             "devd\.pid" "scripts/devd.py" 3
+# ⑨互察mockd函数锚（实测 3——cross_check_mockd（定义+双调用点：收养循环+spawn 循环）；删则 mockd 死亡无人管）
+check "devd 互察函数锚"            "cross_check_mockd" "scripts/devd.py" 3
+# ⑩互察存活汇总锚（实测 2——mockd ok (pid= 日志族（格式串+注释）；删则守护盲区无周期可观测性）
+check "devd 互察汇总锚"            "mockd ok \(pid=" "scripts/devd.py" 2
+# ⑪互察死亡拉起锚（实测 1——mockd dead; relaunching 报警行；删则 mockd 静默死无自愈）
+check "devd 互察拉起锚"            "mockd dead; relaunching" "scripts/devd.py" 1
+# ⑫mockd互察pid锚（实测 2——devd_pid（定义+调用）；删则 mockd 对 devd 死亡失明）
+check "mockd 互察pid锚"            "devd_pid" "scripts/mockd.py" 2
+# ⑬mockd互察周期锚（实测 3——DEVD_CHECK_S（常量+主循环取模+注释）；删则互察退化为永不触发）
+check "mockd 互察周期锚"           "DEVD_CHECK_S" "scripts/mockd.py" 3
+# ⑭mockd互察拉起锚（实测 1——devd dead; relaunching；删则 devd 死后 mockd 不补位（采纳模式使其有意义））
+check "mockd 互察拉起锚"           "devd dead; relaunching" "scripts/mockd.py" 1
+# ⑮启动链devd锚（实测 1——dev.sh 起 devd.py；删则沙箱走此链重启后 3000 无守护）
+check "启动链devd锚"               'scripts/devd\.py' ".zscripts/dev.sh" 1
+# ⑯启动链mockd锚（实测 1——dev.sh 起 mockd.py（幂等）；删则走此链重启后 3999 无守护）
+check "启动链mockd锚"              'scripts/mockd\.py' ".zscripts/dev.sh" 1
+# ⑰mockd重启脚本锚（实测 2——restart-mockd.sh 读 mockd.pid（停+验）；删则守护代码更新无旁路重启法）
+check "mockd重启脚本锚"            'mockd\.pid' ".zscripts/restart-mockd.sh" 2
+# ⑱devd重启脚本锚（实测 2——restart-devd.sh 读 devd.pid（停+验）；删则守护代码更新无旁路重启法）
+check "devd重启脚本锚"             'devd\.pid' ".zscripts/restart-devd.sh" 2
+
+# ---- r112-b：报告节 hover 预览增强——视口外原子 dim 聚焦通道 + ARIA 预览态描述 ----
+# r111 建议②剩余子项：预览期间视口外原子 dim（聚焦感更强——材质级透明度 save/restore，
+# 对称克隆共享材质自动连坐）+ 3D 预览的 ARIA 描述（屏幕阅读器感知预览态——live region
+# 常驻 + 预览开始播报目标节标签与原子数，清屏静默防刷屏）。
+# ①dim 因子常量锚（实测 2——PREVIEW_DIM_FACTOR 定义+引用；删则 dim 失参（回 1.0 全亮））
+check "dim 因子常量锚"             "PREVIEW_DIM_FACTOR" "src/lib/molecular/engine.ts" 2
+# ②dim 开关函数锚（实测 4——setRepDim 定义+三调用（previewHighlight 入口复位/成功施加/clear 复位）；删则聚焦通道断链）
+check "dim 开关函数锚"             "setRepDim" "src/lib/molecular/engine.ts" 4
+# ③dim save/restore 标记锚（实测 5——dim0/dimT0 存取族；删则透明度不可逆（dim 后不还原））
+check "dim 存取标记锚"             "dim0" "src/lib/molecular/engine.ts" 5
+# ④ARIA 状态锚（实测 2——previewAria 状态声明+渲染；删则预览态对屏幕阅读器不可见）
+check "ARIA 状态锚"                "previewAria" "src/components/studio/AgentPanel.tsx" 2
+# ⑤live region 锚（实测 1——aria-live=polite 常驻 status 区（先于内容更新存在才生效）；删则播报失效）
+check "live region 锚"             'aria-live' "src/components/studio/AgentPanel.tsx" 1
+# ⑥ARIA 写入锚（实测 3——setPreviewAria 调用族（预览开始带标签/无标签+清屏）；删则 live region 恒空）
+check "ARIA 写入锚"                "setPreviewAria" "src/components/studio/AgentPanel.tsx" 3
+# ⑦标签三用锚（实测 4——jumpLabel 提取+onClick 溯源/hover 预览/focus 预览三用（同一文本源防手抄漂移）；删则 ARIA 文案缺标签退化）
+check "标签三用锚"                 "jumpLabel" "src/components/studio/AgentPanel.tsx" 4
+# ⑧ARIA 中文文案锚（实测 1——正在预览：label（N 个原子）；删则播报无目标语义）
+check "ARIA 中文文案锚"            "正在预览：" "src/components/studio/AgentPanel.tsx" 1
+
+# ---- r112-c：E2E 视觉自查基线化——wait-stable-frame 工具 + e2e skill 铁律固化 ----
+# r111 建议④：「异步派生落屏时序坑」的工程化收口——G1 类截图断言前统一等「渲染稳定
+# 帧」（连续两截图漂移 ≤0.15% 才拍基线），工具固化为 .zscripts 约定 + skill 铁律
+# （规则 9）；顺带固化 r112-a 新坑（Bash 单调用 sleep ≤90s——>~240s 断 MCP 网关）。
+# ①稳定帧工具存在锚（实测 2——脚本名自引（文件头+注释）；删则工具缺位，E2E 回裸拍时序坑）
+check "稳定帧工具锚"               "wait-stable-frame" ".zscripts/wait-stable-frame.sh" 2
+# ②稳定帧 diff 算法锚（实测 2——ImageChops 差分（import+调用）；删则比对失法（恒 0 假稳定））
+check "稳定帧diff锚"               "ImageChops" ".zscripts/wait-stable-frame.sh" 2
+# ③稳定帧容差锚（实测 3——0.15 默认值族（文件头+TOL 默认+STABLE 文案）；改值须评估分离带（落屏 3-5.8% vs 终态 0.12%））
+check "稳定帧容差锚"               "0\.15" ".zscripts/wait-stable-frame.sh" 3
+# ④UNSTABLE 诚实口径锚（实测 2+——超轮数失败文案（主行+退出码注释）；删则超时静默成功（假稳定））
+check "稳定帧UNSTABLE锚"           "UNSTABLE" ".zscripts/wait-stable-frame.sh" 2
+# ④b渲染活性守卫锚（实测 3——perfLastT 双探（G1 实测：4-8s tick 间隔下零新帧的 0.000% 是同帧假稳定）；删则假稳定回归）
+check "稳定帧活性守卫锚"           "perfLastT" ".zscripts/wait-stable-frame.sh" 3
+# ④c同帧假稳定分支锚（实测 2——STALE-FRAME 分支（Python 判定+文案）；删则守卫失效退化纯像素）
+check "稳定帧同帧分支锚"           "STALE-FRAME" ".zscripts/wait-stable-frame.sh" 2
+# ⑤skill 规则9锚（实测 3——molvision-e2e SKILL.md 引用工具（标题+做法+纪律行）；删则铁律不传承，下轮 E2E 重踩时序坑）
+check "skill稳定帧规则锚"          "wait-stable-frame" ".agent/skills/molvision-e2e/SKILL.md" 3
+# ⑥skill 长sleep规则锚（实测 2——≤90s 铁律（断言纪律行+规则内文）；删则 r112-a 断会话坑重现无防线）
+check "skill长sleep规则锚"         "90s" ".agent/skills/molvision-e2e/SKILL.md" 2
 
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条

@@ -67,6 +67,18 @@ description: MolVision E2E 测试规矩全集（agent-browser 驱动）。当要
 - **为什么**：截图偶发返回陈旧帧（r92 膜错位教训）；HUD 叠加（性能表/坐标轴）会让像素
   diff 假红——基线与对比必须同口径
 
+### 9. 截图断言前等「渲染稳定帧」——wait-stable-frame 工具（r112-c）
+
+- **做法**：G1 类截图断言（拍基线/像素对比）前先跑
+  `bash .zscripts/wait-stable-frame.sh`（默认 6 轮 × 2s × 0.15% 容差；退出码
+  0=STABLE / 1=UNSTABLE / 2=管线故障 / 3=Python 异常），STABLE 后才拍断言截图
+- **为什么**：异步派生渲染（口袋表面/接触着色等后台计算）落屏前的中间态拍进截图
+  =「基线拍早」恒定假差异，且复拍不复现（下一轮已落屏）→ 误判「间歇性回归」
+  （r111 hover 实验 40 分钟排查教训）。判定依据 = 连续两截图漂移 ≤ 容差 **且
+  期间 ≥1 新帧渲染**（r112 G1 实测：SwiftShader 重场景 tick 间隔 4-8s，零新帧时
+  0.000% 是同一陈旧帧的假稳定——工具内建 perfLastT 活性守卫防此坑；活跃落屏
+  3-5.8% vs 终态噪声 0.12%——差一个数量级）
+
 ## 断言纪律
 
 - 断言写「预期 vs 实测数字」（hbond 2202 条 / draw calls 39 / 三角面 485,097 这种），
@@ -74,3 +86,6 @@ description: MolVision E2E 测试规矩全集（agent-browser 驱动）。当要
 - 全会话 console errors 必须为零（`agent-browser errors` 命令）——每轮 E2E 的硬收口
 - 环境型症状（假死/超时/慢）**先查 free/top 系统态再归因代码**——A/B 测试采样偏差陷阱：
   环境间歇故障与代码变更时间点耦合会制造假确定性（r102 两度误判实锤）
+- **Bash 工具单次调用内 sleep ≤90s**——长 sleep（>~240s）会断开 MCP 网关且不可恢复
+  （EOF/connection closed，10+ 重试无效，r112-a 子代理实锤失会话）；长等待拆成
+  ≤90s 多次调用，或交给 wait-stable-frame.sh 这类自带小步进循环的脚本

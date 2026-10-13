@@ -3875,6 +3875,46 @@ export class MolEngine {
 
   // ---------- r111-b 报告节 hover 预览高亮（公开 API——无副作用预览通道） ----------
 
+  /** r112-b 预览聚焦 dim 因子：预览薄纱在场期间全部 rep 材质透明度乘此值——
+   *  视口外原子退居幕后，青色薄纱目标成为唯一视觉焦点（「先看一眼」的聚焦感）。
+   *  0.3 = 实测折中：再低则蛋白轮廓难辨（上下文全失），再高则聚焦感弱。 */
+  private static readonly PREVIEW_DIM_FACTOR = 0.3
+
+  /** r112-b：预览聚焦 dim 开关——遍历全部结构 reps 的材质做透明度 save/restore。
+   *  材质级 userData.dim0/dimT0（幂等防重复 dim）；对称克隆与原 rep 共享材质
+   *  （cloneGroupShallowUserData→clone(true) 不复制材质），遍历 reps 即同时作用
+   *  克隆；dim 期间 rep 重建的新材质不受影响（hover 瞬态可接受）；不触碰膜/
+   *  测量/氢键等分析层与 preview/highlight 薄纱本体（后者挂 repContainer 直属
+   *  不在 reps Map）。透明化保持 depthWrite 原值——遮挡关系不破，仅降低存在感。 */
+  private setRepDim(on: boolean) {
+    for (const view of this.views.values()) {
+      for (const rv of view.reps.values()) {
+        rv.build.group.traverse(o => {
+          const mtl = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined
+          if (!mtl) return // traverse 回调内无外层循环可 continue——return 即跳过本对象
+          const mats = Array.isArray(mtl) ? mtl : [mtl]
+          for (const m of mats) {
+            if (!m) continue
+            if (on) {
+              if (m.userData.dim0 !== undefined) continue // 已 dim（幂等——rep 与克隆共享材质时会重遇）
+              m.userData.dim0 = m.opacity
+              m.userData.dimT0 = m.transparent
+              m.transparent = true
+              m.opacity = m.opacity * MolEngine.PREVIEW_DIM_FACTOR
+            } else {
+              const o0 = m.userData.dim0 as number | undefined
+              if (o0 === undefined) continue
+              m.opacity = o0
+              m.transparent = m.userData.dimT0 as boolean
+              delete m.userData.dim0
+              delete m.userData.dimT0
+            }
+          }
+        })
+      }
+    }
+  }
+
   /** 跨结构清旧 preview（hover 切节/切结构时上一预览不留残影）。 */
   private clearPreviewMeshes() {
     for (const view of this.views.values()) {
@@ -3888,9 +3928,12 @@ export class MolEngine {
 
   /** r111-b：报告节 hover 瞬时预览——选择子原子以青色薄纱罩亮（点击跳转前的「先看
    *  一眼」）。与选择光晕（amber）分色；不写 store、不进 sync 派生链、不参与拾取
-   * （挂 repContainer 直属）；原子数与 updateHighlight 同限（0 / >40000 不画）。 */
+   * （挂 repContainer 直属）；原子数与 updateHighlight 同限（0 / >40000 不画）。
+   * r112-b：薄纱在场期间同步 dim 全部 rep（视口外原子退居幕后聚焦薄纱目标）；入口
+   * 先复位旧 dim——下方任何早退路径（原子数越界/view 缺失）都不留「全暗无焦点」态。 */
   previewHighlight(structureId: string, indices: number[]) {
     this.clearPreviewMeshes()
+    this.setRepDim(false)
     if (!indices.length || indices.length > 40000) return
     const view = this.views.get(structureId)
     const data = dataRegistry.get(structureId)
@@ -3917,11 +3960,14 @@ export class MolEngine {
     mesh.renderOrder = 7 // 预览叠加在选择光晕（6）之上仍可见
     view.preview = mesh
     view.repContainer.add(mesh)
+    this.setRepDim(true) // r112-b：视口外原子 dim 聚焦（青色薄纱目标成为唯一视觉焦点）
   }
 
-  /** r111-b：清除 hover 预览（mouseleave/blur/组件卸载时）。 */
+  /** r111-b：清除 hover 预览（mouseleave/blur/点击跳转/组件卸载时）。
+   * r112-b：同步复位 rep dim（材质透明度 save/restore 还原）。 */
   clearPreviewHighlight() {
     this.clearPreviewMeshes()
+    this.setRepDim(false)
   }
 
   private updateHighlight(view: StructureView, data: StructureData, indices: number[]) {
