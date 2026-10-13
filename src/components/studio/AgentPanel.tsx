@@ -590,7 +590,55 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                 commands: recompCmds.length ? recompCmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
               }
               setMsgs(m => [...m, recompMsg])
-              if (recompCmds.length) records.push(...(await runTurn(recompId, recompCmds, depth + 2, [...priorMsgs, recompMsg], visualBudget, imageBefore, skillId)))
+              if (recompCmds.length) {
+                const recompRecords = await runTurn(recompId, recompCmds, depth + 2, [...priorMsgs, recompMsg], visualBudget, imageBefore, skillId)
+                records.push(...recompRecords)
+                // r116-a 消费轮救济对称（r115 建议①收口）：消费轮（含其视觉自查子轮——
+                // runTurn 返回值递归合并）自己的链域失败此前无救济（消费站点只在
+                // depth-0 修正轮后，r115 实测：消费轮命令成功 → 视觉自查触发 → VLM 重发
+                // 带错链的修正命令失败即终，depth 2 无修正轮）。把消费轮返回记录再做
+                // 一次链域消费判定——有界二次消费：代码结构线性恰两轮（第三轮不存在），
+                // 二轮自身仍 depth+2 无修正轮，循环不可能成形。
+                // 探测源：消费轮记录里的新 chains list 优先（其间结构被换的场景），否则
+                // 复用首轮探测（chains list 幂等——结构未换时链清单不变，重跑同义）。
+                const probe2 = recompRecords.find(r => /^chains\s+(list|ls)\s*$/i.test(r.cmd.trim()) && r.status === 'ok' && r.output) ?? probe
+                // 二轮扫描只看消费轮自身记录；不做跨轮 cmd 文本去重——视觉自查重发同文
+                // 失败（首轮已重组过）属「再次失败」如实上报：重组产物与已成功命令同名
+                // 时由 okOuts 上下文 + mock 0.46 防重发丢弃（诚实跳过口径），不为省一次
+                // 轮询牺牲新失败（VLM 每轮可发不同错链）的救济。
+                const chainFails2: AgentCmdRecord[] = []
+                const seen2 = new Set<string>()
+                for (const r of recompRecords) {
+                  if (r.status !== 'error' || !r.output || !isChainDomainCmd(r.cmd) || seen2.has(r.cmd)) continue
+                  seen2.add(r.cmd)
+                  chainFails2.push(r)
+                }
+                if (chainFails2.length && probe2) {
+                  setPhase('think')
+                  // okOuts2 在首轮消费并入 records 之后取（含首轮重组成功命令——防重发
+                  // 上下文覆盖二轮重组产物）；与首轮 consumePrompt 的 okOuts 同款构造。
+                  const okOuts2 = records.filter(r => r.status === 'ok' && r.output)
+                    .slice(-6).map(r => `- ${r.cmd} → ${(r.output ?? '').replace(/\s+/g, ' ').slice(0, 110)}`)
+                  const consumePrompt2 = tt({
+                    zh: `链清单已探测，请按清单重组刚才失败的命令后重新给出（链号换成清单中实际存在的链）：\n${chainFails2.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n\nchains list 输出：\n${probe2.output}${okOuts2.length ? `\n\n已成功命令的关键输出（重组时不要重复这些命令）：\n${okOuts2.join('\n')}` : ''}\n只给出重组后需要执行的命令，不要重复已成功的命令。`,
+                    en: `The chain list has been probed. Recompose the failed commands per the list and give them again (substitute chain IDs that actually exist):\n${chainFails2.map(f => `- ${f.cmd} → ${f.output}`).join('\n')}\n\nchains list output:\n${probe2.output}${okOuts2.length ? `\n\nKey output of already-successful commands (do not repeat them when recomposing):\n${okOuts2.join('\n')}` : ''}\nOnly give the recomposed commands to run; do not repeat the successful ones.`,
+                  })
+                  // 历史含首轮消费消息（recompMsg）——LLM 可见「上轮已重组过什么」
+                  const recomp2 = await callAgent([...buildApiHistory(priorMsgs), fixMsg, recompMsg, { role: 'user', content: consumePrompt2 }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs), skillId)
+                  if (recomp2) {
+                    const recomp2Cmds = splitCommands(recomp2.commands)
+                    const recomp2Id = newId()
+                    const recomp2Msg: AgentChatMessage = {
+                      id: recomp2Id, role: 'assistant',
+                      content: `${tt({ zh: '链清单消费（二轮）：', en: 'Chain-list consumption (2nd): ' })}${recomp2.reply}`,
+                      time: nowTime(),
+                      commands: recomp2Cmds.length ? recomp2Cmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
+                    }
+                    setMsgs(m => [...m, recomp2Msg])
+                    if (recomp2Cmds.length) records.push(...(await runTurn(recomp2Id, recomp2Cmds, depth + 2, [...priorMsgs, recomp2Msg], visualBudget, imageBefore, skillId)))
+                  }
+                }
+              }
             }
           }
         }
@@ -950,16 +998,30 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
           </span>
         )}
         {/* r115-c 钉住汇总徽章：钉住的报告节跨滚动可见（取消入口在消息行上，钉多了滚走
-            就找不到）；计数 + 点击一键清全部。与记忆徽章同格（顶栏信息徽章族） */}
+            就找不到）；计数 + 点击一键清全部。与记忆徽章同格（顶栏信息徽章族）。
+            r116-b 待恢复态（r115 建议②收口）：刷新后钉恢复但结构未载时薄纱无法求值
+            （ARIA 静默——恢复是隐式的），徽章转琥珀色 + title 提示「结构加载后自动恢复」
+            ——隐式行为显式化，用户不再困惑薄纱为何没出现。 */}
         {pinnedJumps.length > 0 && (
           <button
             onClick={clearAllPins}
-            aria-label={t({ zh: `取消全部 ${pinnedJumps.length} 个钉住的预览`, en: `Unpin all ${pinnedJumps.length} pinned previews` })}
-            title={t({ zh: `已钉住 ${pinnedJumps.length} 个报告节预览（青色薄纱叠加中）——点击全部取消`, en: `${pinnedJumps.length} report-section previews pinned (teal veils active) — click to unpin all` })}
-            className="hidden min-w-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-px font-mono text-[9px] font-medium tabular-nums text-primary transition hover:border-primary/50 hover:bg-primary/15 sm:flex"
+            aria-label={molActiveId
+              ? t({ zh: `取消全部 ${pinnedJumps.length} 个钉住的预览`, en: `Unpin all ${pinnedJumps.length} pinned previews` })
+              : t({ zh: `已钉住 ${pinnedJumps.length} 个报告节预览——当前无活动结构，加载结构后薄纱自动恢复；点击全部取消`, en: `${pinnedJumps.length} report-section previews pinned — no active structure; the teal veils will restore automatically once one is loaded. Click to unpin all` })}
+            title={molActiveId
+              ? t({ zh: `已钉住 ${pinnedJumps.length} 个报告节预览（青色薄纱叠加中）——点击全部取消`, en: `${pinnedJumps.length} report-section previews pinned (teal veils active) — click to unpin all` })
+              : t({ zh: `已钉住 ${pinnedJumps.length} 个报告节预览——当前无活动结构，加载结构后青色薄纱将自动恢复；点击全部取消`, en: `${pinnedJumps.length} report-section previews pinned — no active structure yet; the teal veils will restore automatically once a structure is loaded. Click to unpin all` })}
+            className={cn(
+              'hidden min-w-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-px font-mono text-[9px] font-medium tabular-nums text-primary transition hover:border-primary/50 hover:bg-primary/15 sm:flex',
+              // 待恢复态：琥珀色系（与主色青区分——「在场但暂缺载体」的语义色）
+              !molActiveId && 'border-amber-500/40 bg-amber-500/10 text-amber-600 hover:border-amber-500/60 hover:bg-amber-500/15 dark:text-amber-400',
+            )}
           >
             <Pin className="h-2.5 w-2.5 shrink-0" aria-hidden />
             {t({ zh: '钉', en: 'Pin' })} {pinnedJumps.length}
+            {!molActiveId && (
+              <span className="shrink-0 opacity-80">· {t({ zh: '待结构恢复', en: 'pending' })}</span>
+            )}
           </button>
         )}
         <div className="ml-auto flex items-center gap-0.5">

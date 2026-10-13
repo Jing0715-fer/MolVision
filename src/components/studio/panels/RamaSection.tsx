@@ -46,6 +46,12 @@ const FILTERS: { key: RamaFilter; label: { zh: string; en: string }; probe: stri
   { key: 'pro', label: { zh: 'Pro', en: 'Pro' }, probe: 'PRO' },
 ]
 
+/** r116-c 隔离开关偏好持久化键（'on' = 开；缺席/异常 = 默认关——与 AGENT_VISUAL_KEY
+ *  同款读写模式）。「隔离审阅多个离群」是跨结构/跨会话工作流：用户逐个离群点击审阅
+ *  时，每次重开面板/刷新重按开关是高频摩擦。面板级偏好（非会话数据）就地定义，
+ *  不入 agent 域 protocol.ts。 */
+const RAMA_ISOLATE_KEY = 'molvision-rama-row-isolate'
+
 export function RamaSection() {
   const { t, locale } = useI18n()
   const activeId = useMolStore(s => s.activeId)
@@ -64,7 +70,17 @@ export function RamaSection() {
   // 常被其他链遮挡——开启后行点击附带 isolate（只留残基所在链，同链配体/水连带保留），
   // 与影视级检视的区别：不 label 不 slab（轻量去遮挡，保留用户自己的表示与光照）。
   // 单/双链结构不渲染开关（isolate 语义上无其余链可隔，诚实隐藏而非无效展示）。
-  const [rowIsolate, setRowIsolate] = useState(false)
+  // r116-c 偏好持久化（r115 建议③收口）：惰性初始化直读（typeof 守卫兼容 SSR 预渲染
+  // ——组件在无结构时恒早退 null，双端零 DOM 输出，直读无 hydration 面；挂载 effect
+  // 里 setState 会被 react-hooks/set-state-in-effect 拦截）；切换即写盘。
+  const [rowIsolate, setRowIsolate] = useState(() => {
+    try { return typeof localStorage !== 'undefined' && localStorage.getItem(RAMA_ISOLATE_KEY) === 'on' } catch { return false }
+  })
+  const toggleRowIsolate = () => setRowIsolate(v => {
+    const next = !v
+    try { localStorage.setItem(RAMA_ISOLATE_KEY, next ? 'on' : 'off') } catch { /* 配额满静默 */ }
+    return next
+  })
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   // 聚合物链数（蛋白 + 核酸）——多链判定驱动隔离开关的渲染
@@ -387,11 +403,11 @@ export function RamaSection() {
                 <span className="min-w-0 flex-1 truncate">{t({ zh: `离群残基（φ/ψ 落在 3.5σ 之外）`, en: `Outlier residues (φ/ψ beyond 3.5σ)` })}</span>
                 {polymerChains.length > 1 && (
                   <button
-                    onClick={() => setRowIsolate(v => !v)}
+                    onClick={toggleRowIsolate}
                     aria-pressed={rowIsolate}
                     title={rowIsolate
-                      ? t({ zh: '已开启：点击离群行同时隔离其余链（isolate off 恢复）', en: 'On: clicking an outlier row also isolates other chains (isolate off restores)' })
-                      : t({ zh: '开启后点击离群行时隔离其余链——多链结构去遮挡', en: 'When on, clicking an outlier row isolates other chains — declutter for multi-chain structures' })}
+                      ? t({ zh: '已开启（已记忆）：点击离群行同时隔离其余链（isolate off 恢复）', en: 'On (remembered): clicking an outlier row also isolates other chains (isolate off restores)' })
+                      : t({ zh: '开启后点击离群行时隔离其余链——多链结构去遮挡（偏好已记忆）', en: 'When on, clicking an outlier row isolates other chains — declutter for multi-chain structures (preference remembered)' })}
                     aria-label={rowIsolate ? t({ zh: '关闭点击行时隔离其余链', en: 'Turn off isolate-other-chains on row click' }) : t({ zh: '开启点击行时隔离其余链', en: 'Turn on isolate-other-chains on row click' })}
                     className={cn(
                       'ml-auto shrink-0 rounded px-1 py-px font-mono text-[9px] transition',

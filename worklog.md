@@ -4924,3 +4924,38 @@ Stage Summary:
   6. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
 
 （r115 段 cron 补记，2026-10-13）15min webDevReview 巡检任务 #456413 创建（19:50:21）——create 返回 success 但 list 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 29 次实证：r85-r114 连续 28 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 list 的 execution.info 为准」再次应验），已删除清理。任务书已内嵌 r115 开发纪律（基线 266a62b / guards 803 / 门禁链与 kill 红线 / E2E 铁律含空选择命令族语义与按钮定位新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 803 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r116
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r115 下一轮建议①②③④全收口：①消费轮（depth 2）救济对称——有界二次消费②钉住集会话恢复提示（徽章琥珀态+title/aria 双通道）③拉马隔离开关偏好记忆（localStorage 持久化）④一镜到底 slab/ambient 像素快照断言（E2E 基线）；QA 门禁链全绿 + E2E（M 11 + G1 三组浏览器全链）+ 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=dc1ce8b（r115 cron 补记后）；guards 实跑 803/803 = 本轮基线；dev 3000=200 + mock 3999 活（M 组直测可用）；会话摘要为 r92 旧档——以 worklog 为准（r115 实际已收口消费救济/一镜到底/钉住持久化三线）
+- 【改动·r116-a 应用侧】AgentPanel 消费站点：首轮消费 runTurn 返回值改存 recompRecords（原内联 push）→ r116-a 二次消费判定——chainFails2 只扫消费轮自身记录（含其视觉自查子轮递归合并）；probe2 = 消费轮记录内新 chains list 优先、否则复用首轮探测（chains list 幂等）；不做跨轮 cmd 文本去重（视觉自查重发同文失败属「再次失败」如实上报——重组产物与已成功命令同名时由 okOuts2 + mock 0.46 防重发丢弃，不为省轮询牺牲新失败的救济）；consumePrompt2 附 okOuts2（首轮消费成功并入 records 后取，slice(-6)）；历史含 fixMsg+recompMsg（LLM 可见上轮已重组过什么）；消息前缀「链清单消费（二轮）/ Chain-list consumption (2nd)」（E2E 断言链）；二轮仍 depth+2 无修正轮——线性结构恰两轮，第三轮不存在，循环不可能成形
+- 【改动·r116-b】AgentPanel 钉住徽章：molActiveId 三态分支（在场青色原样 / 缺席琥珀态）——aria-label + title 双通道换「结构加载后薄纱将自动恢复」提示文案、badge 后缀「· 待结构恢复 / pending」、className 追加 amber 色系（border/bg/text/hover/dark 五态）——隐式恢复行为显式化（r115 实证：刷新后钉恢复但结构未载时 ARIA 静默，用户不知薄纱何时回来）
+- 【改动·r116-c】RamaSection：RAMA_ISOLATE_KEY = 'molvision-rama-row-isolate'（面板级偏好就地定义，不入 agent 域 protocol.ts）；rowIsolate 惰性初始化直读（typeof localStorage 守卫——组件无结构时恒早退 null 双端零 DOM 输出，直读无 hydration 面；挂载 effect 里 setState 会被 react-hooks/set-state-in-effect 拦截——本轮 lint 实测驱动）；toggleRowIsolate 切换即写盘；开关 title 增「已记忆/偏好已记忆」双语提示
+- 【守卫 803→813（+10）】r116-a 四锚（chainFails2≥4/probe2≥4/二轮消息≥1/okOuts2≥4）+ r116-b 三锚（待恢复文案≥1/自动恢复提示≥4/amber≥4）+ r116-c 三锚（持久键≥3/键名≥1/切换≥2）；两处阈值返工（rg -c 行口径：同模板行多变量计 1 行；AgentPanel amber 基线 3 行）
+- 【QA】lint 0（set-state-in-effect 一过——惰性初始化方案消解）· bunx tsc src/ 零错误（基线 5 环境错不变）· guards 813/813 · smoke 6/6 · visual-baseline 7/7（漂移 0.00%）· dev.log 尾部零真 error（429×2 为视觉自查 VLM 兜底真实 ZAI 限流瞬态——浏览器 console 零错误、未阻断被测链路）
+- 【E2E-M】.zscripts/r116-m.ts 11/11：T1 二轮新鲜失败重组成功路径（view from chain Q → view from chain A 不误丢）· T2 同文重发全丢弃 + 计数诚实口径 · T3 结构切换新清单重组（1PRC 四链 → 首蛋白链 C）· T4 EN 二轮 prompt · T5 历史含首轮消费消息不干扰 · T6 视觉演练分支回归 · T7 清单解析失败诚实降级；r115-m 21/21 · r114-m 16/16 · r111-m 9/9 · r110-m 16/16 零破坏
+- 【E2E-G1a 消费救济二轮全链】1A2N + custom 供应商（mock-vision）+ 真·钉住 interface-analysis（首轮误点空态建议芯片发了无关消息——空态芯片与技能项同匹配 /interface|界面/ 的定位坑）+ "fail drill chain: ..."：主轮【界面接触分析报告】4 命令全败（chain B 空选择）→ 修正轮 0.45 fixRewrite → [chains list ✓（探测）, bsa ✗] → 视觉自查#1 演练（zoom chain Z, 5 ✗ + interface A Z ✗）→ 一轮消费「4 条待执行」全部执行成功（interface A A → 6780 对 / contacts A|A → 4220 对 / view from (chain A and chain A) / zoom chain A, 5）→ 一轮自身视觉自查#2 演练再败 → **二轮消费「Chain-list consumption (2nd): …1 条待执行，另有 2 条与已成功命令重复已跳过」**——G1 实测抓到比 M 预设更富的行为分界：view from (chain A and chain A) 在 1A2N 近中心几何上报「direction is meaningless」error → 成为二轮的新鲜失败（chain 词式命中 chainFails2）→ 重组执行（该 error 不在 okOuts——ok 记录只有 4 条）；同文演练失败重组产物（zoom chain A, 5 / interface A A）被 okOuts2 防重发丢弃（2 条跳过）；二轮无视觉自查后的第三轮（有界实证）；console 零错误
+- 【E2E-G1b 拉马偏好记忆 + 一镜到底像素】1PRC（12 链，Analysis 拉马 1177 点 3 离群）：隔离开关点击 ON → aria-pressed=true + localStorage 'on' → **刷新页面 → 会话恢复（Resume last session 2 structures）→ 重开 Analysis → 开关自动恢复 ON（跨刷新持久化实证）** → 离群行 C:ALA126 点击 → isolate (chain C and resi 126) 执行（"Isolated: kept C (protein)" + "other chains isolated"——偏好驱动行为）；场记板一镜到底六连（select/isolate/zoom/label/slab 20/set ambient 0.6 + 恢复四件套 isolate off·label off·slab off·set ambient 1 全回执）→ **像素实证：3D 视口（944×311）前后差分平均差 17.46/255、显著变化像素 18.83%（阈 2%）**——slab 切层 + ambient 压暗 + zoom + isolate 的复合视觉实效首次像素级基线化（r115 建议④收口）；开关 OFF → localStorage 'off'
+- 【E2E-G1c 钉住待恢复徽章】1PRC + ligand-pocket 技能 → 报告 → 钉「氢键」节 → 徽章「Pin 1」+ ARIA "Pinned previews: 氢键 (750 atoms)" → **刷新不恢复会话 → 面板重开 → 徽章 "Pin 1 · pending" + title "…the teal veils will restore automatically once a structure is loaded" + amber 类在场 + ARIA 空（预期）→ Resume 结构 → 徽章回 "Pin 1"（amber=false）+ ARIA 重建 "Pinned previews: 氢键 (750 atoms)"**——r116-b 全周期（在场青/缺载琥珀提示/恢复回青+薄纱重建）实证；徽章一键清 → pins "[]" + ARIA 空
+- 【坑（新入档）】①**空态建议芯片与技能库项同文本域**——面板空态的 SUGGESTION_GROUPS 芯片（"Analyze interface contacts between chain A and chain B"）也匹配 /interface|界面/：E2E 定位技能项必须限定 [data-radix-popper-content-wrapper] 内（本轮误点致一条无关消息 + 技能未钉住 → 0.45 无技能上下文不发 chains list → 消费链整体未触发——链路依赖技能钉住的因果链实证）②**wait-stable-frame.sh 的 canvas 探针取 document.querySelector('canvas') 首个**——拉马节渲染后首个 canvas 是散点图（232×224，还可能滚出视口致空白哨兵误报）；3D 视口像素断言须按尺寸/aria 精选 canvas（本轮 944×311 实测）+ /tmp/wsf-canvas.json rect 缓存跨布局陈旧③**React 19 lint 规则 react-hooks/set-state-in-effect 拦截挂载读偏好**——惰性初始化 + typeof 守卫是合规解（组件无结构早退 null 时零 hydration 面）④**agent-browser eval 全 DOM button[aria-pressed] 遍历可超时**（本轮 695+ 按钮正则匹配 30s 超时）——收窄到面板根容器内遍历即过⑤**「无技能上下文的修正轮走关键词模板」**——mock 0.45 分支需 parseSkillDirective 在场：技能未钉住时修正轮不发 chains list 探测、消费救济链不触发（设计使然——真实 LLM 修正轮无技能约束也不保证发探测；E2E 消费链驱动必须钉技能）⑥**view from 在近中心选择上报 error 态**（"direction is meaningless"）——非 ok 警告：会进 chainFails 消费候选（本轮二轮消费的富行为来源）；命令族状态语义入档
+- 【现场恢复】provider DELETE custom → zai 默认 ✓；isolate/label/slab/ambient 四件套恢复 ✓；钉清空 ✓；浏览器会话 close ✓；1A2N/1PRC 双结构留在会话（下次恢复卡可见——无碍）
+
+Stage Summary:
+- 交付一（r116-a）：消费轮救济对称——r115 建议①收口：有界二次消费（线性恰两轮、二轮仍 depth+2 无修正轮）；G1 实测富行为分界（新鲜失败 view from error 重组执行 + 同文演练失败 okOuts 防重发丢弃 2 条 + 无第三轮有界实证）
+- 交付二（r116-b）：钉住集待恢复提示——r115 建议②收口：徽章琥珀态 + 「· 待结构恢复」后缀 + title/aria 双通道提示；全周期实证（在场青 → 刷新缺载琥珀提示 → 结构恢复回青 + ARIA 重建）
+- 交付三（r116-c）：拉马隔离开关偏好记忆——r115 建议③收口：localStorage 持久化 + 跨刷新恢复实证（刷新 → Resume → 开关 ON 自动恢复 → 行为驱动 isolate 执行）
+- 交付四（r116-d）：一镜到底像素快照断言——r115 建议④收口：3D 视口前后差分 18.83% 显著变化像素（阈 2%）——slab/ambient/zoom/isolate 复合视觉实效首次像素级基线
+- 交付五（测试基建）：r116-m.ts 11 锚 + 守卫 803→813（+10）
+- 交付六（验证）：guards 813/813 · smoke 6/6 · visual-baseline 7/7（0.00%）· E2E M 11/11 + 回归 62/62 + G1 三组全链（二轮消费行为分界 / 偏好记忆全周期 + 像素实证 / 徽章待恢复全周期）· console 零错误 · provider 现场恢复
+- 与用户指令对位：①「进行下一阶段开发」——r115 建议①②③④全收口 ②「qa测试和e2e测试」——六道门禁 + M/G1 三组 ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【中】wait-stable-frame.sh canvas 探针修复：querySelector('canvas') 首个在拉马节渲染后错抓散点图（232×224）+ /tmp rect 缓存跨布局陈致空白哨兵误报——按「最大面积 canvas」或 aria 精选 + rect 每次现取（工具债，本轮已绕行）
+  2. 【中】二轮消费的「近中心 view from error」引导：G1 实测 view from (chain A and chain A) 在单链结构恒报「direction is meaningless」error——二轮消费对这类「命令成功域外」的几何性 error 重组执行是幂等的（重组产物同文重跑再败）；可给 chainFails2 增「同文重组产物曾失败则不再列出」短路（省一轮幂等执行），或 view from 错误文案中给出可操作建议的命令（First zoom… 已有——LLM 侧可消费）
+  3. 【中】徽章待恢复态的「一键加载结构」快捷入口：琥珀态徽章旁加「载入最近结构」按钮（当前需用户自己去找恢复卡/装载——提示有了，路径还差一步）
+  4. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线）
+  5. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
+  6. 【低】消费轮视觉自查的 VLM 兜底 429 观测：本轮 dev.log 2 条真实 ZAI 限流（视觉自查兜底路径）——mock-vision 主路径不受影响；若生产高频视觉自查需重试/退避策略再议

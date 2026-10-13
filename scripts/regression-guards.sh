@@ -1578,6 +1578,39 @@ check "钉住一键清锚"               'clearAllPins' "src/components/studio/A
 # ⑧头部徽章锚（钉 N 计数文案；删则钉住数跨滚动不可见）
 check "钉住徽章锚"                 "zh: '钉'" "src/components/studio/AgentPanel.tsx" 1
 
+# ---- r116-a：消费轮（depth 2）救济对称——有界二次消费（r115 建议①） ----
+# r115 实测：消费轮命令成功 → 其视觉自查触发 → VLM 重发带错链修正命令失败即终（消费
+# 站点只在 depth-0）。r116-a 把消费轮返回记录再做一次链域消费判定：线性结构恰两轮
+# （第三轮不存在），二轮自身仍 depth+2 无修正轮，循环不可能成形。
+# ①二轮扫描锚（chainFails2 声明+push+条件+map 重组 = 4；删则消费轮失败无救济）
+check "消费二轮扫描锚"             'chainFails2' "src/components/studio/AgentPanel.tsx" 4
+# ②二轮探测复用锚（probe2 新探测优先+兜底复用首轮+双语文案引用 = 4；删则无链清单可依）
+check "消费二轮探测锚"             'probe2' "src/components/studio/AgentPanel.tsx" 4
+# ③二轮消息锚（「链清单消费（二轮）」前缀——E2E 断言链；删则二轮与首轮不可区分）
+check "消费二轮消息锚"             '链清单消费（二轮）' "src/components/studio/AgentPanel.tsx" 1
+# ④二轮防重发上下文锚（okOuts2 注释+声明+双语文案模板行 = 4 行；删则二轮重组重发已成功命令）
+check "消费二轮okOuts锚"           'okOuts2' "src/components/studio/AgentPanel.tsx" 4
+
+# ---- r116-b：钉住集待恢复提示（徽章琥珀态 + title/aria 双通道）（r115 建议②） ----
+# 刷新后钉恢复但结构未载时薄纱无法求值（ARIA 静默——恢复是隐式的）；徽章转琥珀色 +
+# title 提示「结构加载后自动恢复」——隐式行为显式化。
+# ①待恢复文案锚（badge 后缀「待结构恢复」；删则颜色变化无文字解释）
+check "钉住待恢复文案锚"           '待结构恢复' "src/components/studio/AgentPanel.tsx" 1
+# ②自动恢复提示锚（zh 自动恢复 + en restore automatically = aria/title 双语四处；删则用户不知薄纱何时回来）
+check "钉住自动恢复提示锚"         '自动恢复|restore automatically' "src/components/studio/AgentPanel.tsx" 4
+# ③琥珀待恢复态锚（amber 色系 class；AgentPanel 基线 3 行 + r116-b 新增 1 行；删则无结构时徽章与在场态不可区分）
+check "钉住琥珀待恢复锚"           'amber' "src/components/studio/AgentPanel.tsx" 4
+
+# ---- r116-c：拉马隔离开关偏好记忆（localStorage 持久化）（r115 建议③） ----
+# 「隔离审阅多个离群」是跨结构/跨会话工作流——rowIsolate 刷新即失是高频摩擦；惰性
+# 初始化直读（typeof 守卫兼容 SSR）+ 切换即写盘。
+# ①持久化键锚（键定义+读+写 = 3；删则偏好无载体）
+check "拉马隔离持久键锚"           'RAMA_ISOLATE_KEY' "src/components/studio/panels/RamaSection.tsx" 3
+# ②键字面量锚（跨会话稳定键名；改名则旧用户偏好静默失效）
+check "拉马隔离键名锚"             'molvision-rama-row-isolate' "src/components/studio/panels/RamaSection.tsx" 1
+# ③切换写盘锚（toggleRowIsolate 定义+onClick = 2；删则开关不留痕）
+check "拉马隔离切换锚"             'toggleRowIsolate' "src/components/studio/panels/RamaSection.tsx" 2
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治
