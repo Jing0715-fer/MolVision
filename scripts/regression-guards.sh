@@ -1536,8 +1536,9 @@ check "mock链域演练锚"             'fail drill chain' "mini-services/mock-l
 check "mock okSection隔离锚"       'okSection' "mini-services/mock-llm/index.ts" 2
 # ⑦mock 防重发过滤锚（okCmds 集合 + filter 同名丢弃）
 check "mock防重发过滤锚"           'okCmds' "mini-services/mock-llm/index.ts" 2
-# ⑧mock 重组去重锚（new Set(recomposedAll) 两处——commands 与 dropped 计数同源）
-check "mock重组去重锚"             'new Set\(recomposedAll\)' "mini-services/mock-llm/index.ts" 2
+# ⑧mock 重组去重锚（r118-a 单一来源重构：uniqAll 一处去重，commands/okDrop/failDrop
+#   全从 uniqAll 派生——旧两处 new Set(recomposedAll) 随口径拆分归一；删则去重与计数失源）
+check "mock重组去重锚"             'uniqAll' "mini-services/mock-llm/index.ts" 3
 
 # ---- r115-b：拉马影视级检视一镜到底 + 离群行隔离其余链开关（r114 建议②） ----
 # 三连后 slab 切层（±10Å 沿视线裁剪，前后遮挡剩侧链环境）+ 环境光压暗（1 → 0.6）；恢复链
@@ -1647,6 +1648,45 @@ check "快捷恢复快照锚"             'sessionSnap' "src/components/studio/A
 check "快捷恢复路径锚"             'restoreSession' "src/components/studio/AgentPanel.tsx" 2
 # ⑤图标锚（HardDriveDownload import+JSX = 2；与恢复卡同图标语义呼应）
 check "快捷恢复图标锚"             'HardDriveDownload' "src/components/studio/AgentPanel.tsx" 2
+
+# ---- r118-a：mock 0.46「同文曾失败」对称守卫（r117 建议①收口） ----
+# app 侧 r117-b 短路（failedTexts 过滤）后 mock 的「N 条待执行」与实际执行数出现口径差
+# （r117 G1a 实测：mock 说 1 待执行、app 跳过 1 执行 0）——mock 侧从失败节提取 failCmds，
+# 重组产物同文即丢弃 + 两类丢弃（ok 重复 / 同文失败）独立计数诚实进 reply。
+# ①failCmds 提取锚（声明+过滤引用 = 3；删则同文产物照发、口径差回归）
+check "mock同文失败集锚"           'failCmds' "mini-services/mock-llm/index.ts" 2
+# ②成功重复计数锚（声明+双语模板 = 4；删则 ok 丢弃不可见）
+check "mock成功重复计数锚"         'okDrop' "mini-services/mock-llm/index.ts" 3
+# ③同文失败计数锚（声明+双语模板 = 3；删则 fail 丢弃不可见——E2E 断言链断）
+check "mock同文失败计数锚"         'failDrop' "mini-services/mock-llm/index.ts" 3
+# ④ZH 跳过文案锚（与 app 侧 r117-b 文案同款对齐 = 1；删则 ZH 侧口径断）
+check "mock同文跳过文案锚ZH"       '与既往失败命令同文已跳过' "mini-services/mock-llm/index.ts" 1
+# ⑤EN 跳过文案锚（"N skipped as prior same-text failures" 与 app 侧同款 = 1）
+check "mock同文跳过文案锚EN"       'skipped as prior same-text failures' "mini-services/mock-llm/index.ts" 1
+
+# ---- r118-b：小屏补偿入口（r117 建议②收口） ----
+# 顶栏快捷恢复按钮 hidden sm:flex——移动端不可见，小屏待恢复态用户此前须绕道欢迎页
+# 恢复卡；正文区顶部提示条补齐（sm:hidden 与顶栏按钮互斥成对，桌面端不重复渲染）。
+# ①互斥锚（sm:hidden = 2：提示条 className + 既有处；删则移动端入口消失）
+check "小屏补偿互斥锚"             'sm:hidden' "src/components/studio/AgentPanel.tsx" 1
+# ②门控锚（钉在场+无活动结构+有存档+未失败 四条件同款 = 1；删则无钉也渲染误导入口）
+check "小屏补偿门控锚"             'pinnedJumps.length > 0 && !molActiveId && sessionSnap && !resumeGone' "src/components/studio/AgentPanel.tsx" 1
+# ③主行文案锚（钉 N 待恢复 / N pins pending 双语同线 = 1；删则无上下文的裸动作）
+check "小屏补偿文案锚"             '待恢复）|pins pending' "src/components/studio/AgentPanel.tsx" 1
+# ④双入口复用锚（quickResume 定义+双 onClick = 4；顶栏与小屏条同一路径——删则两入口行为分叉）
+check "双入口复用锚"               'quickResume' "src/components/studio/AgentPanel.tsx" 3
+
+# ---- r118-c：稳定帧工具 --canvas-aria 参数化 + 3D 视口 canvas aria（r117 建议⑤收口） ----
+# 显式 aria-label 子串精选（不区分大小写、未匹配诚实退出不静默回退最大面积）；前提是
+# 3D 视口 canvas 有 aria-label（r117 实测为空串）——MolViewer 挂载后补双语标签。
+# ①aria 参数锚（ARIA_PATTERN 解析+分支+失配消息 = 6；删则参数静默失效回退面积择优）
+check "aria精选参数锚"             'ARIA_PATTERN' ".zscripts/wait-stable-frame.sh" 5
+# ②失配诚实锚（NOMATCH JS 返回+双 case 分支 = 4；删则失配被吞——错抓伪装成通过）
+check "aria失配诚实锚"             'NOMATCH' ".zscripts/wait-stable-frame.sh" 3
+# ③视口标签锚（setAttribute 行双语同款 = 1；删则 --canvas-aria 无可选目标）
+check "视口aria标签锚"             '3D 分子视口|3D molecular viewport' "src/components/molecular/MolViewer.tsx" 1
+# ④标签写入锚（eng.canvas.setAttribute = 1；删则 3D 视口 aria 仍为空串）
+check "视口aria写入锚"             "setAttribute\\('aria-label'" "src/components/molecular/MolViewer.tsx" 1
 
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条

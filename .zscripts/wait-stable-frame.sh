@@ -7,15 +7,21 @@
 # cleared 即终态；活跃落屏差异在 3-5.8% 量级、终态噪声 0.12% 量级——差一个数量级，
 # 容差默认 0.15% 取分离带内偏噪声侧（与 visual-baseline 阈值同哲学）。
 #
-# 用法：bash .zscripts/wait-stable-frame.sh [轮数] [间隔秒] [容差%]
+# 用法：bash .zscripts/wait-stable-frame.sh [轮数] [间隔秒] [容差%] [--canvas-aria <模式>]
 #   默认：6 轮 × 2s × 0.15%（agent-browser 截图单张实测 ~5s：每轮 2 张+间隔 ≈12s，
 #   6 轮 ≈72s——单次 Bash 调用 ≤90s 铁律内（r112-a 坑：>~240s 长等待致 MCP 网关
 #   断连永久失会话）；需要更长耐心则分多次调用——STABLE 通常 2-4 轮内到达
 #   （派生计算 ~15s 落屏，r111 实测））
+#   --canvas-aria <模式>（r118-c，r117 建议⑤收口）：按 aria-label 子串精选 canvas
+#   （不区分大小写）——显式指定即权威：未匹配任何画布时 PIPE-FAIL 诚实退出，
+#   **不静默回退最大面积**（回退会把错抓伪装成通过——与哨兵哲学同款）。不指定时
+#   维持 r117-a 最大面积择优。多 3D 视口场景或拉马散点等辅助画布干扰时的显式
+#   覆盖入口；被测页需先给目标 canvas 补 aria-label（MolVision 的 3D 视口已随
+#   r118-c 补「3D 分子视口 / 3D molecular viewport」——模式「3d」双语文案均可命中）。
 #   退出码：0 = STABLE（打印到达轮数与实测漂移）；1 = UNSTABLE（超轮数——派生
 #           计算未落屏或存在持续动画，如实排查勿硬拍基线）；2 = 管线故障
-#           （canvas 缺失 / 截图三败 / 空白哨兵）；3 = Python 比对异常（rect 壳
-#           剥取失败等——与 UNSTABLE 严格区分，防「崩溃假报不稳定」）
+#           （canvas 缺失 / aria 未匹配 / 截图三败 / 空白哨兵）；3 = Python 比对
+#           异常（rect 壳剥取失败等——与 UNSTABLE 严格区分，防「崩溃假报不稳定」）
 # 前置：agent-browser 会话已打开且页面处于被测状态。本工具不动 DOM——视口清洁由
 #   调用方负责（G1 类测试 agent 面板本就是断言上下文不可隐藏）；比对算法与
 #   visual-baseline 同源（灰度差 > 12/255 计变化像素——bins 13..）。
@@ -34,6 +40,11 @@ set -u
 ROUNDS="${1:-6}"
 INTERVAL="${2:-2}"
 TOL="${3:-0.15}"
+# r118-c：--canvas-aria <模式>（第 4/5 位可选参数）——显式 aria-label 子串精选
+ARIA_PATTERN=''
+if [ "${4:-}" = '--canvas-aria' ]; then
+  ARIA_PATTERN="${5:-}"
+fi
 
 RAW1='/tmp/wsf-a.raw.png'
 RAW2='/tmp/wsf-b.raw.png'
@@ -46,7 +57,18 @@ rect_probe () {
   # r117-a：最大面积 canvas 精选（r116 坑②）——拉马散点图等辅助 canvas 先于 3D 视口
   # 出现在 DOM 时，querySelector 首个会错抓；面积最大者恒为 3D 视口（辅助画布均小）。
   # 返回附 canvas 数 n 供诊断（Python 侧只取 x/y/w/h，多余键无感）。
-  agent-browser eval "(() => { const cs = [...document.querySelectorAll('canvas')]; if (!cs.length) return 'NOCANVAS'; let best = null, ba = -1; for (const c of cs) { const r = c.getBoundingClientRect(); const a = r.width * r.height; if (a > ba) { ba = a; best = c } } const r = best.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), n: cs.length }) })()" 2>/dev/null
+  # r118-c：--canvas-aria 在场时优先按 aria-label 子串精选（不区分大小写；未匹配
+  # 返回 NOMATCH——调用方诚实退出，不静默回退最大面积）；模式串经反斜杠/单引号
+  # 双重转义注入 JS 字符串字面量。
+  local js
+  if [ -n "$ARIA_PATTERN" ]; then
+    local esc
+    esc=$(printf '%s' "$ARIA_PATTERN" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g")
+    js="(() => { const cs = [...document.querySelectorAll('canvas')]; if (!cs.length) return 'NOCANVAS'; const pat = '${esc}'.toLowerCase(); const best = cs.find(c => (c.getAttribute('aria-label') || '').toLowerCase().includes(pat)); if (!best) return 'NOMATCH'; const r = best.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), n: cs.length, m: 'aria' }) })()"
+  else
+    js="(() => { const cs = [...document.querySelectorAll('canvas')]; if (!cs.length) return 'NOCANVAS'; let best = null, ba = -1; for (const c of cs) { const r = c.getBoundingClientRect(); const a = r.width * r.height; if (a > ba) { ba = a; best = c } } const r = best.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), n: cs.length }) })()"
+  fi
+  agent-browser eval "$js" 2>/dev/null
 }
 
 # 三败重试截图（r92 陈旧帧防护同款——先删旧再拍，防重拍返回上一轮残帧）
@@ -63,6 +85,7 @@ shot () {
 probe=$(rect_probe)
 case "$probe" in
   *NOCANVAS*|'') echo "PIPE-FAIL canvas 缺失（agent-browser 会话未开或页面无 3D 视口）"; exit 2 ;;
+  *NOMATCH*) echo "PIPE-FAIL aria 未匹配（--canvas-aria '${ARIA_PATTERN}'：现有 canvas 的 aria-label 均不含该子串——显式指定即权威，不回退最大面积；先给目标画布补 aria-label）"; exit 2 ;;
 esac
 # r117-a：rect 每轮现取（r116 坑②）——旧版循环前探一次写入 RECT_JSON 后复用，
 # 异步内容落屏推挤布局后旧 rect 裁剪错区域（空白哨兵/假漂移双风险）。首轮落盘后
@@ -86,6 +109,7 @@ while [ "$round" -le "$ROUNDS" ]; do
     probe=$(rect_probe)
     case "$probe" in
       *NOCANVAS*|'') echo "PIPE-FAIL canvas 消失（第 ${round} 轮重探——页面被导航/画布被卸载）"; exit 2 ;;
+      *NOMATCH*) echo "PIPE-FAIL aria 失配（第 ${round} 轮重探：--canvas-aria '${ARIA_PATTERN}' 不再匹配——目标画布被卸载或 aria-label 变更）"; exit 2 ;;
     esac
     printf '%s' "$probe" > "$RECT_JSON"
   fi

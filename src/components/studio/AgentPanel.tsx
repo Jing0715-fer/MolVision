@@ -1153,6 +1153,31 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
         }}
         className="mol-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
       >
+        {/* r118-b 小屏补偿入口（r117 建议②收口）：顶栏快捷恢复按钮 hidden sm:flex——
+            移动端顶栏空间约束下不可见，待恢复态的小屏用户此前仍须绕道欢迎页恢复卡。
+            正文区顶部提示条补齐这一步（sm:hidden——与顶栏按钮互斥成对，桌面端不重复
+            渲染）；同款门控与恢复路径（quickResume 复用 restoreSession + 薄纱自动重建），
+            主行是动作、副行给上下文（结构数 + 名称 + 钉住薄纱恢复语义）。 */}
+        {pinnedJumps.length > 0 && !molActiveId && sessionSnap && !resumeGone && (
+          <button
+            onClick={quickResume}
+            disabled={molLoading}
+            aria-label={t({ zh: `载入最近结构（${sessionSnap.count} 个：${sessionSnap.names.join('、') || '—'}），恢复后钉住预览的薄纱自动重建`, en: `Load recent structures (${sessionSnap.count}: ${sessionSnap.names.join(', ') || '—'}); pinned-preview veils rebuild automatically after restore` })}
+            className="flex w-full items-center gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-left transition hover:border-amber-500/60 hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-50 sm:hidden"
+          >
+            <HardDriveDownload className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                {molLoading
+                  ? t({ zh: '载入中…', en: 'Loading…' })
+                  : t({ zh: `载入最近结构（钉 ${pinnedJumps.length} 待恢复）`, en: `Load recent structures (${pinnedJumps.length} pins pending)` })}
+              </span>
+              <span className="block truncate text-[10px] text-amber-700/75 dark:text-amber-400/75">
+                {t({ zh: `${sessionSnap.count} 个 · ${sessionSnap.names.join('、') || '—'}——恢复后薄纱自动重建`, en: `${sessionSnap.count} · ${sessionSnap.names.join(', ') || '—'} — veils rebuild after restore` })}
+              </span>
+            </span>
+          </button>
+        )}
         {msgs.length === 0 && !busy && (
           <div className="space-y-3.5 pt-2">
             <div className="rounded-lg border border-dashed border-border bg-muted/40 px-3 py-3.5 text-center">

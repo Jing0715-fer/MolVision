@@ -4996,3 +4996,37 @@ Stage Summary:
   5. 【低】稳定帧工具的「指定 canvas」参数化：max-area 择优已覆盖主场景，但「按 aria 精选」（3D 视口 aria-label 缺失——本轮实测 aria 为空串）可作为显式覆盖入口（--canvas-aria <pattern>），供未来多 3D 视口场景
 
 （r117 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #456947 创建（00:31:50）——create 返回 success 但 list 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 31 次实证：r85-r116 连续 30 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 list 的 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r117 开发纪律（基线 145b70d / guards 825 / 门禁链与 kill 红线 / E2E 铁律含 fill 后按钮解禁与消息气泡定位新坑 / 下轮优先级五条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 825 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r118
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r117 下一轮建议①②⑤全收口：①mock 0.46「同文曾失败」对称守卫（failCmds 提取 + 两类丢弃独立计数 + 口径与 app 侧 r117-b 对齐）②快捷恢复移动端补偿入口（正文区提示条，与顶栏按钮互斥成对）⑤wait-stable-frame --canvas-aria 参数化 + 3D 视口 canvas 补 aria-label；QA 门禁链全绿 + E2E（M 21 新锚 + 73 回归 + G1 三组浏览器全链）+ 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=c476255（r117 cron 补记后）；guards 实跑 825/825 = 本轮基线；dev 3000=200 + mock 3999 活 + 双守护互察正常（daemon.log devd→mockd ok）；会话摘要为 r92 旧档——以 worklog 为准（r117 实际已收口探针修复/同文短路/快捷恢复三线）
+- 【改动·r118-a mock 侧 0.46】0.46 链清单消费分支：failCmds = new Set(failedPairs 失败命令文本)；重组产物去重集 uniqAll 后双过滤（!okCmds && !failCmds）；okDrop / failDrop 两类丢弃独立计数（重叠时 ok 优先——先失败后成功的最终态按 ok 口径，不冒充同文失败）；reply 双语模板追加「另有 N 条与既往失败命令同文已跳过 / N skipped as prior same-text failures」（与 app 侧 r117-b 文案同款对齐）；对比口径带 .trim()（两侧文本归一）
+- 【改动·r118-b 应用侧】AgentPanel 正文区（消息滚动区顶部）小屏补偿提示条：门控 pinnedJumps.length > 0 && !molActiveId && sessionSnap && !resumeGone（与顶栏按钮同款四条件）；sm:hidden 与顶栏 hidden sm:flex 互斥成对（桌面端不重复渲染）；主行「载入最近结构（钉 N 待恢复）/ Load recent structures (N pins pending)」+ 副行「M 个 · 名称——恢复后薄纱自动重建」；onClick 复用 quickResume（restoreSession 同一路径 + molActiveId effect 驱动薄纱自动重建）；aria-label 与顶栏按钮同款
+- 【改动·r118-c 工具+视口】①MolViewer 引擎挂载后 eng.canvas.setAttribute('aria-label', tt 双语)——「3D 分子视口（交互式渲染画布）/ 3D molecular viewport (interactive render canvas)」，不设 role（交互画布勿标静态图形）；「3D」词干双语文案共通，工具模式「3d」两端均可命中②wait-stable-frame.sh 新增 --canvas-aria <模式>（第 4/5 位参数）：在场时按 aria-label 子串精选（不区分大小写、模式串经反斜杠/单引号双重转义注入 JS）；未匹配返回 NOMATCH → 双 case 分支（首轮+轮间重探）诚实 exit 2，不静默回退最大面积；rect JSON 附 m:'aria' 诊断标记；用法文档与退出码注释同步
+- 【守卫 825→838（+13）】r118-a 五锚（failCmds≥2 / okDrop≥3 / failDrop≥3 / ZH 文案≥1 / EN 文案≥1）+ r118-b 四锚（sm:hidden≥1 / 四条件门控≥1 / 主行文案≥1 / quickResume≥3 双入口）+ r118-c 四锚（ARIA_PATTERN≥5 / NOMATCH≥3 / 视口标签≥1 / setAttribute≥1）；r115-d 旧锚⑧随单一来源重构同步（new Set(recomposedAll)×2 → uniqAll≥3——commands/okDrop/failDrop 全从 uniqAll 派生，去重与计数同源更严）
+- 【QA】lint 0 · bunx tsc src/ 零错误（基线 5 环境错不变）· guards 838/838 · smoke 6/6 · visual-baseline 7/7（漂移 0.00%）· dev.log 尾部零真 error（仅 7AHL >2MB 缓存提示非错——已知基线项）
+- 【E2E-M】.zscripts/r118-m.ts 21/21：T1 同文失败主场景（近中心 view from 恒同文 → 0 待执行 + 1 同文跳过）· T2 混合三分类（保留 1 + ok 丢 1 + 同文丢 1 同句双计数）· T3 EN 双文案（same-text failures + duplicates）· T4 错链重组不同文不误丢（防过度丢弃回归锚）· T5 产物与另一条失败同文也丢 · T6 ok-fail 重叠 ok 优先（不冒充同文口径）· T7 视觉链域演练分支回归 · T8 r115-d 纯 ok 丢弃零回归；M 组回归 73/73（r116-m 11 + r115-m 21 + r114-m 16 + r111-m 9 + r110-m 16）零破坏
+- 【E2E-G1a 消费救济二轮口径对齐】1A2N + custom 供应商（**两步配置纪律再实证：POST setDefault:true 分支提前 return 不落 baseURL/apiKey——先 save 后 setDefault 两 POST；另 API key 须 test-key-12345**）+ 钉 interface-analysis 技能 + "fail drill chain: ..."：主轮技能流程 4 命令全败（chain B 空选择）→ 修正轮 chains list 探测 → 视觉自查#1 演练败（zoom chain Z, 5 / interface A Z）→ 一轮消费「4 条待执行」4 命令全执行（interface A A 6780 对 / contacts 4220 对 / view from / zoom chain A, 5）→ 视觉自查#2 演练败 → **二轮消费消息「已按链清单重组命令（……0 条待执行，另有 2 条与已成功命令重复已跳过，另有 1 条与既往失败命令同文已跳过）」+ 命令卡 0 张**——mock 口径与 app 实际执行数（0）完全一致；r117 旧行为的口径分裂（mock 说 1 待执行 + app 侧补「（另有 1 条与既往失败命令同文，已跳过）」后缀）消失——app 后缀不出现（recomp2All 为空 app 无物可滤），计数单一来源于 mock；console 零错误
+- 【E2E-G1b 移动端补偿全周期】viewport 375×812 + 种子钉 view from (chain A)（localStorage）+ 刷新（不恢复会话）→ 欢迎页悬浮胶囊开面板 → **双入口互斥实证：顶栏按钮 display:none（hidden sm:flex 移动端隐藏）+ 正文区补偿条 display:flex 317×54px 可见**（主行 "Load recent structures (1 pins pending)" + 副行 "1 · 1A2N — veils rebuild after restore"）→ 点击补偿条 → 9s 内引擎就位 + 徽章回青 "Pin 1"（amber=false）+ ARIA "Pinned previews: Chain A overview (3449 atoms)"（薄纱自动重建）+ 补偿条消失（molActiveId 门控关闭）——移动端用户「提示→路径→闭环」三段全兑现
+- 【E2E-G1c aria 精选多路径】3D 视口 canvas aria-label 在场（"3D molecular viewport (interactive render canvas)"，1104×679）→ wait-stable-frame --canvas-aria '3d' STABLE 第 1 轮 0.002% + rect {"x":336,"y":44,"w":1104,"h":679,"n":1,"m":"aria"}；NOMATCH 路径 --canvas-aria 'nonexistent-xyz' → PIPE-FAIL exit 2（诚实退出不静默回退最大面积）；**多画布双向精选**（开 Analysis 拉马散点后 n:2）：'ramachandran' 命中小画布 232×224@(74,696)（aria 权威覆盖最大面积择优——r116 坑②场景的显式控制入口）+ '3d' 命中大画布 1104×679——拉马散点自带 aria-label（"Ramachandran scatter: 416 residues"）与 3D 视口标签天然可区分
+- 【坑（新入档）】①**provider POST 的 setDefault 分支提前 return**——{providerId, baseURL, setDefault:true} 单 POST 只设默认不落配置（baseURL 丢弃 → 面板报 "no Base URL configured"）；必须两步：先带字段 save、后 setDefault（r117 纪律「两步配置」的根因入档）②**mock 期望 API key = test-key-12345**——provider 配 apiKey 填错值时错误表现为 custom HTTP 401 Incorrect API key（不是连接错误，勿误判 mock 掉线）③**G1 定位「Load recent」双按钮须按可见性区分**——顶栏按钮（hidden sm:flex）与正文补偿条（sm:hidden）同 aria-label 文本，移动端 [.find() 抓首个会拿到 display:none 的顶栏按钮]——按 getComputedStyle(b).display !== 'none' 过滤
+- 【现场恢复】provider DELETE custom → zai 默认（GET 复核 defaultProvider:zai）✓；钉清空（pins []）✓；浏览器会话 close ✓；1A2N 留会话存档（恢复卡可见——无碍）
+
+Stage Summary:
+- 交付一（r118-a）：mock 0.46 同文曾失败对称守卫——r117 建议①收口：failCmds 集合 + 两类丢弃独立计数（重叠 ok 优先）+ 双语文案与 app 侧同款；G1a 实证口径分裂消失（r117「mock 1 待执行 vs app 执行 0」→ r118「mock 0 条待执行 + 双计数，app 后缀不再出现」——单一计数源）
+- 交付二（r118-b）：快捷恢复移动端补偿入口——r117 建议②收口：正文区提示条与顶栏按钮互斥成对（sm:hidden / hidden sm:flex）；G1b 全周期实证（顶栏隐藏+条可见 → 点击 → 会话还原+徽章回青+薄纱重建+条消失）
+- 交付三（r118-c）：--canvas-aria 参数化 + 3D 视口 aria-label——r117 建议⑤收口：aria 精选权威（NOMATCH 诚实 exit 2 不回退）+ 多画布双向命中（ramachandran 小画布 / 3d 大画布）+ m:'aria' 诊断标记
+- 交付四（测试基建）：r118-m.ts 21 锚 + 守卫 825→838（+13，旧锚⑧随单一来源重构同步）
+- 交付五（验证）：guards 838/838 · smoke 6/6 · visual-baseline 7/7（0.00%）· E2E M 21/21 + 回归 73/73 + G1 三组全链（口径对齐行为分界 / 移动端补偿全周期 / aria 精选多路径）· console 零错误 · dev.log 干净 · provider 现场恢复
+- 与用户指令对位：①「进行下一阶段开发」——r117 建议①②⑤全收口 ②「qa测试和e2e测试」——六道门禁 + M/G1 三组 ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【中】拉马散点 canvas 的 aria-label 发现：RamaSection 已自带「Ramachandran scatter: N residues」——双画布 aria 天然可区分，可把 visual-baseline / smoke 的 canvas 探针统一迁到 --canvas-aria '3d' 显式模式（当前 max-area 择优在极端布局下仍可能被更大的辅助画布干扰——aria 模式是确定性锚）
+  2. 【中】移动端补偿条的结构态泛化评估：当前门控绑定「钉待恢复」场景（pinnedJumps.length > 0）；无钉但有小屏用户想恢复会话的场景仍只有欢迎页入口——可评估独立「最近会话」小屏入口（与钉无关的门控，谨慎防入口泛滥）
+  3. 【低】二轮消费 reply 的「无效链已替换为 A」措辞在 0 条待执行场景略冗余（无重组发生时仍称替换）——mock 侧可在 commands 为空时切换「无可重组命令」文案（诚实度打磨，非功能缺口）
+  4. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线）
+  5. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
+  6. 【低】消费轮视觉自查的 VLM 兜底 429 观测（r116 遗留——mock-vision 主路径不受影响；生产高频视觉自查需重试/退避策略再议）

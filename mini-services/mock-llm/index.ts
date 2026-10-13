@@ -572,13 +572,20 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
     // r115-d 双重去重：①重组产物精确去重（不同失败命令可重组出同名命令——原失败与
     // 视觉重发同文时）；②与已成功命令同名时丢弃（防重发——真实 LLM 同样不会重发已
     // 成功的命令）。丢弃计数进 reply（诚实口径：重组了几条、丢了几条重复、为什么丢）。
+    // r118-a 对称守卫（r117 建议①）：再从失败节提取 failCmds 集，重组产物与既往失败
+    // 命令同文时丢弃——app 侧 r117-b 同款短路的 mock 对称（重组无变化的命令重跑必再
+    // 败；r117 G1a 实测口径差：mock 说「1 条待执行」而 app 短路后实际执行 0）。两类
+    // 丢弃独立计数、各自诚实进 reply；app 侧防线保留（真实 LLM 无 mock 配合仍生效）。
+    const failCmds = new Set(failedPairs.map(([c]) => c))
     const recomposedAll = failedPairs.map(([c]) => recomposeByChainList(c, available, pick))
-    const commands = [...new Set(recomposedAll)].filter(c => !okCmds.has(c))
-    const dropped = [...new Set(recomposedAll)].length - commands.length
+    const uniqAll = [...new Set(recomposedAll)]
+    const commands = uniqAll.filter(c => !okCmds.has(c.trim()) && !failCmds.has(c.trim()))
+    const okDrop = uniqAll.filter(c => okCmds.has(c.trim())).length
+    const failDrop = uniqAll.length - commands.length - okDrop
     const avail = [...available].join('、')
     return dec(zh,
-      `已按链清单重组命令（场景可用链：${avail}；无效链已替换为 ${pick}——${commands.length} 条待执行${dropped > 0 ? `，另有 ${dropped} 条与已成功命令重复已跳过` : ''}）。`,
-      `Commands recomposed per the chain list (available chains: ${[...available].join(', ')}; invalid chains replaced with ${pick} — ${commands.length} to run${dropped > 0 ? `, ${dropped} skipped as duplicates of already-successful commands` : ''}).`,
+      `已按链清单重组命令（场景可用链：${avail}；无效链已替换为 ${pick}——${commands.length} 条待执行${okDrop > 0 ? `，另有 ${okDrop} 条与已成功命令重复已跳过` : ''}${failDrop > 0 ? `，另有 ${failDrop} 条与既往失败命令同文已跳过` : ''}）。`,
+      `Commands recomposed per the chain list (available chains: ${[...available].join(', ')}; invalid chains replaced with ${pick} — ${commands.length} to run${okDrop > 0 ? `, ${okDrop} skipped as duplicates of already-successful commands` : ''}${failDrop > 0 ? `, ${failDrop} skipped as prior same-text failures` : ''}).`,
       commands)
   }
 

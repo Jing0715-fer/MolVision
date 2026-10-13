@@ -181,6 +181,11 @@ export default function MolViewer() {
     })
     engineRef.current = eng
     engine.current = eng
+    // r118-c：3D 视口 canvas 补 aria-label（r117 实测为空串——E2E 稳定帧工具
+    // --canvas-aria 精选参数可用的前提；「3D」词干双语文案共通，工具按不区分大小写
+    // 子串匹配两端均可命中）。不设 role：画布承载轨道旋转/拾取等交互，role=img 会
+    // 把交互画布误标为静态图形。
+    eng.canvas.setAttribute('aria-label', tt({ zh: '3D 分子视口（交互式渲染画布）', en: '3D molecular viewport (interactive render canvas)' }))
     eng.sync(useMolStore.getState())
     // 欢迎页首发：结构先于引擎就位时，冲刷排队的取景/相机/对称操作
     flushEngineReady()
