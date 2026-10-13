@@ -4882,3 +4882,5 @@ Stage Summary:
   4. 【中】mock 0.46 的多轮扩展：消费轮失败的再消费（当前 depth+2 无救济——有界 vs 闭环的取舍已有定论，但 mock 侧可在 consumePrompt 里附带「上次重组已执行」上下文防 LLM 重发同命令）
   5. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors）
   6. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
+
+（r114 段 cron 补记，2026-10-13）15min webDevReview 巡检任务 #456214 创建（11:26:35）——创建成功未即时报 Disabled（第 28 次尝试，前 27 次连续配额硬限）——本轮配额疑似恢复，巡检任务在位生效。任务书已内嵌 r114 开发纪律（基线 3961864 / guards 780 / 门禁链与 kill 红线 / E2E 铁律含水合竞态与卡片断言新坑 / 下轮优先级六条）。
