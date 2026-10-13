@@ -5032,3 +5032,39 @@ Stage Summary:
   6. 【低】消费轮视觉自查的 VLM 兜底 429 观测（r116 遗留——mock-vision 主路径不受影响；生产高频视觉自查需重试/退避策略再议）
 
 （r118 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #457076 创建（01:30:37）——create 返回 success 但 list 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 32 次实证：r85-r117 连续 31 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 list 的 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r118 开发纪律（基线 0a5224b / guards 838 / 门禁链与 kill 红线 / E2E 铁律含 provider 两步配置与双按钮可见性区分新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 838 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r119
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划」——r118 下一轮建议①②③全收口：①visual-baseline canvas 探针统一迁 aria '3d' 精选（r118 实测「3D 视口 canvas aria-label 在场」的确定性锚红利）②小屏补偿条结构态泛化（去钉门控 + 双态自适应——防入口泛滥的同条泛化路线）③mock 0.46 二轮消费 0 待执行文案切换（「无效链已替换为 A」伪陈述退场）；QA 门禁链全绿 + E2E（M 22 新锚 + 6 块旧锚同步 + 100 旧锚回归 + G1 三组浏览器全链）+ 结果驱动规划
+
+Work Log:
+- 【读基】HEAD=5e937b1（r118 cron 补记后）；guards 实跑 838/838 = 本轮基线；dev 3000=200 + mock 3999 completions=200（Bearer test-key-12345 探活）+ 双守护互察正常（daemon.log devd→mockd ok 5min 心跳）；会话摘要为 r92 旧档——以 worklog 为准（r118 实际已收口 mock 对称守卫/移动端补偿/aria 参数化三线）
+- 【改动·r119-a 稳定基线探针迁移】scripts/visual-baseline.sh 三处 canvas 探针统一迁 aria '3d' 子串精选：①清洁视口第一遍/第二遍（main.querySelectorAll('canvas') find aria 含 '3d'——旧 querySelector('canvas') 首个在多画布场景会错抓辅助画布致真视口包裹层被当 overlay 误隐藏）②rect 实测探针（全文档 aria 精选 + NOARIA 诚实 PROBE-FAIL 不静默回退 + rect JSON 附 n 画布数与 m:'aria' 诊断标记——与 wait-stable-frame --canvas-aria 同款语义）；文件头确定性保障注释同步
+- 【改动·r119-b mock 0.46 文案切换】commands.length===0 分支（重组产物全部被丢弃）改走新文案：「链清单核对完成：N 条候选命令全部与已成功命令重复或与既往失败命令同文（X 条成功重复、Y 条失败同文），无可执行命令——请换一个分析目标，或人工执行 chains list 核验后重试」+ EN 同构（Chain-list check complete … nothing to run … run chains list manually and retry）；依据：旧文案「无效链已替换为 A——0 条待执行」在产物全丢弃时是伪陈述（没有任何命令真的被替换后执行）；commands.length===0 时 uniqAll.length===okDrop+failDrop 恒成立（recomposeByChainList 恒非空 + failedPairs 非空前置校验——不存在 0 候选分支）；1+ 待执行路径旧句式原样保留（if (!commands.length) 先于旧 return——分支边界精确切换）
+- 【改动·r119-c 补偿条结构态泛化】AgentPanel quickResumeStrip 对象（{ pending, snap }——snap 并入解决 JSX 内 sessionSnap null 收窄）+ 门控去钉化（!molActiveId && sessionSnap && !resumeGone 即渲染，顶栏按钮与正文条同门控）：pending=true 琥珀系 +「载入最近结构（钉 N 待恢复）」+ 薄纱重建副行（r118-b 原语义不变）；pending=false 翡翠系（border-primary/30 + bg-primary/[0.06] + primary 图标/主文本）+「继续上次会话」+ 恢复卡同款副行（N 个结构 · 名称）；桌面顶栏按钮保持钉专属（无钉桌面路径 = 欢迎页恢复卡直接可见——防入口泛滥评估结论：不新增入口，同条泛化）
+- 【坑（新入档）】①**custom provider save 第三字段 defaultModel**——G1a 首发报「Provider Custom compatible endpoint has no model configured」：mock 供应商配置须 baseURL+apiKey+defaultModel 三字段齐（r118 坑①「两步配置」升级为「两步三字段」）②**GET /api/agent/providers 不回传裸字段**——status 返回 effectiveModel/hasBaseURLOverride/maskedKey（r99 凭据不回传纪律），读 cu.baseURL/cu.defaultModel 得档案空串是误读非未持久化（存档文件 .molvision/agent-providers.json 直接复核为正）③**fill 后发送按钮跨 eval 时差**——fill eval 与 find+click eval 分离时 React 受控更新未传播（NOBTN 假象）；fill → sleep → 独立 eval 再 find（r118 坑①同族，G1 铁律补充）④**悬浮胶囊无 aria-label**——定位按文本 AI 助手/AI Assistant + 可见性过滤（aria 搜索一族对它无效）⑤**r119-m T2c 期望值笔误**——分类计数断言必须按场景实际构成推导（无 ok 节场景 = 0 success duplicates；作者侧测试坑入档）
+- 【守卫 838→852（+14）】r119-a 三锚（aria 探针 includes('3d')≥3 / NOARIA≥3 / rect 诊断 m:'aria'≥1）+ r119-b 四锚（泛化条对象≥6 / 双态文案≥3 / 快照并入 snap: sessionSnap≥1 / 翡翠色系≥1）+ r119-c 七锚（零命令分支≥1 / 标题 ZH+EN≥2 / 口径≥2 / 分类计数≥2 / 旧文案保留≥1 / 建议≥1）；小屏补偿门控锚随泛化重构同步（旧四条件字面量 → 新三条件两处 = 2）
+- 【M 套件同步】r118-m 4 块（T1/T3/T5/T6——0 待执行场景断言随新文案同步：'1 条失败同文'/'无可执行命令'/'nothing to run'/'1 条成功重复、0 条失败同文'/notIncludes '已替换为' 伪陈述锚）+ r116-m T2（'2 条成功重复'+'无可执行命令'）+ r115-m T4（'1 success duplicates'+'nothing to run'）——口径锚意图不变（与 app 短路后实际执行数一致），r118 段「旧锚随单一来源重构同步」同款惯例
+- 【QA】lint 0 · bunx tsc src/ 零错误（基线 5 环境错不变：examples/websocket ×2 + mock Bun 类型 ×1 + skills ×2）· guards 852/852 · smoke 6/6 · visual-baseline 7/7（0.00% 漂移——aria 探针 7 场景全链实跑）· dev.log 尾部零新错（EADDRINUSE 为历史 devd 采纳模式痕迹，当前 PID 1248 健康 + 心跳正常）；mockd 热重载实证（source change detected → L2 ok after hot-reload）
+- 【E2E-M】.zscripts/r119-m.ts 22/22：T1 ZH 0 待执行新文案全锚（8 锚含 notIncludes 旧签名退场）· T2 EN 新文案全锚（6）· T3 1+ 待执行旧文案边界回归（4——分支边界精确切换）· T4 纯 ok 丢弃分类计数（2）· T5 视觉分支正交回归（2）；M 组回归全绿：r110-m 16 + r111-m 9 + r114-m 16 + r115-m 22 + r116-m 12 + r118-m 25 = 100/100 零破坏
+- 【E2E-G1a 消费 0 待执行文案浏览器全链】1A2N + custom 供应商（**两步三字段**：save {baseURL:3999/v1, apiKey:test-key-12345, defaultModel:mock-gpt} + setDefault）+ 钉 interface-analysis 技能（[data-radix-popper-content-wrapper] 内定位）+ "fail drill chain: analyze the interface between chain A and chain B"：主轮技能流程 → 修正轮 chains list 探测 → 视觉自查#1 演练败 → 一轮消费（旧句式 + 命令卡执行）→ 视觉自查#2 演练败 → **二轮消费消息「Chain-list consumption (2nd): 链清单核对完成：2 条候选命令全部与已成功命令重复或与既往失败命令同文（1 条成功重复、1 条失败同文），无可执行命令——请换一个分析目标，或人工执行 chains list 核验后重试」+ 命令卡 0 张**——r118 旧行为的「无效链已替换为 A——0 条待执行」伪陈述在浏览器实证退场；console 全程零错误
+- 【E2E-G1b 移动端泛化补偿全周期】viewport 375×812 + 清钉 + 刷新（不恢复会话，molData=0）→ 欢迎页恢复卡在场（主区被浮层面板盖住）→ 悬浮胶囊（文本定位）开面板 → **泛化补偿条实证：无钉态渲染 display:flex 317×54 + aria-label "Resume last session (1 structures: 1A2N)" + 主行 "Resume last session" + 副行 "1 structures · 1A2N" + 翡翠色系计算样式实证（borderColor oklab(0.692 -0.125 0.027/0.3) 与 icon/main lab(65.97 -44.37 9.87)——负 a 青绿轴非琥珀黄轴）+ 顶栏按钮整体缺席（钉门控不渲染，强于 display:none）**→ 点击 → 9s 内 molData 0→1 + 引擎就位 + 补偿条消失（molActiveId 门控关闭）；toast 断言因 9s 等待已过 sonner 自动退场窗（4s）而 false——结构恢复 + 条消失为闭环主证据，toast 观察窗收紧为后续工具债
+- 【E2E-G1c aria 探针实跑】visual-baseline.sh check 全量 7/7 场景（aria '3d' 精选探针在每场景实跑）+ /tmp/visual-baseline-canvas.json = {"x":336,"y":44,"w":944,"h":694,"n":1,"m":"aria"}——m:'aria' 诊断标记 + 尺寸对齐 3D 视口（944×694）+ 漂移全 0.00%；r116 坑②（querySelector('canvas') 首个错抓）在基线管线的根修完成
+- 【现场恢复】provider DELETE custom → zai 默认 ✓（GET 复核 defaultProvider:zai）；钉清空 ✓；浏览器会话 close ✓；1A2N 留会话存档（恢复卡可见——无碍）
+
+Stage Summary:
+- 交付一（r119-a）：visual-baseline canvas 探针 aria '3d' 精选——r118 建议①收口：三处探针（清洁两遍 + rect 实测）+ NOARIA 诚实退出 + m:'aria' 诊断标记；G1c 7 场景实跑 0.00% 漂移 + rect 选中 3D 视口 944×694
+- 交付二（r119-b）：小屏补偿条结构态泛化——r118 建议②收口：门控去钉化 + 琥珀/翡翠双态自适应（同条泛化不新增入口）；G1b 全周期实证（无钉态渲染 + 翡翠计算样式 + 顶栏缺席 → 点击恢复 0→1 → 条消失）
+- 交付三（r119-c）：mock 0.46 0 待执行文案切换——r118 建议③收口：伪陈述「已替换为 A + 0 条待执行」退场，「链清单核对完成 + 分类计数 + 下一步建议」诚实口径；G1a 浏览器实证二轮消费 0 命令卡 + 1+ 待执行旧句式保留（T3 分支边界锚）
+- 交付四（测试基建）：r119-m.ts 22 锚 + 守卫 838→852（+14，门控锚同步）+ M 套件 6 块旧锚同步（100 旧锚回归零破坏）
+- 交付五（验证）：guards 852/852 · smoke 6/6 · visual-baseline 7/7（0.00%）· E2E M 22/22 + 回归 100/100 + G1 三组全链（浏览器新文案全链 / 移动端泛化全周期含计算样式 / aria 探针 7 场景实跑）· console 零错误 · dev.log 干净 · provider 现场恢复
+- 与用户指令对位：①「进行下一阶段开发」——r118 建议①②③全收口 ②「qa测试和e2e测试」——六道门禁 + M/G1 三组 ③「根据测试结果规划后续」——见下
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【中】G1b 的 toast 断言观察窗收紧：sonner toast ~4s 自动退场，G1 等 9s 后查 hasToast 必 false——E2E 驱动可改为点击后 2s 内轮询 body 文本（工具债：G1 驱动模板化时统一）
+  2. 【中】拉马散点 aria 与基线探针统一红利外溢：visual-baseline 已迁 aria '3d'，smoke.sh 的 DOM 探针族（应用标志/语言切换/骨架）仍 textContent 级——多画布场景若 smoke 后续扩渲染断言，直接用 aria 锚（本轮已验证模式）
+  3. 【低】泛化补偿条与欢迎页恢复卡的双入口语义重复评估：无钉小屏用户现在有两条恢复路径（被盖住的恢复卡 + 泛化条）——若后续观察使用率，可评估面板开着时恢复卡是否需要视觉弱化（当前无碍）
+  4. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线）
+  5. 【低】拉马离群与 MolProbity 口径对齐评估（Lovell 椭圆近似 vs 完整拓扑边界——文献级 QC 需求时再议）
+  6. 【低】消费轮视觉自查的 VLM 兜底 429 观测（r116 遗留——mock-vision 主路径不受影响；生产高频视觉自查需重试/退避策略再议）
+
