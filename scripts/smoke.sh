@@ -7,8 +7,10 @@
 #       够不到的运行面：
 #         1. console 错误为零（含 CSP violation / 未捕获异常）
 #         2. 应用标志在（document.title / 正文含 "MolVision"）
-#         3. 语言切换入口在（中文/EN 按钮）
-#         4. 主体 UI 骨架在（正文含 structure/结构 等工作台标志）
+#         3. 语言切换入口在（r120-b aria 主探针：button[aria-label]=语言/Language；
+#            textContent 诚实标注回退——冒烟测渲染死亡，锚回归由 guards 拦截）
+#         4. 主体 UI 骨架在（r120-b 共条件升级：structure/结构 文本标志 + PDB
+#            输入框 aria 结构锚——文案在而控件亡的渲染残缺态原纯文本探针测不到）
 #         5. 假死哨兵：重载路径——先装载 4HHB 再预设切换（press 2 真实重渲染）
 #            触发后有界 eval 探针仍响应（r103-c / r102 建议③ / r104-c 重载变体；
 #            装载失败诚实降级轻量路径，路径标记入 PASS 文案）
@@ -75,21 +77,34 @@ else
   fail "应用标志缺失：title/正文均不含 MolVision（实得：${marker:-<eval 无返回>}）"
 fi
 
-# ---- 断言 3：语言切换入口（中文/EN 按钮） ----
+# ---- 断言 3：语言切换入口（r120-b aria 主探针升级，r119 建议②收口） ----
+# 语言切换的 aria-label「语言/Language」挂在 LanguageToggle 的 div[role=group]
+# 包装层上（非 button——r120 首跑实测坑：button[aria-label] 探针恒 false 走了
+# textContent 回退）；探针用全元素 [aria-label] 匹配确定性结构锚。textContent
+# 路径保留为诚实标注回退（冒烟职责是测渲染死亡，锚回归由 guards 拦截，两级
+# 职责分工不混淆）。
 total_btn=$(agent-browser eval "document.querySelectorAll('button').length" 2>/dev/null)
+has_lang_aria=$(agent-browser eval "Array.from(document.querySelectorAll('[aria-label]')).some(x => /^(语言|Language)$/i.test((x.getAttribute('aria-label') || '').trim()))" 2>/dev/null)
 has_lang=$(agent-browser eval "Array.from(document.querySelectorAll('button')).some(x => /^(中文|EN|中)$/i.test((x.textContent || '').trim()))" 2>/dev/null)
-if [ "$has_lang" = "true" ] && [ "${total_btn:-0}" -gt 0 ]; then
-  pass "语言切换入口在（中文/EN 按钮，页面按钮 ${total_btn} 个）"
+if [ "$has_lang_aria" = "true" ]; then
+  pass "语言切换入口在（aria 锚命中 [aria-label]=语言/Language，页面按钮 ${total_btn} 个）"
+elif [ "$has_lang" = "true" ] && [ "${total_btn:-0}" -gt 0 ]; then
+  pass "语言切换入口在（textContent 回退命中——aria 锚未命中，语言切换 aria-label 疑似回归，guards 应拦截）"
 else
-  fail "语言切换入口缺失：未找到 中文/EN 按钮（按钮总数 ${total_btn:-0}，hasLang=${has_lang:-<eval 无返回>}）"
+  fail "语言切换入口缺失：aria 锚与 textContent 双路径均未命中（按钮总数 ${total_btn:-0}，aria=${has_lang_aria:-<eval 无返回>}，txt=${has_lang:-<eval 无返回>}）"
 fi
 
-# ---- 断言 4：主体 UI 骨架（正文含 structure/结构 等工作台标志） ----
+# ---- 断言 4：主体 UI 骨架（r120-b 结构锚共条件升级，r119 建议②收口） ----
+# 纯 innerText 探针升级为「文本标志 + 结构锚」共条件：欢迎页 PDB 编号输入框
+# （aria-label「PDB 编号/PDB ID」，与断言 5 装载探针同一锚——双场景复用）是
+# 工作台核心入口的结构存在性证据；两条件同时满足才 PASS（共条件比原单条件更
+# 严，非回退语义——渲染残缺态「文案在而控件亡」不再漏过）。
 skel=$(agent-browser eval "/structure|结构|MOLECULAR STUDIO/i.test(document.body.innerText)" 2>/dev/null)
-if [ "$skel" = "true" ]; then
-  pass "主体 UI 骨架在（structure/结构 工作台标志）"
+pdb_input=$(agent-browser eval "!!document.querySelector('input[aria-label=\"PDB 编号\"], input[aria-label=\"PDB ID\"]')" 2>/dev/null)
+if [ "$skel" = "true" ] && [ "$pdb_input" = "true" ]; then
+  pass "主体 UI 骨架在（structure/结构 文本标志 + PDB 输入框 aria 结构锚）"
 else
-  fail "主体 UI 骨架缺失：正文不含 structure/结构/MOLECULAR STUDIO（实得：${skel:-<eval 无返回>}）"
+  fail "主体 UI 骨架缺失：文本标志=${skel:-<eval 无返回>}，PDB 输入框 aria 锚=${pdb_input:-<eval 无返回>}（双条件共检——任一缺失即骨架残缺）"
 fi
 
 # ---- 断言 5：假死哨兵（r103-c / r102 建议③ · r104-c 重载变体） ----

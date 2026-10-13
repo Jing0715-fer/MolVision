@@ -10,10 +10,11 @@ import {
   Boxes, Bot, ChevronRight, Command as CommandIcon, HelpCircle,
   FolderOpen, History, Palette, Sparkles, Star, Terminal, Triangle,
   Maximize, RotateCcw, Zap, Camera, Download, Save, FilePlus2, Share2, Rows3,
+  ArchiveRestore,
 } from 'lucide-react'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
 import { COMMAND_HELP, commandCmd, runCommand } from '@/lib/molecular/commands'
-import { exportSessionFile, newSession, saveSession } from '@/lib/molecular/session'
+import { exportSessionFile, newSession, restoreSession, saveSession, sessionSnapshot } from '@/lib/molecular/session'
 import { copyShareLinkToClipboard } from '@/lib/molecular/share-link'
 import {
   appendCmdHistory, dispatchFillCmd, pinnedCmdsSnapshot, cmdHistorySnapshot, emptyCmdSnapshot, subscribeCmdHistory,
@@ -102,6 +103,9 @@ export function CommandPalette() {
   const pinned = useSyncExternalStore(subscribeCmdHistory, pinnedCmdsSnapshot, emptyCmdSnapshot)
 
   const [confirmNewSession, setConfirmNewSession] = useState(false)
+  // r120-c：面板内恢复命令的诚实降级标记（restoreSession 返回 0 时自隐藏——
+  // 与 AgentPanel quickResume / SessionResumeCard 同款语义，防失效存档重试循环）
+  const [resumeGone, setResumeGone] = useState(false)
   // r92 hydration 根修：用户实测 Radix Dialog useId 树位 id SSR/CSR 错位
   // （radix-_R_1qatmlbH1_ vs radix-_R_eindlbH1_，HMR 双模块实例下树哈希漂移）。
   // 客户端挂载后才渲染 CommandDialog——水合阶段零参与，id 永远客户端单源生成；
@@ -129,6 +133,9 @@ export function CommandPalette() {
 
   // ---------- 数据源 ----------
   // 动态快速动作（视图/视觉/导出/会话——带状态感知标签）
+  // r120-c：恢复快照——open/activeId 变化时重读（面板每次打开必新鲜：localStorage
+  // 存档在面板关闭期间的变化不会读到陈旧值；快照本身是 count/names 轻量摘要）
+  const resumeSnap = useMemo(() => sessionSnapshot(), [open, activeId])
   const quickActions = useMemo<PaletteItem[]>(() => [
     ...QUICK_ACTIONS_STATIC,
     {
@@ -166,6 +173,22 @@ export function CommandPalette() {
       run: '', fill: 'png ',
       icon: Camera, iconCls: 'text-muted-foreground',
     },
+    // r120-c（r117-r119 恢复入口主线收口 + r119 建议③双入口评估结论）：命令面板
+    // 「恢复上次会话」——会话命令四件套（保存/导出/分享/新建）补第五件，Ctrl+K
+    // 隐藏入口不占任何视觉空间（防入口泛滥评估的「零成本第三入口」：桌面顶栏
+    // 按钮 + 面板补偿条之外，键盘流用户的自然动词入口——搜索「恢复/resume」即
+    // 命中）。门控与 AgentPanel quickResumeStrip 同款（无活动结构 + 有可用存档 +
+    // 恢复未失效）。
+    ...(resumeSnap && !activeId && !resumeGone ? [{
+      id: 'qa-session-resume',
+      label: { zh: `恢复上次会话（${resumeSnap.count} 个结构）`, en: `Resume last session (${resumeSnap.count} structures)` },
+      desc: {
+        zh: `${resumeSnap.names.join('、') || '—'} · 与欢迎页恢复卡同一路径`,
+        en: `${resumeSnap.names.join(', ') || '—'} · same path as the welcome resume card`,
+      },
+      run: '', fill: '',
+      icon: ArchiveRestore, iconCls: 'text-emerald-500',
+    }] : []),
     {
       id: 'qa-session-save', label: { zh: '保存会话', en: 'Save session' }, desc: { zh: '结构/表示法/设置入档（刷新恢复）', en: 'Structures/reps/settings persisted (restored on refresh)' },
       run: '', fill: 'session ',
@@ -188,7 +211,7 @@ export function CommandPalette() {
       run: '', fill: 'session ',
       icon: FilePlus2, iconCls: 'text-muted-foreground',
     },
-  ], [settings.showHBonds, settings.showMembrane])
+  ], [settings.showHBonds, settings.showMembrane, activeId, resumeGone, resumeSnap])
 
   const allItems = useMemo<PaletteItem[]>(() => {
     // 全部命令（示例命令可直接执行；label 随界面语言取 cmd/cmdEn）
@@ -277,6 +300,22 @@ export function CommandPalette() {
     }
     if (item.id === 'qa-session-share') {
       requestAnimationFrame(() => { void copyShareLinkToClipboard() })
+      return
+    }
+    // r120-c：恢复上次会话——restoreSession 同一路径（替换语义幂等：结构/reps/
+    // 相机全量重建）；成功 toast 与 AgentPanel quickResume 同款文案（含钉住薄纱
+    // 自动恢复承诺——molActiveId effect 驱动重建），失败诚实降级 + resumeGone
+    // 自隐藏（下一次打开面板不再看到失效存档入口）。
+    if (item.id === 'qa-session-resume') {
+      requestAnimationFrame(() => {
+        const n = restoreSession()
+        if (n > 0) {
+          toast.success(tt({ zh: '已恢复上次会话', en: 'Previous session restored' }), { description: tt({ zh: `${n} 个结构 · 钉住预览的薄纱将自动恢复`, en: `${n} structures · pinned-preview veils will restore automatically` }) })
+        } else {
+          setResumeGone(true)
+          toast.error(tt({ zh: '会话恢复失败', en: 'Session restore failed' }), { description: tt({ zh: '本地存档中没有可恢复的结构，已忽略', en: 'No recoverable structures in the local autosave; ignored' }) })
+        }
+      })
       return
     }
     if (item.id === 'qa-session-new') {

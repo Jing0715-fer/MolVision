@@ -1732,6 +1732,55 @@ check "mock重组旧文案锚"           '已按链清单重组命令' "mini-ser
 # ⑦下一步建议锚（换分析目标/人工核验 = 1；删则死胡同无出路）
 check "mock零命令建议锚"           '请换一个分析目标' "mini-services/mock-llm/index.ts" 1
 
+# ---- r120-a：wait-toast.sh toast 观察窗工具（r119 建议①收口） ----
+# sonner 默认 4s 退场（Toaster 无自定义 duration），G1 等 9s 再查 toast 必 false——
+# 观察窗错位让 toast 断言长期空转；工具化有界轮询 [data-sonner-toast]（portal 元素
+# 族——不查全 body 避免按钮/面板同文案假阳性）。
+# ①toast 探针锚（probe JS + 超时诊断 JS + 头注释 = 3；删则回退 body 全文假阳性探针）
+check "toast探针锚"               'data-sonner-toast' ".zscripts/wait-toast.sh" 3
+# ②命中诚实锚（FOUND 第 N 轮 + 在场文本前缀 = 1；删则命中无诊断输出）
+check "toast命中锚"               'FOUND 第' ".zscripts/wait-toast.sh" 1
+# ③超时诊断锚（NOTFOUND 空清单/非空清单双分支 = 2；删则「没出现」与「失配」不可分）
+check "toast超时诊断锚"           'NOTFOUND' ".zscripts/wait-toast.sh" 2
+# ④管线故障分流锚（连续空返回 exit 2 与 NOTFOUND 严格分流 = 1；防环境故障假报文案失配）
+check "toast管线分流锚"           'PIPE-FAIL' ".zscripts/wait-toast.sh" 1
+# ⑤转义纪律锚（模式串反斜杠/单引号双重转义管线 = 1；与 wait-stable-frame r118-c
+#   同款；通配 . 规避 bash 双引号→rg 正则双层反斜杠转义脆弱性）
+check "toast转义锚"               'printf .%s. .\$PATTERN. \| sed' ".zscripts/wait-toast.sh" 1
+
+# ---- r120-b：smoke.sh aria 锚升级（r119 建议②收口） ----
+# textContent 级探针升级：断言 3 aria 主探针（button[aria-label]=语言/Language——
+# 确定性结构锚）+ textContent 诚实标注回退；断言 4 文本标志 + PDB 输入框 aria 结构
+# 锚共条件（「文案在而控件亡」的渲染残缺态原纯文本探针测不到）。
+# ①语言 aria 探针锚（var + 条件 + 失败消息 = 3；删则回退 textContent 单路径）
+check "冒烟语言aria锚"            'has_lang_aria' "scripts/smoke.sh" 3
+# ②回退诚实标注锚（textContent 回退命中——PASS 文案标注 aria 未命中 = 1；两级职责分工）
+check "冒烟回退标注锚"            'textContent 回退命中' "scripts/smoke.sh" 1
+# ③PDB 结构锚（pdb_input var + 共条件 + 失败消息 = 3；删则骨架仍是纯文本证据）
+check "冒烟PDB结构锚"             'pdb_input' "scripts/smoke.sh" 3
+# ④共条件文案锚（PASS/FAIL 双消息含结构锚措辞 = 2；删则共条件语义不可读）
+check "冒烟共条件锚"              'aria 结构锚' "scripts/smoke.sh" 2
+
+# ---- r120-c：CommandPalette 恢复上次会话命令（r117-r119 恢复入口主线收口） ----
+# 会话命令四件套（保存/导出/分享/新建）补第五件：Ctrl+K 隐藏入口零视觉成本（r119
+# 建议③双入口评估结论——防入口泛滥的「零成本第三入口」）；门控与 AgentPanel
+# quickResumeStrip 同款（无活动结构 + 有可用存档 + 恢复未失效）。
+# ①命令 id 锚（面板项定义 + execute 分支 = 2；删则命令不可达）
+check "面板恢复命令id锚"          'qa-session-resume' "src/components/studio/CommandPalette.tsx" 2
+# ②门控三条件锚（快照在场 + 无活动结构 + 未失效 = 1；删则失效存档重试循环）
+check "面板恢复门控锚"            'resumeSnap && !activeId && !resumeGone' "src/components/studio/CommandPalette.tsx" 1
+# ③快照新鲜度锚（open/activeId 变化重读——面板打开必新鲜 = 1；删则关闭期间存档变化读到陈旧值）
+check "面板恢复快照锚"            'useMemo\(\(\) => sessionSnapshot\(\), \[open, activeId\]\)' "src/components/studio/CommandPalette.tsx" 1
+# ④图标锚（ArchiveRestore import + 使用 = 2；删则 lucide 缺名编译错或图标缺失）
+check "面板恢复图标锚"            'ArchiveRestore' "src/components/studio/CommandPalette.tsx" 2
+# ⑤恢复调用锚（restoreSession 同一路径 = 1；删则 Enter 无动作——r99 空承诺教训）
+check "面板恢复调用锚"            'restoreSession\(\)' "src/components/studio/CommandPalette.tsx" 1
+# ⑥成功 toast 双语锚（与 AgentPanel quickResume 同款文案 = 2；删则恢复无用户反馈）
+check "面板恢复toast锚ZH"         '已恢复上次会话' "src/components/studio/CommandPalette.tsx" 1
+check "面板恢复toast锚EN"         'Previous session restored' "src/components/studio/CommandPalette.tsx" 1
+# ⑦诚实降级锚（resumeGone state + 门控 + 失败分支 = 3；删则失效存档入口常驻）
+check "面板恢复降级锚"            'resumeGone' "src/components/studio/CommandPalette.tsx" 3
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治
