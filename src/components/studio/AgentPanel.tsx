@@ -6,11 +6,13 @@
 // 修正命令本身还会被再自查一轮（有界双轮：修到效果理想为止，不无限循环）
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Ban, Bot, Check, ChevronDown, Clock, CornerDownRight, Eye, EyeOff, Loader2, MessageSquarePlus, MousePointerClick, Pencil, Pin, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
+  Ban, Bot, Check, ChevronDown, Clock, CornerDownRight, Eye, EyeOff, HardDriveDownload, Loader2, MessageSquarePlus, MousePointerClick, Pencil, Pin, RotateCw, Send, Sparkles, Square, Trash2, X, AlertTriangle, Settings2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useMolStore, engineRef } from '@/lib/molecular/store'
+// r117-c：待恢复态「一键载入最近结构」——复用会话恢复同一代码路径（restoreSession）
+import { restoreSession, sessionSnapshot } from '@/lib/molecular/session'
 import { buildSceneContext } from '@/lib/molecular/agent/context'
 import { classifyCmd, execAgentCmd, splitCommands } from '@/lib/molecular/agent/runner'
 import { SESSIONS_MAX, sessionTimeLabel, useAgentChatStore } from '@/lib/molecular/agent/chat-store'
@@ -581,11 +583,23 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
             })
             const recomp = await callAgent([...buildApiHistory(priorMsgs), fixMsg, { role: 'user', content: consumePrompt }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs), skillId)
             if (recomp) {
-              const recompCmds = splitCommands(recomp.commands)
+              // r117-b 同文曾失败短路（r116 建议②）：重组产物与既往失败命令同文时，重跑
+              // 必然以同样方式再败（链域错误族均为结构/几何性——错链/空选择/近中心方向，
+              // 同选择同几何同错，与命令顺序无关；r116 G1 实证：view from (chain A and
+              // chain A) 近中心几何 error 的重组产物同文重跑再败，白耗一轮幂等执行）。
+              // 与 r115-d 的 okOuts 防重发互补：那管「同成功」（prompt 上下文 + mock 0.46
+              // 侧过滤），本短路管「同失败」（app 侧记录直判——真实 LLM 侧同样生效，
+              // 不依赖 mock 配合）。极端角落（轮内结构被 load 切换后同文命令恰好成功）
+              // 接受保守跳过：消费链重组产物本就锚定探测时结构，跨结构重执不在语义内。
+              const failedTexts = new Set(records.filter(r => r.status === 'error').map(r => r.cmd.trim()))
+              const recompAll = splitCommands(recomp.commands)
+              const recompFresh = recompAll.filter(c => !failedTexts.has(c.trim()))
+              const recompDropped = recompAll.length - recompFresh.length
+              const recompCmds = recompFresh
               const recompId = newId()
               const recompMsg: AgentChatMessage = {
                 id: recompId, role: 'assistant',
-                content: `${tt({ zh: '链清单消费：', en: 'Chain-list consumption: ' })}${recomp.reply}`,
+                content: `${tt({ zh: '链清单消费：', en: 'Chain-list consumption: ' })}${recomp.reply}${recompDropped > 0 ? tt({ zh: `（另有 ${recompDropped} 条与既往失败命令同文，已跳过）`, en: ` (${recompDropped} skipped as prior same-text failures)` }) : ''}`,
                 time: nowTime(),
                 commands: recompCmds.length ? recompCmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
               }
@@ -626,11 +640,19 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
                   // 历史含首轮消费消息（recompMsg）——LLM 可见「上轮已重组过什么」
                   const recomp2 = await callAgent([...buildApiHistory(priorMsgs), fixMsg, recompMsg, { role: 'user', content: consumePrompt2 }], buildSceneContext(), undefined, buildMemoryDigest(priorMsgs), skillId)
                   if (recomp2) {
-                    const recomp2Cmds = splitCommands(recomp2.commands)
+                    // r117-b 同文曾失败短路（二轮同款，r116 建议②主场景）：records 此刻已含
+                    // 首轮消费记录——r116 G1 实证的「近中心 view from 几何 error 同文重组再
+                    // 执行再败」在此处被拦下（重组产物与自身失败同文 → 必然幂等再败 → 跳过
+                    // 省一轮执行；r116 旧行为是把同文产物执行一遍再留一条重复 error 记录）。
+                    const failedTexts2 = new Set(records.filter(r => r.status === 'error').map(r => r.cmd.trim()))
+                    const recomp2All = splitCommands(recomp2.commands)
+                    const recomp2Fresh = recomp2All.filter(c => !failedTexts2.has(c.trim()))
+                    const recomp2Dropped = recomp2All.length - recomp2Fresh.length
+                    const recomp2Cmds = recomp2Fresh
                     const recomp2Id = newId()
                     const recomp2Msg: AgentChatMessage = {
                       id: recomp2Id, role: 'assistant',
-                      content: `${tt({ zh: '链清单消费（二轮）：', en: 'Chain-list consumption (2nd): ' })}${recomp2.reply}`,
+                      content: `${tt({ zh: '链清单消费（二轮）：', en: 'Chain-list consumption (2nd): ' })}${recomp2.reply}${recomp2Dropped > 0 ? tt({ zh: `（另有 ${recomp2Dropped} 条与既往失败命令同文，已跳过）`, en: ` (${recomp2Dropped} skipped as prior same-text failures)` }) : ''}`,
                       time: nowTime(),
                       commands: recomp2Cmds.length ? recomp2Cmds.map(cmd => ({ cmd, status: 'pending' as const })) : undefined,
                     }
@@ -885,6 +907,29 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
     toast.info(tt({ zh: `已取消全部 ${pinnedJumps.length} 个钉住的预览`, en: `Unpinned all ${pinnedJumps.length} pinned previews` }))
   }, [pinnedJumps, setPinnedJumps])
 
+  /** r117-c：待恢复态「一键载入最近结构」（r116 建议③收口）——琥珀徽章只提示「薄纱
+   *  何时回来」，用户还得自己去欢迎页找恢复卡；此入口把「提示 → 路径」补全为一步。
+   *  复用 SessionResumeCard 同一 restoreSession 代码路径（结构/reps/相机全量还原），
+   *  结构落地后 molActiveId effect 重跑 → 钉住薄纱自动重建（r115-c 闭环顺带兑现）。
+   *  快照 useMemo 单读：面板开关不持久化（水合时恒关——本组件客户端态无水合面）；
+   *  恢复失败自隐藏（存档损坏/为空——与恢复卡同款诚实降级）。 */
+  const [resumeGone, setResumeGone] = useState(false)
+  const sessionSnap = useMemo(() => sessionSnapshot(), [])
+  const restoringRef = useRef(false)
+  const molLoading = useMolStore(s => s.loading)
+  const quickResume = useCallback(() => {
+    if (restoringRef.current || molLoading) return
+    restoringRef.current = true
+    const n = restoreSession()
+    if (n > 0) {
+      toast.success(tt({ zh: '已恢复上次会话', en: 'Previous session restored' }), { description: tt({ zh: `${n} 个结构 · 钉住预览的薄纱将自动恢复`, en: `${n} structures · pinned-preview veils will restore automatically` }) })
+    } else {
+      restoringRef.current = false
+      setResumeGone(true)
+      toast.error(tt({ zh: '会话恢复失败', en: 'Session restore failed' }), { description: tt({ zh: '本地存档中没有可恢复的结构，已忽略', en: 'No recoverable structures in the local autosave; ignored' }) })
+    }
+  }, [molLoading])
+
   /** r111-b 报告节 hover/focus 预览：跳转命令携带的选择子无副作用求值 → engine 青色
    *  薄纱罩亮（点击前的「先看一眼」）。previewExpr 不落全局选择（不碰用户当前选中态）；
    *  无表达式 / 求值失败 / 原子数为 0 时零动作（静默降级，不报错不打断 hover）。
@@ -1003,6 +1048,7 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
             （ARIA 静默——恢复是隐式的），徽章转琥珀色 + title 提示「结构加载后自动恢复」
             ——隐式行为显式化，用户不再困惑薄纱为何没出现。 */}
         {pinnedJumps.length > 0 && (
+          <>
           <button
             onClick={clearAllPins}
             aria-label={molActiveId
@@ -1023,6 +1069,26 @@ export function AgentPanel({ float = false }: { float?: boolean }) {
               <span className="shrink-0 opacity-80">· {t({ zh: '待结构恢复', en: 'pending' })}</span>
             )}
           </button>
+          {/* r117-c 待恢复态快捷入口（r116 建议③收口）：琥珀徽章只说「薄纱何时回来」，
+              这里给一步到位的「载入最近结构」——复用会话恢复同一路径（结构/reps/相机
+              全量还原 + molActiveId effect 驱动薄纱自动重建）。与徽章同族样式（琥珀
+              实底强调「可点动作」vs 徽章琥珀弱底「状态展示」）；仅待恢复态且有可用
+              存档时渲染；恢复失败自隐藏（诚实降级）。 */}
+          {!molActiveId && sessionSnap && !resumeGone && (
+            <button
+              onClick={quickResume}
+              disabled={molLoading}
+              aria-label={t({ zh: `载入最近结构（${sessionSnap.count} 个：${sessionSnap.names.join('、') || '—'}），恢复后钉住预览的薄纱自动重建`, en: `Load recent structures (${sessionSnap.count}: ${sessionSnap.names.join(', ') || '—'}); pinned-preview veils rebuild automatically after restore` })}
+              title={t({ zh: `载入最近结构：${sessionSnap.count} 个 · ${sessionSnap.names.join('、') || '—'}——恢复会话后薄纱自动重建`, en: `Load recent structures: ${sessionSnap.count} · ${sessionSnap.names.join(', ') || '—'} — veils rebuild automatically after the session restores` })}
+              className="hidden shrink-0 items-center gap-1 rounded-full border border-amber-500/50 bg-amber-500/20 px-2 py-px font-mono text-[9px] font-medium text-amber-700 transition hover:border-amber-500/70 hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-50 dark:text-amber-300 sm:flex"
+            >
+              <HardDriveDownload className="h-2.5 w-2.5 shrink-0" aria-hidden />
+              {molLoading
+                ? t({ zh: '载入中…', en: 'Loading…' })
+                : t({ zh: '载入最近结构', en: 'Load recent' })}
+            </button>
+          )}
+          </>
         )}
         <div className="ml-auto flex items-center gap-0.5">
           <button

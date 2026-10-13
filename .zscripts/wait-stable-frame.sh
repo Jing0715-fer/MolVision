@@ -17,9 +17,13 @@
 #           （canvas 缺失 / 截图三败 / 空白哨兵）；3 = Python 比对异常（rect 壳
 #           剥取失败等——与 UNSTABLE 严格区分，防「崩溃假报不稳定」）
 # 前置：agent-browser 会话已打开且页面处于被测状态。本工具不动 DOM——视口清洁由
-#   调用方负责（G1 类测试 agent 面板本就是断言上下文不可隐藏）；canvas rect 取一次
-#   复用（两截图间布局不动本身是稳定帧语义的一部分）；比对算法与 visual-baseline
-#   同源（灰度差 > 12/255 计变化像素——bins 13..）。
+#   调用方负责（G1 类测试 agent 面板本就是断言上下文不可隐藏）；比对算法与
+#   visual-baseline 同源（灰度差 > 12/255 计变化像素——bins 13..）。
+#   r117-a 探针修复（r116 坑②，建议①收口）：①canvas 精选改「最大面积」——querySelector
+#   首个在拉马节/报告图等辅助 canvas 渲染后会错抓小画布（拉马散点 232×224 vs 3D 视口
+#   944×311），且小画布滚出视口时 rect 落在屏外→空白哨兵误报；②rect 每轮现取——
+#   /tmp rect 缓存跨布局陈旧（异步内容落屏推挤布局后，旧 rect 裁剪到错误区域）；
+#   同轮内两截图间布局不动仍是稳定帧语义的一部分（轮内探一次，轮间重探）。
 #   r112 首测根修：rect 探针输出**不剥引号**直接落盘（tr -d '"' 会把 JSON 内部引号
 #   一并剥掉 → json.loads 崩 → 漂移恒空假 UNSTABLE）；Python 体整体 try/except
 #   → 异常 exit 3 与真实 UNSTABLE（exit 1）严格分流。
@@ -38,8 +42,11 @@ RECT_JSON='/tmp/wsf-canvas.json'
 rect_probe () {
   # 注意：不做任何引号剥离——agent-browser 的 shell 引号壳由 Python 侧 startswith('"')
   # 分支统一处理（visual-baseline crop_scene 同款）；bash 侧 tr -d '"' 会连带剥掉
-  # JSON 内部引号致解析崩（r112 首测根修）
-  agent-browser eval "(() => { const c = document.querySelector('canvas'); if (!c) return 'NOCANVAS'; const r = c.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }) })()" 2>/dev/null
+  # JSON 内部引号致解析崩（r112 首测根修）。
+  # r117-a：最大面积 canvas 精选（r116 坑②）——拉马散点图等辅助 canvas 先于 3D 视口
+  # 出现在 DOM 时，querySelector 首个会错抓；面积最大者恒为 3D 视口（辅助画布均小）。
+  # 返回附 canvas 数 n 供诊断（Python 侧只取 x/y/w/h，多余键无感）。
+  agent-browser eval "(() => { const cs = [...document.querySelectorAll('canvas')]; if (!cs.length) return 'NOCANVAS'; let best = null, ba = -1; for (const c of cs) { const r = c.getBoundingClientRect(); const a = r.width * r.height; if (a > ba) { ba = a; best = c } } const r = best.getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), n: cs.length }) })()" 2>/dev/null
 }
 
 # 三败重试截图（r92 陈旧帧防护同款——先删旧再拍，防重拍返回上一轮残帧）
@@ -57,6 +64,9 @@ probe=$(rect_probe)
 case "$probe" in
   *NOCANVAS*|'') echo "PIPE-FAIL canvas 缺失（agent-browser 会话未开或页面无 3D 视口）"; exit 2 ;;
 esac
+# r117-a：rect 每轮现取（r116 坑②）——旧版循环前探一次写入 RECT_JSON 后复用，
+# 异步内容落屏推挤布局后旧 rect 裁剪错区域（空白哨兵/假漂移双风险）。首轮落盘后
+# 每轮开头重探重写；轮内两截图间不重探（布局不动是稳定帧语义的一部分）。
 printf '%s' "$probe" > "$RECT_JSON"
 
 # r112 G1 实测根修（渲染活性守卫）：SwiftShader 重场景 tick 间隔实测 4-8s（0.12-0.25fps）
@@ -70,6 +80,15 @@ engine_tick () {
 
 round=1
 while [ "$round" -le "$ROUNDS" ]; do
+  # r117-a：每轮现取 rect（首轮已在上方落盘；此句对首轮是幂等重探）——跨轮布局
+  # 变化（异步派生内容落屏推挤/面板开闭）后裁剪区域始终对准当前最大面积 canvas。
+  if [ "$round" -gt 1 ]; then
+    probe=$(rect_probe)
+    case "$probe" in
+      *NOCANVAS*|'') echo "PIPE-FAIL canvas 消失（第 ${round} 轮重探——页面被导航/画布被卸载）"; exit 2 ;;
+    esac
+    printf '%s' "$probe" > "$RECT_JSON"
+  fi
   tick_a=$(engine_tick)
   if ! shot "$RAW1"; then echo "PIPE-FAIL 截图三败（$RAW1）"; exit 2; fi
   sleep "$INTERVAL"

@@ -1611,6 +1611,43 @@ check "拉马隔离键名锚"             'molvision-rama-row-isolate' "src/comp
 # ③切换写盘锚（toggleRowIsolate 定义+onClick = 2；删则开关不留痕）
 check "拉马隔离切换锚"             'toggleRowIsolate' "src/components/studio/panels/RamaSection.tsx" 2
 
+# ---- r117-a：wait-stable-frame canvas 探针修复（r116 建议①收口） ----
+# r116 坑②：querySelector('canvas') 首个在拉马节渲染后错抓散点图（232×224）+ /tmp rect
+# 缓存跨布局陈旧 → 空白哨兵误报。修复：最大面积 canvas 精选 + rect 每轮现取。
+# ①最大画布遍历锚（querySelectorAll + 面积比较；删则探针回退「首个 canvas」错抓小画布）
+check "稳定帧最大画布锚"           'querySelectorAll' ".zscripts/wait-stable-frame.sh" 1
+# ②面积比较锚（最大面积择优的判据本体；删则遍历失去择优语义退化为最后一个）
+check "稳定帧面积比较锚"           'best = c' ".zscripts/wait-stable-frame.sh" 1
+# ③轮间重探锚（round>1 分支重探 rect；删则跨轮布局变化后裁剪区域陈旧）
+check "稳定帧轮间重探锚"           'round" -gt 1' ".zscripts/wait-stable-frame.sh" 1
+
+# ---- r117-b：消费重组「同文曾失败」短路（r116 建议②收口） ----
+# r116 G1 实证：近中心 view from 几何 error 的同文重组产物重跑必再败（幂等执行白耗）。
+# app 侧产物过滤（两轮消费全覆盖）——与 r115-d okOuts 防重发互补：那管「同成功」（prompt
+# 上下文 + mock 侧），本短路管「同失败」（记录直判，真实 LLM 侧同样生效）。
+# ①短路集合锚（failedTexts 首轮声明+过滤 + failedTexts2 二轮声明+过滤 = 4；删则幂等产物照跑）
+check "同文失败短路集合锚"         'failedTexts' "src/components/studio/AgentPanel.tsx" 4
+# ②短路产物锚（recompFresh/recomp2Fresh 声明+过滤+复用 = 3+3；删则消息命令卡与执行不走过滤集）
+check "同文失败短路产物锚"         'recompFresh|recomp2Fresh' "src/components/studio/AgentPanel.tsx" 6
+# ③跳过计数锚（recompDropped/recomp2Dropped 声明+三元 = 2+2；删则跳过数不可诚实上报）
+check "同文失败跳过计数锚"         'recompDropped|recomp2Dropped' "src/components/studio/AgentPanel.tsx" 4
+# ④跳过文案锚（双语模板两轮各一 = 2；删则 E2E 断言链断——「已跳过」不可见）
+check "同文失败跳过文案锚"         '与既往失败命令同文' "src/components/studio/AgentPanel.tsx" 2
+
+# ---- r117-c：钉住待恢复态「一键载入最近结构」快捷入口（r116 建议③收口） ----
+# 琥珀徽章只提示「薄纱何时回来」，路径还差一步——此入口复用会话恢复同一路径（restoreSession）
+# 一步到位；结构落地后 molActiveId effect 驱动薄纱自动重建。
+# ①快捷恢复函数锚（quickResume 定义+onClick = 2；删则按钮无动作）
+check "快捷恢复函数锚"             'quickResume' "src/components/studio/AgentPanel.tsx" 2
+# ②快捷恢复文案锚（aria/title/label 双语 ≥3；删则无文字解释的动作按钮）
+check "快捷恢复文案锚"             '载入最近结构' "src/components/studio/AgentPanel.tsx" 3
+# ③快照门控锚（sessionSnap memo+条件+JSX = 5；删则无存档时也渲染死按钮）
+check "快捷恢复快照锚"             'sessionSnap' "src/components/studio/AgentPanel.tsx" 4
+# ④恢复路径复用锚（import+调用 ≥2；删则自造加载逻辑偏离会话恢复语义）
+check "快捷恢复路径锚"             'restoreSession' "src/components/studio/AgentPanel.tsx" 2
+# ⑤图标锚（HardDriveDownload import+JSX = 2；与恢复卡同图标语义呼应）
+check "快捷恢复图标锚"             'HardDriveDownload' "src/components/studio/AgentPanel.tsx" 2
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治
