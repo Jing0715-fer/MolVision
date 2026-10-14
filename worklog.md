@@ -5179,3 +5179,5 @@ Stage Summary:
   4. 【低】技能库第 12 支候选评估：putty 柔性分析（putty 管径 + bfactor 着色 + zoom 组合——图例卡与 putty rep 的技能化对称；KD/sasa 双技能已验证组合流程范式可复制）
   5. 【低】mock 视觉自查分支的技能化对称：surface-hydrophobicity 的视觉自查演练文案（isVisualCmd 对 color kd/sasa 的判定核对——本轮视觉自查关跑通，开态分支未实证）
   6. 【低】生产部署前置清单（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线不变）
+
+（r122 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #458145 创建（13:52:56，expr 0 */15 * * * ? 6 段式 15 分钟——r121 秒字段教训沿用）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 36 次实证：r85-r121 连续 35 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r122 开发纪律（基线 64c0e22 / guards 902 / 六道门禁链与 kill 红线 / E2E 铁律含 g1_eval 前缀参坑与 aria 四象限与陈旧状态竞态与像素 DOMrect 定位四新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 902 + smoke 6 + visual-baseline 7）。
