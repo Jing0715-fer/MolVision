@@ -5213,3 +5213,5 @@ Stage Summary:
   4. 【低】技能库第 13 支候选：二硫键分析（disulfide bonds + color ss + zoom 组合）或盐桥（salt bridges）——组合流程范式（KD/sasa/putty 三支已验证）可继续复制
   5. 【低】putty 技能的视觉自查 mock 分支：r122 建议⑤遗留——flexibility-putty 视觉自查演练文案（isVisualCmd 对 show putty/color bfactor 判定核对，开态分支未实证）
   6. 【低】生产部署前置清单（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——沙箱 bun run build 红线不变）
+
+（r123 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #459319 创建（23:21:54，expr 0 */15 * * * ? 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 37 次实证：r85-r122 连续 36 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r123 开发纪律（基线 176a0d3 / guards 925 / 六道门禁链 / E2E 铁律含 r123 四新坑：UI teal 污染 DOMrect 裁剪+delta 口径、aria-expanded 容器限定、裸双引号分词错乱转义、菜单词 i18n 实测 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 925 + smoke 6 + visual-baseline 7）。
