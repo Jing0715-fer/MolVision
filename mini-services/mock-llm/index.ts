@@ -329,6 +329,8 @@ const SKILL_ADVICE: Record<string, string> = {
   'xcontact-analysis': 'superpose 变换实时反映在跨结构接触中',
   'morph-conformations': 'ensemble fps 可调速；record 可录制',
   'symmetry-assembly': '半径 5-80Å 可调组装范围',
+  // r122-a：表面疏水分析（sasa 面积分项 + color kd 残基构成双数值域）
+  'surface-hydrophobicity': '可 color sasa 对比暴露渐变；hbonds 可叠加网络',
 }
 
 /** 报告章节填值：场景快照可取的填实值；命令回执类（报告生成在命令执行前——接触数/氢键数/
@@ -391,6 +393,12 @@ function fillFromReceiptsByLabel(label: string, src: string): string | null {
   if (/疏水与极性/.test(label)) {
     const m = /疏水 (\d+) · 极性 (\d+)/.exec(src) ?? /hydrophobic (\d+) · polar (\d+)/.exec(src)
     return m ? `疏水 ${m[1]} Å² · 极性 ${m[2]} Å²` : null
+  }
+  // r122-a 残基构成（color kd 回执三类计数：疏水 KD>0 / 亲水 KD<0 / 表外——与 sasa 的
+  // 「有数说话」同族口径；双语回执文案对齐 commands.ts r121-c 格式）
+  if (/残基构成/.test(label)) {
+    const m = /残基构成：疏水 (\d+) · 亲水 (\d+) · 表外 (\d+)/.exec(src) ?? /residues: (\d+) hydrophobic · (\d+) hydrophilic · (\d+) off-scale/.exec(src)
+    return m ? `疏水 ${m[1]} · 亲水 ${m[2]} · 表外 ${m[3]}` : null
   }
   if (/伴侣数/.test(label)) {
     const m = /已生成 (\d+) 个对称伴侣/.exec(src) ?? /(\d+) symmetry mates generated/.exec(src)

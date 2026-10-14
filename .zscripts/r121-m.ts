@@ -114,9 +114,11 @@ ok('T22 ColorsPanel 五阶色卡（两端 + 中插一致）',
 
 // ---------- T23-T26：图例卡 + mock 模板 ----------
 // 图例优先序：putty > bfactor > hydrophobicity > sasa（源序不变量）
-const prio = legend.indexOf('puttyRep) { kind') < legend.indexOf('bfactorRep) { kind')
-  && legend.indexOf('bfactorRep) { kind') < legend.indexOf('hydroRep) { kind')
-  && legend.indexOf('hydroRep) { kind') < legend.indexOf('sasaRep && data?.sasa')
+// r122-b 锚同步：单卡互斥改多卡并置后源序载体从 `X) { kind` 变为
+// `X) entries.push({ kind` —— 优先序语义不变（现为卡片排序）
+const prio = legend.indexOf("puttyRep) entries.push({ kind: 'putty'") < legend.indexOf("bfactorRep) entries.push({ kind: 'bfactor'")
+  && legend.indexOf("bfactorRep) entries.push({ kind: 'bfactor'") < legend.indexOf("hydroRep) entries.push({ kind: 'hydrophobicity'")
+  && legend.indexOf("hydroRep) entries.push({ kind: 'hydrophobicity'") < legend.indexOf('sasaRep && data?.sasa')
 ok('T23 图例优先序（putty > bfactor > hydrophobicity > sasa 源序）', prio, '优先序错乱')
 
 // 图例双语刻度（KD 界 + 端点残基——用户读梯度方向的唯一标尺）
@@ -125,8 +127,10 @@ ok('T24 图例双语刻度（亲水 −4.5 (Arg) / +4.5 疏水 (Ile)）',
   '双语刻度文案缺失')
 
 // hydrophobicity 无数据依赖（固定标度——区别于 sasa 的 data?.sasa 门控）
+// r122-b 锚同步：互斥分支改 entries.push 后原 `else if (hydroRep)` 形态不复存在；
+// 无数据依赖语义不变（push 无 data?.sasa 条件）
 ok('T25 图例 hydro 门控无数据依赖（固定 KD 标度）',
-  legend.includes('else if (hydroRep) { kind = \'hydrophobicity\'') && !legend.includes('hydroRep && data?.sasa'), 'hydro 门控带了数据依赖（回退 sasa 语义）')
+  legend.includes("if (hydroRep) entries.push({ kind: 'hydrophobicity', bRange: null })") && !legend.includes('hydroRep && data?.sasa'), 'hydro 门控带了数据依赖（回退 sasa 语义）')
 
 // mock 模板顺序不变量：7.5 疏水（color kd）必须先于 8 泛色词（链染色）——
 // 顺序颠倒则「疏水着色」请求被泛色词模板吞掉（r121 mock 对齐的行为分界）

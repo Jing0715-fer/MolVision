@@ -48,7 +48,7 @@ export interface AgentSkill {
 }
 
 /**
- * 预置技能库（10 支：r105 六支 + r106 扩容四支）——全部命令均在 runner.ts 白名单内
+ * 预置技能库（11 支：r105 六支 + r106 扩容四支 + r122-a 表面疏水分析）——全部命令均在 runner.ts 白名单内
  * （membrane/pore 已随 r105 补入；sasa/xcontacts/superpose/morph/symmetry 本就在册）。
  * workflow 与 SYSTEM_PROMPT 行为规则严格一致（pub-figure 即规则 18 出版流程的 skill 化）。
  */
@@ -377,6 +377,42 @@ export const AGENT_SKILLS: AgentSkill[] = [
         { key: 'radius', label: { zh: '组装半径', en: 'Assembly radius' }, hint: { zh: '对称伴侣生成半径（Å，默认 20）', en: 'Mate generation radius (Å, default 20)' }, jump: 'zoom' },
         { key: 'mates', label: { zh: '伴侣数', en: 'Mate count' }, hint: { zh: '生成的对称伴侣数（命令回执）', en: 'Number of mates generated (receipt)' }, jump: 'zoom' },
         { key: 'view', label: { zh: '组装观感', en: 'Assembly view' }, hint: { zh: '原体与伴侣的视角关系描述', en: 'Orientation of protomer vs mates' }, jump: 'zoom' },
+        { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
+      ],
+    },
+  },
+  // ---------- r122-a：表面疏水分析（r121 建议①收口——疏水工作流技能化） ----------
+  // 疏水性着色（r121-c color kd）与 SASA 暴露（r106 sasa-surface）各自成技能，但
+  // 「表面化学」高频组合需求（配体可药性/二聚界面疏水斑块/膜结合面评估）是两者串联：
+  // 先算暴露（面积分项），再上 KD 梯度（斑块定位）——skill 化后报告同时携带
+  // 面积分项 + 残基构成两类实测数值。全部命令均在 runner 白名单内（sasa/color/zoom）。
+  {
+    id: 'surface-hydrophobicity',
+    name: { zh: '表面疏水分析', en: 'Surface Hydrophobicity Analysis' },
+    description: {
+      zh: 'SASA 暴露统计 + Kyte-Doolittle 疏水梯度着色组合流程：表面疏水斑块定位与面积分项一站式分析',
+      en: 'SASA exposure stats + Kyte-Doolittle hydropathy gradient coloring in one combined workflow: locate surface hydrophobic patches with area breakdown',
+    },
+    triggers: {
+      strong: {
+        zh: ['表面疏水', '疏水表面', '疏水性分析', '疏水分析', '疏水分布', '疏水斑块', '疏水位点'],
+        en: ['hydrophobic surface analysis', 'surface hydrophobicity', 'hydrophobicity analysis', 'hydropathy analysis', 'hydrophobic patch', 'hydrophobic surface'],
+      },
+      weak: {
+        zh: ['疏水', '亲水'],
+        en: ['hydrophobic', 'hydrophilic'],
+      },
+    },
+    workflow: [
+      { label: { zh: 'SASA 计算', en: 'SASA computation' }, cmd: 'sasa', check: { zh: 'Shrake–Rupley 法（probe 1.4Å 默认）；总面积与疏水/极性分项在回执——大结构 Worker 后台算完自动输出', en: 'Shrake–Rupley (probe 1.4 Å default); total & hydrophobic/polar breakdown in the receipt — large structures auto-print when the worker finishes' } },
+      { label: { zh: '疏水梯度着色', en: 'Hydropathy coloring' }, cmd: 'color kd', check: { zh: '亲水青 −4.5 → 疏水琥珀 +4.5 残基级碳渐变（杂原子保元素色）；回执附残基构成三类计数——疏水斑块在表面语境一眼可辨', en: 'Residue-level carbon gradient teal −4.5 → amber +4.5 (heteroatoms keep element colors); receipt includes residue composition' } },
+      { label: { zh: '全景适配', en: 'Fit view' }, cmd: 'zoom', check: { zh: '整体结构入框——斑块分布要全景观察，不要 zoom sele', en: 'Frame the whole structure — patch distribution needs the full view' } },
+    ],
+    report: {
+      sections: [
+        { key: 'total', label: { zh: '总面积', en: 'Total area' }, hint: { zh: 'SASA 总面积（Å²，命令回执）', en: 'Total SASA (Å², from receipt)' }, jump: 'zoom' },
+        { key: 'ratio', label: { zh: '疏水与极性', en: 'Hydrophobic & polar' }, hint: { zh: '疏水/极性分项面积（Å²，sasa 回执）', en: 'Hydrophobic / polar areas (Å², sasa receipt)' }, jump: 'color sasa' },
+        { key: 'residues', label: { zh: '残基构成', en: 'Residue composition' }, hint: { zh: 'color kd 回执三类计数：疏水 KD>0 / 亲水 KD<0 / 表外', en: 'color kd receipt counts: hydrophobic KD>0 / hydrophilic KD<0 / off-scale' }, jump: 'color kd' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
       ],
     },

@@ -5144,3 +5144,38 @@ Stage Summary:
   6. 【低】生产部署前置清单收口（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线）
 
 （r121 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #457303 创建（03:39:56，expr 0 */15 * * * ?——6 段 cron 首字段是秒，*/15 会被判 15 秒间隔拒绝，0 */15 才是 15 分钟）——create 返回 success 但 list 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 35 次实证：r85-r120 连续 34 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 list 的 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r121 开发纪律（基线 78ad83c / guards 888 / 门禁链与 kill 红线 / E2E 铁律含 g1-lib 标准库使用与 rg 正则裸 | 新坑 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 888 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r122
+Agent: main
+Task: 用户指令「进行下一阶段开发，并进行qa测试和e2e测试，并根据测试结果规划后续开发计划，完成后push」——r121 下一轮建议①②③收口：①疏水性 agent 技能化（表面疏水分析：sasa 统计 + color kd 渐变组合流程——技能库 10→11 支）②图例卡多方案并置（多 rep 多色方案同屏各自有标尺——r121 视觉债收口）③mock 对齐（SKILL_ADVICE + 残基构成回填正则 ZH/EN）+ G1 调动 radix 菜单/混合 locale aria/陈旧状态竞态四坑攻坚；QA 六道门禁全绿 + E2E（M 27 新锚 + 133 旧锚回归 + G1 双组浏览器全链 + 双卡像素级实证）+ 结果驱动规划 + git push
+
+Work Log:
+- 【读基】HEAD=1bed191（r121 cron 补记后）；guards 实跑 888/888 = 本轮基线；dev 3000=200 + mock 3999=200；r121 段确认三条下轮建议（①疏水技能化【中】②图例多卡并置【中】③dispatchFillCmd 覆盖④hover 预览⑤像素断言工具债⑥生产清单——⑥沙箱 build 红线跳过）
+- 【改动·r122-a 技能化】skills.ts 新增第 11 支「surface-hydrophobicity」：①触发域 strong zh 七词（表面疏水/疏水表面/疏水性分析/疏水分析/疏水分布/疏水斑块/疏水位点）+ strong en 六词（含 hydrophobicity analysis——\b 词边界正则下 hydrophobic 单词不吞 hydrophobicity 词组）+ weak 疏水/亲水（弱词 1 分不足选中——纯着色需求走 7.5 模板的 r106 设计纪律保持）②workflow 三步序 sasa → color kd → zoom（全在 runner 白名单——CALC_WAIT_PREFIXES 保 sasa 回执先于回填）③报告四节（总面积 jump zoom / 疏水与极性 jump color sasa / 残基构成 jump color kd / 建议无跳转——静态命令 jump 原样执行是 r109-b 既定语义）④技能内重叠去重与跨技能 spec 决胜复用（「表面分析」仍归 sasa-surface 无冲突——M 组 T7 实证）
+- 【改动·r122-b 图例多卡】ColorLegend.tsx 重写：单 kind 互斥取一 → LegendEntry[] 每方案一卡（putty > bfactor > hydrophobicity > sasa 优先序保留为卡片排序——r121 视觉债收口）；容器 flex-col gap-1.5 纵向堆叠 + 单卡独立 aria（SASA 暴露度标尺/疏水性标尺/B 因子标尺——读屏区分多卡）+ computeBRange 提取为纯函数（putty/bfactor 双调用；hydro/sasa 固定标度 null）+ 容器 aria「颜色标尺图例」保留（r121 G1a STATE-HIT 探针零破坏）
+- 【改动·r122-c mock 对齐】①SKILL_ADVICE 补 surface-hydrophobicity 条目（可 color sasa 对比暴露渐变；hbonds 可叠加网络）②fillFromReceiptsByLabel 补残基构成正则族：ZH「残基构成：疏水 (\d+) · 亲水 (\d+) · 表外 (\d+)」+ EN「residues: (\d+) hydrophobic · (\d+) hydrophilic · (\d+) off-scale」——与 commands.ts r121-c 回执文案逐字对齐（r107 双语坑同族防护）；mockd mtime 热重载实证（编辑后 curl 直测即返新决策）
+- 【平台噪音清理】7 个死 shadcn 模板件（calendar/carousel/chart/drawer/form/input-otp/resizable）以未跟踪态（??）回潮——HEAD 已于 r102 删除、业务引用零命中（rg 穷尽实证）——删除恢复 r102 决策态，负向守卫「死模板符号不复活」由 FAIL(36) 回 PASS；.zscripts 既有 M 标记全为 mode 位噪音（0 insertions/deletions）
+- 【守卫 888→902（+14）】r122-a 六锚（定义/名/触发/流程/报告节/跳转）+ r122-b 五锚（容器/渲染/B 范围/语义/单卡 aria）+ r122-c 三锚（建议/回填 ZH/回填 EN）；r121-m.ts T23/T25 锚同步多卡新形态（`X) entries.push({ kind` 载体——优先序与无数据依赖语义不变）
+- 【QA】lint 0 · bunx tsc 5 基线环境错不变（examples×2+mock×1+skills×2，src/ 零新错）· guards 902/902 · smoke 6/6 · visual-baseline 7/7（漂移 0.00%）· dev.log 尾部零真错（仅 7AHL >2MB 缓存提示历史良性噪音）
+- 【E2E-M】.zscripts/r122-m.ts 27/27：T1-T8 matchSkill 数值级直测（库规模 11/id 注册/强触发 zh×2+en×1/弱词不足 null/无冲突回归/并列降级 null——2:2 spec 4:4 平降级是 r106 纪律的行为锚）· T9-T13 技能结构（三步命令序/四节/跳转域/建议无跳转/名源）· T14-T18 多卡源锚（LegendEntry[]+map/独立 push×4/computeBRange/单卡 aria/容器 aria 保留）· T19-T22 mock 源锚 · T23-T27 **mock 真端到端 fetch 3999**（技能注入段 → commands=['sasa','color kd','zoom'] 回放 + 四节草稿「—」诚实 + 建议填值；回填段 → 总面积 23456 Å²/疏水与极性分项/残基构成 97·76·5 三类计数 ZH+EN 双语——curl 手测的可持续回归化）；M 组回归 133/133（r110 16 + r111 9 + r114 16 + r115 22 + r116 12 + r118 25 + r119 22 + r120 11 + r121 26）零破坏
+- 【E2E-G1a 技能全链（g1-lib.sh 第 2 个实战驱动）】mock 接线（两步三字段 r119 坑①）→ 4HHB 装载（STATE-HIT 2/25）→ AgentPanel（STATE-HIT 1/16）→ 清空会话（陈旧状态竞态根修）→「分析一下表面疏水性」textarea native setter + Enter 派发 → 报告卡+徽章 STATE-HIT（回填第 4/60 轮——真实等待新 turn）→ **回填实测数值（总面积 24087 Å² · 疏水与极性 疏水 3706/极性 14680 · 残基构成 疏水 248·亲水 326·表外 227——4HHB 真实计算）** → hydro 图例卡在场（color kd 执行旁证）→ **跳转环①**（疏水与极性节 click → color sasa → SASA 卡 STATE-HIT 1/20）→ **跳转环②**（残基构成节 click → color kd → hydro 卡回归 1/20——报告→命令→渲染闭环双环实证）→ 截图存证 shots/r122-skill-report.png → console 零错误 → 现场恢复（provider=zai GET 复核 · pins 清空 · 浏览器关闭）
+- 【E2E-G1b 多卡并置】Reps 面板轨道 → 添加按钮（radix DropdownMenuTrigger：pointerdown + click 双派发）→ putty 菜单项（portal [data-radix-popper-content-wrapper] 内 [role=menuitem]：pointerdown+pointerup+click 三连——radix Item 激活依赖 pointerup）→ 双卡同屏 STATE-HIT 1/30（putty 管径 + 疏水性 KD 文本双锚）→ 截图存证 shots/r122-legend-multi.png → **像素级终判（正确坐标重采样后）：putty 渐变条 1164px（B 因子五档色带 y202-211）+ putty 管形 SVG 792px（sqrt 映射管径）+ hydro 渐变条 639px（teal→sand→amber y295-304）——双卡各自标尺像素级在场**
+- 【坑（新入档，G1 四坑全为测试侧）】①**裸 agent-browser eval 严禁带期望前缀第二参**——'OK::' 会被 CLI 拼进 JS 表达式（SyntaxError: Unexpected identifier 'OK'）且静默走 `|| 兜底` 分支（本轮同坑两犯：初版 8 处 + 清空行补丁 1 处——凡断言必 g1_eval，裸 eval 仅限不查返回的副作用触发）②**跳转按钮 aria 四象限混合形态**——aria-label = 界面前缀（Jump:/跳转：，ASCII/全角冒号+空格差异）+ 报告节标签语言（报告语言独立于界面语言——EN 界面 + ZH 报告 → 'Jump: ▌疏水与极性'）+ 行首 ▌ 前缀（r109-b 调用侧截取设计）；正则须 `(Jump|跳转)[：:]\s*▌?(标签zh|标签en)` 全容 ③**陈旧状态竞态**——失败轮次的旧报告卡已带回填数字，「OK::backfilled」第 1 轮瞬 match 旧内容而新 turn 仍 busy → jumpTo busy 早退静默无跳转；修法：发消息前清空当前会话（唯一报告卡 = 本轮 turn）+ 回填命中后 sleep 2 busy 沉降保险 ④**像素断言先取 DOM rect 定位**——图例卡在视口区左下（LeftPanel 占左侧 ~300px，卡起点 x~310）非屏幕最左；按屏幕绝对坐标采样全错位（首轮 teal=5/blueviolet=0 假阴性三连）——r121 建议⑤「粗采样阈值误判」工具债的姊妹坑：**坐标错位**比采样粗细更致命，断言前先 getBoundingClientRect 或逐行扫描定位密集带
+- 【G1 与 r121 建议⑤收口】像素断言采用「逐行扫描定位渐变密集带 + 带内全采样」范式（非固定坐标粗采样）——r121 stride=3 粗采样假阴性教训的制度化规避
+
+Stage Summary:
+- 交付一（r122-a）：表面疏水分析技能——技能库第 11 支（r105 六支 + r106 四支 + r122 一支）：sasa 面积分项 + color kd 残基构成双数值域报告（两段式回填后双实测）+ 双静态跳转（color sasa 对比入口 / color kd 重放）+ 触发域与既有 sasa-surface 零冲突（spec 决胜与并列降级数值级锚定）
+- 交付二（r122-b）：图例卡多方案并置——r121 视觉债收口：同屏多 rep 多方案（putty + bfactor + hydrophobicity + sasa）各自有标尺（纵向堆叠、优先序保留为排序、单卡独立 aria）；G1b 像素级实证（putty 渐变条 + 管形 SVG + hydro 渐变条三要素在场）
+- 交付三（r122-c）：mock 三处对齐（SKILL_ADVICE / 残基构成回填正则 ZH+EN / 技能名 marker 兼容）+ 热重载实证；M 组 T23-T27 把 curl 手测固化为 fetch 真端到端可持续回归
+- 交付四（测试基建）：守卫 888→902（+14）+ r122-m.ts 27 锚（matchSkill 数值级直测为 M 套件新增维度）+ r121-m.ts 两锚同步多卡新形态 + G1 双脚本（技能全链含双跳转环 + 多卡并置含像素级）
+- 交付五（验证）：guards 902/902 · smoke 6/6 · visual-baseline 7/7（0.00%）· lint 0 · tsc 基线不变 · E2E M 27 新 + 133 回归 + G1 双组全链（回填实测数值 24087 Å²/248·326·227 双环跳转 + 双卡像素级）· console 零错误 · dev.log 干净 · provider 无扰动（zai 复核）
+- 环境卫生：平台回潮的 7 个死模板件清理（负向守卫恢复全绿）——「未跟踪噪音≠可留死代码」入档
+- 与用户指令对位：①「进行下一阶段开发」——r121 建议①②收口 + 平台噪音清理 ②「qa测试和e2e测试」——六道门禁 + M/G1 双组（技能链真端到端 + 多卡像素级双层验证）③「根据测试结果规划后续」——见下 ④「完成后push」——git push origin main
+- 下一轮建议（按优先级，基于本轮实测）：
+  1. 【中】dispatchFillCmd 键盘流覆盖（r121 建议③遗留）：G1 控制台输入走 native setter + Enter，cmd-history 的 Tab 填充（CommandPalette Tab 流）仍未自动化——可与 g1-lib 键盘派发范式合并一轮收口
+  2. 【中】ColorsPanel 色卡 hover 预览（r121 建议④遗留）：ChimeraX hover 试穿语义——hover 时 previewExpr 同款青色薄纱预览（r111-b 基建复用，成本低）
+  3. 【中】图例卡折叠收纳：四卡满配时纵向 ~300px 占位（小屏可能遮挡视口）——可评估超过两卡时折叠为色块行+悬浮展开
+  4. 【低】技能库第 12 支候选评估：putty 柔性分析（putty 管径 + bfactor 着色 + zoom 组合——图例卡与 putty rep 的技能化对称；KD/sasa 双技能已验证组合流程范式可复制）
+  5. 【低】mock 视觉自查分支的技能化对称：surface-hydrophobicity 的视觉自查演练文案（isVisualCmd 对 color kd/sasa 的判定核对——本轮视觉自查关跑通，开态分支未实证）
+  6. 【低】生产部署前置清单（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——需生产构建验证环境，沙箱内 bun run build 禁用红线不变）

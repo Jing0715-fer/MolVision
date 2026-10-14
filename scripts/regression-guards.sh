@@ -1829,6 +1829,44 @@ check "疏水图例刻度锚"            '−4\.5 \(Arg\)|\+4\.5 hydrophobic' "s
 # ⑭mock 模板锚（color kd 命令族 = 3；删则 E2E 疏水请求被泛色词模板吞掉）
 check "疏水mock模板锚"            'color kd' "mini-services/mock-llm/index.ts" 3
 
+# ---- r122-a：表面疏水分析技能（r121 建议①收口——sasa 统计 + color kd 渐变组合流程技能化） ----
+# 疏水着色（r121-c）与 SASA 暴露（r106）之间的「表面化学」高频组合需求技能化：
+# 报告同时携带面积分项（sasa 回执）+ 残基构成（color kd 回执）两类实测数值。
+# ①技能定义锚（id 注册 = 1；删则 skillId 合法性校验拒绝 + 芯片栏消失）
+check "疏水技能定义锚"            "surface-hydrophobicity" "src/lib/molecular/agent/skills.ts" 1
+# ②技能名锚（头部注释 + 段注释 + name.zh = 3；删则报告标题【表面疏水分析报告】断源）
+check "疏水技能名锚"              '表面疏水分析' "src/lib/molecular/agent/skills.ts" 3
+# ③触发词锚（strong zh 数组行含疏水位点 = 1；删则「疏水位点在哪」类需求落回泛色词模板）
+check "疏水技能触发锚"            '疏水位点' "src/lib/molecular/agent/skills.ts" 1
+# ④workflow 命令锚（color kd 步 = 1；删则技能只算面积不上梯度——组合流程退化）
+check "疏水技能流程锚"            "cmd: 'color kd'" "src/lib/molecular/agent/skills.ts" 1
+# ⑤报告节锚（残基构成节 = 1；删则报告丢 color kd 回执数值域）
+check "疏水技能报告节锚"          "key: 'residues'" "src/lib/molecular/agent/skills.ts" 1
+# ⑥跳转锚（残基构成节点击重放 color kd = 1；删则报告节不可交互）
+check "疏水技能跳转锚"            "jump: 'color kd'" "src/lib/molecular/agent/skills.ts" 1
+
+# ---- r122-b：图例卡多方案并置（r121 建议②收口——同屏多 rep 多方案各自有标尺） ----
+# 旧版互斥取一（putty > bfactor > hydrophobicity > sasa 只显最高优先级一张）的视觉债：
+# 多方案同屏时其余无标尺。r122 改为每方案一张卡纵向堆叠（优先序保留为卡片排序）。
+# ①多卡容器锚（flex 纵向堆叠 = 1；删则卡片横向错排或退单卡）
+check "图例多卡容器锚"            'flex w-44 flex-col gap-1.5' "src/components/studio/ColorLegend.tsx" 1
+# ②多卡渲染锚（entries 数组 + legends.map + LegendEntry[] 类型 = 3；删则回退单 kind）
+check "图例多卡渲染锚"            'legends\.map|LegendEntry\[\]' "src/components/studio/ColorLegend.tsx" 3
+# ③B 范围函数锚（computeBRange 定义 + putty/bfactor 两调用 = 3；删则 B 卡刻度退 '—'）
+check "图例多卡B范围锚"           'computeBRange' "src/components/studio/ColorLegend.tsx" 3
+# ④多卡语义锚（互斥取一移除说明 = 1；删则回归单卡无哨兵注释）
+check "图例多卡语义锚"            '不再互斥取一' "src/components/studio/ColorLegend.tsx" 1
+# ⑤单卡 aria 锚（三 kind 各自标尺 aria = 3；删则读屏无法区分多卡）
+check "图例单卡aria锚"            '疏水性标尺|B 因子标尺|SASA 暴露度标尺' "src/components/studio/ColorLegend.tsx" 3
+
+# ---- r122-c：mock 表面疏水技能对齐（建议填值 + 残基构成回填正则） ----
+# ①建议填值锚（SKILL_ADVICE 注册 = 1；删则报告建议节回退兜底短句）
+check "疏水mock建议锚"            'surface-hydrophobicity' "mini-services/mock-llm/index.ts" 1
+# ②回填正则锚（ZH 三类计数提取 = 1；删则残基构成节恒 '—'）
+check "疏水mock回填锚"            '残基构成：疏水' "mini-services/mock-llm/index.ts" 1
+# ③回填EN正则锚（EN 回执同域提取 = 1；删则 EN 语言下残基构成回填失配——r107 双语坑同族）
+check "疏水mock回填EN锚"          'off-scale' "mini-services/mock-llm/index.ts" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治
