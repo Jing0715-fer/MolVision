@@ -1867,6 +1867,49 @@ check "疏水mock回填锚"            '残基构成：疏水' "mini-services/mo
 # ③回填EN正则锚（EN 回执同域提取 = 1；删则 EN 语言下残基构成回填失配——r107 双语坑同族）
 check "疏水mock回填EN锚"          'off-scale' "mini-services/mock-llm/index.ts" 1
 
+# ---- r123-a：配色方案 hover 试穿（r121 建议④收口——ChimeraX 试衣语义，r122 下轮建议②） ----
+# store 侧三锚：试穿态类型 + setter 声明/实现 + colorRev 复用（着色级失效链触发引擎重建）
+check "试穿态类型锚"              'previewScheme: ColorScheme \| null' "src/lib/molecular/store.ts" 1
+check "试穿setter锚"              'setPreviewScheme' "src/lib/molecular/store.ts" 2
+check "试穿colorRev锚"            'colorRev: x\.colorRev \+ 1 \} : x' "src/lib/molecular/store.ts" 2
+# engine 侧两锚：试穿方案替代 rep.colorScheme + 活动结构门控（非活动结构不受试穿影响）
+check "试穿engine接线锚"          'previewing \? uiState\.previewScheme' "src/lib/molecular/engine.ts" 1
+check "试穿engine门控锚"          'entry\.id === store\.getState\(\)\.activeId' "src/lib/molecular/engine.ts" 1
+# 面板侧四锚：hover 进入 + 键盘 focus 试穿（可及性）+ 120ms 防抖 + 卸载恢复（防试穿态卡死）
+check "试穿面板hover锚"           'onMouseEnter=\{\(\) => enterPreview' "src/components/studio/panels/ColorsPanel.tsx" 1
+check "试穿面板focus锚"           'onFocus|onBlur' "src/components/studio/panels/ColorsPanel.tsx" 2
+check "试穿防抖锚"                'setTimeout' "src/components/studio/panels/ColorsPanel.tsx" 1
+check "试穿卸载恢复锚"            'getState\(\)\.setPreviewScheme\(null\)' "src/components/studio/panels/ColorsPanel.tsx" 1
+
+# ---- r123-b：图例卡折叠收纳（r122 下轮建议③——≥3 卡满配 ~300px 小屏遮挡债收口） ----
+# ①折叠阈值锚（COLLAPSE_THRESHOLD 定义 + 使用 = 2；删则四卡满配直显回归遮挡）
+check "图例折叠阈值锚"            'COLLAPSE_THRESHOLD' "src/components/studio/ColorLegend.tsx" 2
+# ②折叠可及性锚（aria-expanded + 键盘 Enter/Space 展开 = 2；删则读屏/键盘不可达）
+check "图例折叠aria锚"            'aria-expanded' "src/components/studio/ColorLegend.tsx" 1
+check "图例折叠键盘锚"            "e\\.key === 'Enter' \\|\\| e\\.key === ' '" "src/components/studio/ColorLegend.tsx" 1
+# ③指针穿透锚（容器 pointer-events-none 下折叠卡/收起按钮自身 auto = 3；删则点击落空）
+check "图例折叠指针锚"            'pointer-events-auto' "src/components/studio/ColorLegend.tsx" 2
+# ④折叠短名锚（KIND_SHORT 四 kind 映射 = 2；删则折叠行无名可读）
+check "图例折叠短名锚"            'KIND_SHORT' "src/components/studio/ColorLegend.tsx" 2
+
+# ---- r123-c：putty 柔性分析技能（r122 下轮建议④——组合流程范式复制，技能库 11→12） ----
+# ①技能定义锚（id 注册 = 1；删则 matchSkill 永不命中）
+check "柔性技能定义锚"            'flexibility-putty' "src/lib/molecular/agent/skills.ts" 1
+# ②触发域锚（zh strong 柔性分析族 = 2；删则用户中文请求落空）
+check "柔性技能触发锚"            '柔性分析|柔性分布|柔性区域' "src/lib/molecular/agent/skills.ts" 2
+# ③workflow 锚（show putty + color bfactor 双编码 = 2；删则技能退化单命令）
+check "柔性技能流程锚"            'show putty' "src/lib/molecular/agent/skills.ts" 1
+# ④报告节锚（B 因子范围 + 高柔性残基 双数值域 = 2；删则报告无实测域）
+check "柔性技能报告节锚"          'B 因子范围|高柔性残基' "src/lib/molecular/agent/skills.ts" 2
+# ⑤回执统计锚（commands.ts bfactor 范围统计 = 2；删则报告数值域无源）
+check "柔性回执统计锚"            '高柔性残基（>80% 分位）\$\{flex\}' "src/lib/molecular/commands.ts" 1
+# ⑥mock 对齐三锚（SKILL_ADVICE + B 因子范围回填 + 高柔性回填）
+check "柔性mock建议锚"            "'flexibility-putty'" "mini-services/mock-llm/index.ts" 1
+check "柔性mock回填锚"            'B 因子范围 \(\[\\d\.\]\+\)–' "mini-services/mock-llm/index.ts" 1
+check "柔性mock回填EN锚"          'B-factor range \(\[\\d\.\]\+\)–' "mini-services/mock-llm/index.ts" 1
+# ⑦mock 7.6 模板锚（弱词场景 show putty + color bfactor = 2；删则纯表示需求跑偏）
+check "柔性mock模板锚"            "'show putty', 'color bfactor'" "mini-services/mock-llm/index.ts" 1
+
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条
 # 脱节（23 条盲区），新增守卫后忘同步静态数的坑就此根治

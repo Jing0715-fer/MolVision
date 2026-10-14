@@ -48,8 +48,9 @@ export interface AgentSkill {
 }
 
 /**
- * 预置技能库（11 支：r105 六支 + r106 扩容四支 + r122-a 表面疏水分析）——全部命令均在 runner.ts 白名单内
- * （membrane/pore 已随 r105 补入；sasa/xcontacts/superpose/morph/symmetry 本就在册）。
+ * 预置技能库（12 支：r105 六支 + r106 扩容四支 + r122-a 表面疏水分析 + r123-c putty 柔性分析）
+ * ——全部命令均在 runner.ts 白名单内
+ * （membrane/pore 已随 r105 补入；sasa/xcontacts/superpose/morph/symmetry/show putty 本就在册）。
  * workflow 与 SYSTEM_PROMPT 行为规则严格一致（pub-figure 即规则 18 出版流程的 skill 化）。
  */
 export const AGENT_SKILLS: AgentSkill[] = [
@@ -413,6 +414,42 @@ export const AGENT_SKILLS: AgentSkill[] = [
         { key: 'total', label: { zh: '总面积', en: 'Total area' }, hint: { zh: 'SASA 总面积（Å²，命令回执）', en: 'Total SASA (Å², from receipt)' }, jump: 'zoom' },
         { key: 'ratio', label: { zh: '疏水与极性', en: 'Hydrophobic & polar' }, hint: { zh: '疏水/极性分项面积（Å²，sasa 回执）', en: 'Hydrophobic / polar areas (Å², sasa receipt)' }, jump: 'color sasa' },
         { key: 'residues', label: { zh: '残基构成', en: 'Residue composition' }, hint: { zh: 'color kd 回执三类计数：疏水 KD>0 / 亲水 KD<0 / 表外', en: 'color kd receipt counts: hydrophobic KD>0 / hydrophilic KD<0 / off-scale' }, jump: 'color kd' },
+        { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
+      ],
+    },
+  },
+  // ---------- r123-c：putty 柔性分析（r122 建议④——KD/sasa 双技能已验证的组合流程范式复制） ----------
+  // putty 管径（B 因子 sqrt 映射：柔性区粗、刚性区细）与 B 因子着色（低蓝→高红）双编码
+  // 是 PyMOL/ChimeraX 柔性可视化的标配组合；报告数值域来自 r123-c 的 color bfactor
+  // 回执增强（B 因子范围 min–max + 高柔性残基占比）。全部命令均在 runner 白名单内
+  // （show/color/zoom）。
+  {
+    id: 'flexibility-putty',
+    name: { zh: '柔性分析', en: 'Putty Flexibility Analysis' },
+    description: {
+      zh: 'putty 管径 + B 因子渐变着色组合流程：柔性区域定位与高柔性残基统计一站式分析',
+      en: 'Putty tube radius + B-factor gradient coloring in one combined workflow: locate flexible regions with high-flexibility residue stats',
+    },
+    triggers: {
+      strong: {
+        zh: ['柔性分析', '柔性分布', '柔性区域', '柔性位点', '柔性图谱', 'b因子分析', 'b 因子分析', '柔性可视化'],
+        en: ['flexibility analysis', 'putty analysis', 'flexible regions', 'b-factor analysis', 'bfactor analysis', 'flexibility map'],
+      },
+      weak: {
+        zh: ['柔性', 'b因子', 'b 因子'],
+        en: ['flexible', 'putty', 'flexibility'],
+      },
+    },
+    workflow: [
+      { label: { zh: 'putty 表示法', en: 'Putty representation' }, cmd: 'show putty', check: { zh: '管径按 B 因子 sqrt 映射（柔性区粗、刚性区细）——半径几何与着色双编码的几何半边', en: 'Tube radius maps B-factor via sqrt (thick = flexible) — the geometry half of the dual encoding' } },
+      { label: { zh: 'B 因子着色', en: 'B-factor coloring' }, cmd: 'color bfactor', check: { zh: '低蓝 → 高红连续渐变（着色半边）；回执附 B 因子范围与高柔性残基占比——报告数值域', en: 'Low blue → high red gradient (color half); receipt includes B-factor range & high-flexibility residue stats' } },
+      { label: { zh: '全景适配', en: 'Fit view' }, cmd: 'zoom', check: { zh: '整体入框——柔性区分布要全景观察，不要 zoom sele', en: 'Frame the whole structure — flexible region distribution needs the full view' } },
+    ],
+    report: {
+      sections: [
+        { key: 'brange', label: { zh: 'B 因子范围', en: 'B-factor range' }, hint: { zh: 'min–max 范围（color bfactor 回执）', en: 'min–max range (color bfactor receipt)' }, jump: 'color bfactor' },
+        { key: 'flex', label: { zh: '高柔性残基', en: 'High-flexibility residues' }, hint: { zh: 'B > 80% 分位的 CA 残基占比（回执）', en: 'CA residues above the 80th percentile (receipt)' }, jump: 'zoom' },
+        { key: 'mapping', label: { zh: '管径映射', en: 'Tube mapping' }, hint: { zh: 'putty 管径按 B 因子 sqrt 映射（rMin→rMax，puttyRange 可钳制高值端）', en: 'Putty radius maps B-factor via sqrt (rMin→rMax; puttyRange clamps the high end)' }, jump: 'zoom' },
         { key: 'advice', label: { zh: '建议', en: 'Advice' }, hint: { zh: '下一步操作建议（≤40 字）', en: 'Next-step suggestion (≤40 chars)' } },
       ],
     },

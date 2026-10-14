@@ -59,6 +59,12 @@ export interface MolState {
     agentOpen: boolean
     /** 论文图复现模板库（r71：CNS 图式一键应用） */
     templateOpen: boolean
+    /** r123-a 配色方案 hover 试穿（ChimeraX 试衣语义）：非 null 时活动结构的 rep
+     *  渲染颜色临时以该方案替代 rep.colorScheme（覆盖色仍叠加——用户看到的是
+     *  「应用后的完整效果」）；不写 colorOverrides/无 toast/不入 undo——移出恢复 null。
+     *  setter 复用 colorRev bump（着色级失效链：rep 哈希含 colorRev → 引擎重建 →
+     *  buildRep 读到试穿方案），零引擎哈希机制改动 */
+    previewScheme: ColorScheme | null
   }
   consoleLog: { type: 'in' | 'out' | 'err'; text: string; time: string; seq?: number }[]
   /** 本次页面生命周期内是否加载过结构（防止恢复失败后被空自动保存抹掉存档） */
@@ -78,6 +84,8 @@ export interface MolState {
   removeRep: (structureId: string, repId: string) => void
   applyPreset: (preset: string) => void
   applyColor: (target: ColorScheme | string) => void
+  /** r123-a：设置/清除配色方案试穿（null = 恢复真实方案）；仅活动结构受影响 */
+  setPreviewScheme: (scheme: ColorScheme | null) => void
   resetColors: (scope: 'selection' | 'structure') => void
   setSelection: (structureId: string | null, indices: number[], mode?: 'replace' | 'add' | 'remove') => void
   selectFromExpr: (expr: string) => { count: number; error?: string }
@@ -338,6 +346,7 @@ export const useMolStore = create<MolState>()((set, get) => ({
     paletteOpen: false,
     agentOpen: false,
     templateOpen: false,
+    previewScheme: null,
   },
   consoleLog: [{ type: 'out', text: tt(BOOT_LOG), time: '' }],
   everHadStructures: false,
@@ -657,6 +666,21 @@ export const useMolStore = create<MolState>()((set, get) => ({
     if (res.error) return { count: 0, error: res.error }
     get().setSelection(entry.id, maskToIndices(res.mask))
     return { count: res.count }
+  },
+
+  setPreviewScheme: (scheme) => {
+    // r123-a：试穿态变化才写（重复同值不触发重建）；仅活动结构 colorRev bump——
+    // 非活动结构不受试穿影响（buildRep 侧 entry.id === activeId 门控）
+    const s = get()
+    if (s.ui.previewScheme === scheme) return
+    const activeId = s.activeId
+    set(st => ({
+      ui: { ...st.ui, previewScheme: scheme },
+      structures: activeId
+        ? st.structures.map(x => x.id === activeId ? { ...x, colorRev: x.colorRev + 1 } : x)
+        : st.structures,
+      visualRev: st.visualRev + 1,
+    }))
   },
 
   previewExpr: (expr) => {

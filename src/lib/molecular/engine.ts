@@ -3795,7 +3795,12 @@ export class MolEngine {
     const atomIdx: number[] = []
     for (let i = 0; i < mask.length; i++) if (mask[i]) atomIdx.push(i)
     // 颜色
-    const colors = computeAtomColors(data, rep.colorScheme, { uniformColor: rep.uniformColor })
+    // r123-a hover 试穿：ui.previewScheme 非 null 且该 rep 属活动结构时，渲染颜色临时
+    // 以试穿方案替代 rep.colorScheme（覆盖色照常叠加——试穿展示「应用后的完整效果」）。
+    // 重建触发链：setPreviewScheme bump 活动 entry.colorRev → rep 哈希失效 → 此处重建。
+    const uiState = store.getState().ui
+    const previewing = uiState.previewScheme != null && entry.id === store.getState().activeId
+    const colors = computeAtomColors(data, previewing ? uiState.previewScheme! : rep.colorScheme, { uniformColor: rep.uniformColor })
     const overrides = Object.keys(entry.colorOverrides)
     if (overrides.length) {
       const c = new THREE.Color()

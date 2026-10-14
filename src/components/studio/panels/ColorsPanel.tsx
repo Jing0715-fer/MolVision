@@ -1,8 +1,10 @@
 'use client'
 
 // 颜色面板：配色方案应用到当前选择、自定义颜色、重置
-import { useState } from 'react'
-import { Paintbrush, RotateCcw, Palette } from 'lucide-react'
+// r123-a：方案色卡 hover/focus 试穿（ChimeraX 试衣语义）——指针悬停 120ms 或键盘
+// 聚焦时活动结构实时预览该方案（无 toast/无 undo/移出即恢复）；点击照旧正式应用。
+import { useEffect, useRef, useState } from 'react'
+import { Paintbrush, RotateCcw, Palette, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMolStore } from '@/lib/molecular/store'
 import { COLOR_SCHEME_LABELS, NAMED_COLORS, type ColorScheme } from '@/lib/molecular/colors'
@@ -27,10 +29,34 @@ export function ColorsPanel() {
   const { t, locale } = useI18n()
   const applyColor = useMolStore(s => s.applyColor)
   const resetColors = useMolStore(s => s.resetColors)
+  const setPreviewScheme = useMolStore(s => s.setPreviewScheme)
   const selection = useMolStore(s => s.selection)
   const activeId = useMolStore(s => s.activeId)
   const structures = useMolStore(s => s.structures)
   const [custom, setCustom] = useState('#e05d5d')
+  /** 试穿中的方案（本地镜像——Eye 图标态与色卡行高亮）；全局态在 store.ui.previewScheme */
+  const [trying, setTrying] = useState<ColorScheme | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // r123-a 试穿进入（120ms 防抖：快速扫过色卡列不触发重建风暴）/ 退出（即时恢复）
+  const enterPreview = (key: ColorScheme) => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    hoverTimer.current = setTimeout(() => {
+      hoverTimer.current = null
+      setPreviewScheme(key)
+      setTrying(key)
+    }, 120)
+  }
+  const exitPreview = () => {
+    if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null }
+    setPreviewScheme(null)
+    setTrying(null)
+  }
+  // 卸载恢复（面板切走/结构卸载时防试穿态卡死——store 直取确保零闭包残留）
+  useEffect(() => () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current)
+    useMolStore.getState().setPreviewScheme(null)
+  }, [])
 
   const st = structures.find(x => x.id === activeId)
   const hasSelection = selection.structureId === activeId && selection.indices.length > 0
@@ -49,21 +75,35 @@ export function ColorsPanel() {
     <div className="pb-4">
       <SectionTitle>{t({ zh: '配色方案', en: 'Color schemes' })}</SectionTitle>
       <div className="space-y-1 px-2">
-        {SCHEMES.map(sc => (
+        {SCHEMES.map(sc => {
+          const isTrying = trying === sc.key
+          return (
           <button
             key={sc.key}
-            onClick={() => { applyColor(sc.key); toast.success(tt({ zh: `已应用配色：${tt(COLOR_SCHEME_LABELS[sc.key])}`, en: `Applied: ${tt(COLOR_SCHEME_LABELS[sc.key])}` })) }}
-            className="panel-card flex w-full items-center gap-2.5 px-2.5 py-2 text-left"
+            onMouseEnter={() => enterPreview(sc.key)}
+            onMouseLeave={exitPreview}
+            onFocus={() => { if (hoverTimer.current) clearTimeout(hoverTimer.current); setPreviewScheme(sc.key); setTrying(sc.key) }}
+            onBlur={exitPreview}
+            onClick={() => { exitPreview(); applyColor(sc.key); toast.success(tt({ zh: `已应用配色：${tt(COLOR_SCHEME_LABELS[sc.key])}`, en: `Applied: ${tt(COLOR_SCHEME_LABELS[sc.key])}` })) }}
+            title={t({ zh: `悬停试穿 · 点击应用：${tt(COLOR_SCHEME_LABELS[sc.key])}`, en: `Hover to try · click to apply: ${tt(COLOR_SCHEME_LABELS[sc.key])}` })}
+            aria-label={t({ zh: `${tt(COLOR_SCHEME_LABELS[sc.key])}（悬停预览，点击应用）`, en: `${tt(COLOR_SCHEME_LABELS[sc.key])} (hover to preview, click to apply)` })}
+            className={cn(
+              'panel-card flex w-full items-center gap-2.5 px-2.5 py-2 text-left transition',
+              isTrying && 'ring-1 ring-primary/50',
+            )}
           >
-            <div className="flex -space-x-1">
+            <div className="flex -space-x-1" aria-hidden>
               {sc.swatches.map((c, i) => (
                 <span key={i} className="h-4 w-4 rounded-full border border-background shadow-xs" style={{ background: c }} />
               ))}
             </div>
             <span className="min-w-0 flex-1 truncate text-xs font-medium" title={t(COLOR_SCHEME_LABELS[sc.key])}>{t(COLOR_SCHEME_LABELS[sc.key])}</span>
-            <Paintbrush className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+            {isTrying
+              ? <Eye className="h-3.5 w-3.5 shrink-0 text-primary/70" aria-hidden />
+              : <Paintbrush className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" aria-hidden />}
           </button>
-        ))}
+          )
+        })}
       </div>
 
       <SectionTitle>{t({ zh: '自定义颜色', en: 'Custom color' })}</SectionTitle>

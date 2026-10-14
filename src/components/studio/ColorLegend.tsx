@@ -5,13 +5,27 @@
 // r122-b 多方案并置：同屏多个可见 rep 各持不同色方案（如 cartoon 疏水 + spheres B 因子）
 // 时各自渲染一张标尺卡（纵向堆叠、优先序 putty > bfactor > hydrophobicity > sasa）——
 // 旧版只显最高优先级一张，其余方案无标尺（r121 视觉债收口）。
-import { useMemo } from 'react'
+// r123-b 折叠收纳：≥3 卡满配时纵向 ~300px 在小屏可能遮挡视口——默认折叠为单卡紧凑
+// 色带行（每方案一行 mini 渐变条 + 名称），点击/Enter/Space 展开全卡；≤2 卡保持直显。
+import { useMemo, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useMolStore, dataRegistry } from '@/lib/molecular/store'
 import { useI18n } from '@/i18n'
 import { BFACTOR_STOPS, SASA_STOPS, HYDRO_STOPS, stopsToGradient } from '@/lib/molecular/colors'
 import type { RepConfig } from '@/lib/molecular/types'
 
 type LegendKind = 'putty' | 'bfactor' | 'hydrophobicity' | 'sasa'
+
+/** 方案短名（折叠行与卡标题共用；单字粒度便于小屏） */
+const KIND_SHORT: Record<LegendKind, { zh: string; en: string }> = {
+  putty: { zh: 'putty 柔性', en: 'putty flex' },
+  bfactor: { zh: 'B 因子', en: 'B-factor' },
+  hydrophobicity: { zh: '疏水性', en: 'Hydrophobicity' },
+  sasa: { zh: 'SASA 暴露', en: 'SASA' },
+}
+
+/** 折叠阈值：≥3 卡时默认折叠（r122 建议③——四卡满配 ~300px 小屏遮挡） */
+const COLLAPSE_THRESHOLD = 3
 
 /** 单张图例卡（一个可见色方案一张；bRange 仅 putty/bfactor 需要） */
 interface LegendEntry {
@@ -64,6 +78,8 @@ export function ColorLegend() {
   const activeId = useMolStore(s => s.activeId)
   // 控制台打开时隐藏（底部命令行覆盖层会遮挡图例，避免残缺显示）
   const consoleOpen = useMolStore(s => s.ui.consoleOpen)
+  // r123-b 折叠态（本地态：同一次挂载内记忆用户选择；方案数变化重新评估阈值）
+  const [expanded, setExpanded] = useState(false)
 
   const st = structures.find(x => x.id === activeId)
 
@@ -89,11 +105,17 @@ export function ColorLegend() {
 
   if (!legends.length || consoleOpen) return null
 
+  // r123-b：≥3 卡且未手动展开 → 折叠紧凑态；≤2 卡（或已展开）→ 全卡直显
+  const collapsible = legends.length >= COLLAPSE_THRESHOLD
+  const showFull = !collapsible || expanded
+
   return (
     <div
       className="pointer-events-none flex w-44 flex-col gap-1.5 select-none"
       aria-label={t({ zh: '颜色标尺图例', en: 'Color scale legend' })}
     >
+      {showFull ? (
+        <>
       {legends.map(({ kind, bRange }) => (
         <div
           key={kind}
@@ -164,6 +186,50 @@ export function ColorLegend() {
           )}
         </div>
       ))}
+          {/* r123-b 折叠态的「收起」入口（展开态尾部）：容器 pointer-events-none，
+              按钮自身 pointer-events-auto 才可点 */}
+          {collapsible && (
+            <button
+              onClick={() => setExpanded(false)}
+              className="pointer-events-auto flex h-6 w-full items-center justify-center gap-1 rounded-md border border-border bg-card/90 text-[9px] text-muted-foreground transition hover:bg-accent mol-elevate"
+              aria-label={t({ zh: `收起 ${legends.length} 张标尺卡`, en: `Collapse ${legends.length} legend cards` })}
+            >
+              <ChevronDown className="h-3 w-3" aria-hidden /> {t({ zh: '收起标尺', en: 'Collapse legends' })}
+            </button>
+          )}
+        </>
+      ) : (
+        /* r123-b 折叠紧凑态：单卡内每方案一行 mini 渐变条——小屏不遮挡视口；
+           整卡可点击/Enter/Space 展开全卡（可及性：role=button + aria-expanded） */
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setExpanded(true)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(true) } }}
+          aria-expanded={false}
+          aria-label={t({ zh: `${legends.length} 个颜色标尺已折叠，点击展开`, en: `${legends.length} color scales collapsed, click to expand` })}
+          className="pointer-events-auto cursor-pointer rounded-lg border border-border bg-card p-2 mol-elevate transition hover:border-primary/40"
+        >
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[10px] font-semibold tracking-wide text-foreground/80">
+              {t({ zh: `颜色标尺 ×${legends.length}`, en: `Color scales ×${legends.length}` })}
+            </span>
+            <ChevronUp className="h-3 w-3 text-muted-foreground/70" aria-hidden />
+          </div>
+          <div className="flex flex-col gap-1">
+            {legends.map(({ kind }) => (
+              <div key={kind} className="flex items-center gap-1.5">
+                <div
+                  className="h-1.5 w-14 shrink-0 rounded-full border border-border/40"
+                  style={{ background: stopsToGradient(kind === 'sasa' ? SASA_STOPS : kind === 'hydrophobicity' ? HYDRO_STOPS : BFACTOR_STOPS) }}
+                  aria-hidden
+                />
+                <span className="truncate text-[9px] leading-none text-muted-foreground">{t(KIND_SHORT[kind])}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

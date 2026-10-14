@@ -754,7 +754,38 @@ export function runCommand(raw: string): void {
         })
       }
     }
-    ok(tt({ zh: `已上色: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}${hydroNote}`, en: `Colored: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}${hydroNote}` }))
+    // r123-c：B 因子回执附范围统计（kd 残基构成统计同族的「有数说话」口径——
+    // min–max 范围 + 高柔性残基占比（CA 中 B > min + 0.8·(max−min)，即管径最粗档）。
+    // putty 柔性分析技能报告的数值域：回填正则从本回执提取）
+    let bfactorNote = ''
+    if (scheme === 'bfactor') {
+      const data = dataRegistry.get(s.activeId)
+      if (data) {
+        let min = Infinity, max = -Infinity
+        const n = data.atoms.count
+        for (let i = 0; i < n; i++) {
+          const v = data.atoms.bfactors[i]
+          if (!Number.isFinite(v)) continue
+          if (v < min) min = v
+          if (v > max) max = v
+        }
+        if (min <= max && Number.isFinite(min)) {
+          const hi = min + 0.8 * (max - min)
+          let ca = 0, flex = 0
+          for (let i = 0; i < n; i++) {
+            if (data.atoms.names[i] === 'CA') {
+              ca++
+              if (data.atoms.bfactors[i] > hi) flex++
+            }
+          }
+          bfactorNote = tt({
+            zh: `——低蓝 → 高红连续渐变；B 因子范围 ${min.toFixed(1)}–${max.toFixed(1)}${ca ? ` · 高柔性残基（>80% 分位）${flex}/${ca}` : ''}`,
+            en: ` — low blue → high red continuous gradient; B-factor range ${min.toFixed(1)}–${max.toFixed(1)}${ca ? ` · high-flexibility residues (>80th pct) ${flex}/${ca}` : ''}`,
+          })
+        }
+      }
+    }
+    ok(tt({ zh: `已上色: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}${hydroNote}${bfactorNote}`, en: `Colored: ${scheme ? tt(COLOR_SCHEME_LABELS[scheme]) : css}${selExpr ? ` (${selExpr})` : ''}${hydroNote}${bfactorNote}` }))
     return
   }
 

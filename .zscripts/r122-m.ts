@@ -21,8 +21,8 @@ const ok = (name: string, cond: boolean, detail?: string) => {
 }
 
 // ---------- T1-T8：技能注册与 matchSkill 数值级直测 ----------
-ok('T1 技能库规模（r105 六支 + r106 四支 + r122 一支 = 11）',
-  AGENT_SKILLS.length === 11, `实际 ${AGENT_SKILLS.length} 支`)
+ok('T1 技能库规模（r105 六支 + r106 四支 + r122 一支 + r123 一支 = 12——r123 扩容后同步）',
+  AGENT_SKILLS.length === 12, `实际 ${AGENT_SKILLS.length} 支`)
 
 ok('T2 技能 id 注册（SKILL_IDS 含 surface-hydrophobicity）',
   SKILL_IDS.has('surface-hydrophobicity'), 'id 未注册——请求体 skillId 校验将拒绝')

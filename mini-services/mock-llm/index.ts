@@ -331,6 +331,8 @@ const SKILL_ADVICE: Record<string, string> = {
   'symmetry-assembly': '半径 5-80Å 可调组装范围',
   // r122-a：表面疏水分析（sasa 面积分项 + color kd 残基构成双数值域）
   'surface-hydrophobicity': '可 color sasa 对比暴露渐变；hbonds 可叠加网络',
+  // r123-c：putty 柔性分析（管径 sqrt(B) + B 因子渐变双编码）
+  'flexibility-putty': 'Reps 面板可调 puttyRange 钳制离群高 B；色卡可 hover 试穿',
 }
 
 /** 报告章节填值：场景快照可取的填实值；命令回执类（报告生成在命令执行前——接触数/氢键数/
@@ -356,6 +358,8 @@ function fillSkillReportValue(skillId: string, label: string, scene: SceneFacts 
     case '帧数': return '40（默认）'
     case '组装半径': return '20Å（默认）'
     case '组装观感': return '原体 + 对称伴侣整体入框'
+    // r123-c：管径映射（静态说明节——不依赖回执；putty 几何语义）
+    case '管径映射': return 'putty 管径 sqrt(B) 映射：rMin→rMax，柔性区粗刚性区细'
     default: return '—'
   }
 }
@@ -399,6 +403,18 @@ function fillFromReceiptsByLabel(label: string, src: string): string | null {
   if (/残基构成/.test(label)) {
     const m = /残基构成：疏水 (\d+) · 亲水 (\d+) · 表外 (\d+)/.exec(src) ?? /residues: (\d+) hydrophobic · (\d+) hydrophilic · (\d+) off-scale/.exec(src)
     return m ? `疏水 ${m[1]} · 亲水 ${m[2]} · 表外 ${m[3]}` : null
+  }
+  // r123-c B 因子范围（color bfactor 回执增强——commands.ts r123-c 格式逐字对齐：
+  // ZH「B 因子范围 min–max」/ EN「B-factor range min–max」；en-dash U+2013）
+  if (/B 因子范围/.test(label)) {
+    const m = /B 因子范围 ([\d.]+)–([\d.]+)/.exec(src) ?? /B-factor range ([\d.]+)–([\d.]+)/.exec(src)
+    return m ? `${m[1]}–${m[2]} Å²` : null
+  }
+  // r123-c 高柔性残基（CA 中 B > 80% 分位占比；ZH「高柔性残基（>80% 分位）n/总」/
+  // EN「high-flexibility residues (>80th pct) n/total」）
+  if (/高柔性残基/.test(label)) {
+    const m = /高柔性残基（>80% 分位）(\d+)\/(\d+)/.exec(src) ?? /high-flexibility residues \(>80th pct\) (\d+)\/(\d+)/.exec(src)
+    return m ? `${m[1]}/${m[2]} CA（>80% 分位）` : null
   }
   if (/伴侣数/.test(label)) {
     const m = /已生成 (\d+) 个对称伴侣/.exec(src) ?? /(\d+) symmetry mates generated/.exec(src)
@@ -702,6 +718,16 @@ function buildDecision(messages: MockMessage[]): { reply: string; commands: stri
       '已按 Kyte-Doolittle 疏水性着色（color kd：亲水青 −4.5 Arg → 疏水琥珀 +4.5 Ile，残基级碳渐变，杂原子保元素色）——表面化学语境的疏水斑块一眼可辨。',
       'Colored by Kyte-Doolittle hydropathy (color kd: hydrophilic teal −4.5 Arg → hydrophobic amber +4.5 Ile, residue-level carbon gradient; heteroatoms keep element colors) — hydrophobic patches stand out instantly in surface-chemistry context.',
       ['color kd'])
+  }
+
+  // 7.6 r123-c putty 表示（弱词场景模板——技能 strong 词「柔性分析」等已被前端
+  //     matchSkill 拦走带 skillId 走注入段；纯表示需求「用 putty 显示/管子表示」落此）。
+  //     真实语法：show putty（B 因子 sqrt 管径映射——柔性区粗刚性区细）+ color bfactor 双编码。
+  if (/putty|管子表示|蠕虫管|柔性可视化/.test(t)) {
+    return dec(zh,
+      '已切换 putty 表示（show putty：管径按 B 因子 sqrt 映射，柔性区粗、刚性区细）并叠加 B 因子渐变着色（color bfactor：低蓝 → 高红）——双编码下柔性区域一眼可辨。',
+      'Switched to putty representation (show putty: tube radius maps B-factor via sqrt — thick where flexible, thin where rigid) with B-factor gradient coloring (color bfactor: low blue → high red) — flexible regions stand out via dual encoding.',
+      ['show putty', 'color bfactor'])
   }
 
   // 8. 链染色（r64-b 既有模板升级双语）：显式上色动词，或消息本身就带颜色词（如「B 链蓝色」）
