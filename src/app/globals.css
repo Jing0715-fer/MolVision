@@ -506,27 +506,6 @@ canvas {
   box-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
 }
 
-/* 场景预设卡（工具栏下拉内）：强调型条目 */
-.scene-item {
-  position: relative;
-}
-.scene-item::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2px;
-  height: 18px;
-  border-radius: 2px;
-  background: var(--primary);
-  opacity: 0;
-  transition: opacity 140ms ease;
-}
-.scene-item[data-highlighted]::before {
-  opacity: 1;
-}
-
 /* ============================================================
    欢迎页（仪器待机大屏）
    ============================================================ */

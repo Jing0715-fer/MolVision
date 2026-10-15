@@ -1,6 +1,5 @@
 // PyMOL 风格命令行：select / show / hide / color / bg / zoom / spin / slab / label / create / map / symmetry / stereo ...
 import { PRESETS, useMolStore, engineRef, dataRegistry, buildNamedMasks } from './store'
-import { SCENE_PRESETS } from './scenes'
 import { FIGURE_TEMPLATES, runTemplateCommands, adaptTemplateCommands, logAdaptNotes } from './figure-templates'
 import { saveSession, clearSession, sessionInfo, exportSessionFile, newSession } from './session'
 import { buildShareLink } from './share-link'
@@ -142,7 +141,7 @@ export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; exampl
   { cmd: 'disable|enable [名]', desc: { zh: '隐藏/恢复整个结构对象（缺省活动结构；morph 模板收尾清理源构象）', en: 'Hide/restore a whole structure object (defaults to the active one; morph templates clean up source conformers)' }, example: 'disable 4ake · enable m1' },
   { cmd: 'orient [sel]', desc: { zh: '主轴对齐视角（PCA）', en: 'Principal-axis aligned view (PCA)' }, example: 'orient chain A' },
   { cmd: 'get_view / set_view', desc: { zh: '视角导出/恢复（JSON）', en: 'Export/restore camera view (JSON)' }, example: 'get_view' },
-  { cmd: 'view save|go|del|list…', desc: { zh: '视角书签（缩略图+平滑跳转，Shift+数字）', en: 'View bookmarks (thumbnails + smooth jumps, Shift+number)' }, example: 'view save 口袋', exampleEn: 'view save pocket' },
+  { cmd: 'view save|go|del|list…', desc: { zh: '视角书签（缩略图+平滑跳转，数字键 1-9）', en: 'View bookmarks (thumbnails + smooth jumps, number keys 1-9)' }, example: 'view save 口袋', exampleEn: 'view save pocket' },
   { cmd: 'tour [id]|stop', desc: { zh: '引导式演示场景（逐步自动操作）', en: 'Guided demo scenes (stepwise auto-operation)' }, example: 'tour quickstart' },
   { cmd: 'measure dist|angle|dihedral (选择A) (选择B)…', cmdEn: 'measure dist|angle|dihedral (selectionA) (selectionB)…', desc: { zh: '选择表达式测量（距离取最近原子对，角度/二面角取质心；3D 标注入测量面板）', en: 'Selection-expression measurements (nearest atom pair for distance, centroids for angle/dihedral; 3D labels + measurement panel)' }, example: 'measure dist (resn HEM) (within 5 of resn HEM and protein) · measure clear' },
   { cmd: 'count_atoms [expr]', desc: { zh: '统计原子数', en: 'Count atoms' }, example: 'count_atoms chain A' },
@@ -180,7 +179,7 @@ export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; exampl
   { cmd: 'session save|export|share|new|info|clear', desc: { zh: '会话存档 / 文件导出 / 分享链接 / 新建', en: 'Session archive / file export / share link / new session' }, example: 'session export · session share · session new' },
   { cmd: 'history [clear]', desc: { zh: '命令历史面板（搜索/置顶/执行；clear 清空）', en: 'Command history panel (search / pin / run; clear empties)' }, example: 'history · history clear' },
   { cmd: 'label on|off', desc: { zh: '标记当前选择 / 清除标签', en: 'Label current selection / clear labels' }, example: 'label on' },
-  { cmd: 'preset <名>', cmdEn: 'preset <name>', desc: { zh: '应用风格预设（含出版级互作）', en: 'Apply a style preset (incl. publication-grade interactions)' }, example: 'preset publication' },
+  { cmd: 'preset <名>', cmdEn: 'preset <name>', desc: { zh: '应用表示法预设（完整风格工作流用图版模板 figure <id>）', en: 'Apply a representation preset (full style workflows: figure <id> templates)' }, example: 'preset publication' },
   { cmd: 'isolate <选择>|off', cmdEn: 'isolate <selection>|off', desc: { zh: '链隔离：保留选择所在链隐藏其余（多链蛋白单链配体分析）', en: 'Chain isolation: keep chains touched by the selection, hide the rest (single-chain ligand analysis in multi-chain proteins)' }, example: 'isolate (resn HEM and chain A) · isolate off' },
   { cmd: 'chains hide|show|list', desc: { zh: '链显隐手动控制（同链 ID 多链组全匹配）', en: 'Manual chain visibility control (all groups of a same chain ID matched)' }, example: 'chains hide B+C · chains show all' },
   { cmd: 'scene save|recall|next|list', desc: { zh: '场景快照：相机+表示法+链隔离+环境一体保存切换', en: 'Scene snapshots: camera + representations + chain isolation + environment saved and restored as one' }, example: 'scene save A链口袋 · scene recall A链口袋 · scene next', exampleEn: 'scene save pocket · scene recall pocket · scene next' },
@@ -1144,22 +1143,21 @@ export function runCommand(raw: string): void {
     return runChainsCommand(input, parts, ok, err)
   }
 
-  if (cmd === 'preset' || cmd === 'style' || cmd === 'scene') {
+  // r125：风格预设/场景组合预设随图版模板系统退役——scene 收敛为场景快照子命令族，
+  // preset/style 保留表示法切换；完整风格工作流（背景/配色/相机/后处理组合）由
+  // 56 支图版模板承接（figure <id> / templates 面板）
+  if (cmd === 'scene') {
     const name = (parts[1] ?? '').toLowerCase()
-    // 场景快照子命令（scene save/recall/update/del/clear/next/prev）——
-    // 先于 preset 别名判定（非子命令时 scene 仍是 preset 别名，向后兼容）
-    if (cmd === 'scene' && SCENE_SUBS.has(name)) {
+    if (SCENE_SUBS.has(name)) {
       return runSceneCommand(parts, ok, err)
     }
-    // 场景组合预设先查（r59-a2 #4：键冲突——SCENE_PRESETS.publication 曾被 PRESETS.publication
-    // 永久遮蔽，命令行永远无法触达「出版级渲染」场景；scene <键> 一律走场景语义）
-    if (cmd === 'scene') {
-      const scene = SCENE_PRESETS[name]
-      if (scene) {
-        for (const c of scene.commands) runCommand(c)
-        return ok(tt({ zh: `已应用场景: ${tt(scene.label)}（${scene.commands.length} 条命令）`, en: `Scene applied: ${tt(scene.label)} (${scene.commands.length} commands)` }))
-      }
-    }
+    return err(tt({
+      zh: `用法：scene save [名] / recall <名> / update <名> / del <名> / list / next / prev / clear——场景快照（相机+表示法+链隔离+环境一体）；完整风格工作流请用图版模板：figure <id>（templates 开库）`,
+      en: `Usage: scene save [name] / recall <name> / update <name> / del <name> / list / next / prev / clear — scene snapshots (camera + representations + chain isolation + environment in one); for complete style workflows use figure templates: figure <id> (templates opens the library)`,
+    }))
+  }
+  if (cmd === 'preset' || cmd === 'style') {
+    const name = (parts[1] ?? '').toLowerCase()
     const p = PRESETS[name]
     if (p) {
       useMolStore.getState().applyPreset(name)
@@ -1171,13 +1169,10 @@ export function runCommand(raw: string): void {
       }
       return ok(tt({ zh: `已应用预设: ${tt(p.label)}`, en: `Preset applied: ${tt(p.label)}` }))
     }
-    // preset/style 动词仍可触达场景组合预设（含 publication 场景的完整渲染链）
-    const scene = SCENE_PRESETS[name]
-    if (scene) {
-      for (const c of scene.commands) runCommand(c)
-      return ok(tt({ zh: `已应用场景: ${tt(scene.label)}（${scene.commands.length} 条命令）`, en: `Scene applied: ${tt(scene.label)} (${scene.commands.length} commands)` }))
-    }
-    return err(tt({ zh: `未知预设 "${parts[1]}"。表示法: ${Object.keys(PRESETS).join(', ')} · 场景: ${Object.keys(SCENE_PRESETS).join(', ')}`, en: `Unknown preset "${parts[1]}". Style presets: ${Object.keys(PRESETS).join(', ')} · scene presets: ${Object.keys(SCENE_PRESETS).join(', ')}` }))
+    return err(tt({
+      zh: `未知预设 "${parts[1] ?? ''}"。可用: ${Object.keys(PRESETS).join(', ')}——完整风格工作流（背景/配色/相机/后处理组合）请用图版模板：figure <id>（templates 开库）`,
+      en: `Unknown preset "${parts[1] ?? ''}". Available: ${Object.keys(PRESETS).join(', ')} — for complete style workflows (background / color / camera / post-processing combos) use figure templates: figure <id> (templates opens the library)`,
+    }))
   }
 
   if (cmd === 'delete') {
@@ -1391,16 +1386,16 @@ export function runCommand(raw: string): void {
       ok(tt({ zh: `视角书签（${vs.bookmarks.length}/${MAX_BOOKMARKS}）：`, en: `View bookmarks (${vs.bookmarks.length}/${MAX_BOOKMARKS}):` }))
       vs.bookmarks.forEach((b, i) => {
         const t = new Date(b.createdAt).toLocaleTimeString(tt({ zh: 'zh-CN', en: 'en-US' }), { hour: '2-digit', minute: '2-digit' })
-        ok(`  ${String(i + 1).padEnd(2)}  ${b.name.padEnd(16)} ${t}${i < 9 ? '  ⇧' + (i + 1) : ''}`)
+        ok(`  ${String(i + 1).padEnd(2)}  ${b.name.padEnd(16)} ${t}${i < 9 ? '  [' + (i + 1) + ']' : ''}`)
       })
-      return ok(tt({ zh: '跳转：view <序号|名称> / Shift+数字键；删除：view del <序号|名称>；清空：view clear', en: 'Jump: view <number|name> / Shift+number; delete: view del <number|name>; clear all: view clear' }))
+      return ok(tt({ zh: '跳转：view <序号|名称> / 数字键 1-9；删除：view del <序号|名称>；清空：view clear', en: 'Jump: view <number|name> / number keys 1-9; delete: view del <number|name>; clear all: view clear' }))
     }
     if (sub === 'save' || sub === 'add' || sub === 'snap') {
       const name = parts.slice(2).join(' ').trim() || undefined
       const bm = vs.addBookmark(name)
       if (!bm) return err(tt({ zh: `书签已达上限（${MAX_BOOKMARKS}）——先 view del 删除不再需要的书签`, en: `Bookmark limit reached (${MAX_BOOKMARKS}) — delete unneeded ones with view del first` }))
       const idx = useViewsStore.getState().bookmarks.length
-      return ok(tt({ zh: `已保存视角书签「${bm.name}」${idx < 9 ? `（Shift+${idx} 或 view ${idx} 跳转）` : ''}`, en: `View bookmark "${bm.name}" saved${idx < 9 ? ` (Shift+${idx} or view ${idx} to jump)` : ''}` }))
+      return ok(tt({ zh: `已保存视角书签「${bm.name}」${idx < 9 ? `（数字键 ${idx + 1} 或 view ${idx + 1} 跳转）` : ''}`, en: `View bookmark "${bm.name}" saved${idx < 9 ? ` (key ${idx + 1} or view ${idx + 1} to jump)` : ''}` }))
     }
     if (sub === 'clear') {
       vs.clearBookmarks()

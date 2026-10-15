@@ -67,7 +67,6 @@ function Segs({ segs }: { segs: Seg[] }) {
 }
 
 const SHORTCUTS: [string, DualText][] = [
-  ['1 – 9', { zh: '快速切换风格预设（6 = 结合口袋，7 = 出版级互作，9 = Putty B 因子管）', en: 'Quickly switch style presets (6 = binding pocket, 7 = publication-grade interactions, 9 = Putty B-factor tubes)' }],
   ['F', { zh: '适配视图（缩放到结构）', en: 'Fit view (zoom to the structure)' }],
   ['S', { zh: '自动旋转 开/关', en: 'Auto-rotate on/off' }],
   ['R', { zh: '相机摇摆 开/关（±26°）', en: 'Camera rock on/off (±26°)' }],
@@ -78,7 +77,7 @@ const SHORTCUTS: [string, DualText][] = [
   ['P', { zh: 'NMR 构象动画 播放/暂停', en: 'NMR ensemble animation play/pause' }],
   ['L', { zh: '为当前选择添加原子标注', en: 'Add atom labels to the current selection' }],
   ['V', { zh: '保存当前视角为书签（带缩略图）', en: 'Save the current view as a bookmark (with thumbnail)' }],
-  ['Shift + 1-9', { zh: '平滑跳转到视角书签', en: 'Smoothly jump to a view bookmark' }],
+  ['1 – 9', { zh: '平滑跳转到视角书签（数字键直达，无需 Shift）', en: 'Smoothly jump to a view bookmark (number keys jump directly — no Shift needed)' }],
   ['→ / ←', { zh: '演示引导中：下一步 / 上一步', en: 'During a guided tour: next / previous step' }],
   ['` / ~', { zh: '打开/关闭命令行', en: 'Open/close the command line' }],
   ['Ctrl + K', { zh: '命令面板：搜索全部命令/最近使用/置顶/结构切换（Enter 执行 · Tab 填入命令行编辑）', en: 'Command palette: search all commands / recent / pinned / structure switching (Enter to run · Tab to fill the command line for editing)' }],
@@ -140,7 +139,7 @@ const CHIMERAX_MAP: [DualText | string, string, DualText][] = [
 /** 快速上手六步（每条为文段序列） */
 const QUICK_START: Seg[][] = [
   [T('顶部输入 PDB 编号（如 ', 'Enter a PDB ID at the top (e.g. '), C('4HHB'), T('）加载结构，或拖入本地文件；空状态下也可点击一键示例', ') to load a structure, or drop in a local file; one-click examples are also available in the empty state')],
-  [T('用「风格预设」一键切换 Cartoon / 球棍 / 空间填充 / 表面 / 出版级互作（7）', 'Use style presets to switch in one click between Cartoon / ball-stick / spacefill / surface / publication-grade interactions (7)')],
+  [T('用「论文图模板」一键套用 CNS 图式（56 支 · 6 分类——出版级渲染/科普/口袋特写/膜环境等完整风格链），或命令行 ', 'Apply a paper-figure template in one click (56 CNS styles across 6 categories — publication renders, popular science, pocket close-ups, membrane contexts — as complete style chains), or on the command line '), C('figure publication-ready'), T('；单项表示法切换用 ', '), single representation switches: '), C('preset cartoon'), T(' 或 reps 面板', ' or the reps panel')],
   [T('点击 3D 视图中的残基进行选择，在左侧面板调颜色与表示法', 'Click residues in the 3D view to make selections; tune color and representation in the left panel')],
   [T('工具栏切换测量模式，点击原子测量距离 / 角度 / 二面角', 'Switch to a measurement mode from the toolbar and click atoms to measure distance / angle / dihedral')],
   [T('按 ', 'Press '), K('`'), T(' 打开命令行，像 PyMOL 一样工作；', ' to open the command line and work the PyMOL way; '), S('Tab 智能补全', 'Tab smart completion'), T('——命令名/子命令/结构名/表示法/颜色/选择关键字全部可补全，↑↓ 切换候选，输入时实时显示参数用法提示', ' — command names / subcommands / structure names / representations / colors / selection keywords are all completable; ↑↓ cycles candidates and usage hints appear live as you type')],
@@ -162,7 +161,7 @@ const ANALYSIS: Seg[][] = [
     T('：快捷键 ', ': the '),
     C('V'),
     T(' 或视口右缘「保存视角」把当前相机状态存为书签（带视口缩略图），', ' shortcut or the “Save view” chip at the right edge of the viewport stores the current camera state as a bookmark (with a viewport thumbnail); '),
-    C2('Shift+数字', 'Shift+number'),
+    C2('数字键 1-9', 'number keys 1-9'),
     T(' / 点击缩略图平滑过渡跳转；命令行 ', ' / click a thumbnail to glide there; on the command line: '),
     C2('view save 口袋', 'view save pocket'),
     T('、', ', '),
@@ -202,7 +201,7 @@ const ANALYSIS: Seg[][] = [
     S('B 因子分析', 'B-factor analysis'),
     T('：', ': '),
     C('preset putty'),
-    T(' 或快捷键 9——Putty 管径随 B 因子连续变化（粗=柔性/高 B、细=刚性/低 B）配 B 因子彩虹渐变，蛋白（CA）与核酸（磷酸骨架）统一映射；', ' or shortcut 9 — Putty tube radius varies continuously with the B-factor (thick = flexible / high B, thin = rigid / low B) paired with a B-factor rainbow gradient, mapped uniformly for proteins (CA) and nucleic acids (phosphate backbone); '),
+    T(' ——Putty 管径随 B 因子连续变化（粗=柔性/高 B、细=刚性/低 B）配 B 因子彩虹渐变，蛋白（CA）与核酸（磷酸骨架）统一映射；', ' — Putty tube radius varies continuously with the B-factor (thick = flexible / high B, thin = rigid / low B) paired with a B-factor rainbow gradient, mapped uniformly for proteins (CA) and nucleic acids (phosphate backbone); '),
     C('color bfactor'),
     T(' 同款色标；视口左下角自动显示颜色标尺图例（B 值→颜色→管径三联映射）。', ' uses the same color scale; a color-scale legend (B-value → color → tube radius) appears automatically at the lower-left of the viewport.'),
   ],

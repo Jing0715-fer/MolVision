@@ -126,7 +126,7 @@ check "语言控件滑轨化（双变体）" "OrbitTrack tone="                "
 check "滑块锁定脉冲组件接线"     "lang-lock"                       "src/components/studio/LanguageToggle.tsx" 2
 check "滑块锁定脉冲样式"         "lang-lock-pulse"                 "src/app/globals.css"              2
 check "浮动胶囊工具类定义"       "welcome-float-chip"              "src/app/globals.css"              2
-check "浮动胶囊工具类接线"       "welcome-float-chip"              "src/components/studio/WelcomeScreen.tsx" 2
+check "浮动胶囊工具类接线"       "welcome-float-chip"              "src/components/studio/WelcomeScreen.tsx" 1
 
 # ---- r70：工具栏移动端溢出收纳（⋯ 菜单）+ 锁定脉冲点击驱动时序 ----
 check "溢出收纳菜单触发钮"       "MoreHorizontal"                  "src/components/studio/Toolbar.tsx" 2
@@ -175,7 +175,7 @@ check "欢迎页画廊数据接线"       "FIGURE_TEMPLATES"                "src
 check "欢迎页画廊演示动作"       "demoThenApply"                   "src/components/studio/WelcomeScreen.tsx" 3
 check "欢迎页画廊缩略图"         "/templates/"                     "src/components/studio/WelcomeScreen.tsx" 1
 check "画廊卡片入场动画定义"     "gallery-card-in"                "src/app/globals.css"              4
-check "画廊卡片入场接线"         "gallery-card-in"                "src/components/studio/WelcomeScreen.tsx" 2
+check "画廊卡片入场接线"         "journal-row-in"                "src/components/studio/WelcomeScreen.tsx" 3
 check "画廊网格探针"             "data-welcome-gallery"            "src/components/studio/WelcomeScreen.tsx" 1
 check "欢迎页顶栏探针"           "data-welcome-topbar"             "src/components/studio/WelcomeScreen.tsx" 1
 check "画廊分类过滤接线"         "FIGURE_CATEGORIES"              "src/components/studio/WelcomeScreen.tsx" 2
@@ -192,7 +192,6 @@ check "对比视图探针"             "data-template-compare"           "src/co
 check "对比态管理接线"           "setCompareId"                    "src/components/studio/FigureTemplatesDialog.tsx" 4
 check "对比视图接线"             "compareId"                       "src/components/studio/FigureTemplatesDialog.tsx" 2
 check "新模板五图标"             "'salt-bridge-network': Zap"      "src/components/studio/FigureTemplatesDialog.tsx" 1
-check "画廊 hover 浮层探针"     "data-welcome-tpl-purpose"        "src/components/studio/WelcomeScreen.tsx" 1
 check "无配体氢键退避主链"       "hbonds on 3.2 in backbone"       "src/lib/molecular/figure-templates.ts" 1
 check "无核酸降级"               "无核酸"                          "src/lib/molecular/figure-templates.ts" 2
 check "热点链不匹配降级"         "链不匹配"                        "src/lib/molecular/figure-templates.ts" 3
@@ -212,7 +211,6 @@ check "管线清洁视口两遍"         "hidden:"                         "scri
 check "全局默认描边减细"         "outlineThickness: 1\.2"          "src/lib/molecular/types.ts"        1
 
 # ---- r77：hover 重叠修复 + 四新模板 + 选择泄漏根治 + B 因子百分位 ----
-check "hover 浮层序号避让（pl-10）" "pl-10 pr-3 pb-9 pt-2.5"    "src/components/studio/WelcomeScreen.tsx" 1
 check "四新模板入库"               "cpk-spacefill|mobility-bfactor|heme-pocket|cation-pi" "src/lib/molecular/figure-templates.ts" 5
 check "四新模板图标"               "'cpk-spacefill': Shapes"   "src/components/studio/FigureTemplatesDialog.tsx" 1
 check "CPK 空间填充命令"           "hide everything"            "src/lib/molecular/figure-templates.ts" 1
@@ -286,12 +284,11 @@ check "图式模板 custom 字段"     "custom\?: true"               "src/lib/m
 check0 "顶栏语言入口已删（负向）" "variant=\"welcome\"|variant=\"toolbar\"" "src/components/studio/"
 check0 "Toolbar 语言开关已删（负向）" "LanguageToggle"              "src/components/studio/Toolbar.tsx"
 check "状态栏语言入口保留"       "variant=\"status\""              "src/components/studio/StatusBar.tsx" 1
-check "hero 主色晕染"            "radial-gradient\(circle,color-mix" "src/components/studio/WelcomeScreen.tsx" 1
 check "遥测读数板（动态模板数）" "\{allTemplates.length\}"       "src/components/studio/WelcomeScreen.tsx" 1
-check "遥测读数板标签"           "图式模板.*Figure styles"        "src/components/studio/WelcomeScreen.tsx" 1
-check "加载舱面板"               "或本地文件.*or local file"      "src/components/studio/WelcomeScreen.tsx" 1
+check "卷期元数据行标签（r124 排印化）" "VOL\.16.*WEBGL.*RCSB"    "src/components/studio/WelcomeScreen.tsx" 1
+check "本地文件入口（r124 排印链接）" '打开本地文件|Open local file' "src/components/studio/WelcomeScreen.tsx" 1
 check "示例卡 desc 副行上屏"     "t\(ex\.desc\)"                  "src/components/studio/WelcomeScreen.tsx" 1
-check "示例双列卡片栅格（r87 收紧）" "mt-3 grid w-full grid-cols-2 gap-2 sm:mt-3\.5" "src/components/studio/WelcomeScreen.tsx" 1
+check "示例列表数据（r124 索引式行）" "WELCOME_EXAMPLES"          "src/components/studio/WelcomeScreen.tsx" 2
 
 # ---- r81：全面代码审查缺口修复——路由级错误边界 ----
 check "路由错误边界文件"         "RouteError"                     "src/app/error.tsx"                 2
@@ -365,9 +362,8 @@ check "粘贴卡输入钩子"           "data-qa=\"share-link-input\""   "src/co
 check "粘贴卡提交钩子"           "data-qa=\"share-load-apply\""   "src/components/studio/ShareLinkLoadCard.tsx" 1
 check "剪贴板降级引导"           "Ctrl\+V / ⌘V 粘贴"            "src/components/studio/ShareLinkLoadCard.tsx" 1
 check "欢迎页接线"               "ShareLinkLoadCard"              "src/components/studio/WelcomeScreen.tsx" 1
-check "会话区容器"               "mt-6 flex w-full flex-col gap-2\.5 sm:mt-9" "src/components/studio/WelcomeScreen.tsx" 1
+check "会话恢复区（r124 降噪重皮）" "SessionResumeCard"           "src/components/studio/WelcomeScreen.tsx" 1
 check "面板子命令直填"           "fill: 'session share'"          "src/components/studio/CommandPalette.tsx" 1
-check "箭头光学居中"             "-translate-y-px"                "src/components/studio/SessionResumeCard.tsx" 1
 check "CommandDialog标题入栈"   "DialogContent"                 "src/components/ui/command.tsx" 3
 
 # ---- r87：窄屏密度重构（速览条 + 响应式收紧 + chips 横滑）+ 同类异风模板五连 + 分享卡窄输入 + 管线表单锚定修复 ----
@@ -377,29 +373,21 @@ check "红蓝立体模板（印刷对）"    "id: 'stereo-anaglyph'"         "sr
 check "胖瘦管模板（管径对）"      "id: 'putty-flexibility'"       "src/lib/molecular/figure-templates.ts" 1
 check "切层剖面模板（剖切对）"    "id: 'slab-cutaway'"            "src/lib/molecular/figure-templates.ts" 1
 check "图鉴 r87 新词条"           "红蓝立体渲染（双通道色分移）"  "src/lib/molecular/figure-templates.ts" 1
-check "hero 响应式收紧"           "px-3 pb-6 pt-7 sm:max-w-\[368px\] sm:px-6 sm:pt-9" "src/components/studio/WelcomeScreen.tsx" 1
-check "画廊 chips 横滑"           "mol-toolbar-scroll ml-auto"   "src/components/studio/WelcomeScreen.tsx" 1
+check "画廊过滤页签（r124 journal-tab）" "journal-tab"         "src/components/studio/WelcomeScreen.tsx" 2
 check "分享卡窄屏图标化提交"      "w-9 shrink-0"                  "src/components/studio/ShareLinkLoadCard.tsx" 1
 check "规格 ink-night-cover"        "ink-night-cover:11:4HHB:27"   "scripts/template-specs.sh" 1
 check "管线表单锚定修复"          "closest\('form'\)"            "scripts/gen-template-thumbs.sh" 1
-check "版本升级 1.6"              "v1\.6"                          "src/components/studio/WelcomeScreen.tsx" 2
+check "版本双联（r124 kicker+脚注）" 'VOL\.16|v1\.6'           "src/components/studio/WelcomeScreen.tsx" 2
 
 # ---- r89：窄屏画廊去重重构（分类横滚行 + 画廊上移）+ 多风格新五连 + 缩略图内容收紧管线 ----
 check0 "速览条退役（零残留）"      "WELCOME_TEASER_IDS"            "src/components/studio/WelcomeScreen.tsx"
 check0 "速览条探针零残留"          "data-welcome-teaser"            "src/components/studio/WelcomeScreen.tsx"
-check "左栏 display:contents 载体" "\[display:contents\] lg:flex" "src/components/studio/WelcomeScreen.tsx" 1
-check "part1 表单舱 order-1"      "order-1 mx-auto flex w-full flex-col items-center px-3" "src/components/studio/WelcomeScreen.tsx" 1
-check "part2 示例舱 order-3"      "order-3 mx-auto flex w-full flex-col items-center px-3" "src/components/studio/WelcomeScreen.tsx" 1
-check "画廊 order-2 上移"         "mol-scroll order-2 flex w-full" "src/components/studio/WelcomeScreen.tsx" 1
 check "分类横滚行容器"            "data-welcome-cat-rows"         "src/components/studio/WelcomeScreen.tsx" 1
 check "分类行渲染探针"            "data-welcome-cat-row"          "src/components/studio/WelcomeScreen.tsx" 2
 check "行卡渲染探针"              "data-welcome-row-card"         "src/components/studio/WelcomeScreen.tsx" 1
 check "行头查看全部按钮"          "data-welcome-row-all"          "src/components/studio/WelcomeScreen.tsx" 1
 check "行卡组件"                  "function RowCard"              "src/components/studio/WelcomeScreen.tsx" 1
-check "紧凑缩略图组件"            "function CompactThumb"         "src/components/studio/WelcomeScreen.tsx" 1
 check "过滤网格条件渲染"          "filter === 'all'"              "src/components/studio/WelcomeScreen.tsx" 3
-check "紧凑卡 2 列网格"           "'grid grid-cols-2 xl:grid-cols-3'" "src/components/studio/WelcomeScreen.tsx" 1
-check "信息条 <sm 隐藏溯源"       "mt-1\.5 hidden items-center gap-1\.5 sm:flex" "src/components/studio/WelcomeScreen.tsx" 1
 check "线描骨架模板"              "id: 'wire-skeleton'"           "src/lib/molecular/figure-templates.ts" 1
 check "黑白制版模板"              "id: 'grayscale-print'"         "src/lib/molecular/figure-templates.ts" 1
 check "红蓝静电模板"              "id: 'electrostatic-surface'"   "src/lib/molecular/figure-templates.ts" 1
@@ -417,11 +405,7 @@ check "规格 wire-skeleton"          "wire-skeleton:10:1CRN:32"      "scripts/t
 check "管线高清视口"              "set viewport 1920 960"         "scripts/gen-template-thumbs.sh" 2
 check "缩略图内容收紧脚本"        "content_bbox"                  "scripts/tighten-thumbs.py" 2
 
-# ---- r90：窄屏 hero 全宽化（解除 <sm 368px 盒宽 + px-5→px-3 六处同步）+ 过滤网格返回入口（r89 建议①） ----
-check "画廊头 <sm 收紧"          "px-3 py-3.5 sm:px-7"          "src/components/studio/WelcomeScreen.tsx" 1
-check "分类行头 <sm 收紧"        "px-3 pt-4 sm:px-7"            "src/components/studio/WelcomeScreen.tsx" 1
-check "分类横滚行 <sm 收紧"      "px-3 pb-1\.5 pt-2 sm:px-7"    "src/components/studio/WelcomeScreen.tsx" 1
-check "画廊网格容器 <sm 收紧"    "px-3 pb-6 pt-4 sm:px-7"       "src/components/studio/WelcomeScreen.tsx" 1
+# ---- r90：窄屏 hero 全宽化 + 过滤网格返回入口（r89 建议①；r125：<sm 收紧四锚随 r124 重设计退役） ----
 check "过滤网格返回入口"          "data-welcome-back-rows"        "src/components/studio/WelcomeScreen.tsx" 1
 check "返回入口仅 <lg"            "返回分类浏览"                  "src/components/studio/WelcomeScreen.tsx" 1
 check "返回入口 ArrowLeft 图标"   "ArrowLeft"                    "src/components/studio/WelcomeScreen.tsx" 1
@@ -858,13 +842,14 @@ check "斜率采样窗接线"          "rss_window"            "scripts/devd.py"
 # ---- r103-c：smoke 假死哨兵（r102 建议③——主线程假死症状的 CI 判定缺口补齐） ----
 # 背景：r102 E2E 实测沙箱内存耗尽（next-server 1259MB + 双 Chrome ~1.35GB → free
 # 544MB）时页面主线程假死——eval 超时但浏览器级存活（get title 正常），lint/guards
-# 的静态面测不到该症状。smoke.sh 落地断言 5「假死哨兵」：press 2 触发预设切换
-# （MolViewer.tsx 快捷键监听挂 window，数字键 1-9 直映射预设——agent-browser
-# press 派发可达）+ 有界 eval 探针（Date.now() 首测 + sleep 5 有界宽限重试一次，
+# 的静态面测不到该症状。smoke.sh 落地断言 5「假死哨兵」：press s 触发自动旋转
+# （MolViewer.tsx 快捷键监听挂 window，S 键切引擎 rAF 持续渲染循环——agent-browser
+# press 派发可达；r125：数字键 1-9 随快速风格退役移交书签，触发器自 press 2 换防）
+# + 有界 eval 探针（Date.now() 首测 + sleep 5 有界宽限重试一次，
 # 两次皆空才判假死）+ 断言 6 触发后 console 仍零错误；汇总段由硬编码「4/4」改
 # TOTAL 动态计数。以下四锚防哨兵被后续改写静默退化：
 # ①press 触发调用锚（渲染负载触发器本体——改触发方式须同步过闸）
-check "哨兵press触发锚"          "agent-browser press 2" "scripts/smoke.sh" 1
+check "哨兵press触发锚"          "agent-browser press s" "scripts/smoke.sh" 1
 # ②响应探针 eval 锚（首测 + 有界宽限重试双站点；模式带 probe 赋值前缀，不误伤
 #    pass/fail 文案里的 Date.now() 字样——$ 与括号在 bash 双引号内有替换/子壳坑，
 #    沿 r101-a/r102-b 手法用单引号护正则）
@@ -918,10 +903,10 @@ check "膜类离子纵列锚"          "show spheres, elem K" "src/lib/molecular
 # ④头注释 r104 扩容段锚（扩容史与验证方法论的档位点）
 check "膜类头注释锚"            "r104 扩容（膜蛋白 · 通道分类补全 2→6" "src/lib/molecular/figure-templates.ts" 1
 
-# ---- r104-c：smoke 假死哨兵重载变体（r103 建议③ / r103-c 遗留①） ----
-# 背景：r103-c 哨兵的轻量键盘分发在空页面 press 2 因 activeId 空守卫不真正
-# applyPreset——无渲染负载，发现率有限。r104-c 升级为「装载 4HHB → press 2」
-# 重载路径（真实 4,548 原子重渲染，贴近 r102 假死现场）；装载失败诚实降级轻量
+# ---- r104-c：smoke 假死哨兵重载变体（r103 建议③ / r103-c 遗留① · r125 触发器换防） ----
+# 背景：r103-c 哨兵的轻量键盘分发在空页面 press s 只切开关不生渲染负载，发现率
+# 有限。r104-c 升级为「装载 4HHB → press s」重载路径（真实 4,548 原子 rAF 持续
+# 自旋重绘，贴近 r102 假死现场）；装载失败诚实降级轻量
 # 路径（路径标记入 PASS 文案）。以下锚防重载逻辑被后续改写静默退化回轻量：
 # ①重载路径标记锚（heavy/light 双站点——load_path 变量是路径语义的载体）
 check "哨兵重载路径锚"          'load_path="(light|heavy)"' "scripts/smoke.sh" 2
@@ -930,7 +915,7 @@ check "哨兵装载探针锚"          "setter\.call\(i, '4HHB'\)" "scripts/smok
 # ③有界等待循环锚（__molData.size 轮询——装载判定的数据源；非零才升 heavy）
 check "哨兵装载等待锚"          "window\.__molData \? window\.__molData\.size : 0" "scripts/smoke.sh" 1
 # ④路径标记 PASS 文案锚（重载路径的证据输出——smoke 6/6 输出能区分 heavy/light）
-check "哨兵路径文案锚"          '\$\{load_path\} 路径预设切换触发后主线程仍响应' "scripts/smoke.sh" 1
+check "哨兵路径文案锚"          '\$\{load_path\} 路径自旋渲染负载触发后主线程仍响应' "scripts/smoke.sh" 1
 
 # ---- r104-d：缩略图管线 tighten 作用域化（r104 像素对比实锤的生成损失根修） ----
 # 背景：全量 tighten 对已收紧旧图做裁剪 + LANCZOS 往返，单轮 5-13% 边缘像素漂移
@@ -1909,6 +1894,37 @@ check "柔性mock回填锚"            'B 因子范围 \(\[\\d\.\]\+\)–' "mini
 check "柔性mock回填EN锚"          'B-factor range \(\[\\d\.\]\+\)–' "mini-services/mock-llm/index.ts" 1
 # ⑦mock 7.6 模板锚（弱词场景 show putty + color bfactor = 2；删则纯表示需求跑偏）
 check "柔性mock模板锚"            "'show putty', 'color bfactor'" "mini-services/mock-llm/index.ts" 1
+
+# ---- r125：过时功能精简（用户指令：快速风格/风格预设随 56 支图版模板退役）+ r124 期刊风设计守卫补位 ----
+# 背景：图版模板系统（56 支 · 6 分类）已完整承接风格工作流（表示法+配色+背景+相机+后处理
+# 组合链），旧的「快速风格」视口浮层与工具栏「风格预设」下拉成为冗余入口——本轮退役；
+# 数字键 1-9 移交视角书签直达（原 Shift+1-9 两段式简化）；scenes.ts（4 支场景组合预设）
+# 整文件删除；`preset` 命令保留（表示法切换原语——模板/演示/agent 均引用）。
+# ①负向锚：快速风格 UI 零残留（删不干净 = 视口仍驻留冗余菜单）
+check0 "快速风格浮层退役（零残留）" "快速风格.*Quick styles" "src/components/molecular/MolViewer.tsx"
+check0 "风格预设下拉退役（零残留）" 'SCENE_PRESETS|applyScenePreset|风格预设|Style presets' "src/components/studio/Toolbar.tsx"
+check0 "场景组合预设文件已删"       "SCENE_PRESETS"                    "src/lib/molecular/"
+check0 "视口快捷预设菜单退役"       '应用预设|Apply preset'            "src/components/molecular/MolViewer.tsx"
+# ②表示法命令原语保留锚（preset 命令 = 模板/演示/agent 的命令链原语，非 UI 功能）
+check "preset命令保留"             "cmd === 'preset' \|\| cmd === 'style'" "src/lib/molecular/commands.ts" 1
+check "preset错误指向模板"         "完整风格工作流|for complete style workflows" "src/lib/molecular/commands.ts" 2
+check "scene快照子命令保留"        "SCENE_SUBS.has\(name\)"         "src/lib/molecular/commands.ts" 1
+# ③数字键书签直达锚（1-9 移交视角书签——MolViewer 键盘分支本体）
+check "数字键书签跳转分支"         "!e\\.shiftKey && /\\^Digit\\[1-9\\]\\$/" "src/components/molecular/MolViewer.tsx" 1
+check "视口状态徽标（加载指示保留）" "function LoadingBadge"            "src/components/molecular/MolViewer.tsx" 1
+# ④命令补全同步锚（scene 不再补 preset 名——快照子命令族纯净）
+check "scene补全纯净（无preset名）" "names: \\['scene'\\]"             "src/lib/molecular/complete.ts" 1
+# ⑤帮助文档同步锚（快捷键表 1-9 = 书签；快速上手第 2 步指向模板）
+check "帮助1-9书签条目"            "平滑跳转到视角书签"              "src/components/studio/HelpDialog.tsx" 1
+check "帮助快速上手模板步"         "figure publication-ready"        "src/components/studio/HelpDialog.tsx" 1
+check0 "帮助风格预设条目退役"       "快速切换风格预设"                 "src/components/studio/HelpDialog.tsx"
+# ⑥r124 期刊编辑风设计锚（旧仪器风锚退役于各段——此处补位新设计的判定面）
+check "衬线编辑字族接线"           "font-serif-editorial"            "src/components/studio/WelcomeScreen.tsx" 8
+check "装裱图版框"                 "plate-frame"                     "src/components/studio/WelcomeScreen.tsx" 2
+check "图版hero A/B 选目"          "PLATE_A = 'ink-night-cover'|PLATE_B = 'porcelain-studio'" "src/components/studio/WelcomeScreen.tsx" 2
+check "墨线绘入强调"               "accent-ink"                      "src/components/studio/WelcomeScreen.tsx" 2
+check "排版系统CSS载体"            "journal-kicker|accent-ink|plate-frame|journal-tab" "src/app/globals.css" 10
+check0 "死脚手架API已删"           "Hello, world"                    "src/app/api/"
 
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条

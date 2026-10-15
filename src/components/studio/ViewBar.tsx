@@ -2,7 +2,7 @@
 
 // 视角书签浮层（视口右缘竖排）：保存/恢复相机视角
 // - 缩略图点击 → 平滑过渡跳转；悬停删除；双击名称重命名
-// - 快捷键：V 保存新书签；Shift+1..9 跳转（注册于 MolViewer）
+// - 快捷键：V 保存新书签；数字键 1-9 跳转（注册于 MolViewer）
 import { useEffect, useRef, useState } from 'react'
 import { Bookmark, BookmarkPlus, Camera, ChevronRight, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -59,7 +59,7 @@ export function ViewBar() {
     setUserCollapsed(false)
     toast.success(tt({ zh: `已保存视角书签「${bm.name}」`, en: `View bookmark "${bm.name}" saved` }), {
       description: bookmarks.length + 1 < 9
-        ? tt({ zh: `Shift+${bookmarks.length + 1} 快速跳转 · 双击名称可重命名`, en: `Shift+${bookmarks.length + 1} to jump · double-click the name to rename` })
+        ? tt({ zh: `数字键 ${bookmarks.length + 1} 快速跳转 · 双击名称可重命名`, en: `number key ${bookmarks.length + 1} to jump · double-click the name to rename` })
         : tt({ zh: '双击名称可重命名', en: 'Double-click the name to rename' }),
     })
   }
@@ -135,7 +135,7 @@ export function ViewBar() {
           ))}
           {bookmarks.length > 0 && (
             <p className="px-1 pt-0.5 text-right text-[9px] leading-tight text-muted-foreground/80">
-              {t({ zh: 'V 保存 · Shift+数字 跳转', en: 'V to save · Shift+number to jump' })}
+              {t({ zh: 'V 保存 · 数字键跳转', en: 'V to save · number keys to jump' })}
             </p>
           )}
         </div>

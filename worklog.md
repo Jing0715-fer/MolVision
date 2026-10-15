@@ -5243,3 +5243,37 @@ Stage Summary:
   4. 【低】kicker「VOL.16」与版本 v1.6 的双关依赖版本手动同步
 
 （r124 段 cron 补记，2026-10-15）15min webDevReview 巡检任务 #460409 创建（10:53:34，expr `0 */15 * * * ?` 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 38 次实证：r85-r123 连续 37 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r124 交接基线（期刊扉页重设计完成态 + 下轮优先级四条 + 开发纪律三条：bun run build 红线 / Turbopack CSS 丢更服务端字节级复核 / plate-frame 未分层 CSS hover 直供）——配额恢复后可直接重建。巡检缺席期防线沿用：devd（3000 双闸守护）+ mockd（3999 探活）双守护 + 守卫测试基线。
+
+---
+Task ID: r125
+Agent: main
+Task: 用户指令「打磨项目，精简掉一些过时的功能，比如快速风格，风格预设等已经被模板替代了，这些过时功能可以去除掉，同时可以从整体审查一下整体项目，看看是否还有哪些过时功能可以精简掉」——过时功能退役 + 全项目精简审查 + r124 遗留的 24 个过时守卫收口
+
+Work Log:
+- 【读基】HEAD=b5d5e27（r124 欢迎页重设计后，UUID 提交）；guards 基线实跑 925 中 24 FAIL——全部为 r124 重设计退役的旧仪器风锚（遥测板/hover 浮层/CompactThumb/order 布局/<sm 收紧等——r124 会话结束时守卫未同步，本轮收口）；dev 3000=200 + mock 3999=200
+- 【审查定位】快速风格= MolViewer QuickPresets 浮层（右下角 PRESETS 下拉+1-9 快捷键）；风格预设= Toolbar 风格预设下拉（SCENE_PRESETS 场景组合 4 支 + PRESETS 表示法列表）；已被 56 支图版模板（figure-templates 6 分类完整风格链）替代；守卫/E2E 脚本/mock 零引用（rg 穷尽）——可安全退役
+- 【改动·r125-a MolViewer】①QuickPresets 退役→LoadingBadge（保留「处理中…」行内加载指示——原与快速风格同容器）；②数字键 1-9 表示法预设快捷键退役→移交视角书签直达（原 Shift+1-9 两段式简化为单键，无修饰键冲突核查通过：字母键族 f/s/r/h/w/b/m/v/l/p 与数字零冲突）；③底部提示条「1–9 表示法预设」→「1–9 视角书签跳转」；④PRESETS/DropdownMenu 导入清理（右键菜单本用原生按钮）；⑤V 保存书签 toast「Shift+数字键」→「数字键」
+- 【改动·r125-b Toolbar】风格预设下拉整块退役（SCENE_PRESETS 场景组合 + PRESETS 表示法双区块 + 分隔线调整：示例/演示归组）；SCENE_ICON 映射/applyPreset/runCommand/PRESETS 导入清理；Award/Target/Minimize2 图标退役（Sparkles 保留给 Ray 菜单项）
+- 【改动·r125-c 命令层】①scenes.ts 整文件删除（4 支场景组合预设：publication/popular/pocket/clean——模板库同能力超集覆盖：publication-ready/comic-pop/heme-pocket/porcelain-studio 等）；②commands.ts 重构：scene 收敛为快照子命令族（SCENE_SUBS 原样保留——SceneBar 快照是活跃功能），非子命令→用法错误+模板指引；preset/style 保留（表示法切换原语——模板命令链/tours/agent 提示词/mock 全部引用，57 处 'preset xxx' 命令串不动）；错误信息指向 figure <id>（templates 开库）；③complete.ts scene 补全去掉 presetNameItems（preset/style 补全保留）
+- 【改动·r125-d 提示文案】HelpDialog：快捷键表删「1–9 风格预设」条、Shift+1-9→1-9 书签直达、快速上手第 2 步「风格预设」→「论文图模板」（figure publication-ready 示例）、B 因子段删「或快捷键 9」、书签段 Shift+数字→数字键 1-9；ViewBar 注释/toast/hint 三处；commands.ts COMMAND_HELP view 条目+用法+保存回执+书签列表 ⇧ 徽标→[n]
+- 【改动·r125-e 死代码】api/route.ts 删除（「Hello, world!」Next.js 脚手架遗留——rg 穷尽零引用）；globals.css 孤儿 .scene-item 样式块删除（场景预设卡专属，唯一消费方已退役）
+- 【改动·r125-f 测试基建】①smoke.sh 假死哨兵触发器换防：press 2（数字键→applyPreset 渲染负载——路径已死）→press s（S 键切自动旋转→引擎 rAF 持续渲染循环——比一次性预设切换更贴近 r102 假死现场的持续负载语义）；heavy 路径装载范式原样（native setter+4HHB+__molData 轮询）；②guards 24 个 r124 过时锚清理：8 锚重定位新设计等价物（画廊入场 gallery-card-in→journal-row-in/遥测板标签→VOL.16 kicker/加载舱→排印链接/双列栅格→索引行数据/会话区容器→SessionResumeCard/chips 横滑→journal-tab/版本 v1.6→VOL.16|v1.6 双联/浮动胶囊阈值 2→1）+ 16 锚删除（radial 晕染/hover 浮层×2/箭头居中/hero 收紧/order 布局×4/CompactThumb/紧凑网格×2/<sm 收紧×4——均为 r124 有意退役的装饰模式）+ r125 新段 24 锚（负向 4：快速风格/风格预设/scenes.ts/Apply preset 零残留；保留 3：preset 命令/错误指向模板/SCENE_SUBS；书签 2：数字键分支/LoadingBadge；补全 1；帮助 3；期刊风设计 6：衬线字族/装裱框/hero 选目/墨线/CSS 载体/死 API）
+- 【坑（新入档）】①**guards check 函数 set -u 下第 4 参必填**——check0 语义的检查误写成 check（死 API 检查缺 min 参数）→「$4: unbound variable」在脚本尾部静默截断汇总行（PASS 数已产出但无结论行——汇总缺失本身即信号）；②**bash 双引号正则的 \| 陷阱在守卫侧反向发生**——守卫模式串写 "a\\|b"（文件字面 \\|→bash 展开 \|→rg 字面竖线）导致负向守卫恒真零命中（判定力蒸发）；交替一律单引号 'a|b' 或双引号内裸 |（r121 坑②姊妹篇：那轮是 rg CLI 直调，本轮是 guards 文件内嵌）；③**agent-browser press 的 code 字段完整**（key:'1'/code:'Digit1'/which:49/keyCode:49 全带——window 捕获探针实证），数字键新分支 e.code 正则可达；④**书签跳转断言的自身状态陷阱**——V 保存的即当前相机，恢复同位相机=「不动」；断言前必须先挪相机（dollyCamera 0.5）再 press 1 验证回位（JUMPED-BACK:true 实证）；⑤**WebGL canvas toDataURL 恒空白**（无 preserveDrawingBuffer——长度恒等假阴性），渲染变更断言用 __molEngine.getCameraState() 而非 canvas 像素；⑥**bash 反引号 press 挂起**——agent-browser press ` 的反引号被 bash 展开为命令替换等待闭合→60s 超时；命令行开关改走工具栏 Terminal 按钮（aria-label 命中）
+- 【QA】lint 0 · bunx tsc 5 基线环境错不变（examples×2+mock×1+skills×2，src/ 零新错）· guards 928/928（925→928：24 失败锚修复 + 16 删除 + 8 重定位 + 24 新增后净额）· smoke 6/6（heavy 路径自旋哨兵 + console 零错）· visual-baseline 7/7（漂移 0.00%）
+- 【E2E agent-browser】①风格预设/快速风格 UI 零残留（body 文本双词穷尽 false）②4HHB 装载（native setter + __molData 1）③V 保存书签→ViewBar 右缘缩略图在场（x:1315）④数字键跳转闭环：dollyCamera 0.5 挪走→press 1→相机平滑回位（97.10,77.95,169.86 三坐标全等）⑤press 9 不存在书签→toast「bookmark 9 does not exist」⑥控制台 preset cartoon→回执「Preset applied: Classic cartoon」（原语保留）⑦scene pocket→用法错误+figure templates 指引 ⑧scene save/del test-snap→快照子命令族工作 ⑨模板弹窗：56 缩略图+6 分类（All56/Basic22/Surface8/Conformations5/Site8/Interaction7/Membrane6）+Esc 关闭 ⑩console 零错误 · 现场恢复（scene del+localStorage 清空+浏览器关闭）
+- 【审查结论·全项目过时功能扫描】快速风格/风格预设（本轮退役）✓；ViewBar 书签/SceneBar 快照/Tours 演示/Movie 时间轴/Ensemble 构象/密度图/叠合/孔道——全部活跃功能保留；presets ChimeraX 兼容动词保留（CLI 互操作非 UI 冗余）；PRESET_SELECTIONS（选择语法预设）与风格无关保留；api/route.ts 脚手架死代码（本轮删除）✓；死 shadcn 模板件 r102/r122 两轮已清（本轮 rg 复查零回潮）；examples/websocket 与 skills 为平台设施不动
+
+Stage Summary:
+- 交付一（UI 退役）：快速风格浮层 + 工具栏风格预设下拉双双退役——风格工作流唯一入口收敛到 56 支图版模板（模板弹窗/figure 命令/模板面板），表示法单项切换保留 reps 面板 + preset 命令 + 快捷键无（数字键移交书签）；视口右下保留 LoadingBadge 行内加载指示
+- 交付二（交互简化）：数字键 1-9 从表示法预设移交视角书签直达（Shift+1-9 两段式→单键；HelpDialog/ViewBar/commands 三处提示同步 + COMMAND_HELP/错误信息/回执全链一致）
+- 交付三（命令层收敛）：scenes.ts 删除（4 支场景组合预设——模板超集覆盖）；scene 命令纯净为快照子命令族（用法错误带模板指引）；preset/style 保留为表示法原语（57 处模板命令链引用不动）
+- 交付四（死代码清理）：api/route.ts 脚手架遗留 + globals.css 孤儿 .scene-item
+- 交付五（测试基建）：smoke 哨兵触发器换防（press s 自旋持续负载）+ guards 24 过时锚清理与 r125 新段 24 锚（925→928 全绿）
+- 交付六（验证）：六道门禁全绿 + E2E 十项闭环（UI 零残留/书签跳转相机级实证/命令行为三分支/模板弹窗完整性/console 零错）
+- 与用户指令对位：①「精简掉过时的功能，比如快速风格，风格预设」——双 UI + scenes.ts + 快捷键 + 提示文案五层全退役 ②「已经被模板替代」——模板承接验证（56 缩略图弹窗 + figure 命令指引）③「整体审查还有哪些过时功能」——全项目扫描结论见上（死 API 脚手架一并清理，其余均为活跃功能）
+- 下一轮建议（按优先级）：
+  1. 【中】r124 欢迎页 VLM 建议未采纳项复盘（移动端三入口折叠「更多选项」——r124 已评估 CTA 427px 可达暂缓；用户反馈拥挤可实施）
+  2. 【中】图例卡折叠态持久化（r123 建议③遗留——expanded 本地 useState 刷新重置，localStorage 偏好记忆评估）
+  3. 【低】preset 命令的 agent 技能化对称评估（12 支技能库均为组合流程，单项 preset 无技能——ChimeraX presets 动词已在 route.ts 提示词，无需新增）
+  4. 【低】数字键书签与 radix 菜单开态的焦点边界（菜单项聚焦时按数字会跳书签——Shift 版同样暴露，实际无害，防御性评估可做可不做）
+  5. 【低】生产部署前置清单（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——沙箱 build 红线不变）

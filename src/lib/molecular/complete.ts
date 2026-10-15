@@ -114,7 +114,7 @@ const onOff = (): CompletionItem[] => [
   { insert: 'off', kind: 'value', detail: tt({ zh: '关', en: 'Off' }) },
 ]
 
-/** preset 名候选（scene 命令非子命令时仍可作 preset 别名） */
+/** preset 名候选（preset/style 命令第一参数；r125：scene 命令收敛为快照子命令族，不再复用） */
 const presetNameItems = (): CompletionItem[] => [
   { insert: 'publication', kind: 'preset', detail: tt({ zh: '出版级互作（卡通+口袋球棍）', en: 'Publication-grade interactions (cartoon + pocket ball-stick)' }) },
   { insert: 'bindingsite', kind: 'preset', detail: tt({ zh: '结合口袋', en: 'Binding site' }) },
@@ -204,7 +204,6 @@ const REGISTRY: CmdDef[] = [
       { insert: 'next', kind: 'sub', detail: tt({ zh: '轮播下一个', en: 'Cycle to next' }) },
       { insert: 'prev', kind: 'sub', detail: tt({ zh: '轮播上一个', en: 'Cycle to previous' }) },
       { insert: 'list', kind: 'sub', detail: tt({ zh: '列出全部场景', en: 'List all scenes' }) },
-      ...presetNameItems(),
     ] : pos >= 2 ? sceneNameItems() : null),
   },
   { names: ['show', 'display'], args: (pos, ctx) => (pos === 1 ? repItems() : pos >= 2 ? selItems(ctx) : null) },

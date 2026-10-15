@@ -9,12 +9,10 @@ import {
   Camera, ChevronDown, Crosshair, FolderOpen, FlaskConical, Github, HelpCircle, Video, CircleStop, Film,
   Home, Loader2, MousePointer2, RotateCw, Ruler, Sun, Moon, Terminal, Triangle, Rotate3d, Compass, Glasses, GraduationCap, Layers,
   FileDown, FilePlus2, FileUp, Save, HardDriveDownload, GitMerge, PenLine, Command as CommandIcon, Bot, Sparkles, Share2,
-  Award, Target, Minimize2, MoreHorizontal, ExternalLink, LayoutTemplate, BookOpenText, SlidersHorizontal,
+  MoreHorizontal, ExternalLink, LayoutTemplate, BookOpenText, SlidersHorizontal,
 } from 'lucide-react'
-import { engineRef, PRESETS, useMolStore } from '@/lib/molecular/store'
+import { engineRef, useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt, loc, type DualText } from '@/i18n'
-import { SCENE_PRESETS, applyScenePreset } from '@/lib/molecular/scenes'
-import { runCommand } from '@/lib/molecular/commands'
 import { EXAMPLE_STRUCTURES, fetchPdbId } from '@/lib/molecular/loader'
 import { exportSessionFile, importSessionFile, mergeSessionFile, newSession, sessionInfo } from '@/lib/molecular/session'
 import { copyShareLinkToClipboard } from '@/lib/molecular/share-link'
@@ -95,11 +93,6 @@ function DropTrigger({ icon: Icon, label, show = 'lg', disabled, hint }: {
   )
 }
 
-/** 场景预设图标映射 */
-const SCENE_ICON: Record<string, typeof Award> = {
-  award: Award, sparkles: Sparkles, target: Target, minimize: Minimize2,
-}
-
 export function Toolbar() {
   const { resolvedTheme, setTheme } = useTheme()
   const { t } = useI18n()
@@ -107,7 +100,6 @@ export function Toolbar() {
   const setMeasureMode = useMolStore(s => s.setMeasureMode)
   const settings = useMolStore(s => s.settings)
   const updateSettings = useMolStore(s => s.updateSettings)
-  const applyPreset = useMolStore(s => s.applyPreset)
   const activeId = useMolStore(s => s.activeId)
   const loading = useMolStore(s => s.loading)
   const ui = useMolStore(s => s.ui)
@@ -343,48 +335,6 @@ export function Toolbar() {
                 </span>
               </DropdownMenuItem>
             ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className="mol-sep" />
-
-        {/* ── 风格组 ── */}
-        <DropdownMenu>
-          <DropTrigger icon={Sparkles} label={{ zh: '风格预设', en: 'Style presets' }} show="lg" disabled={!activeId} hint={{ zh: '一键切换展示风格与场景组合', en: 'One-click style & scene combos' }} />
-          <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuLabel className="mol-micro">{t({ zh: '场景组合 · 一键工作流', en: 'Scene combos · one-click workflows' })}</DropdownMenuLabel>
-            {Object.values(SCENE_PRESETS).map(sp => {
-              const Icon = SCENE_ICON[sp.icon] ?? Sparkles
-              return (
-                <DropdownMenuItem
-                  key={sp.key}
-                  onClick={() => {
-                    const r = applyScenePreset(sp.key, runCommand)
-                    if (r.ok) toast.success(tt({ zh: `已应用场景：${tt(r.applied)}`, en: `Scene applied: ${tt(r.applied)}` }), sp.after ? { description: tt(sp.after) } : undefined)
-                    else toast.error(tt(r.error ?? { zh: '场景应用失败', en: 'Failed to apply scene' }))
-                  }}
-                  className="scene-item gap-2.5"
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
-                  <span className="flex-1">
-                    <span className="block text-xs font-medium">{t(sp.label)}</span>
-                    <span className="block text-[10px] leading-snug text-muted-foreground">{t(sp.desc)}</span>
-                  </span>
-                  <kbd className="shrink-0 rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">{sp.commands.length} cmd</kbd>
-                </DropdownMenuItem>
-              )
-            })}
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="mol-micro">{t({ zh: '表示法 · 单项切换', en: 'Representations · individual toggles' })}</DropdownMenuLabel>
-            {Object.entries(PRESETS).map(([key, p], i) => (
-              <DropdownMenuItem key={key} onClick={() => applyPreset(key)} className="gap-2 text-xs">
-                <span className="w-4 text-center font-mono text-[10px] text-muted-foreground">{i + 1}</span>
-                {t(p.label)}
-              </DropdownMenuItem>
-            ))}
-            <p className="px-2 pb-1.5 pt-1 text-[9px] leading-relaxed text-muted-foreground/70">
-              {t({ zh: '命令行同样可用：', en: 'Also available on the command line: ' })}<code className="rounded bg-muted px-1 font-mono">preset publication</code> · <code className="rounded bg-muted px-1 font-mono">scene pocket</code>
-            </p>
           </DropdownMenuContent>
         </DropdownMenu>
 

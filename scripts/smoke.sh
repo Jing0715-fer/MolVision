@@ -107,22 +107,24 @@ else
   fail "主体 UI 骨架缺失：文本标志=${skel:-<eval 无返回>}，PDB 输入框 aria 锚=${pdb_input:-<eval 无返回>}（双条件共检——任一缺失即骨架残缺）"
 fi
 
-# ---- 断言 5：假死哨兵（r103-c / r102 建议③ · r104-c 重载变体） ----
+# ---- 断言 5：假死哨兵（r103-c / r102 建议③ · r104-c 重载变体 · r125 触发器换防） ----
 # 动机：r102 E2E 实测沙箱内存耗尽（next-server RSS 1259MB + 双 Chrome ~1.35GB，
 # 4GB 沙箱仅剩 544MB free）时页面主线程假死——eval 超时但浏览器级存活（get title
 # 正常），lint/guards 的静态面测不到该症状，CI 存在判定性缺口。哨兵 = 渲染负载
-# 触发器 + 有界 eval 探针：触发器选 press 2 的依据——MolViewer.tsx 快捷键监听挂
-# window（非 canvas/document），数字键 1-9 直接映射预设（'2' → ballstick），无
-# 输入框聚焦时 agent-browser press 派发的按键可达监听器（r102 E2E 的「预设
-# 2/5/1 三键切换」即走此路径）。探针有界宽容：首次空返回可能只是瞬态长任务
-# （GC 尖峰/编译不 yield），sleep 5 重试一次，两次皆空才判假死——避免瞬时抖动误报。
+# 触发器 + 有界 eval 探针。触发器选 press s 的依据——MolViewer.tsx 快捷键监听挂
+# window（非 canvas/document），S 键切换自动旋转（updateSettings → 引擎 rAF 渲染
+# 循环持续矩阵更新），无输入框聚焦时 agent-browser press 派发的按键可达监听器；
+# 持续渲染负载比一次性切换更贴近 r102 假死现场（r125：数字键 1-9 已随快速风格
+# 退役移交视角书签，原「press 2 → applyPreset」路径不复存在）。探针有界宽容：首次
+# 空返回可能只是瞬态长任务（GC 尖峰/编译不 yield），sleep 5 重试一次，两次皆空才
+# 判假死——避免瞬时抖动误报。
 # 【r104-c 重载变体（r103 建议③/r103-c 遗留①）】轻量键盘分发的发现率有限——
-# 空页面 press 2 因 activeId 空守卫不真正 applyPreset（无渲染负载，只测主线程
-# 响应性）。重载路径：先经欢迎页装载 4HHB（native setter + input 事件——React
-# 受控输入 E2E 铁律；gen-template-thumbs.sh 同款范式），有界等待 __molData.size
-# 非零（2s × 10 轮）后再 press 2——真实结构上的预设切换（4,548 原子重渲染），
-# 贴近 r102 假死现场的渲染负载。装载失败（RCSB 网络抖动/输入缺失）退回轻量
-# 路径继续探测（哨兵语义不依赖结构存在——诚实降级并打印路径标记）。
+# 空页面 press s 只切开关（无渲染负载，只测主线程响应性）。重载路径：先经欢迎页
+# 装载 4HHB（native setter + input 事件——React 受控输入 E2E 铁律；
+# gen-template-thumbs.sh 同款范式），有界等待 __molData.size 非零（2s × 10 轮）后
+# 再 press s——真实结构上的持续自旋渲染（4,548 原子 rAF 循环重绘），贴近 r102
+# 假死现场的渲染负载。装载失败（RCSB 网络抖动/输入缺失）退回轻量路径继续探测
+# （哨兵语义不依赖结构存在——诚实降级并打印路径标记）。
 load_path="light"
 load_probe=$(agent-browser eval "(() => { const i = document.querySelector('input[aria-label=\"PDB 编号\"], input[aria-label=\"PDB ID\"]'); if (!i) return 'NOINPUT'; const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; setter.call(i, '4HHB'); i.dispatchEvent(new Event('input', { bubbles: true })); const btn = i.closest('form')?.querySelector('button[type=\"submit\"]'); if (!btn) return 'NOBTN'; btn.click(); return 'submitted' })()" 2>/dev/null | tr -d '"')
 if [ "$load_probe" = "submitted" ]; then
@@ -134,10 +136,10 @@ if [ "$load_probe" = "submitted" ]; then
   done
   if [ -n "$sz" ] && [ "$sz" -ge 1 ] 2>/dev/null; then
     load_path="heavy"
-    sleep 2   # 等引擎挂载与首帧渲染落地，再切换预设
+    sleep 2   # 等引擎挂载与首帧渲染落地，再开启自旋
   fi
 fi
-agent-browser press 2 >/dev/null 2>&1 || true
+agent-browser press s >/dev/null 2>&1 || true
 sleep 2   # 等触发后的键盘分发/状态更新落地，再探测主线程
 probe=$(agent-browser eval "Date.now()" 2>/dev/null || true)
 retries=0
@@ -147,19 +149,19 @@ if [ -z "$probe" ]; then
   probe=$(agent-browser eval "Date.now()" 2>/dev/null || true)
 fi
 if [ -n "$probe" ]; then
-  pass "假死哨兵：${load_path} 路径预设切换触发后主线程仍响应（eval Date.now() → ${probe}，重试 ${retries} 次）"
+  pass "假死哨兵：${load_path} 路径自旋渲染负载触发后主线程仍响应（eval Date.now() → ${probe}，重试 ${retries} 次）"
 else
-  fail "假死哨兵触发：${load_path} 路径 press 2 后 eval Date.now() 探针两轮（首测 + 有界宽限重试 ${retries} 次）均无返回——疑似主线程假死（r102 实测症状为 eval 超时但浏览器级存活，可先跑 agent-browser get title 区分环境内存耗尽假死与页面崩溃）"
+  fail "假死哨兵触发：${load_path} 路径 press s 后 eval Date.now() 探针两轮（首测 + 有界宽限重试 ${retries} 次）均无返回——疑似主线程假死（r102 实测症状为 eval 超时但浏览器级存活，可先跑 agent-browser get title 区分环境内存耗尽假死与页面崩溃）"
 fi
 
-# ---- 断言 6：预设触发后 console 仍零错误 ----
+# ---- 断言 6：交互触发后 console 仍零错误 ----
 # 与断言 1 构成「交互前/交互后」两道 console 闸：断言 5 的触发路径
-# （快捷键分发 → applyPreset → 渲染）不应引入运行时错误。
+# （快捷键分发 → 自旋渲染循环）不应引入运行时错误。
 errors2=$(agent-browser errors 2>/dev/null)
 if [ -z "$errors2" ]; then
-  pass "预设切换后 console 仍零错误"
+  pass "自旋交互后 console 仍零错误"
 else
-  fail "预设切换引入 console 错误：
+  fail "自旋交互引入 console 错误：
 $errors2"
 fi
 

@@ -6,13 +6,9 @@ import { MolEngine, AXIS_GIZMO, type AtomPick, type HoverInfo } from '@/lib/mole
 import { dataRegistry, engineRef, useMolStore } from '@/lib/molecular/store'
 import { useHoverStore } from '@/lib/molecular/hover-store'
 import { loadFiles, fetchPdbId } from '@/lib/molecular/loader'
-import { PRESETS } from '@/lib/molecular/store'
 import { saveSession } from '@/lib/molecular/session'
 import { flushEngineReady } from '@/lib/molecular/engine-ready'
 import { useMapStore } from '@/lib/molecular/map-store'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { GraduationCap } from 'lucide-react'
@@ -271,8 +267,9 @@ export default function MolViewer() {
         useMovieStore.getState().setTimelineOpen(false)
         return
       }
-      // Shift+数字 → 跳转视角书签（数字键无 Shift 仍是风格预设）
-      if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && /^Digit[1-9]$/.test(e.code)) {
+      // 数字键 1-9 → 跳转视角书签（r125：原表示法预设快捷键随「快速风格」退役，
+      // 数字键移交书签跳转——原 Shift+数字两段式简化为单键直达）
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
         const idx = Number(e.code.slice(5)) - 1
         const vs = useViewsStore.getState()
         const b = vs.bookmarks[idx]
@@ -285,12 +282,6 @@ export default function MolViewer() {
         return
       }
       switch (e.key) {
-        case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
-          const keys = ['cartoon', 'ballstick', 'spacefill', 'wireframe', 'surface', 'bindingsite', 'publication', 'hybrid', 'putty']
-          const preset = keys[Number(e.key) - 1]
-          if (preset && store.activeId) store.applyPreset(preset)
-          break
-        }
         case 'f': case 'F':
           engine.current?.fitView()
           break
@@ -383,7 +374,7 @@ export default function MolViewer() {
           if (e.ctrlKey || e.metaKey || e.altKey) break
           const bm = useViewsStore.getState().addBookmark()
           if (bm) {
-            toast.success(tt({ zh: `已保存视角书签「${bm.name}」`, en: `View bookmark "${bm.name}" saved` }), { description: tt({ zh: 'Shift+数字键快速跳转 · 视口右缘可管理', en: 'Jump with Shift+number · manage at the viewport edge' }) })
+            toast.success(tt({ zh: `已保存视角书签「${bm.name}」`, en: `View bookmark "${bm.name}" saved` }), { description: tt({ zh: '数字键快速跳转 · 视口右缘可管理', en: 'Jump with number keys · manage at the viewport edge' }) })
           } else if (useViewsStore.getState().bookmarks.length >= 12) {
             toast.error(tt({ zh: '书签已达上限（12）', en: 'Bookmark limit reached (12)' }), { description: tt({ zh: '在视口右缘删除不再需要的书签', en: 'Delete unneeded bookmarks at the viewport edge' }) })
           }
@@ -629,8 +620,9 @@ export default function MolViewer() {
         />
       )}
 
-      {/* 快捷预设浮层（右下角） */}
-      <QuickPresets />
+      {/* 视口右下工作状态徽标（r125：快速风格菜单随图版模板系统退役——表示法切换
+          收敛到 reps 面板 / preset 命令 / 模板库；此处仅保留行内进行中指示） */}
+      <LoadingBadge />
 
       {/* 孔道剖面分析卡（右上，pore 命令产出；轴指示器左侧） */}
       <PoreProfile />
@@ -751,7 +743,7 @@ function EmptyHint() {
           <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">`</kbd> {t({ zh: '命令行', en: 'command line' })}
         </span>
         <span className="flex items-center gap-1">
-          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">9</kbd> {t({ zh: '表示法预设', en: 'representation presets' })}
+          <kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">1</kbd>–<kbd className="rounded border border-border/60 px-1 font-mono text-[9px]">9</kbd> {t({ zh: '视角书签跳转', en: 'view bookmarks' })}
         </span>
         <span className="flex items-center gap-1">{t({ zh: '右键 · 原子级操作', en: 'Right-click · atom-level actions' })}</span>
       </div>
@@ -759,40 +751,23 @@ function EmptyHint() {
   )
 }
 
-function QuickPresets() {
+/** 视口右下角工作状态徽标：结构装载/计算进行中时显示行内指示
+ *  （r125：原「快速风格」下拉随图版模板系统退役——表示法切换由 reps 面板、
+ *   preset 命令与 56 支图版模板承接，视口不再驻留风格菜单） */
+function LoadingBadge() {
   const { t } = useI18n()
   const structures = useMolStore(s => s.structures)
   const activeId = useMolStore(s => s.activeId)
-  const applyPreset = useMolStore(s => s.applyPreset)
   const loading = useMolStore(s => s.loading)
   // movie 时间轴打开时上移让位（底部右角与时间轴面板重叠）
   const timelineOpen = useMovieStore(s => s.timelineOpen)
-  if (!structures.length || !activeId) return null
+  if (!structures.length || !activeId || !loading) return null
   return (
     <div className={cn('absolute right-3 z-10 flex items-center gap-1.5 transition-all duration-300', timelineOpen ? 'bottom-[196px]' : 'bottom-3')}>
-      {loading && (
-        <div className="mr-0.5 flex items-center gap-2 rounded-md border border-border/60 bg-popover/95 px-2.5 py-1.5 text-xs shadow-md backdrop-blur">
-          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/50 border-t-foreground" />
-          {t({ zh: '处理中…', en: 'Working…' })}
-        </div>
-      )}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-popover/95 px-2.5 text-xs font-medium shadow-sm backdrop-blur transition hover:bg-popover hover:border-border">
-            {t({ zh: '快速风格', en: 'Quick styles' })}
-            <span className="text-[10px] text-muted-foreground">1-9</span>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="top">
-          <DropdownMenuLabel className="text-xs">{t({ zh: '应用预设', en: 'Apply preset' })}</DropdownMenuLabel>
-          {Object.entries(PRESETS).map(([key, p], i) => (
-            <DropdownMenuItem key={key} onClick={() => applyPreset(key)} className="gap-2 text-xs">
-              <span className="w-4 text-center text-[10px] text-muted-foreground">{i + 1}</span>
-              {t(p.label)}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center gap-2 rounded-md border border-border/60 bg-popover/95 px-2.5 py-1.5 text-xs shadow-md backdrop-blur">
+        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/50 border-t-foreground" />
+        {t({ zh: '处理中…', en: 'Working…' })}
+      </div>
     </div>
   )
 }
