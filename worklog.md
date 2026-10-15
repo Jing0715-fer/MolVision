@@ -5324,3 +5324,28 @@ Stage Summary:
 - 下一轮建议：①【低】Load 按钮 hover 微光/微升反馈 ②【低】AI 芯片收敛进「工具」菜单或 masthead 集成（VLM 两次评审共同点名）③【低】浅色输入格 focus 对比度微调
 
 （r126 段 cron 补记，2026-10-15）15min webDevReview 巡检任务 #460632 创建（14:02:50，expr 0 */15 * * * ? 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 39 次实证：r85-r125 连续 38 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r126 开发纪律（基线 guards 941 / 六道门禁链与 kill 红线 / E2E 铁律含元素级 getBoundingClientRect 移动端断言与守卫正则转义两新坑 / 膜轴三级检测设计红线 C2 二义性拒绝 / 下轮优先级四条）——配额恢复后可直接重建。巡检缺席期防线沿用：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 941 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r127
+Agent: main
+Task: 用户指令「目前首页的排版和样式还是不满意，需要再推倒重构，你去一些专业的设计网站找一些模板看看有没有合适的」——欢迎页第三次推倒重构：r127 Precision Dark（Linear 级工程美学）
+
+Work Log:
+- 【调研·真实设计网站】①web-search 定位 VoltAgent/awesome-design-md（54+ 真实站点 DESIGN.md 库）与 setproduct《Vercel aesthetic: blueprint grid 完全指南》；②page_reader + jsdelivr 拉取《linear.app DESIGN.md》全文（24KB 完整 tokens：#010102 近黑画布/四步 surface 阶梯/hairline 描边不用投影/薰衣草单色克制度/显示字 600 负字距 -3px@80px/8-12-16px 圆角梯度/section 96px/product-screenshot 为主角/eyebrow 正字距）；③VLM 对旧版基线截图的批判定调：「学术拼贴感/衬线×等宽错位/低对比泥泞/CTA 突兀——放弃期刊隐喻，转 Functional Minimalism（Linear/Vercel/Raycast 语态）」
+- 【设计转换】期刊排印语态 → 工程精密语态：衬线 Newsreader 全退（Geist sans 负字距大标题）·发丝线/§编号/图版装裱退（surface 圆角卡 + mono 技术标签）·居中 hero（RCSB LIVE 状态胶囊 ping 点 + 命令条输入焦点 ring）·蓝图网格 + 顶部主色辉光（color-mix 主题化）·cat-pill 过滤胶囊（Linear pricing-tab 族）·rise-in 卡片入场（opacity-only，规避 r69 transform 占用坑）
+- 【改动·WelcomeScreen】整文件重写（983→约 960 行）：顶栏（品牌标 + v1.6 版本胶囊 + 圆角图标钮）；hero（状态胶囊/大标题「看清每一个原子。」/命令条 Search 图标 + 0.18em 等宽输入 + n/4 计数 + CTA 两态：合法 4 位 → 主色墨块/休眠 → surface 描边/焦点 ring-[3px] primary/25/状态行含本地文件入口 h-8 触达）；遥测统计块（三块等分 divide-x：56 图式/6 示例/0 安装）；展示 bento（Plate A 2/3 宽幅 + HUD 角签 ENGINE RENDER + Plate B LIGHT STUDIO + 全库入口卡——引擎真实渲染即产品截图）；会话带（eyebrow + 两列圆角 surface 卡）；§01 经典结构（3 列卡 grid，mono PDB 号主视觉 + t(ex.desc) 副行）；§02 画廊（SectionEyebrow 02 + 从图片创建 secondary 钮 + cat-pill 过滤 + 边到边图版卡 + 卡内三行元数据）；AI 浮芯降噪（h-8 轻胶囊）；页脚（standby 文案 <sm 隐藏防截断）；拖放遮罩圆角化
+- 【改动·globals.css】r124/r126-b 期刊段整段退役（font-serif-editorial/journal-kicker/accent-ink/plate-frame/journal-tab/journal-row-in/link-ink——src 全仓零引用实证后删）；r45 死装饰族一并清（welcome-cta/led-pulse/hero-badge-in/hero-halo/nucleus-breathe/welcome-orbit——status-micro/status-val 为 StatusBar 活跃样式保留）；新增 r127 段：hero-grid-bg（44px 网格 + 径向渐隐 mask）·hero-grid-glow（560px 15% 主色）·cat-pill（含 data-active surface 抬升）·rise-in
+- 【改动·兄弟组件】SessionResumeCard/ShareLinkLoadCard 重皮（rounded-xl + bg-card 圆角 surface 族，翡翠相区分保留）
+- 【改动·guards】941→945：4 期刊锚退役（衬线字族/装裱框/墨线/旧 CSS 载体）+ 8 新锚（hero-grid-bg/hero-grid-glow/0.18em 命令条/-0.035em 显示字/ping×2/新 CSS 载体≥8/期刊零残留组件侧/期刊零残留 CSS 侧）+ 4 锚重定位（journal-row-in→rise-in/VOL.16 dateline→RCSB LIVE/journal-tab→cat-pill/版本双联→v1.6×2 nav 胶囊+脚注）；PLATE_A/B 选目锚不变（hero 展示沿用两图版）
+- 【验证·六道门禁】lint 0 错 0 警 · guards 945/945 全绿 · dev.log 干净 · console 零新错
+- 【验证·VLM 四轮】暗色 8.5→9/10（终评「production-quality professional design，无阻断缺陷」）；浅色 8/10（RCSB LIVE 对比度修复后）；移动 8/10（触达/截断三项修复后）；终评 zh 暗色 9/10。VLM 建议采纳：命令条 focus ring 加宽 / 统计行升级三块结构 / Plate B 补 HUD 角签 / AI 芯片降噪；拒绝：伪造「trusted by」机构 logo 墙（诚实性红线）
+- 【验证·E2E】①黄金路径：4HHB 示例卡点击 → 工作台挂载（statusbar「4HHB · 4,779 atoms · 801 res」+ VLM 确认血红蛋白 cartoon+HEM）②画廊 56 卡 · Membrane 过滤→6 卡 · 卡点击→1BL8 演示装载 ③移动 375px：元素级审计 scrollW=375 零真溢出（543 命中全在合法横滚容器内），命令条 16..359/CTA 261..352 无裁切 ④r89 移动架构：filter=all 时 6 分类行/56 行卡恰好一次/主网格 display:none；过滤态 back-rows 按钮在场且点击回分类 ⑤语言切换：中→「看清每一个原子。」/EN→「Every atom, in focus.」双向验证
+
+Stage Summary:
+- 设计资产：r127 Precision Dark 设计系统（Linear DESIGN.md 为蓝本 + Vercel blueprint grid 点缀）——调研驱动而非闭门造车（用户指令「去专业设计网站找模板」的对位交付）
+- 文件交付：WelcomeScreen.tsx 整文件重写 · globals.css（-150 行期刊/死装饰 CSS，+70 行 r127 段）· SessionResumeCard/ShareLinkLoadCard 重皮 · regression-guards.sh（945 锚全绿）
+- 功能零回退：PDB 表单/拖放/文件/会话恢复/分享卡/6 示例/画廊过滤/移动横滚行/自定义模板/双语/主题切换全量保留（r85-r126 语义）
+- 坑（新入档）：①agent-browser 视口命令是 `set viewport <w> <h>`（裸 `viewport` 不存在——help 的 Browser Settings 分组下）；②VLM 评审静态截图看不到 hover/focus 态——「缺 snap」类建议需先自查代码是否已有（本轮 focus ring 已在，避免重复加样式）；③移动端溢出审计的 500+ 误报：横滚容器内元素 getBoundingClientRect 天然超视口——判定以 document.scrollWidth 为准 + 关键 CTA 元素级核查；④stats 单元格窄屏标签「INSTALL · WEBGL2」超宽截断——统计块标签保持 ≤10 字符
+- 下一轮建议：①【低】VLM 终评 9/10 后的余项：Load 钮 hover 微光反馈、浅色 hero 辉光饱和度微调 ②【低】smoke.sh/visual-baseline 与本轮零交集（工作台路径未动）——如需全绿可复跑 ③【低】移动端 hero 统计块在 <360px 极窄屏的三列挤压评估 ④【低】生产部署前置清单（多轮挂起项不变）
+
+（r127 段 cron 补记，2026-10-15）15min webDevReview 巡检任务 #460687 创建（14:40:21，expr 0 */15 * * * ? 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 40 次实证：r85-r126 连续 39 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r127 开发纪律（基线 guards 945 / 六道门禁链 / E2E 铁律含 set viewport 命令形态、横滚容器误报、统计块窄屏标签三条新坑 / 下轮优先级三条）——配额恢复后可直接重建。巡检缺席期防线沿用：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 945 + smoke 6 + visual-baseline 7——后两者与 r127 改动零交集未复跑，workbench 代码路径未动）。

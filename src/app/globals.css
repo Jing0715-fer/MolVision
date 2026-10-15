@@ -519,15 +519,17 @@ canvas {
   animation: welcome-in 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* 背景三轨道原子线稿缓慢旋转（96s 一周） */
-@keyframes welcome-orbit-rot {
-  to { transform: rotate(1turn); }
+.status-micro {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
 }
-.welcome-orbit {
-  animation: welcome-orbit-rot 96s linear infinite;
+.status-val {
+  font-size: 10.5px;
 }
+
+/* r127 注：.welcome-orbit（三轨道 96s 旋转）随 r45 装饰族退役——src 零引用 */
+
 @media (prefers-reduced-motion: reduce) {
-  .welcome-orbit { animation: none; }
   .welcome-in { animation: none; }
 }
 
@@ -538,83 +540,16 @@ canvas {
    —— 扣分项：静态感 / CTA 平淡 / 浅色对比度危机 / 版本可信度
    ============================================================ */
 
-/* —— CTA「晶体按键」：顶部内高光（晶面）+ 底部内阴影（厚度）+ 主色柔光 —— */
-.welcome-cta {
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.34),
-    inset 0 -1px 1px oklch(0.22 0.04 168 / 0.38),
-    0 2px 14px color-mix(in oklab, var(--primary) 42%, transparent);
-  transition: box-shadow 170ms ease, transform 170ms ease, filter 170ms ease;
-}
-.welcome-cta:hover:not(:disabled) {
-  transform: translateY(-1px);
-  filter: brightness(1.06);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.44),
-    inset 0 -1px 1px oklch(0.22 0.04 168 / 0.3),
-    0 5px 22px color-mix(in oklab, var(--primary) 55%, transparent);
-}
-.welcome-cta:active:not(:disabled) {
-  transform: translateY(0);
-  filter: brightness(0.96);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.22),
-    inset 0 -1px 1px oklch(0.22 0.04 168 / 0.45),
-    0 1px 8px color-mix(in oklab, var(--primary) 30%, transparent);
-}
-.welcome-cta:disabled { box-shadow: none; }
+/* r127：r45 时代装饰资产（晶体按键 CTA / LED 呼吸 / 徽章弹性 / 六角 halo /
+   原子核呼吸 / 三轨道旋转）随期刊风一并退役——src 全仓零引用实证（status-micro/
+   status-val 为 StatusBar 活跃样式，另行保留） */
 
-/* —— 待机 LED 呼吸脉冲（系统就绪的可视信号） —— */
-@keyframes led-pulse {
-  0%, 100% {
-    box-shadow:
-      inset 0 1px 1px rgb(255 255 255 / 0.35),
-      0 0 0 0 color-mix(in oklab, var(--primary) 42%, transparent);
-  }
-  50% {
-    box-shadow:
-      inset 0 1px 1px rgb(255 255 255 / 0.35),
-      0 0 7px 1.5px color-mix(in oklab, var(--primary) 25%, transparent);
-  }
-}
-.led-pulse { animation: led-pulse 2.8s ease-in-out infinite; }
+/* ============================================================
+   r74：欢迎页画廊配套（卡片入场 / sticky 区头毛玻璃）
+   ============================================================ */
 
-/* —— hero 徽章弹性入场（缩放 + 微旋转回正） —— */
-@keyframes hero-badge-in {
-  from { opacity: 0; transform: scale(0.68) rotate(-10deg); }
-  62%  { opacity: 1; transform: scale(1.045) rotate(1.6deg); }
-  to   { opacity: 1; transform: none; }
-}
-.hero-badge-in {
-  animation: hero-badge-in 660ms cubic-bezier(0.22, 1.36, 0.36, 1) both;
-}
-
-/* —— 品牌六角 halo 呼吸（电源指示灯的低频脉动） —— */
-@keyframes hero-halo {
-  0%, 100% { filter: drop-shadow(0 0 12px color-mix(in oklab, var(--primary) 20%, transparent)); }
-  50%      { filter: drop-shadow(0 0 24px color-mix(in oklab, var(--primary) 38%, transparent)); }
-}
-.hero-halo { animation: hero-halo 4.2s ease-in-out infinite; }
-
-/* —— 原子核呼吸 —— */
-@keyframes nucleus-breathe {
-  0%, 100% { opacity: 0.82; }
-  50%      { opacity: 1; }
-}
-.nucleus-breathe { animation: nucleus-breathe 3.5s ease-in-out infinite; }
-
-@media (prefers-reduced-motion: reduce) {
-  .led-pulse, .hero-halo, .nucleus-breathe { animation: none; }
-}
-
-/* —— 仪表条可读性提升（VLM：文字过小且密集） —— */
-.status-micro {
-  font-size: 9.5px;
-  letter-spacing: 0.14em;
-}
-.status-val {
-  font-size: 10.5px;
-}
+/* r127：r45 时代装饰资产退役说明见上；仪表条可读性样式（status-micro/
+   status-val）为 StatusBar 活跃样式，保留如下 */
 
 /* ============================================================
    r74：欢迎页 Open-design 重设计——模板画廊配套
@@ -687,133 +622,73 @@ canvas {
 }
 
 /* ============================================================
-   r124：欢迎页「学术期刊扉页」重设计配套
-   —— 概念：MolVision 复现 CNS 论文图式，欢迎页本身即一页期刊：
-     衬线大标题 / 小写字距元数据行 / §编号章节 / 索引式示例列表 /
-     图版（Plate A/B）hero 构图 / Fig. 编号画廊。
-     去噪：轨道电子 · LED 脉冲 · halo 呼吸 · 晶体按键 · 遥测板全部退役。
+   r127：欢迎页「Precision Dark」重设计配套
+   —— 设计依据：VoltAgent/awesome-design-md《linear.app DESIGN.md》
+     （近黑画布 + surface 阶梯 + 发丝描边 + 单一强调色克制度）+
+     Vercel blueprint grid 趋势（hero 网格 + 顶部辉光）。
+     语态：工程精密（Geist sans 负字距大标题 / 状态胶囊 ping 点 /
+     命令条输入 / cat-pill 过滤胶囊 / rise-in 卡片入场）。
+     退役：衬线编辑字族 / 期刊元数据行 / 墨线绘入 / 图版装裱框 /
+     下划线页签 / 排印链接（journal 族整段让位于本段）。
    ============================================================ */
 
-/* —— 编辑衬线字族（Newsreader 优先；中文回退宋体系保持衬线语态） —— */
-.font-serif-editorial {
-  font-family: var(--font-newsreader), Georgia, 'Times New Roman', 'Songti SC',
-    'Noto Serif SC', 'Noto Serif CJK SC', SimSun, serif;
-  font-feature-settings: 'liga' 1, 'kern' 1;
+/* —— hero 蓝图网格（Vercel 语态）：细线网格 + 径向渐隐蒙版——
+      color-mix 主题化，浅色下自动降为淡灰网格；不拦截交互 —— */
+.hero-grid-bg {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 85% 78% at 50% 0%, black 28%, transparent 74%);
+  mask-image: radial-gradient(ellipse 85% 78% at 50% 0%, black 28%, transparent 74%);
 }
 
-/* —— 期刊元数据行（小写字距等宽——扉页卷期行惯例） —— */
-.journal-kicker {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-}
-.journal-kicker .jk-sep { opacity: 0.4; padding: 0 0.7em; }
-
-/* —— 标题斜体重点词：墨线下划线绘入（排印师手绘一划；一次性）。
-      r126-b：下划线降为 45% 墨——满饱和色线会被读作超链接；减淡后
-      读作手绘强调（VLM 评审「1998 超链接」误读的根治） —— */
-@keyframes ink-draw {
-  from { background-size: 0% 1px; }
-  to   { background-size: 100% 1px; }
-}
-.accent-ink {
-  background-image: linear-gradient(
-    color-mix(in oklab, currentColor 45%, transparent),
-    color-mix(in oklab, currentColor 45%, transparent));
-  background-repeat: no-repeat;
-  background-position: 0 96%;
-  background-size: 100% 1px;
-  animation: ink-draw 640ms 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  padding-bottom: 0.04em;
-}
-@media (prefers-reduced-motion: reduce) {
-  .accent-ink { animation: none; background-size: 100% 1px; }
+/* —— hero 顶部主色辉光（Linear 顶部柔光惯例的克制版：15% 主色、
+      560px 窄幅、仅 hero 带高度；浅色下为淡绿晕） —— */
+.hero-grid-glow {
+  background: radial-gradient(
+    560px 300px at 50% -6%,
+    color-mix(in oklab, var(--primary) 15%, transparent),
+    transparent 72%);
 }
 
-/* —— 期刊图版（Plate）：硬角 + 发丝框 + 印刷留白边（像装裱的印版）；
-      浅色下加一档纸张层叠投影（r124 VLM 浅色评审：米白图版需与纸底分离） —— */
-.plate-frame {
-  border: 1px solid color-mix(in oklab, var(--foreground) 16%, transparent);
-  background: var(--card);
-  padding: 6px;
-  box-shadow: 0 1px 3px oklch(0.25 0.01 80 / 0.07), 0 6px 18px -8px oklch(0.25 0.01 80 / 0.1);
-}
-.dark .plate-frame {
-  border-color: color-mix(in oklab, var(--foreground) 26%, transparent);
-  box-shadow: none;
-}
-.plate-frame img, .plate-frame .plate-fallback {
-  display: block;
-  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
-}
-/* 图版悬停态（承载 button 内）：未分层 CSS 压过 Tailwind 工具类——
-   hover 边框/投影直接定义于此，组件侧不再写冲突的 group-hover 类；
-   r126-b：悬停微升 -2px（印刷品被拈起）+ 缓出曲线 */
-button:hover:not(:disabled) .plate-frame {
-  border-color: color-mix(in oklab, var(--primary) 45%, transparent);
-  box-shadow: 0 2px 8px oklch(0.25 0.01 80 / 0.1), 0 10px 26px -10px oklch(0.25 0.01 80 / 0.14);
-  transform: translateY(-2px);
-}
-.dark button:hover:not(:disabled) .plate-frame {
-  box-shadow: 0 1px 6px oklch(0 0 0 / 0.5);
-  transform: translateY(-2px);
-}
-.plate-frame, button .plate-frame {
-  transition: border-color 200ms ease, box-shadow 200ms ease,
-    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* —— 画廊下划线过滤页签（坐在发丝基线上；激活页签的墨线覆盖基线） —— */
-.journal-tab {
-  position: relative;
+/* —— 过滤胶囊（Linear pricing-tab 族）：激活 = surface 抬升（bg-card），
+      未激活 = 透明底淡字；hover 提字。未分层 CSS 会压过 Tailwind 文字
+      色工具类——「我的模板」紫态在组件侧用 inline style 提权（内联恒胜） —— */
+.cat-pill {
+  display: inline-flex;
   flex-shrink: 0;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 140ms ease, border-color 140ms ease;
+  align-items: center;
+  height: 32px;
+  padding: 0 13px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--muted-foreground);
+  background: transparent;
+  white-space: nowrap;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
 }
-.journal-tab[data-active='true'] {
-  border-bottom-color: var(--primary);
+.cat-pill:hover { color: var(--foreground); }
+.cat-pill[data-active='true'] {
+  background: var(--card);
+  color: var(--foreground);
+  border-color: color-mix(in oklab, var(--foreground) 20%, transparent);
 }
 
-/* —— 索引行 / 图版卡入场（纯 opacity——transform 终态交给 hover 过渡） —— */
-@keyframes journal-row-in {
+/* —— 卡片/行入场（纯 opacity——transform 终态交给 hover 过渡；
+      r69 入档：welcome-in 的 fill-mode:both 会永久占用 transform 的坑
+      在此规避）；错峰由内联 animation-delay 递增 —— */
+@keyframes rise-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-.journal-row-in { animation: journal-row-in 420ms ease-out both; }
-@media (prefers-reduced-motion: reduce) {
-  .journal-row-in { animation: none; }
-}
-
-/* r124a: watcher nudge */
-
-/* ============================================================
-   r126-b：欢迎页二次重构「期刊封面」级冲击力
-   —— r124 扉页语态进化为封面语态：卷期刊眉线（dateline 双发丝线）/
-     混合字号封面大标题 / 进样格（hairline 盒 + 微底填充 + 2px 墨线基线
-     + 焦点墨线绘入）/ 「墨已研好」CTA（合法编号 → 墨块填充，描边休眠态）/
-     主导竖幅图版 A（4:5 封面构图）/ 墨块直角 AI 芯片（去圆角去毛玻璃）。
-   ============================================================ */
-
-/* —— 排印链接：悬停墨线自左绘入（局部下划线替代整词变色） —— */
-.link-ink {
-  background-image: linear-gradient(currentColor, currentColor);
-  background-repeat: no-repeat;
-  background-position: 0 100%;
-  background-size: 0% 1px;
-  padding-bottom: 1px;
-  transition: background-size 240ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.link-ink:hover,
-.link-ink:focus-visible {
-  background-size: 100% 1px;
-}
+.rise-in { animation: rise-in 420ms ease-out both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .link-ink { transition: none; }
+  .rise-in { animation: none; }
 }
 
-/* r126-b: watcher nudge v2 (accent-ink 45% ink + input affordance round) */
+/* r127: watcher nudge (journal 族 CSS 退役——见本段头部说明) */

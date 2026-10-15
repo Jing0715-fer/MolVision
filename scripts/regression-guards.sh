@@ -175,7 +175,7 @@ check "欢迎页画廊数据接线"       "FIGURE_TEMPLATES"                "src
 check "欢迎页画廊演示动作"       "demoThenApply"                   "src/components/studio/WelcomeScreen.tsx" 3
 check "欢迎页画廊缩略图"         "/templates/"                     "src/components/studio/WelcomeScreen.tsx" 1
 check "画廊卡片入场动画定义"     "gallery-card-in"                "src/app/globals.css"              4
-check "画廊卡片入场接线"         "journal-row-in"                "src/components/studio/WelcomeScreen.tsx" 3
+check "画廊卡片入场接线"         "rise-in"                       "src/components/studio/WelcomeScreen.tsx" 3
 check "画廊网格探针"             "data-welcome-gallery"            "src/components/studio/WelcomeScreen.tsx" 1
 check "欢迎页顶栏探针"           "data-welcome-topbar"             "src/components/studio/WelcomeScreen.tsx" 1
 check "画廊分类过滤接线"         "FIGURE_CATEGORIES"              "src/components/studio/WelcomeScreen.tsx" 2
@@ -285,7 +285,7 @@ check0 "顶栏语言入口已删（负向）" "variant=\"welcome\"|variant=\"too
 check0 "Toolbar 语言开关已删（负向）" "LanguageToggle"              "src/components/studio/Toolbar.tsx"
 check "状态栏语言入口保留"       "variant=\"status\""              "src/components/studio/StatusBar.tsx" 1
 check "遥测读数板（动态模板数）" "\{allTemplates.length\}"       "src/components/studio/WelcomeScreen.tsx" 1
-check "卷期元数据行标签（r124 排印化）" "VOL\.16.*WEBGL.*RCSB"    "src/components/studio/WelcomeScreen.tsx" 1
+check "hero 遥测胶囊（r127 RCSB LIVE）" "RCSB LIVE"             "src/components/studio/WelcomeScreen.tsx" 1
 check "本地文件入口（r124 排印链接）" '打开本地文件|Open local file' "src/components/studio/WelcomeScreen.tsx" 1
 check "示例卡 desc 副行上屏"     "t\(ex\.desc\)"                  "src/components/studio/WelcomeScreen.tsx" 1
 check "示例列表数据（r124 索引式行）" "WELCOME_EXAMPLES"          "src/components/studio/WelcomeScreen.tsx" 2
@@ -373,11 +373,11 @@ check "红蓝立体模板（印刷对）"    "id: 'stereo-anaglyph'"         "sr
 check "胖瘦管模板（管径对）"      "id: 'putty-flexibility'"       "src/lib/molecular/figure-templates.ts" 1
 check "切层剖面模板（剖切对）"    "id: 'slab-cutaway'"            "src/lib/molecular/figure-templates.ts" 1
 check "图鉴 r87 新词条"           "红蓝立体渲染（双通道色分移）"  "src/lib/molecular/figure-templates.ts" 1
-check "画廊过滤页签（r124 journal-tab）" "journal-tab"         "src/components/studio/WelcomeScreen.tsx" 2
+check "画廊过滤胶囊（r127 cat-pill）" "cat-pill"               "src/components/studio/WelcomeScreen.tsx" 2
 check "分享卡窄屏图标化提交"      "w-9 shrink-0"                  "src/components/studio/ShareLinkLoadCard.tsx" 1
 check "规格 ink-night-cover"        "ink-night-cover:11:4HHB:27"   "scripts/template-specs.sh" 1
 check "管线表单锚定修复"          "closest\('form'\)"            "scripts/gen-template-thumbs.sh" 1
-check "版本双联（r124 kicker+脚注）" 'VOL\.16|v1\.6'           "src/components/studio/WelcomeScreen.tsx" 2
+check "版本双联（r127 nav 胶囊+脚注）" 'v1\.6'                 "src/components/studio/WelcomeScreen.tsx" 2
 
 # ---- r89：窄屏画廊去重重构（分类横滚行 + 画廊上移）+ 多风格新五连 + 缩略图内容收紧管线 ----
 check0 "速览条退役（零残留）"      "WELCOME_TEASER_IDS"            "src/components/studio/WelcomeScreen.tsx"
@@ -1918,12 +1918,17 @@ check "scene补全纯净（无preset名）" "names: \\['scene'\\]"             "
 check "帮助1-9书签条目"            "平滑跳转到视角书签"              "src/components/studio/HelpDialog.tsx" 1
 check "帮助快速上手模板步"         "figure publication-ready"        "src/components/studio/HelpDialog.tsx" 1
 check0 "帮助风格预设条目退役"       "快速切换风格预设"                 "src/components/studio/HelpDialog.tsx"
-# ⑥r124 期刊编辑风设计锚（旧仪器风锚退役于各段——此处补位新设计的判定面）
-check "衬线编辑字族接线"           "font-serif-editorial"            "src/components/studio/WelcomeScreen.tsx" 8
-check "装裱图版框"                 "plate-frame"                     "src/components/studio/WelcomeScreen.tsx" 2
-check "图版hero A/B 选目"          "PLATE_A = 'ink-night-cover'|PLATE_B = 'porcelain-studio'" "src/components/studio/WelcomeScreen.tsx" 2
-check "墨线绘入强调"               "accent-ink"                      "src/components/studio/WelcomeScreen.tsx" 2
-check "排版系统CSS载体"            "journal-kicker|accent-ink|plate-frame|journal-tab" "src/app/globals.css" 10
+# ⑥r127 Precision Dark 设计锚（r124/r126-b 期刊风锚随推倒重构退役——此处补位新设计判定面；
+#   设计依据：linear.app DESIGN.md + Vercel blueprint grid，详见 worklog r127 段）
+check "hero 蓝图网格接线"           "hero-grid-bg"                   "src/components/studio/WelcomeScreen.tsx" 1
+check "hero 顶部辉光接线"           "hero-grid-glow"                 "src/components/studio/WelcomeScreen.tsx" 1
+check "命令条等宽字距输入"           "0\.18em"                        "src/components/studio/WelcomeScreen.tsx" 1
+check "显示大标题负字距"             "-0\.035em"                      "src/components/studio/WelcomeScreen.tsx" 1
+check "图版hero A/B 选目"            "PLATE_A = 'ink-night-cover'|PLATE_B = 'porcelain-studio'" "src/components/studio/WelcomeScreen.tsx" 2
+check "状态胶囊 ping 点"             "animate-ping"                   "src/components/studio/WelcomeScreen.tsx" 2
+check "新设计系统CSS载体"            "hero-grid-bg|hero-grid-glow|cat-pill|rise-in" "src/app/globals.css" 8
+check0 "期刊语态零残留（组件侧）"     "font-serif-editorial|journal-kicker|accent-ink|plate-frame|journal-tab|journal-row-in|link-ink" "src/components/studio/WelcomeScreen.tsx"
+check0 "期刊CSS零残留（样式侧）"      "journal-kicker|journal-tab|journal-row-in|accent-ink|plate-frame|link-ink|font-serif-editorial|plate-fallback" "src/app/globals.css"
 check0 "死脚手架API已删"           "Hello, world"                    "src/app/api/"
 
 # ---- r126：膜轴三级检测（BIOMT 生物装配元数据）+ 疏水带膜心 + orient membrane ----

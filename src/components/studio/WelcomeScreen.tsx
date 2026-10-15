@@ -1,51 +1,41 @@
 'use client'
 
-// 欢迎页 r126-b「期刊封面」二次重构（r124 扉页语态的进化）：
+// MolVision 欢迎页 r127「Precision Dark」推倒重构（用户指令：期刊风不满意，
+// 参照专业设计网站模板重排）：
 // ─────────────────────────────────────────────────────────────────────────────
-// 概念进化：r124 把欢迎页排印成一页期刊「扉页」；本轮升格为「封面」语态——
-// 更电影感、更大胆的黑白空间、更强的层级节奏（VLM 8.5 → 冲 9+）：
-//   · 卷期刊眉线（dateline）：元数据行坐进双发丝线之间，成为封面第一道排印
-//     结构——修「VOL.16 kicker 悬浮无根」
-//   · 混合字号封面大标题：重点词 1.28em 放大 + 墨线绘入（accent-ink）
-//   · 导语 standfirst：正字重小字轨（封面大标题下的呼吸位）
-//   · 进样格：hairline 盒 + 微底填充 + 2px 墨线基线 + 焦点主色墨线自左绘入
-//     ——修「输入框可交互性暧昧」；CTA「墨已研好」：合法 4 位编号时由描边
-//     态整块填充为墨块——修「Load 存在感不足」
-//   · 主导竖幅图版 A（4:5 封面构图 + 图版眉行 + 图注发丝线）+ 图版 B 与图库
-//     索引栏——修「左右视觉重量失衡」（图版侧升为主导锚点，版心 1080→1200）
-//   · 墨块直角 AI 胶囊（welcome-float-chip 去圆角去毛玻璃）——修「SaaS 圆角
-//     气泡破坏锐利排印语态」
-//   · link-ink：排印链接悬停墨线自左绘入（§02 头部动作族）
-// r124 设计概念与全部功能/handler 原样保留（见下）。
+// 设计依据（本轮真实调研，非闭门造车）：
+//   · VoltAgent/awesome-design-md《linear.app DESIGN.md》——Linear 级工程美学：
+//     近黑画布 + surface 阶梯 + 发丝描边（不用投影）、单一强调色克制度
+//     （brand/CTA/focus/LIVE 点）、显示字 600 + 负字距（-0.03em 量级）、
+//     8px 按钮 / 12px 卡 / 16px 大图版圆角、section 96px 节奏、
+//     「产品截图是每一节的主角」——模板渲染图即产品截图。
+//   · Vercel blueprint grid 趋势（setproduct 完全指南）——hero 蓝图网格 +
+//     顶部辉光（color-mix 主题化，浅色自动降档）。
+//   · VLM 对旧版（期刊封面语态）的批判：学术拼贴感/衬线×等宽错位/低对比
+//     泥泞/栅格拘束/CTA 突兀——全部对位根治。
+// 语态转换：期刊排印（衬线/发丝/§编号/图版装裱）→ 工程精密（Geist sans
+// 负字距大标题/状态胶囊/命令条/圆角 surface 卡/等宽技术标签）。
+//   · hero：RCSB LIVE 状态胶囊（ping 点）+ 大标题 + 命令条输入（焦点 ring）
+//     + 格式提示行 + 等宽遥测统计
+//   · 展示 bento：图版 A（2/3 宽幅）+ 图版 B + 全库入口卡——引擎真实渲染
+//     为主角（Linear product-screenshot 惯例）
+//   · §01 经典结构：surface 卡 3 列（mono PDB 号为主视觉）
+//   · §02 论文图式：cat-pill 过滤胶囊（Linear pricing-tab 族）+ 边到边
+//     图版卡画廊
+//   · AI 浮芯回归圆角胶囊（ping 点 + backdrop blur）
+// 功能全量保留（r85-r126 语义零回退）：PDB 表单校验 / 本地文件（r99 value
+// 清空）/ 全页拖放 / 会话恢复 / 分享链接粘贴卡 / 6 经典示例 / 画廊分类过滤 /
+// 移动端分类横滚行（r89 去重架构）/ 返回分类锚点（r90）/ 自定义模板行与
+// 直编（r85）/ 从图片创建 / 在库中浏览 / 诚实版权脚注 / AI 胶囊与面板 /
+// 主题 · GitHub · 语言切换 / 精确指针自动聚焦 / demoThenApply 感知回执。
 // ─────────────────────────────────────────────────────────────────────────────
-// r124 设计概念：MolVision 的灵魂是复现 Cell/Nature/Science 的论文图式——那么欢迎页
-// 本身就该被排印成一页期刊。概念驱动（而非装饰驱动）是去「AI 味」的根本：
-//   · 刊眉顶栏：六角铭印 + 衬线字标 MolVision + 小写字距副题
-//   · 扉页 hero：卷期元数据行（VOL.16 · WEBGL · RCSB LIVE · N STYLES——原遥测
-//     板的信息以排印形式保留）+ 衬线大标题（斜体重点词 + 墨线绘入）+ 进样表单
-//     （大号等宽字 + 墨色下划线 + 墨块 CTA）+ 右侧「图版 A/B」hero 构图
-//     （引擎真实渲染的作品，配期刊溯源图注；点击即演示加载）
-//   · §01 经典结构：索引式列表（期刊目次惯例——等宽编号 + PDB 号 + 条目行）
-//   · §02 论文图式：下划线过滤页签（坐在发丝基线上）+ Fig. 编号画廊卡
-//     （硬角发丝图版框 + 三行图注：名称/图注/溯源）+ 移动端分类横滚行
-//   · 诚实脚注（细小学注）+ 素纸页脚（待机 · 快捷键 · 语言）
-//
-// 去噪清单（r45/r68/r74 时代装饰资产退役）：三轨道电子巡航 / 六角 halo 呼吸 /
-// 原子核呼吸 / LED 待机脉冲 / 晶体按键 CTA / 遥测读数板 / 墨色仪表底座 /
-// 毛玻璃卡片堆叠 / 取景框角刻度。保留：welcome-in 错峰入场（克制的 460ms 上浮）
-// 与 gallery 错峰淡入。
-//
-// 功能全量保留：PDB 表单校验 / 本地文件（r99 value 清空）/ 全页拖放 /
-// 会话恢复 / 分享链接粘贴卡 / 6 经典示例 / 画廊分类过滤 / 移动端分类横滚行
-// （r89 去重架构）/ 返回分类锚点（r90）/ 自定义模板行与直编（r85）/
-// 从图片创建 / 在库中浏览 / 空态引导 / 诚实版权脚注 / AI 胶囊与面板 /
-// 主题 · GitHub · 语言切换 / 精确指针自动聚焦。
 import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, BookOpenText, ChevronRight,
-  FileUp, FolderOpen, Github, ImagePlus, Loader2, Moon, Pencil, Play, Sun, Wand2,
+  FileUp, FolderOpen, Github, ImagePlus, Loader2, Moon, Pencil, Play, Search,
+  Sun, Wand2,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -65,8 +55,8 @@ import { cn } from '@/lib/utils'
 /** 欢迎页示例精选（6 个均衡覆盖小蛋白/酶/四聚体/DNA/药物靶点；完整列表在加载对话框） */
 const WELCOME_EXAMPLES = EXAMPLE_STRUCTURES.filter(ex => ex.id !== '1D3Z')
 
-/** 扉页图版选目：墨夜封面（深底封面语态）+ 白瓷影棚（单柔光棚拍语态）——明暗两极
- *  的代表作品，且缩略图为引擎真实渲染产物 */
+/** hero 展示 bento 选目：墨夜封面（深底代表）+ 白瓷影棚（浅底代表）——明暗两极，
+ *  缩略图均为引擎真实渲染产物（Linear「产品截图为主角」的对应物） */
 const PLATE_A = 'ink-night-cover'
 const PLATE_B = 'porcelain-studio'
 
@@ -76,7 +66,7 @@ function PlateImg({ tpl, alt, className }: { tpl: FigureTemplate; alt: string; c
   const a = ACCENT[tpl.accent]
   if (!imgOk) {
     return (
-      <span aria-hidden className={cn('plate-fallback absolute inset-0 flex items-center justify-center bg-gradient-to-br', a.grad)}>
+      <span aria-hidden className={cn('absolute inset-0 flex items-center justify-center bg-gradient-to-br', a.grad)}>
         <BookOpenText className={cn('h-8 w-8 opacity-60', a.text)} />
       </span>
     )
@@ -94,31 +84,37 @@ function PlateImg({ tpl, alt, className }: { tpl: FigureTemplate; alt: string; c
   )
 }
 
-// ── 扉页图版（Plate）：图版眉行（kicker + 发丝线 + 演示结构号）+ 装裱印版 +
-//    期刊图注（发丝线之上的名称/tagline/溯源）；点击即演示。
-//    r126-b：feature=true 为主导封面图版——竖幅构图 + tagline 图注行。 ──
-function HeroPlate({ tpl, label, aspect, className, delay, busy, onDemo, feature = false }: {
+// ── 演示徽章（常显——触屏无 hover；PDB 号即「点会发生什么」的说明） ──
+function DemoBadge({ demo, compact }: { demo: string; compact?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'absolute bottom-2 right-2 flex items-center gap-1 rounded-md border border-foreground/15 bg-background/80 px-1.5 font-mono text-[9px] font-semibold leading-none backdrop-blur-sm',
+        compact ? 'h-5' : 'h-5.5 py-0.5 text-[9.5px]',
+      )}
+    >
+      <Play className="h-2 w-2" aria-hidden />
+      {demo}
+    </span>
+  )
+}
+
+// ── hero 展示图版（Linear product-screenshot-card 对应物）：边到边渲染图 +
+//    卡内图注条（名称 + 期刊溯源）；可选 HUD 等宽角签（ENGINE RENDER——
+//    「这是引擎真实产物」的诚实标注）；点击即演示。 ──
+function ShowcasePanel({ tpl, aspect, className, delay, busy, onDemo, hud }: {
   tpl: FigureTemplate
-  label: DualText
   aspect: string
   className?: string
   delay: string
   busy: boolean
   onDemo: () => void
-  /** 主导封面图版：图注含 tagline 行（更完整的期刊图版说明） */
-  feature?: boolean
+  /** HUD 角签（仅主导图版使用——克制度） */
+  hud?: string
 }) {
   const { t } = useI18n()
   return (
-    <figure className={cn('journal-row-in m-0', className)} style={{ animationDelay: delay }}>
-      {/* 图版眉行：图号 + 发丝线延展 + 演示结构号（期刊图版编号惯例） */}
-      <div className="mb-2 flex items-center gap-2.5">
-        <span className="journal-kicker shrink-0 text-primary">{t(label)}</span>
-        <span aria-hidden className="h-px min-w-0 flex-1 bg-foreground/15" />
-        <span className="shrink-0 font-mono text-[9.5px] font-medium uppercase tracking-[0.08em] tabular-nums text-muted-foreground">
-          {tpl.demo}
-        </span>
-      </div>
+    <figure className={cn('rise-in m-0', className)} style={{ animationDelay: delay }}>
       <button
         type="button"
         onClick={onDemo}
@@ -127,21 +123,23 @@ function HeroPlate({ tpl, label, aspect, className, delay, busy, onDemo, feature
           zh: `加载演示结构 ${tpl.demo} 并应用「${t(tpl.name)}」图式`,
           en: `Load demo structure ${tpl.demo} with the "${t(tpl.name)}" style applied`,
         })}
-        className="plate-frame group block w-full cursor-pointer text-left disabled:pointer-events-none disabled:opacity-60"
+        className="group block w-full cursor-pointer overflow-hidden rounded-2xl border border-foreground/[0.12] bg-card text-left transition-[border-color,translate] duration-200 ease-out hover:border-primary/45 hover:-translate-y-0.5 focus-visible:border-primary/60 disabled:pointer-events-none disabled:opacity-60 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
-        <span className={cn('relative block w-full overflow-hidden', aspect)}>
+        <span className={cn('relative block w-full overflow-hidden bg-muted/30', aspect)}>
           <PlateImg
             tpl={tpl}
             alt={t(tpl.tagline)}
-            className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+            className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
           />
-          {/* 演示徽章（常显——触屏无 hover；PDB 号即「点会发生什么」的说明） */}
-          <span className="absolute bottom-2 right-2 flex h-5 items-center gap-1 border border-foreground/15 bg-background/90 px-1.5 font-mono text-[9px] font-semibold leading-none">
-            <Play className="h-2 w-2" aria-hidden />
-            {tpl.demo}
-          </span>
+          {hud && (
+            <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-md border border-foreground/15 bg-background/75 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground/80 backdrop-blur-sm">
+              <span aria-hidden className="h-1 w-1 rounded-full bg-primary" />
+              {hud}
+            </span>
+          )}
+          <DemoBadge demo={tpl.demo} />
           {tpl.custom && (
-            <span className="absolute left-1.5 top-1.5 bg-violet-500/85 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-white">
+            <span className="absolute left-2 top-2 rounded-md bg-violet-500/85 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-white">
               {t({ zh: '自定义', en: 'CUSTOM' })}
             </span>
           )}
@@ -151,26 +149,19 @@ function HeroPlate({ tpl, label, aspect, className, delay, busy, onDemo, feature
             </span>
           )}
         </span>
-      </button>
-      {/* 图注：发丝线上坐名称/主导图注/溯源——期刊图版说明惯例 */}
-      <figcaption className="mt-2.5 border-t border-foreground/15 pt-2">
-        <div className="flex items-baseline gap-2.5">
-          <span className="font-serif-editorial truncate text-[13.5px] font-semibold leading-tight">{t(tpl.name)}</span>
-          <span className="ml-auto shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">
+        {/* 卡内图注条：名称 + 溯源（图版卡的完成度细节） */}
+        <span className="flex items-baseline gap-2.5 border-t border-foreground/[0.08] px-4 py-3">
+          <span className="truncate text-[13.5px] font-medium leading-tight">{t(tpl.name)}</span>
+          <span className="ml-auto shrink-0 font-mono text-[9.5px] tabular-nums text-muted-foreground">
             {tpl.citation.journal} · {tpl.citation.year}
           </span>
-        </div>
-        {feature && (
-          <div className="mt-1 truncate text-[11px] leading-relaxed text-muted-foreground" title={t(tpl.tagline)}>
-            {t(tpl.tagline)}
-          </div>
-        )}
-      </figcaption>
+        </span>
+      </button>
     </figure>
   )
 }
 
-// ── r89 移动端分类横滚行卡片（紧凑图版：缩略图 + 名称行；行内以图像为主角） ──
+// ── r89 移动端分类横滚行卡片（紧凑图版：缩略图 + 名称行；r127 重皮为圆角 surface 卡） ──
 function RowCard({ tpl, delay, busy, onDemo }: {
   tpl: FigureTemplate
   delay: string
@@ -193,24 +184,20 @@ function RowCard({ tpl, delay, busy, onDemo }: {
         en: `Load demo structure ${tpl.demo} with the "${t(tpl.name)}" style applied`,
       })}
       className={cn(
-        'journal-row-in group relative w-[124px] shrink-0 cursor-pointer snap-start border border-foreground/12 bg-card text-left transition-[border-color] duration-150 hover:border-primary/45 sm:w-[136px]',
+        'rise-in group relative w-[128px] shrink-0 cursor-pointer snap-start overflow-hidden rounded-xl border border-foreground/10 bg-card text-left transition-[border-color] duration-150 hover:border-primary/45 sm:w-[140px]',
         a.text,
       )}
       style={{ animationDelay: delay }}
     >
-      <span className="relative block aspect-[16/10] w-full overflow-hidden bg-muted/40">
+      <span className="relative block aspect-[16/10] w-full overflow-hidden bg-muted/30">
         <PlateImg
           tpl={tpl}
           alt={t(tpl.tagline)}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
         />
-        {/* 演示徽章（常显——触屏无 hover） */}
-        <span className="absolute bottom-1.5 right-1.5 flex h-5 items-center gap-1 border border-foreground/15 bg-background/90 px-1.5 font-mono text-[9px] font-semibold leading-none">
-          <Play className="h-2 w-2" aria-hidden />
-          {tpl.demo}
-        </span>
+        <DemoBadge demo={tpl.demo} compact />
         {tpl.custom && (
-          <span className="absolute left-1.5 top-1.5 bg-violet-500/85 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-white">
+          <span className="absolute left-1.5 top-1.5 rounded bg-violet-500/85 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-white">
             {t({ zh: '自定义', en: 'CUSTOM' })}
           </span>
         )}
@@ -220,15 +207,15 @@ function RowCard({ tpl, delay, busy, onDemo }: {
           </span>
         )}
       </span>
-      <span className="flex items-center gap-1 px-2 py-1.5">
+      <span className="flex items-center gap-1.5 px-2.5 py-2">
         <Icon className={cn('h-3 w-3 shrink-0', a.text)} aria-hidden />
-        <span className="truncate text-[11px] font-semibold leading-tight text-foreground">{t(tpl.name)}</span>
+        <span className="truncate text-[11px] font-medium leading-tight text-foreground">{t(tpl.name)}</span>
       </span>
     </button>
   )
 }
 
-// ── 画廊图版卡（Fig. 编号 + 三行图注：名称/图注/溯源——期刊图版惯例） ──
+// ── 画廊图版卡（r127：边到边图面 + 卡内三行元数据——mono 图号/名称/tagline/溯源） ──
 function GalleryCard({ tpl, index, busy, onDemo, onEdit }: {
   tpl: FigureTemplate
   index: number
@@ -243,7 +230,7 @@ function GalleryCard({ tpl, index, busy, onDemo, onEdit }: {
   const figLabel = t({ zh: `图 ${String(index + 1).padStart(2, '0')}`, en: `Fig. ${String(index + 1).padStart(2, '0')}` })
 
   return (
-    <article className="journal-row-in group relative" style={{ animationDelay: `${320 + index * 25}ms` }}>
+    <article className="rise-in group relative" style={{ animationDelay: `${340 + index * 25}ms` }}>
       <button
         type="button"
         onClick={onDemo}
@@ -252,52 +239,50 @@ function GalleryCard({ tpl, index, busy, onDemo, onEdit }: {
           zh: `加载演示结构 ${tpl.demo} 并应用「${t(tpl.name)}」图式`,
           en: `Load demo structure ${tpl.demo} with the "${t(tpl.name)}" style applied`,
         })}
-        className="block w-full cursor-pointer text-left disabled:pointer-events-none"
+        className="block w-full cursor-pointer overflow-hidden rounded-xl border border-foreground/10 bg-card text-left transition-[border-color,translate] duration-200 ease-out hover:border-primary/45 hover:-translate-y-0.5 focus-visible:border-primary/60 disabled:pointer-events-none disabled:opacity-60 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
-        {/* 装裱图版：发丝外框 + 印刷留白边 + 发丝内框（悬停态由 .plate-frame 的
-            未分层 CSS 直供——Tailwind group-hover 会被其压过） */}
-        <span className="plate-frame relative block">
-          <span className="relative block aspect-[16/10] w-full overflow-hidden bg-muted/40">
-            <PlateImg
-              tpl={tpl}
-              alt={t(tpl.tagline)}
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-            />
-            {/* 自定义紫印（语义标记保留）；内置卡无角标——图号移至图注行 */}
-            {tpl.custom && (
-              <span className="absolute left-1.5 top-1.5 bg-violet-500/85 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-white">
-                {t({ zh: '自定义', en: 'CUSTOM' })}
-              </span>
-            )}
-            {/* 演示徽章（hover 浮现；触屏恒显） */}
-            <span className={cn(
-              'absolute bottom-1.5 right-1.5 flex h-6 items-center gap-1 border border-foreground/15 bg-background/90 px-2 font-mono text-[10px] font-semibold transition-opacity duration-200',
-              'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100',
-            )}>
-              <Play className="h-2.5 w-2.5" aria-hidden />
-              {tpl.demo}
+        <span className="relative block aspect-[16/10] w-full overflow-hidden bg-muted/30">
+          <PlateImg
+            tpl={tpl}
+            alt={t(tpl.tagline)}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+          />
+          {/* 自定义紫印（语义标记保留）；内置卡无角标——图号移至图注行 */}
+          {tpl.custom && (
+            <span className="absolute left-1.5 top-1.5 rounded bg-violet-500/85 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-white">
+              {t({ zh: '自定义', en: 'CUSTOM' })}
             </span>
-            {busy && (
-              <span className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              </span>
-            )}
+          )}
+          {/* 演示徽章（hover 浮现；触屏恒显） */}
+          <span className={cn(
+            'absolute bottom-1.5 right-1.5 flex h-6 items-center gap-1 rounded-md border border-foreground/15 bg-background/80 px-2 font-mono text-[10px] font-semibold backdrop-blur-sm transition-opacity duration-200',
+            'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100',
+          )}>
+            <Play className="h-2.5 w-2.5" aria-hidden />
+            {tpl.demo}
           </span>
+          {busy && (
+            <span className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </span>
+          )}
         </span>
 
-        {/* 图注三行（期刊图版说明） */}
-        <span className="mt-2.5 flex items-baseline gap-2">
-          <span className="font-serif-editorial truncate text-[15px] font-semibold leading-snug">{t(tpl.name)}</span>
-          <span className="ml-auto shrink-0 font-mono text-[10px] font-medium text-muted-foreground">{tpl.demo}</span>
-        </span>
-        <span className="mt-1 block truncate text-[11px] leading-relaxed text-muted-foreground" title={t(tpl.tagline)}>
-          {t(tpl.tagline)}
-        </span>
-        <span className="mt-1.5 flex items-center gap-1.5">
-          <span className="shrink-0 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">{figLabel}</span>
-          <span className="shrink-0 font-mono text-[9px] text-muted-foreground/75">· {tpl.citation.journal} {tpl.citation.year}</span>
-          <span className={cn('ml-auto shrink-0 font-mono text-[9px] text-muted-foreground/60', a.text)}>
-            {tpl.commands.length} {t({ zh: '条命令', en: 'cmds' })}
+        {/* 卡内元数据三行（名称 / tagline / 溯源+命令数） */}
+        <span className="block px-3 pb-2.5 pt-2.5">
+          <span className="flex items-baseline gap-2">
+            <span className="truncate text-[13.5px] font-medium leading-tight">{t(tpl.name)}</span>
+            <span className="ml-auto shrink-0 font-mono text-[9.5px] font-semibold tabular-nums text-primary">{tpl.demo}</span>
+          </span>
+          <span className="mt-1 block truncate text-[11px] leading-relaxed text-muted-foreground" title={t(tpl.tagline)}>
+            {t(tpl.tagline)}
+          </span>
+          <span className="mt-1.5 flex items-center gap-1.5 font-mono text-[9px] text-muted-foreground/75">
+            <span className="shrink-0 font-semibold uppercase tracking-[0.12em]">{figLabel}</span>
+            <span className="shrink-0">· {tpl.citation.journal} {tpl.citation.year}</span>
+            <span className={cn('ml-auto shrink-0', a.text)}>
+              {tpl.commands.length} {t({ zh: '条命令', en: 'cmds' })}
+            </span>
           </span>
         </span>
       </button>
@@ -323,6 +308,15 @@ function GalleryCard({ tpl, index, busy, onDemo, onEdit }: {
         </div>
       )}
     </article>
+  )
+}
+
+/** 章节眉（Linear eyebrow 惯例：等宽大写正字距 + 主色编号） */
+function SectionEyebrow({ code, children }: { code: string; children: React.ReactNode }) {
+  return (
+    <div className="font-mono text-[10.5px] font-medium uppercase tracking-[0.18em] text-primary">
+      {code} · {children}
+    </div>
   )
 }
 
@@ -359,7 +353,7 @@ export function WelcomeScreen() {
       tpls: customs,
     }] : []),
   ]
-  // 扉页图版（缺图时渐变占位兜底）
+  // hero 展示图版（缺图时渐变占位兜底）
   const plateA = FIGURE_TEMPLATES.find(x => x.id === PLATE_A) ?? FIGURE_TEMPLATES[0]
   const plateB = FIGURE_TEMPLATES.find(x => x.id === PLATE_B) ?? FIGURE_TEMPLATES[1]
 
@@ -395,6 +389,8 @@ export function WelcomeScreen() {
     }
   }
 
+  const idValid = /^[0-9][A-Z0-9]{3}$/.test(id)
+
   return (
     <div
       className="relative flex h-full w-full flex-col overflow-hidden bg-background"
@@ -408,29 +404,30 @@ export function WelcomeScreen() {
         if (e.dataTransfer.files?.length) loadFiles(e.dataTransfer.files)
       }}
     >
-      {/* ── 刊眉顶栏：六角铭印 + 衬线字标 + 小写字距副题；右：主题 · GitHub ── */}
+      {/* ── 顶栏（Linear top-nav 语态）：品牌标 + 版本胶囊；右：主题 · GitHub ── */}
       <header
         data-welcome-topbar
-        className="welcome-in relative z-30 flex h-12 shrink-0 items-center gap-3 border-b border-foreground/12 px-4 sm:px-6"
+        className="welcome-in relative z-30 flex h-14 shrink-0 items-center gap-2.5 border-b border-foreground/10 px-4 sm:px-6"
         style={{ animationDelay: '40ms' }}
       >
-        <svg viewBox="0 0 28 28" className="h-[18px] w-[18px] shrink-0" aria-hidden>
+        <svg viewBox="0 0 28 28" className="h-[19px] w-[19px] shrink-0" aria-hidden>
           <polygon points="14,1 25.1,7.25 25.1,20.75 14,27 2.9,20.75 2.9,7.25" className="fill-primary" />
           <g fill="none" stroke="currentColor" strokeWidth="1" className="text-primary-foreground" opacity="0.9">
             <ellipse cx="14" cy="14" rx="8" ry="3" />
             <ellipse cx="14" cy="14" rx="8" ry="3" transform="rotate(60 14 14)" />
           </g>
         </svg>
-        <span className="font-serif-editorial text-[17px] font-semibold leading-none tracking-[-0.01em]">MolVision</span>
-        {/* r126-b：顶栏副题退役——刊物名由卷期眉线右端「THE JOURNAL OF
-            MOLECULAR FIGURES」独占承担（相邻两条期刊铭文 = 元数据噪音） */}
+        <span className="text-[15px] font-semibold leading-none tracking-[-0.01em]">MolVision</span>
+        <span className="hidden rounded-full border border-foreground/[0.12] px-2 py-0.5 font-mono text-[9.5px] leading-none text-muted-foreground sm:inline">
+          v1.6
+        </span>
         <div className="flex-1" />
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1">
           <button
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
             suppressHydrationWarning
             aria-label={t({ zh: '切换深浅主题', en: 'Toggle light/dark theme' })}
-            className="flex h-8 w-8 cursor-pointer items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.05] hover:text-foreground"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.06] hover:text-foreground"
           >
             <Sun className="h-4 w-4 hidden dark:block" />
             <Moon className="h-4 w-4 dark:hidden" />
@@ -440,240 +437,228 @@ export function WelcomeScreen() {
             target="_blank"
             rel="noreferrer"
             aria-label={t({ zh: 'GitHub 仓库', en: 'GitHub repository' })}
-            className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.05] hover:text-foreground"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.06] hover:text-foreground"
           >
             <Github className="h-4 w-4" />
           </a>
         </div>
       </header>
 
-      {/* ── 主体：期刊封面版式（加宽版心 1200 + 封面刊眉线；单列滚动） ── */}
+      {/* ── 主体：单列滚动（hero → 展示 bento → 会话带 → §01 结构 → §02 画廊） ── */}
       <div className="mol-scroll relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-8">
 
-          {/* ══ 封面：卷期刊眉线 + 混合字号大标题 + 进样表单 ｜ 主导竖幅图版 A ══ */}
-          <section className="pb-14 pt-6 sm:pt-8">
-            {/* 卷期刊眉线（dateline）：元数据坐进双发丝线之间——封面的第一道
-                排印结构（修 r124 遗留「kicker 悬浮无根」） */}
+        {/* ══ Hero：蓝图网格 + 顶部辉光 + 状态胶囊 + 大标题 + 命令条 ══ */}
+        <section className="relative">
+          {/* 蓝图网格（Vercel 语态：细线网格 + 径向渐隐蒙版）与顶部主色辉光
+              （均不拦截交互；color-mix 主题化——浅色自动降档为灰网格/淡绿晕） */}
+          <div aria-hidden className="hero-grid-bg pointer-events-none absolute inset-0" />
+          <div aria-hidden className="hero-grid-glow pointer-events-none absolute inset-x-0 top-0 h-[420px]" />
+          <div className="relative mx-auto w-full max-w-[1040px] px-4 pb-14 pt-12 text-center sm:px-8 sm:pt-16">
+
+            {/* 状态胶囊（Linear status-badge）：RCSB LIVE + ping 点 */}
             <div
-              className="welcome-in journal-kicker flex items-center gap-4 border-y border-foreground/15 py-2 text-muted-foreground"
-              style={{ animationDelay: '80ms' }}
+              className="welcome-in mx-auto inline-flex h-7 items-center gap-2 rounded-full border border-foreground/[0.12] bg-card px-3.5"
+              style={{ animationDelay: '60ms' }}
             >
-              <span className="hidden shrink-0 sm:inline">2026</span>
-              <span className="min-w-0 flex-1 truncate text-center">
-                VOL.16<span className="jk-sep">·</span>WEBGL<span className="jk-sep">·</span>RCSB&nbsp;LIVE<span className="jk-sep">·</span>{allTemplates.length}&nbsp;STYLES
+              <span aria-hidden className="relative flex h-1.5 w-1.5 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50 motion-reduce:hidden" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
               </span>
-              <span className="hidden shrink-0 md:inline">{t({ zh: '分子图式期刊', en: 'THE JOURNAL OF MOLECULAR FIGURES' })}</span>
+              <span className="font-mono text-[10.5px] font-medium uppercase tracking-[0.14em] text-foreground/75">
+                RCSB LIVE · {t({ zh: '结构档案实时可达', en: '250K+ structures on tap' })}
+              </span>
             </div>
 
-            <div className="grid gap-10 pt-8 sm:pt-10 lg:grid-cols-2 lg:gap-12">
-            {/* 左：排印主体（<lg 单列——进样表单先于图版，核心流程最短路径）。
-                r126-b 封面版式：左右各半（对开跨页）——图版侧与文字侧等宽，
-                主导图版 A 得以占据整幅半版（视觉锚点最大化） */}
-            <div className="order-1 flex min-w-0 flex-col">
-              {/* 封面大标题：混合字号（重点词 1.28em 放大）+ 墨线绘入 */}
-              <h1
-                className={cn(
-                  'welcome-in font-serif-editorial text-balance font-medium tracking-[-0.015em]',
-                  locale === 'zh'
-                    ? 'text-[clamp(30px,4.2vw,46px)] leading-[1.18]'
-                    : 'text-[clamp(30px,4vw,44px)] leading-[1.16]',
-                )}
-                style={{ animationDelay: '120ms' }}
-              >
-                {locale === 'zh' ? (
-                  <>把蛋白质、核酸与配体，<br />排成<span className="accent-ink whitespace-nowrap text-[1.28em] text-primary dark:text-foreground">值得发表的图</span>。</>
-                ) : (
-                  <>Proteins, nucleic acids &amp; ligands, set as <span className="accent-ink whitespace-nowrap text-[1.18em] italic text-primary dark:text-foreground">publication-worthy</span> figures.</>
-                )}
-              </h1>
-              {/* 导语（standfirst）：衬线字族（英文斜体——期刊封面导语惯例；
-                  中文保持正体——CJK 伪斜体排印禁忌），封面大标题下的呼吸位 */}
-              <p
-                className={cn(
-                  'welcome-in font-serif-editorial mt-5 max-w-[520px] text-[15px] text-foreground/80 dark:text-foreground/90',
-                  locale === 'zh' ? 'leading-[1.9]' : 'italic leading-[1.85]',
-                )}
-                style={{ animationDelay: '160ms' }}
-              >
-                {t({
-                  zh: '在浏览器中探索蛋白质 · 核酸 · 配体与电子密度——渲染、测量、排版一气呵成。',
-                  en: 'Explore proteins · nucleic acids · ligands & electron density in the browser — render, measure, and typeset in one flow.',
-                })}
-              </p>
+            {/* 显示大标题（Linear display：600 字重 + 负字距 + 紧行高） */}
+            <h1
+              className="welcome-in mt-6 text-balance font-semibold tracking-[-0.035em] text-[clamp(34px,6vw,58px)] leading-[1.06]"
+              style={{ animationDelay: '110ms' }}
+            >
+              {t({ zh: '看清每一个原子。', en: 'Every atom, in focus.' })}
+            </h1>
 
-              {/* 进样格（r126-b）：hairline 盒 + 2px 墨线基线——可交互性不再
-                  暧昧；焦点时主色墨线自左绘入；n/4 计数即时反馈；CTA「墨已
-                  研好」——合法 4 位编号时由描边态整块填充为墨块 */}
-              <div className="welcome-in mt-10 w-full max-w-[520px]" style={{ animationDelay: '200ms' }}>
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="journal-kicker text-muted-foreground">
-                    {t({ zh: 'PDB 编号 · RCSB 实时', en: 'PDB ID · RCSB LIVE' })}
-                  </span>
-                  {id.length > 0 && (
-                    <span
-                      className={cn(
-                        'journal-kicker tabular-nums transition-colors duration-200',
-                        id.length === 4 ? 'text-primary' : 'text-muted-foreground/60',
-                      )}
-                    >
-                      {id.length}/4
-                    </span>
+            {/* 导语：单行语态，克制 */}
+            <p
+              className="welcome-in mx-auto mt-5 max-w-[580px] text-[15px] leading-[1.8] text-muted-foreground sm:text-[15.5px]"
+              style={{ animationDelay: '150ms' }}
+            >
+              {t({
+                zh: '在浏览器里渲染、测量并排版蛋白质与核酸结构——输入 PDB 编号或拖入文件，即刻开始。',
+                en: 'Render, measure, and typeset proteins & nucleic acids right in the browser — enter a PDB ID or drop a file to begin.',
+              })}
+            </p>
+
+            {/* 命令条（Linear text-input + Raycast 聚合搜索语态）：surface 卡 +
+                焦点 ring；CTA 两态（合法 4 位 → 主色墨填充） */}
+            <form
+              onSubmit={e => { e.preventDefault(); submitId() }}
+              className="welcome-in group mx-auto mt-9 flex w-full max-w-[560px] items-center gap-2 rounded-xl border border-foreground/[0.12] bg-card py-1.5 pl-4 pr-1.5 transition-[border-color,box-shadow] duration-200 focus-within:border-primary/55 focus-within:ring-[3px] focus-within:ring-primary/25 sm:mt-10"
+              style={{ animationDelay: '190ms' }}
+            >
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground/80" aria-hidden />
+              <input
+                ref={inputRef}
+                value={id}
+                onChange={e => setId(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
+                maxLength={4}
+                placeholder={t({ zh: '输入 PDB 编号，如 4HHB', en: 'Enter a PDB ID, e.g. 4HHB' })}
+                aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
+                autoComplete="off"
+                spellCheck={false}
+                className="h-11 min-w-0 flex-1 bg-transparent font-mono text-[17px] font-medium uppercase leading-none tracking-[0.18em] text-foreground caret-primary outline-none placeholder:font-sans placeholder:text-[13px] placeholder:font-normal placeholder:normal-case placeholder:tracking-[0.01em] placeholder:text-muted-foreground/70"
+              />
+              {/* n/4 即时计数（合法 → 主色确认） */}
+              {id.length > 0 && (
+                <span
+                  aria-hidden
+                  className={cn(
+                    'hidden shrink-0 font-mono text-[10.5px] tabular-nums transition-colors duration-200 sm:inline',
+                    id.length === 4 ? 'text-primary' : 'text-muted-foreground/60',
                   )}
-                </div>
-                <form
-                  onSubmit={e => { e.preventDefault(); submitId() }}
-                  className="mt-2 flex w-full items-stretch"
                 >
-                  {/* 进样仪器（r126-b 收口版）：输入格 + 墨钮统一为同一台仪器——
-                      共享 hairline 外框与 2px 墨线基线（「双按钮混淆」与「CTA
-                      悬空」的根治：CTA 即进样格的右舱，等高贴合无 gap） */}
-                  <span className="group relative flex min-w-0 flex-1 items-center border border-r-0 border-b-2 border-b-foreground/75 bg-foreground/[0.05] shadow-[inset_0_1px_0_oklch(0.25_0.01_80/0.06)] transition-colors duration-200 hover:border-foreground/55 hover:border-b-foreground/90 focus-within:border-foreground/55 focus-within:bg-foreground/[0.07] dark:border-white/[0.45] dark:border-r-0 dark:border-b-white/[0.7] dark:bg-white/[0.09] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] dark:hover:border-white/[0.55] dark:hover:border-b-white/80 dark:focus-within:border-white/[0.55] dark:focus-within:bg-white/[0.11]">
-                    {/* 终端式进样提示符（与状态行「> 待发」同一语态——字段可
-                        键入的可见邀约） */}
-                    <span
-                      aria-hidden
-                      className="pointer-events-none absolute left-3.5 font-mono text-[15px] leading-none text-muted-foreground/70"
-                    >
-                      &gt;
-                    </span>
-                    <input
-                      ref={inputRef}
-                      value={id}
-                      onChange={e => setId(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
-                      maxLength={4}
-                      placeholder={t({ zh: '如 4HHB', en: 'e.g. 4HHB' })}
-                      aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
-                      autoComplete="off"
-                      spellCheck={false}
-                      className="h-[56px] w-full bg-transparent px-4 pl-9 font-mono text-[24px] font-medium uppercase leading-none tracking-[0.22em] text-foreground caret-primary outline-none placeholder:font-serif-editorial placeholder:text-[13.5px] placeholder:italic placeholder:font-normal placeholder:normal-case placeholder:tracking-[0.02em] placeholder:text-muted-foreground placeholder:dark:text-foreground/60"
-                    />
-                    {/* 焦点墨线绘入（accent-ink 的焦点态姊妹篇——2px 主色线覆写基线） */}
-                    <span
-                      aria-hidden
-                      className="pointer-events-none absolute inset-x-0 bottom-[-2px] h-[2px] origin-left scale-x-0 bg-primary transition-transform duration-300 ease-out motion-reduce:transition-none group-focus-within:scale-x-100"
-                    />
+                  {id.length}/4
+                </span>
+              )}
+              <button
+                type="submit"
+                disabled={loading || id.length !== 4}
+                className={cn(
+                  'flex h-11 shrink-0 select-none items-center gap-2 rounded-lg px-4 text-[13px] font-semibold transition-[background-color,border-color,color,translate] duration-150 active:translate-y-px disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none',
+                  /* CTA 两态：合法 4 位 → 主色墨块（Linear button-primary）；
+                     否则 surface 描边休眠态（可预期、不喧哗） */
+                  idValid
+                    ? 'bg-primary text-primary-foreground hover:brightness-110'
+                    : 'border border-foreground/[0.12] bg-foreground/[0.04] text-muted-foreground',
+                )}
+              >
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+                {t({ zh: '载入', en: 'Load' })}
+                {!loading && <ArrowRight className="h-3.5 w-3.5" aria-hidden />}
+              </button>
+            </form>
+
+            {/* 状态行（固定高度防布局位移）+ 本地文件入口（r127 并入同一行） */}
+            <div className="welcome-in mx-auto mt-3.5 flex h-9 w-full max-w-[560px] flex-wrap items-center justify-center gap-x-3 gap-y-1.5" style={{ animationDelay: '230ms' }}>
+              {loading ? (
+                <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary">
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                  {loadingMsg || t({ zh: '处理中…', en: 'Processing…' })}
+                </span>
+              ) : idValid ? (
+                <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary/90">
+                  <span aria-hidden>&gt;</span>
+                  {t({ zh: `待发 ${id} · RCSB 实时`, en: `ready: fetch ${id} from RCSB` })}
+                </span>
+              ) : (
+                <>
+                  <span className="font-mono text-[9.5px] tracking-wide text-muted-foreground/80">
+                    PDB / CIF / CCP4 / .molvision · {t({ zh: '整页可拖放', en: 'drag & drop anywhere' })}
                   </span>
                   <button
-                    type="submit"
-                    disabled={loading || id.length !== 4}
-                    className={cn(
-                      'flex shrink-0 select-none items-center gap-2.5 border-2 px-7 font-mono text-[14px] font-bold uppercase tracking-[0.12em] transition-[background-color,border-color,color,translate] duration-200 active:translate-y-px disabled:pointer-events-none',
-                      /* 「墨已研好」两态：休眠 = 整块墨钮（封面级存在感）；合法
-                         4 位编号 = 整块主色墨填充（accent 态 unmistakable） */
-                      id.length === 4
-                        ? 'border-primary bg-primary text-primary-foreground hover:brightness-110'
-                        : 'border-foreground bg-foreground text-background dark:border-white/90 dark:bg-white dark:text-black',
-                    )}
+                    onClick={() => fileRef.current?.click()}
+                    disabled={loading}
+                    className="inline-flex h-8 cursor-pointer items-center gap-1.5 px-1 text-[12.5px] font-medium text-foreground/80 transition-colors duration-150 hover:text-primary disabled:pointer-events-none disabled:opacity-50"
                   >
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    {t({ zh: '载入', en: 'Load' })}
-                    {!loading && <ArrowRight className="h-3.5 w-3.5" aria-hidden />}
+                    <FolderOpen className="h-3.5 w-3.5" aria-hidden />
+                    {t({ zh: '打开本地文件…', en: 'Open local file…' })}
                   </button>
-                </form>
-              </div>
-
-              {/* 状态行：固定高度避免加载态布局位移；r124 终端式就绪反馈——
-                  合法 4 位编号即时回显待发目标（期刊排印 × 仪器终端的交叉语态） */}
-              <div className="welcome-in mt-3 flex h-4 w-full max-w-[520px] items-center" style={{ animationDelay: '240ms' }}>
-                {loading ? (
-                  <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    {loadingMsg || t({ zh: '处理中…', en: 'Processing…' })}
-                  </span>
-                ) : /^[0-9][A-Z0-9]{3}$/.test(id) ? (
-                  <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary/90">
-                    <span aria-hidden>&gt;</span>
-                    {t({ zh: `待发 ${id} · RCSB 实时`, en: `ready: fetch ${id} from RCSB` })}
-                  </span>
-                ) : (
-                  <span className="text-[10.5px] text-muted-foreground">
-                    {t({ zh: 'RCSB 实时获取 · 可拖放文件到页面任意位置', en: 'Live from RCSB PDB · drag & drop files anywhere' })}
-                  </span>
-                )}
-              </div>
-
-              {/* 本地文件：排印链接（正字重 + 下划线偏移），格式族等宽小学注 */}
-              <div className="welcome-in mt-5 flex w-full max-w-[520px] flex-wrap items-baseline gap-x-4 gap-y-2" style={{ animationDelay: '280ms' }}>
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  disabled={loading}
-                  className="group inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-foreground underline decoration-foreground/35 underline-offset-4 transition-colors duration-150 hover:text-primary hover:decoration-primary/60 disabled:pointer-events-none disabled:opacity-50"
-                >
-                  <FolderOpen className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-px" aria-hidden />
-                  {t({ zh: '打开本地文件…', en: 'Open local file…' })}
-                </button>
-                <span className="font-mono text-[9.5px] tracking-wide text-muted-foreground/90">
-                  PDB / CIF / CCP4 / .molvision
-                </span>
-              </div>
-
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                accept=".pdb,.ent,.cif,.mmcif,.txt,.molvision,.json,.ccp4,.map,.mrc"
-                className="hidden"
-                onChange={e => {
-                  if (e.target.files?.length) loadFiles(e.target.files)
-                  // r99：清 value——解析失败后重选同一文件不派发 change（重试静默失效）
-                  e.target.value = ''
-                }}
-              />
+                </>
+              )}
             </div>
 
-            {/* 右：主导竖幅图版 A（4:5 封面构图——引擎真实渲染的代表作品为
-                视觉锚点）+ 图版 B 与图库索引栏；<lg 移至进样表单之后 */}
-            <div className="order-2 min-w-0">
-              <HeroPlate
-                tpl={plateA}
-                label={{ zh: '图版 A · 封面', en: 'PLATE A · COVER' }}
-                aspect="aspect-[4/5]"
-                delay="360ms"
-                busy={busyId === plateA.id || loading}
-                onDemo={() => void demo(plateA)}
-                feature
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept=".pdb,.ent,.cif,.mmcif,.txt,.molvision,.json,.ccp4,.map,.mrc"
+              className="hidden"
+              onChange={e => {
+                if (e.target.files?.length) loadFiles(e.target.files)
+                // r99：清 value——解析失败后重选同一文件不派发 change（重试静默失效）
+                e.target.value = ''
+              }}
+            />
+
+            {/* 遥测统计块（VLM r127 评审：数字行要有结构重量——三块等分 + 发丝分隔） */}
+            <div
+              className="welcome-in mx-auto mt-10 flex w-full max-w-[520px] items-stretch justify-center divide-x divide-foreground/10"
+              style={{ animationDelay: '270ms' }}
+            >
+              <div className="flex-1 px-2 text-center sm:px-5">
+                <div className="font-mono text-[20px] font-semibold leading-none tabular-nums text-foreground">{allTemplates.length}</div>
+                <div className="mt-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
+                  {t({ zh: '图式模板', en: 'figure styles' })}
+                </div>
+              </div>
+              <div className="flex-1 px-2 text-center sm:px-5">
+                <div className="font-mono text-[20px] font-semibold leading-none tabular-nums text-foreground">{WELCOME_EXAMPLES.length}</div>
+                <div className="mt-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
+                  {t({ zh: '精选示例', en: 'curated demos' })}
+                </div>
+              </div>
+              <div className="flex-1 px-2 text-center sm:px-5">
+                <div className="font-mono text-[20px] font-semibold leading-none tabular-nums text-foreground">0</div>
+                <div className="mt-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
+                  {t({ zh: '安装', en: 'install' })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ══ 展示 bento（产品截图是主角——引擎真实渲染图版） ══ */}
+        <div className="mx-auto w-full max-w-[1160px] px-4 sm:px-8">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <ShowcasePanel
+              tpl={plateA}
+              aspect="aspect-[16/9]"
+              className="lg:col-span-2"
+              delay="330ms"
+              busy={busyId === plateA.id || loading}
+              onDemo={() => void demo(plateA)}
+              hud={t({ zh: '引擎真实渲染', en: 'ENGINE RENDER' })}
+            />
+            <div className="grid gap-4">
+              <ShowcasePanel
+                tpl={plateB}
+                aspect="aspect-[16/10] lg:aspect-[13/10]"
+                delay="380ms"
+                busy={busyId === plateB.id || loading}
+                onDemo={() => void demo(plateB)}
+                hud={t({ zh: '浅色影棚渲染', en: 'LIGHT STUDIO' })}
               />
-              <div className="mt-5 flex items-stretch gap-4">
-                <HeroPlate
-                  tpl={plateB}
-                  label={{ zh: '图版 B', en: 'PLATE B' }}
-                  aspect="aspect-[4/3]"
-                  className="w-[62%] shrink-0"
-                  delay="400ms"
-                  busy={busyId === plateB.id || loading}
-                  onDemo={() => void demo(plateB)}
+              {/* 全库入口卡（数字主角 + 引导至画廊章节） */}
+              <a
+                href="#welcome-gallery"
+                className="rise-in group flex items-center gap-3.5 rounded-2xl border border-foreground/[0.12] bg-card px-4 py-3.5 transition-[border-color,translate] duration-200 ease-out hover:border-primary/45 hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                style={{ animationDelay: '420ms' }}
+              >
+                <span className="font-mono text-[22px] font-semibold leading-none tracking-tight tabular-nums text-primary">
+                  {allTemplates.length}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13.5px] font-medium leading-tight">
+                    {t({ zh: '图式全库', en: 'Full template library' })}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] leading-relaxed text-muted-foreground">
+                    {t({ zh: '同类多风格 · 可上传你的论文图', en: 'Variants per type · upload your own figure' })}
+                  </span>
+                </span>
+                <ArrowDown
+                  className="ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-[color,translate] duration-200 group-hover:translate-y-0.5 group-hover:text-primary"
+                  aria-hidden
                 />
-                {/* 图库索引栏（sm+）：计数 + 衬线小标 + 引导至画廊章节 */}
-                <a
-                  href="#welcome-gallery"
-                  className="welcome-in group hidden flex-col items-start gap-1.5 self-stretch border-l border-foreground/15 pl-4 sm:flex"
-                  style={{ animationDelay: '440ms' }}
-                >
-                  <span className="font-mono text-[12px] font-bold tabular-nums leading-none text-primary">{allTemplates.length}</span>
-                  <span className="font-serif-editorial text-[14px] font-semibold leading-tight">
-                    {t({ zh: '图式全库', en: 'Full library' })}
-                  </span>
-                  <span className="text-[9.5px] leading-relaxed text-muted-foreground">
-                    {t({ zh: '同类多风格 · 可上传你的论文图', en: 'Same-type variants · upload your own figure' })}
-                  </span>
-                  <ArrowDown className="mt-auto h-3.5 w-3.5 text-muted-foreground transition-[color,translate] duration-200 group-hover:translate-y-0.5 group-hover:text-primary" aria-hidden />
-                </a>
-              </div>
+              </a>
             </div>
-            </div>
-          </section>
+          </div>
+        </div>
 
-          {/* ══ 存档带：会话恢复 + 分享链接粘贴（r126-b 封面之下的「存档启事」
-              横带——原左栏内嵌块移出，封面左栏收敛为标题+进样的纯排印；
-              恢复卡缺席时分享卡独占左格，期刊式非对称） ══ */}
-          <section aria-label={t({ zh: '存档与会话恢复', en: 'Archive and session resume' })} className="pb-12">
-            <div className="welcome-in" style={{ animationDelay: '320ms' }}>
-              <div className="mb-2.5 flex items-center gap-2.5">
-                <span className="journal-kicker shrink-0 text-muted-foreground">
-                  {t({ zh: '存档 · 会话 · 分享', en: 'ARCHIVE · SESSION · SHARED' })}
-                </span>
-                <span aria-hidden className="h-px min-w-0 flex-1 bg-foreground/15" />
+        {/* ══ 会话带：会话恢复 + 分享链接粘贴（两列 surface 卡） ══ */}
+        <div className="mx-auto w-full max-w-[1160px] px-4 pt-6 sm:px-8">
+          <section aria-label={t({ zh: '存档与会话恢复', en: 'Archive and session resume' })} className="pb-4">
+            <div className="welcome-in" style={{ animationDelay: '400ms' }}>
+              <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
+                {t({ zh: '会话 · 分享链接', en: 'SESSION · SHARE LINK' })}
               </div>
               <div className="grid items-stretch gap-2.5 sm:grid-cols-2">
                 <SessionResumeSlot />
@@ -681,68 +666,70 @@ export function WelcomeScreen() {
               </div>
             </div>
           </section>
+        </div>
 
-          {/* ══ §01 经典结构：索引式列表（期刊目次惯例） ══ */}
-          <section aria-label={t({ zh: '经典结构索引', en: 'Classic structures index' })}>
+        {/* ══ §01 经典结构：surface 卡 3 列（mono PDB 号为主视觉） ══ */}
+        <div className="mx-auto w-full max-w-[1160px] px-4 sm:px-8">
+          <section aria-label={t({ zh: '经典结构索引', en: 'Classic structures index' })} className="pt-10">
             <header
-              className="welcome-in flex items-baseline gap-3 border-b border-foreground/15 pb-3"
-              style={{ animationDelay: '380ms' }}
+              className="welcome-in flex flex-wrap items-end justify-between gap-x-4 gap-y-2 pb-5"
+              style={{ animationDelay: '420ms' }}
             >
-              <span className="font-mono text-[11px] font-semibold tabular-nums text-primary">§01</span>
-              <h2 className="font-serif-editorial text-[21px] font-semibold leading-none tracking-[-0.01em]">
-                {t({ zh: '经典结构', en: 'Classic structures' })}
-              </h2>
-              <span className="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground">
+              <div>
+                <SectionEyebrow code="01">{t({ zh: '经典结构', en: 'classic structures' })}</SectionEyebrow>
+                <h2 className="mt-1.5 text-[24px] font-semibold leading-tight tracking-[-0.02em]">
+                  {t({ zh: '从这里开始', en: 'Start from a classic' })}
+                </h2>
+              </div>
+              <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
                 {WELCOME_EXAMPLES.length} {t({ zh: '条目', en: 'entries' })}
               </span>
             </header>
-            <ol className="m-0 list-none p-0" role="list">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" role="list">
               {WELCOME_EXAMPLES.map((ex, i) => (
-                <li key={ex.id} role="listitem">
-                  <button
-                    onClick={() => void fetchPdbId(ex.id)}
-                    disabled={loading}
-                    className="journal-row-in group grid w-full cursor-pointer grid-cols-[2rem_4rem_1fr_auto] items-baseline gap-x-3 border-b border-foreground/10 py-3.5 text-left transition-colors duration-150 hover:bg-foreground/[0.035] disabled:pointer-events-none disabled:opacity-50 dark:hover:bg-white/[0.04]"
-                    style={{ animationDelay: `${400 + i * 35}ms` }}
-                  >
-                    <span className="font-mono text-[10px] tabular-nums leading-none text-muted-foreground/70">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span className="font-mono text-[13px] font-bold leading-none tracking-[0.06em] text-primary">{ex.id}</span>
-                    <span className="flex min-w-0 items-baseline gap-2.5 leading-none">
-                      <span className="truncate text-[14px] font-semibold leading-none" title={t(ex.title)}>{t(ex.title)}</span>
-                      <span className="hidden truncate text-[11.5px] leading-none text-muted-foreground sm:inline" title={t(ex.desc)}>{t(ex.desc)}</span>
-                    </span>
+                <button
+                  key={ex.id}
+                  role="listitem"
+                  onClick={() => void fetchPdbId(ex.id)}
+                  disabled={loading}
+                  className="rise-in group flex cursor-pointer flex-col gap-1.5 rounded-xl border border-foreground/10 bg-card p-4 text-left transition-[border-color,background-color] duration-200 hover:border-primary/40 hover:bg-foreground/[0.025] disabled:pointer-events-none disabled:opacity-50"
+                  style={{ animationDelay: `${450 + i * 35}ms` }}
+                >
+                  <span className="flex items-center">
+                    <span className="font-mono text-[13px] font-semibold tracking-[0.06em] text-primary">{ex.id}</span>
                     <ArrowRight
-                      className="h-3.5 w-3.5 -translate-x-1 text-primary opacity-0 transition-[opacity,translate] duration-200 group-hover:translate-x-0 group-hover:opacity-100"
+                      className="ml-auto h-3.5 w-3.5 -translate-x-1 text-primary opacity-0 transition-[opacity,translate] duration-200 group-hover:translate-x-0 group-hover:opacity-100"
                       aria-hidden
                     />
-                  </button>
-                </li>
+                  </span>
+                  <span className="text-[14px] font-medium leading-snug" title={t(ex.title)}>{t(ex.title)}</span>
+                  <span className="truncate text-[11.5px] leading-relaxed text-muted-foreground" title={t(ex.desc)}>
+                    {t(ex.desc)}
+                  </span>
+                </button>
               ))}
-            </ol>
+            </div>
           </section>
 
-          {/* ══ §02 论文图式：过滤页签 + Fig. 编号画廊 ══ */}
-          <section id="welcome-gallery" aria-label={t({ zh: '论文图模板画廊', en: 'Paper-figure template gallery' })} className="scroll-mt-2 pt-12">
+          {/* ══ §02 论文图式：过滤胶囊 + 画廊 ══ */}
+          <section id="welcome-gallery" aria-label={t({ zh: '论文图模板画廊', en: 'Paper-figure template gallery' })} className="scroll-mt-2 pt-14">
             <header
-              className="welcome-in flex flex-wrap items-baseline gap-x-3 gap-y-2 border-b border-foreground/15 pb-3"
-              style={{ animationDelay: '420ms' }}
+              className="welcome-in flex flex-wrap items-end justify-between gap-x-4 gap-y-3 pb-1"
+              style={{ animationDelay: '460ms' }}
             >
-              <span className="font-mono text-[11px] font-semibold tabular-nums text-primary">§02</span>
-              <h2 className="font-serif-editorial text-[21px] font-semibold leading-none tracking-[-0.01em]">
-                {t({ zh: '论文图式', en: 'Figure styles' })}
-              </h2>
-              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                {allTemplates.length} {t({ zh: '式', en: 'styles' })}
-              </span>
-              {/* 右：图库动作（排印链接族——主链接 + 次链接） */}
-              <div className="ml-auto flex items-center gap-4">
+              <div>
+                <SectionEyebrow code="02">{t({ zh: '论文图式', en: 'paper figure styles' })}</SectionEyebrow>
+                <h2 className="mt-1.5 text-[24px] font-semibold leading-tight tracking-[-0.02em]">
+                  {t({ zh: '一键复现论文图', en: 'Recreate paper figures in one click' })}
+                </h2>
+              </div>
+              {/* 图库动作（Linear button-secondary 族） */}
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   data-welcome-create-template
                   onClick={() => { setUi({ templateOpen: true }); window.dispatchEvent(new CustomEvent('open-template-upload')) }}
-                  className="link-ink inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 text-[11.5px] font-semibold text-primary transition-colors duration-150 hover:text-primary/75"
+                  className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-foreground/[0.12] bg-card px-3.5 text-[12.5px] font-medium text-foreground/85 transition-[border-color,color] duration-150 hover:border-primary/45 hover:text-foreground"
                   title={t({ zh: '上传论文图，AI 解析图式生成你的自定义模板', en: 'Upload a paper figure — the AI parses it into your custom template' })}
                 >
                   <ImagePlus className="h-3.5 w-3.5" aria-hidden />
@@ -751,7 +738,7 @@ export function WelcomeScreen() {
                 <button
                   type="button"
                   onClick={() => setUi({ templateOpen: true })}
-                  className="link-ink inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 text-[11.5px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                  className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-[12.5px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground"
                   title={t({ zh: '打开完整模板库（可应用到已加载结构）', en: 'Open the full template library (applies to loaded structures)' })}
                 >
                   {t({ zh: '在库中浏览', en: 'Browse library' })}
@@ -759,18 +746,18 @@ export function WelcomeScreen() {
                 </button>
               </div>
             </header>
-            <p className="welcome-in mt-2.5 max-w-2xl text-[11px] leading-relaxed text-muted-foreground" style={{ animationDelay: '450ms' }}>
+            <p className="welcome-in mt-2.5 max-w-2xl text-[11.5px] leading-relaxed text-muted-foreground" style={{ animationDelay: '480ms' }}>
               {t({
                 zh: 'Cell / Nature / Science 结构文章的经典图式——缩略图由引擎真实渲染，点击卡片即刻加载演示结构并应用；同类多风格（明暗/键连/立体/剖切/线描/灰度/静电/水合…）与上传你自己的论文图 AI 解析为新模板均可。',
                 en: 'Classic figure styles from Cell / Nature / Science papers — thumbnails are genuine engine renders; click a card to load the demo structure with the style applied. Same-type variants (dark / bonding / stereo / cutaway / wire / grayscale / electrostatic / hydration…) and AI-parsed uploads included.',
               })}
             </p>
 
-            {/* 过滤页签（下划线坐发丝基线；sticky 毛玻璃常驻便于长画廊随手过滤） */}
+            {/* 过滤胶囊（Linear pricing-tab 族：激活 = surface 抬升；sticky 常驻） */}
             <div
               role="group"
               aria-label={t({ zh: '画廊分类', en: 'Gallery categories' })}
-              className="gallery-head-blur mol-toolbar-scroll sticky top-0 z-10 mt-5 flex items-center gap-5 overflow-x-auto border-b border-foreground/15"
+              className="gallery-head-blur mol-toolbar-scroll sticky top-0 z-10 mt-5 flex items-center gap-2 overflow-x-auto border-b border-foreground/10 py-3"
             >
               {FIGURE_CATEGORIES.map(c => {
                 const n = c.key === 'all' ? allTemplates.length : allTemplates.filter(x => x.category === c.key).length
@@ -782,10 +769,7 @@ export function WelcomeScreen() {
                     onClick={() => setFilter(c.key)}
                     aria-pressed={active}
                     data-active={active}
-                    className={cn(
-                      'journal-tab cursor-pointer pb-2.5 text-[12.5px] font-medium leading-none transition-colors',
-                      active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-                    )}
+                    className="cat-pill cursor-pointer"
                   >
                     {t(c.label)}
                     <span className="ml-1.5 font-mono text-[9px] tabular-nums opacity-60">{n}</span>
@@ -799,11 +783,8 @@ export function WelcomeScreen() {
                   aria-pressed={filter === 'mine'}
                   data-welcome-mine-chip
                   data-active={filter === 'mine'}
-                  className={cn(
-                    'journal-tab shrink-0 cursor-pointer pb-2.5 text-[12.5px] font-medium leading-none transition-colors',
-                    filter === 'mine' ? 'text-violet-600 dark:text-violet-400' : 'text-violet-600/70 hover:text-violet-600 dark:text-violet-400/70 dark:hover:text-violet-400',
-                  )}
-                  style={filter === 'mine' ? { borderBottomColor: 'var(--color-violet-500, #8b5cf6)' } : undefined}
+                  className="cat-pill cursor-pointer"
+                  style={filter === 'mine' ? { color: 'var(--color-violet-500, #8b5cf6)' } : undefined}
                 >
                   {t({ zh: '我的模板', en: 'My templates' })}
                   <span className="ml-1.5 font-mono text-[9px] tabular-nums opacity-60">{customs.length}</span>
@@ -817,7 +798,7 @@ export function WelcomeScreen() {
                 {catRows.map(row => row.tpls.length > 0 && (
                   <div key={row.key} data-welcome-cat-row={row.key}>
                     <div className="flex items-baseline gap-2 pt-5">
-                      <h3 className="font-serif-editorial text-[15px] font-semibold leading-none tracking-[-0.01em]">{t(row.label)}</h3>
+                      <h3 className="text-[15px] font-semibold leading-none tracking-[-0.01em]">{t(row.label)}</h3>
                       <span className="font-mono text-[9px] font-semibold tabular-nums leading-none text-muted-foreground">{row.tpls.length}</span>
                       <button
                         type="button"
@@ -843,7 +824,7 @@ export function WelcomeScreen() {
                         <RowCard
                           key={tpl.id}
                           tpl={tpl}
-                          delay={`${360 + i * 25}ms`}
+                          delay={`${380 + i * 25}ms`}
                           busy={busyId === tpl.id || loading}
                           onDemo={() => void demo(tpl)}
                         />
@@ -872,7 +853,7 @@ export function WelcomeScreen() {
                 key={filter}
                 data-welcome-gallery
                 className={cn(
-                  'gap-x-6 gap-y-8',
+                  'gap-x-5 gap-y-7',
                   filter === 'all'
                     ? 'hidden grid-cols-2 xl:grid-cols-3 lg:grid'
                     : 'grid grid-cols-2 lg:grid-cols-3',
@@ -893,16 +874,16 @@ export function WelcomeScreen() {
                   />
                 ))}
                 {filter === 'mine' && customs.length === 0 && (
-                  <div className="col-span-full flex flex-col items-center gap-2 border border-dashed border-foreground/20 py-12 text-center">
+                  <div className="col-span-full flex flex-col items-center gap-2 rounded-xl border border-dashed border-foreground/20 py-12 text-center">
                     <ImagePlus className="h-7 w-7 text-muted-foreground/50" aria-hidden />
-                    <p className="font-serif-editorial text-[15px] font-semibold">{t({ zh: '还没有自定义模板', en: 'No custom templates yet' })}</p>
+                    <p className="text-[15px] font-medium">{t({ zh: '还没有自定义模板', en: 'No custom templates yet' })}</p>
                     <p className="max-w-sm text-[11px] leading-relaxed text-muted-foreground">
                       {t({ zh: '上传一张论文/科研分子图，AI 将解析其图式配方并生成可编辑命令模板', en: 'Upload a paper or scientific molecular figure — the AI parses its style recipe into an editable command template' })}
                     </p>
                     <button
                       type="button"
                       onClick={() => { setUi({ templateOpen: true }); window.dispatchEvent(new CustomEvent('open-template-upload')) }}
-                      className="mt-1 inline-flex h-8 cursor-pointer items-center gap-1.5 border border-primary/45 px-3.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/10"
+                      className="mt-1 inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-primary/45 px-3.5 text-[12px] font-medium text-primary transition-colors hover:bg-primary/10"
                     >
                       <ImagePlus className="h-3.5 w-3.5" aria-hidden />
                       {t({ zh: '上传第一张图', en: 'Upload your first image' })}
@@ -911,7 +892,7 @@ export function WelcomeScreen() {
                 )}
               </div>
               {/* 诚实版权脚注（细小学注；与模板库对话框同口径） */}
-              <p className="journal-row-in mt-8 flex max-w-2xl items-start gap-1.5 border-t border-foreground/10 pt-4 text-[10px] leading-relaxed text-muted-foreground" style={{ animationDelay: '700ms' }}>
+              <p className="rise-in mt-8 flex max-w-2xl items-start gap-1.5 border-t border-foreground/10 pt-4 text-[10px] leading-relaxed text-muted-foreground" style={{ animationDelay: '700ms' }}>
                 <Wand2 className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
                 {t({
                   zh: '模板复现的是图式视觉配方（表示法·配色·视角·灯光·轮廓）与分析命令（孔道剖面/脂双层），不含论文原图；缩略图由 MolVision 引擎对代表结构真实渲染。',
@@ -921,21 +902,25 @@ export function WelcomeScreen() {
             </div>
           </section>
         </div>
+
+        {/* 底部呼吸（最后 section 与页脚之间的留白节奏） */}
+        <div className="h-10" aria-hidden />
       </div>
 
-      {/* AI 助手悬浮入口（r126-b 纯排印藏书标签：直角发丝描边 + 方形状态灯
-          + 等宽微大型——零图标零投影零圆角；快捷键语义只留 footer 学注
-          （kbd 组合在两轮 VLM 中被误读为 SaaS 开关——本体征退役）；
-          ⌘J 快捷键行为保留；面板打开时让位隐藏） */}
+      {/* AI 助手悬浮入口（r127 VLM 降噪：更小更轻的圆角胶囊——滚动全程可达
+          的入口价值保留；ping 点 + backdrop blur；面板打开时让位隐藏） */}
       {!agentOpen && (
         <button
           onClick={() => setUi({ agentOpen: true })}
-          className="welcome-in welcome-float-chip group bottom-5 right-5 z-20 flex h-10 select-none items-center gap-2.5 border border-foreground/30 bg-background px-4 text-foreground/85 transition-colors duration-200 hover:border-primary/60 hover:text-foreground dark:border-white/[0.35] dark:bg-background dark:text-foreground/85 dark:hover:border-primary/60 dark:hover:text-foreground"
-          style={{ animationDelay: '500ms' }}
+          className="welcome-in welcome-float-chip group bottom-5 right-5 z-20 flex h-8 select-none items-center gap-1.5 rounded-full border border-foreground/10 bg-card/85 px-3 text-foreground/75 shadow-sm backdrop-blur-sm transition-colors duration-200 hover:border-primary/45 hover:text-foreground dark:border-white/[0.14] dark:bg-card/85"
+          style={{ animationDelay: '520ms' }}
           aria-keyshortcuts="Control+J"
         >
-          <span aria-hidden className="h-1.5 w-1.5 shrink-0 bg-primary" />
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em]">{t({ zh: 'AI 助手', en: 'AI Assistant' })}</span>
+          <span aria-hidden className="relative flex h-1.5 w-1.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-50 motion-reduce:hidden" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+          </span>
+          <span className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.14em]">{t({ zh: 'AI 助手', en: 'AI Assistant' })}</span>
         </button>
       )}
 
@@ -948,13 +933,13 @@ export function WelcomeScreen() {
       {/* AI 助手面板（悬浮变体；加载结构后随工作台重挂载并还原历史） */}
       <AgentPanel float />
 
-      {/* 素纸页脚（待机遥测的排印化：版本 · 状态 · 快捷键 · 语言） */}
-      <footer className="relative z-30 flex h-10 shrink-0 items-center gap-3 border-t border-foreground/12 px-4 sm:px-6">
+      {/* 状态页脚（待机遥测：版本 · 状态 · 快捷键 · 语言） */}
+      <footer className="relative z-30 flex h-10 shrink-0 items-center gap-3 border-t border-foreground/10 px-4 sm:px-6">
         <span className="font-mono text-[10.5px] font-bold tracking-wide">
           MolVision <span className="font-normal text-muted-foreground">v1.6</span>
         </span>
         <span className="h-3 w-px shrink-0 bg-foreground/15" aria-hidden />
-        <span className="truncate text-[11px] text-muted-foreground">
+        <span className="hidden truncate text-[11px] text-foreground/60 sm:inline">
           {t({ zh: '待机 · 等待结构加载', en: 'Standby · awaiting structure' })}
         </span>
         <span className="ml-auto hidden shrink-0 font-mono text-[9.5px] tracking-wide text-muted-foreground/70 md:block">
@@ -965,13 +950,13 @@ export function WelcomeScreen() {
         </div>
       </footer>
 
-      {/* 拖放遮罩（松手提示；期刊语态：虚线墨框 + 学注格式族） */}
+      {/* 拖放遮罩（松手提示；r127 圆角虚线面板 + backdrop blur） */}
       {dragOver && (
-        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-background/[0.94]">
-          <div className="border border-dashed border-primary/60 px-10 py-8 text-center">
-            <FileUp className="mx-auto h-6 w-6 text-primary" aria-hidden />
-            <span className="mt-3 block text-[13px] font-semibold">{t({ zh: '松开以加载文件', en: 'Drop to load files' })}</span>
-            <span className="mt-1.5 block font-mono text-[10px] tracking-wide text-muted-foreground">
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-background/85 backdrop-blur-sm">
+          <div className="mx-4 rounded-2xl border-2 border-dashed border-primary/50 px-12 py-10 text-center">
+            <FileUp className="mx-auto h-8 w-8 text-primary" aria-hidden />
+            <span className="mt-4 block text-[15px] font-semibold">{t({ zh: '松开以加载文件', en: 'Drop to load files' })}</span>
+            <span className="mt-2 block font-mono text-[10px] tracking-wide text-muted-foreground">
               {t({ zh: '.pdb / .cif / .ccp4 密度图 / .molvision 会话', en: '.pdb / .cif / .ccp4 maps / .molvision sessions' })}
             </span>
           </div>
