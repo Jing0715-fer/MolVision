@@ -5277,3 +5277,5 @@ Stage Summary:
   3. 【低】preset 命令的 agent 技能化对称评估（12 支技能库均为组合流程，单项 preset 无技能——ChimeraX presets 动词已在 route.ts 提示词，无需新增）
   4. 【低】数字键书签与 radix 菜单开态的焦点边界（菜单项聚焦时按数字会跳书签——Shift 版同样暴露，实际无害，防御性评估可做可不做）
   5. 【低】生产部署前置清单（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——沙箱 build 红线不变）
+
+（r125 段 cron 补记，2026-10-15）15min webDevReview 巡检任务 #460464 创建（11:42:10，expr 0 */15 * * * ? 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 38 次实证：r85-r123 连续 37 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r125 开发纪律（基线 guards 928 / 六道门禁链 / E2E 铁律含数字键同位假阴性、WebGL toDataURL 空白、bash 反引号挂起三新坑 / 下轮优先级四条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 928 + smoke 6 + visual-baseline 7）。
