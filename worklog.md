@@ -5349,3 +5349,24 @@ Stage Summary:
 - 下一轮建议：①【低】VLM 终评 9/10 后的余项：Load 钮 hover 微光反馈、浅色 hero 辉光饱和度微调 ②【低】smoke.sh/visual-baseline 与本轮零交集（工作台路径未动）——如需全绿可复跑 ③【低】移动端 hero 统计块在 <360px 极窄屏的三列挤压评估 ④【低】生产部署前置清单（多轮挂起项不变）
 
 （r127 段 cron 补记，2026-10-15）15min webDevReview 巡检任务 #460687 创建（14:40:21，expr 0 */15 * * * ? 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 40 次实证：r85-r126 连续 39 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r127 开发纪律（基线 guards 945 / 六道门禁链 / E2E 铁律含 set viewport 命令形态、横滚容器误报、统计块窄屏标签三条新坑 / 下轮优先级三条）——配额恢复后可直接重建。巡检缺席期防线沿用：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 945 + smoke 6 + visual-baseline 7——后两者与 r127 改动零交集未复跑，workbench 代码路径未动）。
+
+---
+Task ID: r128
+Agent: main
+Task: 欢迎页「Hero → 模板画廊」直落式重构（用户指令：欢迎+PDB加载后直接接模板列表，中间内容全删，继续优化美观度）
+
+Work Log:
+- 通读 r127 版 WelcomeScreen.tsx（967 行）与 SessionResumeCard / ShareLinkLoadCard / globals.css 相关段落，确认删减范围
+- 重写 WelcomeScreen.tsx（968 → 约 690 行）：删除展示 bento（图版 A/B + 全库入口卡）、会话带两列卡、§01 经典结构 3 列索引、hero 遥测统计三等分行
+- 新增智能命令条双语义：同一输入框识别 4 位 PDB 编号（大小写宽容、短输入自动大写化）与含 #s= 的分享链接文本（applyShareLinkFromText 复用，混杂文本自动提取最长合法载荷）；图标/边框/CTA/状态行四态联动（PDB=主色「Load」，分享=翡翠「Restore」）
+- 会话恢复改窄幅条（max-w-[560px] 与命令条同宽、无存档自动隐藏）；ShareLinkLoadCard.tsx 功能并入后删除文件
+- 模板画廊成为页面主体：hero 后 border-t 发丝线直落衔接；eyebrow 改 "TPL"（单一章节不再编号）；sticky 分类胶囊行保留；移动端 r89 横滚行架构保留
+- VLM 评审两轮采纳：① cat-pill 激活态品牌染色（9% 主色入底 + 32% 主色描边，globals.css）② 画廊卡描述改 line-clamp-2（原单行截断信息损失）
+- 版本号 v1.6 → v1.7（顶栏胶囊 + 页脚两处）
+- agent-browser 端到端验证：小写 4hhb 输入自动大写 + CTA 主色态；粘贴 #s= 链接 → 翡翠 Restore 态；提交 4HHB → 工作台加载成功；重载后会话恢复条显示（1 structures · 4HHB · just now）；画廊卡点击 → demo 加载进工作台；分类胶囊点击 → 8 卡过滤正确 + 激活态清晰；390px 移动视口 → 6 分类横滚行 + 56 卡、桌面网格隐藏；控制台 0 错误；lint 0 错误
+
+Stage Summary:
+- 欢迎页结构：顶栏 → Hero（LIVE 胶囊 + 大标题 + 智能命令条 + 会话恢复条）→ 模板画廊（分类胶囊 + 56 卡网格）→ 页脚，一屏直达
+- 交互回归全绿：PDB 加载 / 分享链接恢复 / 会话恢复 / 画廊演示 / 分类过滤 / 移动端横滚行均验证通过
+- VLM 终审结论：「具备上线/交付条件」（激活态清晰、两行描述舒适、视觉一致性高）
+- 遗留：1PH0 beta桶膜画偏斜 bug 仍未排查（用户此前报告，优先级待定）

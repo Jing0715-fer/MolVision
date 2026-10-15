@@ -672,10 +672,12 @@ canvas {
   transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
 }
 .cat-pill:hover { color: var(--foreground); }
+/* r128：激活态品牌染色（VLM 评审——原 surface 抬升在深底上区分度弱；
+   9% 主色入底 + 32% 主色描边，扫视时当前分类一目了然） */
 .cat-pill[data-active='true'] {
-  background: var(--card);
+  background: color-mix(in oklab, var(--primary) 9%, var(--card));
   color: var(--foreground);
-  border-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+  border-color: color-mix(in oklab, var(--primary) 32%, transparent);
 }
 
 /* —— 卡片/行入场（纯 opacity——transform 终态交给 hover 过渡；
