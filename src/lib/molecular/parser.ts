@@ -98,6 +98,10 @@ export interface StructureData {
   ensembleKnots?: number
   /** 晶胞与空间群（CRYST1 / _cell）——对称伴侣与电子密度图计算用 */
   crystal?: CrystalInfo
+  /** 生物装配非恒等旋转（REMARK 350 BIOMT / MTRIX，行主序 3×3）：寡聚体对称轴投票用。
+   *  r126 新增：单链沉积 + 晶体对称生成寡聚体的结构（如 1PH0 porin 三聚体）链间
+   *  Kabsch 不可达，装配元数据是唯一对称轴证据。只存非恒等 op（恒等无信息量）。 */
+  bioRotations?: number[][]
   /** 空间哈希网格（用于 within 选择、近邻查询） */
   grid: SpatialGrid
   bbox: { min: [number, number, number]; max: [number, number, number]; center: [number, number, number]; radius: number }
@@ -201,6 +205,23 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
   let seenModel = false
   // 晶胞（CRYST1）
   let crystal: CrystalInfo | null = null
+  // 生物装配旋转（REMARK 350 BIOMT / MTRIX）：op 序号 → 3 行 [r11,r12,r13,r14…]。
+  // r126：单链沉积 + 晶体对称生成寡聚体（1PHO 三聚体先例）的对称轴唯一证据源。
+  // token 化解析（列位在 RCSB 各文件里对齐宽度不一；`BIOMT` 子串命中后先用
+  // /^BIOMT[123]$/ 过滤说明文本行——"…BY APPLYING BIOMT TRANSFORMATIONS" 实测坑）
+  const bioOps = new Map<number, number[][]>()
+  const collectBioOp = (tokens: string[]) => {
+    // tokens[0] 形如 'BIOMT1'/'MTRIX1'（均 6 字符，末位是行号 1-3）
+    const head = tokens[0] ?? ''
+    const row = /^(?:BIOMT|MTRIX)([123])$/.exec(head)?.[1]
+    const serial = parseInt(tokens[1])
+    const vals = tokens.slice(2)
+    if (!row || !Number.isFinite(serial) || vals.length < 4
+      || vals.some(v => isNaN(Number(v)))) return
+    const rows = bioOps.get(serial) ?? []
+    rows[parseInt(row) - 1] = vals.slice(0, 4).map(Number)
+    bioOps.set(serial, rows)
+  }
   // NMR ensemble：非首 MODEL 的坐标缓冲
   let modelNo = 0
   let frameCoords: number[] | null = null
@@ -288,6 +309,14 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
       })
     } else if (rec === 'CRYST1') {
       crystal = parseCryst1(line)
+    } else if (rec === 'REMARK' && line.includes('BIOMT')) {
+      // REMARK 350 BIOMTn s r11 r12 r13 t1 —— token 化（列位宽度不统一，见上方注释）
+      const t = line.trim().split(/\s+/)
+      if (t.length >= 8 && /^BIOMT[123]$/.test(t[2] ?? '')) collectBioOp([t[2], t[3], ...t.slice(4)])
+    } else if (rec.startsWith('MTRIX')) {
+      // MTRIXn s r11 r12 r13 t1（非晶体学对称：坐标不在文件里的同构拷贝；6 token）
+      const t = line.trim().split(/\s+/)
+      if (t.length >= 6) collectBioOp([t[0], t[1], ...t.slice(2)])
     } else if (rec === 'CONECT') {
       const from = parseInt(line.slice(6, 11), 10)
       if (!from) continue
@@ -298,11 +327,22 @@ function parsePDB(text: string, name: string, id = ''): StructureData {
     }
   }
 
+  // 生物装配旋转：行齐的 op → 非恒等者存旋转部分（行主序 9 数；恒等/近平移 op 无信息）
+  const bioRotations: number[][] = []
+  for (const rows of bioOps.values()) {
+    if (rows.length !== 3 || rows.some(r => !r)) continue
+    const R = [...rows[0].slice(0, 3), ...rows[1].slice(0, 3), ...rows[2].slice(0, 3)]
+    const isIdentity = Math.abs(R[0] - 1) < 1e-6 && Math.abs(R[4] - 1) < 1e-6 && Math.abs(R[8] - 1) < 1e-6
+      && R.slice(0, 9).every((v, i) => (i === 0 || i === 4 || i === 8) || Math.abs(v) < 1e-6)
+    if (!isIdentity) bioRotations.push(R)
+  }
+
   return buildStructure({
     name, format: 'pdb', pdbId, title: title || name, method, resolution,
     x, y, z, serial, names, elements, resNames, resSeqs, iCodes, chainIds,
     bfactors, occupancies, heteroFlags, conects, helixRanges, sheetRanges,
     extraFrames, crystal: crystal ?? undefined,
+    bioRotations: bioRotations.length ? bioRotations : undefined,
   })
 }
 
@@ -488,6 +528,8 @@ interface RawAtoms {
   extraFrames?: Float32Array[]
   /** 晶胞与空间群（CRYST1 / _cell） */
   crystal?: CrystalInfo
+  /** 生物装配非恒等旋转（REMARK 350 BIOMT / MTRIX，行主序 3×3） */
+  bioRotations?: number[][]
 }
 
 function buildStructure(raw: RawAtoms): StructureData {
@@ -760,6 +802,7 @@ function buildStructure(raw: RawAtoms): StructureData {
     hasHydrogens,
     ensemble,
     crystal: raw.crystal,
+    bioRotations: raw.bioRotations,
     grid,
     bbox: { min, max, center, radius },
   }
@@ -770,7 +813,9 @@ function buildStructure(raw: RawAtoms): StructureData {
 /**
  * 从已有结构抽取原子子集，构建一个新的独立 StructureData。
  * 残基/链/键重新推导（键按距离重算），二级结构按 (chain,resSeq,iCode,resName) 匹配从源复制，
- * 晶胞信息原样传递；ensemble/SASA 不保留。
+ * 晶胞信息原样传递；ensemble/SASA 不保留。bioRotations 也不传递（r126：装配元数据描述
+ * 的是源结构的完整寡聚体——子集（如 create chain A 单体）不再是那个装配，继承会把
+ * 二聚体 C2 轴错装到单体上，1F88 视黄醛模板的「create 链 A 避开二聚体 C2」先例）。
  */
 export function subsetStructure(src: StructureData, indices: readonly number[], name: string): StructureData {
   const uniq = [...new Set(indices)].sort((a, b) => a - b)

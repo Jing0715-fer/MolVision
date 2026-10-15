@@ -24,7 +24,7 @@ import { detectHBonds, type HBond } from './hbonds'
 import { contactColor } from './contacts'
 import { useContactStore } from './contacts-store'
 import { usePoreStore } from './pore-store'
-import { poreZoneColor, poreAxis, membraneWaist } from './pore'
+import { poreZoneColor, poreAxis, membraneWaist, membraneBeltCenter } from './pore'
 import { superposeStructures, applyRigidTransform, recomputeBbox, type SuperposeResult } from './superpose'
 import {
   computeSasa, computeBuriedSasa, computeBuriedSasaArrays, sasaStats, compileRadii,
@@ -2355,8 +2355,11 @@ export class MolEngine {
     // 横向半径局部最小窗），无腰回落盒中点（KcsA 短跨膜蛋白/非膜蛋白与 r99 一致）。
     // 9P6B 全长 TRPV1 实证：PCA 主轴歪 18°（特征值简并）且盒中点偏离跨膜区 31Å
     // （膜插进 ARD 胞内域）——对称轴 + 腰心双修后膜板对准跨膜螺旋束。
+    // r126：轴三级（+BIOMT 生物装配元数据：1PHO 单链 porin 三聚体实测 PCA 歪
+    // 25.8°）；膜心第三级 = 跨膜疏水带中位（7AHL 无双向腰盒心偏 13.1Å 的根修）。
     const { origin, dir } = poreAxis(data)
     const waist = membraneWaist(data, origin, dir)
+    const belt = waist ? null : membraneBeltCenter(data, origin, dir)
     const n = new THREE.Vector3(dir[0], dir[1], dir[2])
     const up = Math.abs(n.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
     const u = new THREE.Vector3().crossVectors(n, up).normalize()
@@ -2395,7 +2398,10 @@ export class MolEngine {
     // 让蛋白两侧板缘对称。
     // r100：沿法线 tc 改跨膜腰心（waist.center）——盒中点仅对「跨膜区居中」的蛋白
     // 成立（KcsA）；全长通道（TRPV1 带 ARD）盒中点偏进胞内域 31Å。无腰保持盒中。
-    const tc = waist ? waist.center : (tLo + tHi) / 2
+    // r126：无腰时第三级回落疏水带中位（belt）——短跨膜蛋白（1PHO/1BL8）与无双向
+    // 腰的蘑菇形（7AHL：帽大柄长，盒心偏进帽区 13Å）的跨膜区直接物理证据；
+    // 带检测失败（非膜蛋白/带不紧致）保持盒中（与 r99 一致）。
+    const tc = waist ? waist.center : (belt ?? (tLo + tHi) / 2)
     const uc = (uLo + uHi) / 2
     const vc = (vLo + vHi) / 2
     const T = state.settings.membraneThickness
@@ -4558,8 +4564,11 @@ export class MolEngine {
     return true
   }
 
-  /** 对标 PyMOL orient：按 PCA 主轴对齐视角（最长轴→屏幕水平，次轴→垂直）再适配 */
-  orient(refs?: { structureId: string; indices?: number[] }[]): boolean {
+  /** 对标 PyMOL orient：按 PCA 主轴对齐视角（最长轴→屏幕水平，次轴→垂直）再适配。
+   *  r126 新增 mode='membrane'：膜法线（poreAxis 三级检测）→屏幕竖直——膜板水平、
+   *  侧视构图直达（膜蛋白图式的标准朝向：胞外朝上、膜面水平）。PCA 模式与
+   *  orient polymer 语义不变（r92 模板流「PCA≈膜法线」巧合的显式化替代）。 */
+  orient(refs?: { structureId: string; indices?: number[] }[], mode: 'pca' | 'membrane' = 'pca'): boolean {
     const pts = this.collectFitPoints(refs)
     if (pts.length < 3) return false
     // 质心 + 协方差（3x3 对称）
@@ -4577,9 +4586,32 @@ export class MolEngine {
     const { vals, vecs } = eigenSymmetric3(cov)
     if (!(vals[0] > 1e-9)) { this.fitView(refs); return true }
     // 正交右手系：v1（最大方差）→屏幕 X，v2→Y(up)，v3 = v1×v2 →相机方向
-    const v1 = new THREE.Vector3(vecs[0][0], vecs[0][1], vecs[0][2]).normalize()
-    const v2 = new THREE.Vector3(vecs[1][0], vecs[1][1], vecs[1][2]).normalize()
-    const v3 = new THREE.Vector3().crossVectors(v1, v2).normalize()
+    let v1 = new THREE.Vector3(vecs[0][0], vecs[0][1], vecs[0][2]).normalize()
+    let v2 = new THREE.Vector3(vecs[1][0], vecs[1][1], vecs[1][2]).normalize()
+    let v3 = new THREE.Vector3().crossVectors(v1, v2).normalize()
+    // r126 膜法线模式：n（poreAxis，符号取向 +z 侧为屏幕上——沉积系惯例胞外朝上）
+    // 钉到屏幕竖直；水平轴取 PCA 主轴在膜面内的投影（最宽立面朝镜头；主轴≈法线的
+    // 通道结构自动退到次轴投影，仍退化用世界叉积兜底）——构图确定且适配距离沿旧式。
+    if (mode === 'membrane') {
+      const s = useMolStore.getState()
+      const data = s.activeId ? dataRegistry.get(s.activeId) : null
+      if (data) {
+        const { dir } = poreAxis(data)
+        const n = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize()
+        if (n.z < 0) n.negate()
+        // 水平轴：PCA 主轴→次轴依次向膜面投影，取首个投影长度可用者
+        const cand = [v1, v2, new THREE.Vector3(vecs[2][0], vecs[2][1], vecs[2][2]).normalize()]
+        let u: THREE.Vector3 | null = null
+        for (const p of cand) {
+          const proj = p.clone().addScaledVector(n, -p.dot(n))
+          if (proj.length() > 0.3) { u = proj.normalize(); break }
+        }
+        if (!u) u = new THREE.Vector3().crossVectors(n, Math.abs(n.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).normalize()
+        v1 = u
+        v2 = n.clone()
+        v3 = new THREE.Vector3().crossVectors(v1, v2).normalize()
+      }
+    }
     const center = new THREE.Vector3(c[0], c[1], c[2])
     // r55：适配距离与 fitView 同式，主轴对齐走缓动（up 球面 slerp 由 animateCameraTo 处理；
     // 极点豁免也在其内部登记——主轴竖直的 PCA 对齐仍能精确落位）；录制中 orient 不再跳变

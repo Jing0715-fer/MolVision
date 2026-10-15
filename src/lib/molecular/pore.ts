@@ -6,16 +6,23 @@
 //  · 收缩点（constriction）位置与半径——通道开关/选择性滤波器的关键读数
 //  · 膜蛋白语境：membrane 命令画脂双层板（孔道分析图的标配语境）
 //
-// 通道轴检测（r100 两级）：
+// 通道轴检测（r100 两级；r126 三级）：
 //  ① 同构链对 Kabsch 对称轴投票（优先）：寡聚体通道（C4/C5/C6…）的同构亚基间
 //     刚体旋转轴 = 寡聚体对称轴 = 孔道轴。9P6B（全长人 TRPV1，含大 ARD 胞内域）
 //     实证：全原子 PCA 主轴歪 18°（特征值 734/728/721 近简并，「蘑菇形」整体
 //     近各向同性），对称投票 6/6 票一击命中 C4 轴（|1-z|<0.003）。
-//  ② 聚合物主方差轴（PCA 兜底）：单体结构/对称检测失败时与 r72-r99 行为一致
-//     （KcsA 1BL8 实证主轴即孔轴）。
+//  ② 生物装配元数据轴（r126）：REMARK 350 BIOMT / MTRIX 非恒等旋转的投票——
+//     单链沉积 + 晶体对称生成寡聚体的结构（1PHO porin 三聚体先例）链间 Kabsch
+//     不可达，装配元数据是唯一对称轴证据；Cn≥3 才收（C2 二义性拒绝，1F88 先例）。
+//  ③ 聚合物主方差轴（PCA 兜底）：单体结构/两级对称检测均失败时与 r72-r99 行为
+//     一致（KcsA 1BL8 实证主轴即孔轴）。
 //  跨膜腰扫描（r100）：轴确定后沿轴做横向 RMS 半径剖面，跨膜螺旋束是「腰」
 //  （横向半径局部最小 + 双向收腰），膜中心/剖面采样区间锚定腰心而非包围盒中点
 //  ——9P6B 实证：盒中点偏离跨膜区 31Å（膜插进 ARD），腰心偏差仅 5Å。
+//  跨膜疏水带中心（r126 膜心第三级）：腰检测门槛（跨度 ≥94Å）把短跨膜蛋白
+//  （1PHO 66Å / 1BL8 57Å / 7AHL 102Å 无双向腰）拒之门外，盒中点兜底实测偏差
+//  7AHL 13.1Å（蘑菇顶大底窄，盒心偏进帽区）/1BL8 6.4Å——疏水带中位（KD≥1.8）
+//  是膜心的直接物理证据（IQR/span ≤ 0.42 门闸防可溶性蛋白误触）。
 //  采样区间 = 腰窗 ± 两端腔延伸（HOLE 语义：跨膜孔+口腔，非全长）：
 //  9P6B 实测剖面还原 TRPV1 双门结构（选择性滤波器 r≈0.7Å + 下门 r≈0.9Å）。
 //
@@ -27,7 +34,7 @@
 // 与 HOLE 惯例一致——通道内的离子会错误地把剖面「压死」在轴上）。
 import { tt } from '@/i18n'
 import type { StructureData } from './parser'
-import { elementInfo } from './chemistry'
+import { elementInfo, hydropathy } from './chemistry'
 import { dataRegistry, engineRef, useMolStore } from './store'
 import { usePoreStore, type PoreResult, type PoreSample } from './pore-store'
 
@@ -212,7 +219,7 @@ function kabschAxis(P: number[], Q: number[]): [number, number, number] | null {
   return [wx / wl, wy / wl, wz / wl]
 }
 
-/** 同构链对对称轴投票：多数一致轴 = 寡聚体对称轴 = 通道轴。null = 降级 PCA。 */
+/** 同构链对对称轴投票：多数一致轴 = 寡聚体对称轴 = 通道轴。null = 降级 BIOMT/PCA。 */
 export function symmetryAxis(data: StructureData): [number, number, number] | null {
   const pos = data.atoms.positions
   const names = data.atoms.names
@@ -271,6 +278,88 @@ export function symmetryAxis(data: StructureData): [number, number, number] | nu
   if (keep.length < 2 || keep.length < votes.length * 0.4) return null
   const len = Math.hypot(mx, my, mz) || 1
   return [mx / len, my / len, mz / len]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// r126：生物装配元数据对称轴投票（REMARK 350 BIOMT / MTRIX）——单链沉积结构的
+// 第三级证据。1PHO（β 桶 porin 三聚体，单链 A + 晶体学 3-fold 生成）实测：链间
+// Kabsch 不可达（1 链）→ PCA 兜底把单体长轴（倾斜 25.8°）当膜法线，膜板斜插桶身；
+// BIOMT 两个 120° op 轴即晶体学三重轴 = 真膜法线（P321 晶体 porin 膜面 ∥ ab 是
+// 教科书结论）。投票口径与链间 Kabsch 同款：符号统一 + 25° 主簇 + ≥2 票 + ≥40%。
+// 【C2 二义性拒绝】只收 30° ≤ |角| ≤ 170° 的 op：C2（180°）装配轴与膜法线关系
+// 二义（1F88 先例：二聚体 2-fold 平行膜面，把膜转 90°）；C3+ 旋转轴 = 膜法线/
+// 通道轴是普遍规律（环形寡聚体），且 Cn≥3 必有 ≥2 个非 180° op 满足门。180°
+// Rodrigues 分量归零（轴不可反解）也是硬约束——顺带绕开该数值坑。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 生物装配对称轴投票（REMARK 350 BIOMT / MTRIX 旋转部分；Cn≥3 才收）。null = 降级 PCA。 */
+export function bioSymmetryAxis(data: StructureData): [number, number, number] | null {
+  const ops = data.bioRotations
+  if (!ops || ops.length < 2) return null
+  const votes: [number, number, number][] = []
+  for (const R of ops) {
+    const wx = R[7] - R[5], wy = R[2] - R[6], wz = R[3] - R[1]
+    const sinT = Math.hypot(wx, wy, wz) / 2
+    const cosT = Math.min(1, Math.max(-1, (R[0] + R[4] + R[8] - 1) / 2))
+    const deg = Math.atan2(sinT, cosT) * 180 / Math.PI
+    // [30°, 170°]：拒近恒等（轴数值不稳）与 C2（180°，二义性先例）
+    if (Math.abs(deg) < 30 || Math.abs(deg) > 170) continue
+    const l = Math.hypot(wx, wy, wz) || 1
+    votes.push([wx / l, wy / l, wz / l])
+  }
+  if (votes.length < 2) return null
+  // 与链间 Kabsch 同款簇精炼（符号统一 + 25° 主簇 + ≥2 票 + ≥40%）
+  const ref = votes[0]
+  const aligned = votes.map(v => (v[0] * ref[0] + v[1] * ref[1] + v[2] * ref[2] >= 0 ? v : [-v[0], -v[1], -v[2]]))
+  let mx = 0, my = 0, mz = 0
+  for (const v of aligned) { mx += v[0]; my += v[1]; mz += v[2] }
+  let keep = aligned
+  for (let it = 0; it < 5; it++) {
+    const l = Math.hypot(mx, my, mz) || 1
+    keep = aligned.filter(v => (v[0] * mx + v[1] * my + v[2] * mz) / l > Math.cos((25 * Math.PI) / 180))
+    if (!keep.length) break
+    mx = 0; my = 0; mz = 0
+    for (const v of keep) { mx += v[0]; my += v[1]; mz += v[2] }
+  }
+  if (keep.length < 2 || keep.length < votes.length * 0.4) return null
+  const len = Math.hypot(mx, my, mz) || 1
+  return [mx / len, my / len, mz / len]
+}
+
+/** 跨膜疏水带中心（r126 膜心第三级证据）：沿轴的疏水 CA 投影中位数。
+ *  生物膜物理：跨膜区 = 疏水残基带（KD ≥ 1.8：A/V/L/I/M/F/C），其中位数即膜心。
+ *  门闸（防可溶性蛋白误触）：带内 IQR ≤ 0.42 × 聚合物沿轴跨度（可溶性蛋白疏水核
+ *  填满全高，IQR/span ~0.5+；膜蛋白实测 1PHO 0.24 / 1BL8 0.36 / 7AHL 0.33——
+ *  分母必须是蛋白全跨度，用带自身范围会错杀 1BL8 类）+ 疏水 CA ≥ 20 + 带宽 ≥ 20Å。
+ *  null = 回落盒中点（与 r99 一致）。 */
+export function membraneBeltCenter(
+  data: StructureData,
+  origin: [number, number, number],
+  dir: [number, number, number],
+): number | null {
+  const pos = data.atoms.positions
+  const names = data.atoms.names
+  const residues = data.residues
+  const hyd: number[] = []
+  let tLo = Infinity, tHi = -Infinity // 聚合物全跨度（门闸分母）
+  for (const r of residues) {
+    if (!r.polymer || r.water) continue
+    const hydRes = (hydropathy(r.resName) ?? -99) >= 1.8
+    for (let i = r.start; i < r.end; i++) {
+      const t = (pos[i * 3] - origin[0]) * dir[0] + (pos[i * 3 + 1] - origin[1]) * dir[1] + (pos[i * 3 + 2] - origin[2]) * dir[2]
+      if (t < tLo) tLo = t
+      if (t > tHi) tHi = t
+      if (hydRes && names[i] === 'CA') hyd.push(t)
+    }
+  }
+  const span = tHi - tLo
+  if (hyd.length < 20 || !(span > 0)) return null
+  hyd.sort((a, b) => a - b)
+  const hLo = hyd[0], hHi = hyd[hyd.length - 1]
+  if (hHi - hLo < 20) return null // 带宽不足 20Å（太薄不可能是跨膜区）
+  const q1 = hyd[Math.floor(hyd.length * 0.25)], q3 = hyd[Math.floor(hyd.length * 0.75)]
+  if (q3 - q1 > 0.42 * span) return null
+  return hyd.length % 2 ? hyd[(hyd.length - 1) / 2] : (hyd[hyd.length / 2 - 1] + hyd[hyd.length / 2]) / 2
 }
 
 /** 跨膜腰：沿给定轴的横向 RMS 半径剖面里「双向收窄」的局部最小窗。
@@ -339,15 +428,18 @@ export function membraneWaist(
   return best ? { center: best.c, halfWidth: WIN / 2 } : null
 }
 
-/** 通道轴统一入口（r100）：对称轴优先、PCA 兜底；origin = 聚合物质心（膜/环带/剖面同基准） */
+/** 通道轴统一入口（r100；r126 三级）：链间 Kabsch 对称轴 → 生物装配元数据轴
+ *  （BIOMT/MTRIX，单链沉积结构）→ PCA 兜底；origin = 聚合物质心（膜/环带/剖面同基准） */
 export function poreAxis(data: StructureData): {
   origin: [number, number, number]
   dir: [number, number, number]
-  method: 'symmetry' | 'pca'
+  method: 'symmetry' | 'bio' | 'pca'
 } {
   const { origin, dir } = principalAxis(data)
   const sym = symmetryAxis(data)
   if (sym) return { origin, dir: sym, method: 'symmetry' }
+  const bio = bioSymmetryAxis(data)
+  if (bio) return { origin, dir: bio, method: 'bio' }
   return { origin, dir, method: 'pca' }
 }
 

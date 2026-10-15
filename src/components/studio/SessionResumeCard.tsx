@@ -2,6 +2,8 @@
 
 // 会话恢复卡：dynamic(ssr:false) 挂载（服务端不渲染 → 零水合差异）
 // localStorage 存档摘要仅在客户端读取；恢复失败时自我隐藏
+// r126-b：期刊封面语态重皮——直角发丝卡（去 panel-card 圆角与浮起投影），
+// 悬停墨色描边 + 极淡主色底（与进样格/图版同族印刷语态）
 import dynamic from 'next/dynamic'
 import { useRef, useState } from 'react'
 import { ArrowRight, HardDriveDownload } from 'lucide-react'
@@ -45,7 +47,7 @@ function SessionResumeCard() {
     <button
       onClick={resume}
       disabled={loading}
-      className="welcome-in panel-card group flex w-full items-center gap-3 px-4 py-3 text-left transition-[border-color] duration-200 hover:border-primary/45!"
+      className="welcome-in group flex w-full items-center gap-3 border border-foreground/15 bg-transparent px-4 py-3.5 text-left transition-colors duration-200 hover:border-primary/50 hover:bg-primary/[0.04] disabled:pointer-events-none disabled:opacity-50"
       style={{ animationDelay: '200ms' }}
     >
       <HardDriveDownload className="h-4 w-4 shrink-0 text-primary" aria-hidden />

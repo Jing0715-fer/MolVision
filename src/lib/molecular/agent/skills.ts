@@ -240,8 +240,8 @@ export const AGENT_SKILLS: AgentSkill[] = [
       },
     },
     workflow: [
-      { label: { zh: '主轴定向', en: 'Axis alignment' }, cmd: 'orient', check: { zh: 'PCA 主轴对齐视角（跨膜轴竖直是膜图标配）', en: 'PCA axis alignment (TM axis vertical is the convention)' } },
-      { label: { zh: '脂双层板', en: 'Bilayer slab' }, cmd: 'membrane', check: { zh: '默认 34Å；典型生物膜 30-40Å；膜心自动对准跨膜腰窗', en: 'Default 34Å; slab auto-centered on TM waist' } },
+      { label: { zh: '膜法线定向', en: 'Membrane-normal alignment' }, cmd: 'orient membrane', check: { zh: '膜法线钉到屏幕竖直（膜板水平、胞外朝上是膜图标配）；对称轴/装配轴三级检测', en: 'Membrane normal pinned vertical (horizontal slab, extracellular up — the convention); 3-tier axis detection' } },
+      { label: { zh: '脂双层板', en: 'Bilayer slab' }, cmd: 'membrane', check: { zh: '默认 34Å；典型生物膜 30-40Å；膜心自动对准跨膜腰窗/疏水带', en: 'Default 34Å; slab auto-centered on the TM waist / hydrophobic belt' } },
       { label: { zh: '孔道剖面', en: 'Pore profile' }, cmd: 'pore', check: { zh: '仅通道/孔道类结构执行（收缩点半径红绿蓝环带）；非通道跳过', en: 'Channels/pores only; skip otherwise' } },
       { label: { zh: '全量适配', en: 'Fit view' }, cmd: 'zoom', check: { zh: '蛋白+膜整体入框', en: 'Fit protein + slab' } },
     ],

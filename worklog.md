@@ -5279,3 +5279,48 @@ Stage Summary:
   5. 【低】生产部署前置清单（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——沙箱 build 红线不变）
 
 （r125 段 cron 补记，2026-10-15）15min webDevReview 巡检任务 #460464 创建（11:42:10，expr 0 */15 * * * ? 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 38 次实证：r85-r123 连续 37 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r125 开发纪律（基线 guards 928 / 六道门禁链 / E2E 铁律含数字键同位假阴性、WebGL toDataURL 空白、bash 反引号挂起三新坑 / 下轮优先级四条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 928 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r126-a
+Agent: main
+Task: 用户指令「1ph0 的 beta 桶结构的膜画的位置感觉好像不太对，有些斜，是怎么回事？」——膜板倾斜根因诊断与三级轴检测根修
+
+Work Log:
+- 【诊断·数值级】1PHO 单链沉积（2602 原子，三聚体靠 REMARK 350 BIOMT 晶体学 3-fold 生成，P321 空间群膜面 ∥ ab 是教科书结论）→ symmetryAxis 链间 Kabsch 不可达（需 ≥2 链）→ PCA 兜底把倾斜 25.8° 的单体长轴当膜法线（桶轴 cylinder 拟合真值 12.5° 外倾、PCA 与桶轴夹 21.5°）；膜心因腰检测门槛（跨度 66Å < 94Å）回落盒中点（偏 2.9Å）。VLM 复现用户视角：膜板相对桶倾斜 15-25°、屏幕对角倾斜、位置偏高——三条主诉全对上
+- 【回归面全数值化】1FX8 同病（单链 + 晶体 C4 生成，PCA 偏真法线 23°）；1BL8/7AHL/9P6B 走链对称（不变）；1F88 全部 BIOMT 为恒等（行为不变）；7AHL 无双向腰盒中点偏 13.1Å（隐性旧债）；1BL8 盒中点偏 6.4Å
+- 【改动·parser】bioRotations 字段：REMARK 350 BIOMT + MTRIX token 化解析（坑①「BY APPLYING BIOMT TRANSFORMATIONS」说明文本行须 /^BIOMT[123]$/ 过滤；坑② MTRIX 6 token/BIOMT 8 token 列宽不齐）；subsetStructure 不继承（装配元数据描述源寡聚体——子集继承会把二聚体 C2 轴错装到单体，1F88 模板先例）
+- 【改动·pore】bioSymmetryAxis 投票层：[30°,170°] 角度门（C2 二义性拒绝——1F88 膜面平行 2-fold 先例；180° Rodrigues 分量归零顺带绕开）+ 与链 Kabsch 同款簇精炼（符号统一/25°/≥2 票/≥40%）；poreAxis 三级（symmetry → bio → pca）；membraneBeltCenter 疏水带中位（KD≥1.8 CA 投影中位；门闸 IQR ≤ 0.42×聚合物跨度——分母必须是蛋白全跨度，用带自身范围会错杀 1BL8）
+- 【改动·engine】updateMembrane 膜心三级回落（waist → belt → 盒中点）；orient(refs, mode='pca'|'membrane') 新模式：膜法线钉屏幕竖直（符号取向 +z 侧朝上）、水平轴取 PCA 主轴向膜面投影（最宽立面朝镜头）
+- 【改动·commands】orient membrane 分支（坑③：必须先于主 orient 块——主块把 'membrane' 当选择表达式提前 return，分支排后永不达，E2E 实测）；membrane/pore 回执更新（三级检测口径 + 1pho 示例）；PoreProfile 剖面卡 method 三态标签（SYM/BIOMT/PCA）
+- 【改动·模板】5 支膜类模板 orient polymer+turn z 90 → orient membrane（r92 流依赖「PCA≈膜法线」巧合，轴修复后全局分叉；toxin 顶视改 orient membrane+turn x 90）；membrane-context 技能 workflow 第 1 步同步；1K4C selectivity-filter（零膜板）保留 PCA 构图流
+- 【验证·数值】活代码复跑：1PHO/1FX8 method=bio dir=[0,0,1] 精确命中（0.00°）；1BL8/7AHL/9P6B 不变；belt 位移 1PHO 2.8 / 1FX8 3.9 / 1BL8 6.4 / 7AHL 13.2 / 1F88 1.2；可溶性蛋白负向 4HHB 0.7 / 1CRN 0.6（对称核带中位≈盒中，门闸不完美但无害）
+- 【验证·浏览器】1PHO 重载（bioOps=2 活数据）→ membrane 30 → 膜法线世界系 (0,0,1) 引擎级精确命中 → orient membrane 后相机 up=(0,0,1) → VLM 评审 9/10「publication-ready，桶身真实外倾 12.5° 是 porin 三聚体实然姿态」；模板流 figure beta-barrel-porin 同样 9/10 无缺陷
+- 【验证·门禁】lint 0 · guards 928→941（r126 新段 13 锚：BIOMT 解析/投票/腰带/三级入口/C2 拒绝门/膜心回落/orient 模式/命令分支/回执/模板注释/剖面标签/技能流/非膜模板保留——坑④守卫正则元字符必须转义 \( \) \?，裸括号「(deg)」当分组恒 miss）· visual-baseline 4 膜场景有意漂移（1F88 53%/1PHO 11%/7AHL 17%/toggle）→ VLM 三场景复鉴全 PASS 后 capture 重定基线 → check 7/7（0.00%）· smoke 6/6 · dev.log 干净
+
+Stage Summary:
+- 根因：单链沉积 + 晶体对称生成寡聚体的结构（porin 族普遍现象）链间对称检测不可达，PCA 兜底被倾斜的单体长轴带歪——BIOMT 装配元数据是该类结构唯一的对称轴证据源，本轮接入为三级检测的第二级
+- 交付：parser bioRotations · pore bioSymmetryAxis/membraneBeltCenter · engine orient membrane 模式 + 膜心三级 · commands orient membrane · 5 膜模板构图流显式化 · 剖面卡/技能/帮助文案同步 · 13 新守卫
+- 顺带根修：7AHL 膜心 13.1Å 隐性旧债（蘑菇形无双向腰）；1FX8 膜法线 23° 隐性偏差（r92 流自洽掩盖）
+- C2 二义性拒绝（1F88 先例）是设计红线：Cn≥3 环形寡聚轴=膜法线是普遍规律，C2 轴与膜面关系二义不可赌
+- 下一轮建议：①【低】pore on 1PHO 单体的剖面质量评估（BIOMT-z 轴过质心 vs 桶轴 12.5° 夹角——眼口收缩点读数可信度，可评估桶轴 refine）②【低】mmCIF 的 _pdbx_struct_assembly_gen 装配旋转解析（当前仅 PDB 格式）③【低】VLM 对 Load 按钮 hover 态与底部 AI 芯片的残余挑剔（r126-b 段遗留）
+
+---
+Task ID: r126-b
+Agent: frontend-styling-expert（执行）+ main（验证收口）
+Task: 用户指令「首页还是美观度不够，继续重构」——欢迎页二次视觉重构：r124 期刊扉页语态进化为期刊封面语态
+
+Work Log:
+- 【执行】frontend-styling-expert 子代理（三次启动两次超时——Task 工具 context deadline；第三次工作完整落盘但未及自写 worklog/收尾验证，main 接管收口）：WelcomeScreen.tsx +287 行重构 + globals.css r126-b 段（+61）+ SessionResumeCard/ShareLinkLoadCard 降噪
+- 【设计】「期刊封面」语态：卷期刊眉线（dateline 双发丝线 + THE JOURNAL OF MOVISION 右端刊物名）/ 混合字号封面大标题（重点词 1.28em 放大 + 墨线绘入降 45% 墨——VLM「1998 超链接」误读根治）/ 对开跨页版式（图版侧与文字侧等宽，主导图版 A 竖幅 4:5 封面构图 + 图版眉行 + 图注发丝线）/ 进样仪器统一体（输入格 hairline 盒 + 终端提示符 + 2px 墨线基线 + 焦点墨线绘入 + CTA 即进样格右舱等高贴合）/「墨已研好」CTA 两态（合法 4 位编号 → 整块主色墨填充）/ 存档带移出 hero（封面左栏收敛为标题+进样纯排印）/ AI 浮芯退役圆角胶囊（直角墨块同族印刷语态 + translate 悬浮微升）/ 图版 hover 微升 -2px 印刷品拈起语义
+- 【main 收口·移动端根修】子代理超时未完成移动端验证——375px 元素级实测抓到 hero grid auto 轨道按 max-content 撑到 488px（输入格 intrinsic 宽度驱动），Load 按钮被 .mol-scroll 裁切（VLM「headline cut off」与 DOM scrollWidth=375 的矛盾以 getBoundingClientRect 元素级核查裁决）；修法：两个 hero grid 子项补 min-w-0 → CTA right 359≤375 ✓ VLM 复验 hero 零裁切
+- 【验证】lint 0 · guards 941/941（子代理保留全部 r124 锚——font-serif-editorial/plate-frame/accent-ink/PLATE_A/B 字面量全在场）· console 零新错 · 1440 桌面无溢出 · 黄金路径（4HHB 示例行点击 → 工作台挂载 → __molData=4HHB）· 存档带/分享卡/会话恢复卡/六示例/画廊过滤全在场
+- 【VLM 终评】真深色 9.2/10「masterclass in Scientific Editorial——respects the user's intelligence」（墨色 off-black 防眼疲劳、plate 描边哑光衬托、绿印色 accent）；浅色 8.5/10（anti-slop 9.5——「designed by a graphic designer who understands science」）；移动端 hero 零裁切 ✓。两次评审均 ≥8.5 达标
+- 【VLM 残余挑剔（下轮候选）】Load 按钮纯黑 hover 态反馈、底部 AI 芯片位置语义（「journals don't have chatbot toggles in the margins」）、暗色输入格强光环境对比度
+
+Stage Summary:
+- 设计资产：期刊封面语态设计系统（dateline 眉线族/混合字号大标题/进样仪器统一体/墨已研好 CTA 两态/对开跨页图版/直角墨块浮芯）——r124「扉页」的封面级进化，概念同源（论文图式复现）而非装饰驱动
+- 文件交付：WelcomeScreen.tsx（983 行）· globals.css r126-b 段 · SessionResumeCard/ShareLinkLoadCard
+- 坑（新入档）：①Task 子代理的 VLM 迭代循环易超 context deadline——「工作落盘但验证/worklog 未闭环」状态须 main 以 git diff+守卫+浏览器接管收口；②移动端断言必须元素级 getBoundingClientRect——document.scrollWidth 会被 overflow-y-auto 容器静默裁切伪装成「无溢出」（本轮 488px 裁切在 scrollWidth=375 下隐形）；③grid 隐式 auto 轨道按 max-content 定宽——输入类组件（intrinsic size 大）进 grid 子项必须 min-w-0
+- 下一轮建议：①【低】Load 按钮 hover 微光/微升反馈 ②【低】AI 芯片收敛进「工具」菜单或 masthead 集成（VLM 两次评审共同点名）③【低】浅色输入格 focus 对比度微调
+
+（r126 段 cron 补记，2026-10-15）15min webDevReview 巡检任务 #460632 创建（14:02:50，expr 0 */15 * * * ? 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 39 次实证：r85-r125 连续 38 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r126 开发纪律（基线 guards 941 / 六道门禁链与 kill 红线 / E2E 铁律含元素级 getBoundingClientRect 移动端断言与守卫正则转义两新坑 / 膜轴三级检测设计红线 C2 二义性拒绝 / 下轮优先级四条）——配额恢复后可直接重建。巡检缺席期防线沿用：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 941 + smoke 6 + visual-baseline 7）。

@@ -1,8 +1,24 @@
 'use client'
 
-// 欢迎页 r124「学术期刊扉页」全面重设计：
+// 欢迎页 r126-b「期刊封面」二次重构（r124 扉页语态的进化）：
 // ─────────────────────────────────────────────────────────────────────────────
-// 设计概念：MolVision 的灵魂是复现 Cell/Nature/Science 的论文图式——那么欢迎页
+// 概念进化：r124 把欢迎页排印成一页期刊「扉页」；本轮升格为「封面」语态——
+// 更电影感、更大胆的黑白空间、更强的层级节奏（VLM 8.5 → 冲 9+）：
+//   · 卷期刊眉线（dateline）：元数据行坐进双发丝线之间，成为封面第一道排印
+//     结构——修「VOL.16 kicker 悬浮无根」
+//   · 混合字号封面大标题：重点词 1.28em 放大 + 墨线绘入（accent-ink）
+//   · 导语 standfirst：正字重小字轨（封面大标题下的呼吸位）
+//   · 进样格：hairline 盒 + 微底填充 + 2px 墨线基线 + 焦点主色墨线自左绘入
+//     ——修「输入框可交互性暧昧」；CTA「墨已研好」：合法 4 位编号时由描边
+//     态整块填充为墨块——修「Load 存在感不足」
+//   · 主导竖幅图版 A（4:5 封面构图 + 图版眉行 + 图注发丝线）+ 图版 B 与图库
+//     索引栏——修「左右视觉重量失衡」（图版侧升为主导锚点，版心 1080→1200）
+//   · 墨块直角 AI 胶囊（welcome-float-chip 去圆角去毛玻璃）——修「SaaS 圆角
+//     气泡破坏锐利排印语态」
+//   · link-ink：排印链接悬停墨线自左绘入（§02 头部动作族）
+// r124 设计概念与全部功能/handler 原样保留（见下）。
+// ─────────────────────────────────────────────────────────────────────────────
+// r124 设计概念：MolVision 的灵魂是复现 Cell/Nature/Science 的论文图式——那么欢迎页
 // 本身就该被排印成一页期刊。概念驱动（而非装饰驱动）是去「AI 味」的根本：
 //   · 刊眉顶栏：六角铭印 + 衬线字标 MolVision + 小写字距副题
 //   · 扉页 hero：卷期元数据行（VOL.16 · WEBGL · RCSB LIVE · N STYLES——原遥测
@@ -28,7 +44,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, BookOpenText, Bot, ChevronRight,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, BookOpenText, ChevronRight,
   FileUp, FolderOpen, Github, ImagePlus, Loader2, Moon, Pencil, Play, Sun, Wand2,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
@@ -78,8 +94,10 @@ function PlateImg({ tpl, alt, className }: { tpl: FigureTemplate; alt: string; c
   )
 }
 
-// ── 扉页图版（Plate）：装裱印版（发丝框 + 印刷留白边）+ 期刊图注；点击即演示 ──
-function HeroPlate({ tpl, label, aspect, className, delay, busy, onDemo }: {
+// ── 扉页图版（Plate）：图版眉行（kicker + 发丝线 + 演示结构号）+ 装裱印版 +
+//    期刊图注（发丝线之上的名称/tagline/溯源）；点击即演示。
+//    r126-b：feature=true 为主导封面图版——竖幅构图 + tagline 图注行。 ──
+function HeroPlate({ tpl, label, aspect, className, delay, busy, onDemo, feature = false }: {
   tpl: FigureTemplate
   label: DualText
   aspect: string
@@ -87,10 +105,20 @@ function HeroPlate({ tpl, label, aspect, className, delay, busy, onDemo }: {
   delay: string
   busy: boolean
   onDemo: () => void
+  /** 主导封面图版：图注含 tagline 行（更完整的期刊图版说明） */
+  feature?: boolean
 }) {
   const { t } = useI18n()
   return (
     <figure className={cn('journal-row-in m-0', className)} style={{ animationDelay: delay }}>
+      {/* 图版眉行：图号 + 发丝线延展 + 演示结构号（期刊图版编号惯例） */}
+      <div className="mb-2 flex items-center gap-2.5">
+        <span className="journal-kicker shrink-0 text-primary">{t(label)}</span>
+        <span aria-hidden className="h-px min-w-0 flex-1 bg-foreground/15" />
+        <span className="shrink-0 font-mono text-[9.5px] font-medium uppercase tracking-[0.08em] tabular-nums text-muted-foreground">
+          {tpl.demo}
+        </span>
+      </div>
       <button
         type="button"
         onClick={onDemo}
@@ -105,10 +133,10 @@ function HeroPlate({ tpl, label, aspect, className, delay, busy, onDemo }: {
           <PlateImg
             tpl={tpl}
             alt={t(tpl.tagline)}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+            className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
           />
           {/* 演示徽章（常显——触屏无 hover；PDB 号即「点会发生什么」的说明） */}
-          <span className="absolute bottom-1.5 right-1.5 flex h-5 items-center gap-1 border border-foreground/15 bg-background/85 px-1.5 font-mono text-[9px] font-semibold leading-none backdrop-blur-sm">
+          <span className="absolute bottom-2 right-2 flex h-5 items-center gap-1 border border-foreground/15 bg-background/90 px-1.5 font-mono text-[9px] font-semibold leading-none">
             <Play className="h-2 w-2" aria-hidden />
             {tpl.demo}
           </span>
@@ -124,12 +152,19 @@ function HeroPlate({ tpl, label, aspect, className, delay, busy, onDemo }: {
           )}
         </span>
       </button>
-      <figcaption className="mt-2 flex items-baseline gap-2">
-        <span className="journal-kicker shrink-0 text-primary">{t(label)}</span>
-        <span className="font-serif-editorial truncate text-[12.5px] font-semibold leading-tight">{t(tpl.name)}</span>
-        <span className="ml-auto shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">
-          {tpl.citation.journal} · {tpl.citation.year}
-        </span>
+      {/* 图注：发丝线上坐名称/主导图注/溯源——期刊图版说明惯例 */}
+      <figcaption className="mt-2.5 border-t border-foreground/15 pt-2">
+        <div className="flex items-baseline gap-2.5">
+          <span className="font-serif-editorial truncate text-[13.5px] font-semibold leading-tight">{t(tpl.name)}</span>
+          <span className="ml-auto shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">
+            {tpl.citation.journal} · {tpl.citation.year}
+          </span>
+        </div>
+        {feature && (
+          <div className="mt-1 truncate text-[11px] leading-relaxed text-muted-foreground" title={t(tpl.tagline)}>
+            {t(tpl.tagline)}
+          </div>
+        )}
       </figcaption>
     </figure>
   )
@@ -170,7 +205,7 @@ function RowCard({ tpl, delay, busy, onDemo }: {
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
         />
         {/* 演示徽章（常显——触屏无 hover） */}
-        <span className="absolute bottom-1.5 right-1.5 flex h-5 items-center gap-1 border border-foreground/15 bg-background/85 px-1.5 font-mono text-[9px] font-semibold leading-none backdrop-blur-sm">
+        <span className="absolute bottom-1.5 right-1.5 flex h-5 items-center gap-1 border border-foreground/15 bg-background/90 px-1.5 font-mono text-[9px] font-semibold leading-none">
           <Play className="h-2 w-2" aria-hidden />
           {tpl.demo}
         </span>
@@ -236,7 +271,7 @@ function GalleryCard({ tpl, index, busy, onDemo, onEdit }: {
             )}
             {/* 演示徽章（hover 浮现；触屏恒显） */}
             <span className={cn(
-              'absolute bottom-1.5 right-1.5 flex h-6 items-center gap-1 border border-foreground/15 bg-background/85 px-2 font-mono text-[10px] font-semibold backdrop-blur-sm transition-opacity duration-200',
+              'absolute bottom-1.5 right-1.5 flex h-6 items-center gap-1 border border-foreground/15 bg-background/90 px-2 font-mono text-[10px] font-semibold transition-opacity duration-200',
               'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100',
             )}>
               <Play className="h-2.5 w-2.5" aria-hidden />
@@ -387,7 +422,8 @@ export function WelcomeScreen() {
           </g>
         </svg>
         <span className="font-serif-editorial text-[17px] font-semibold leading-none tracking-[-0.01em]">MolVision</span>
-        <span className="journal-kicker hidden text-muted-foreground/80 lg:block">Molecular Visualization Studio</span>
+        {/* r126-b：顶栏副题退役——刊物名由卷期眉线右端「THE JOURNAL OF
+            MOLECULAR FIGURES」独占承担（相邻两条期刊铭文 = 元数据噪音） */}
         <div className="flex-1" />
         <div className="flex shrink-0 items-center gap-1.5">
           <button
@@ -411,72 +447,135 @@ export function WelcomeScreen() {
         </div>
       </header>
 
-      {/* ── 主体：期刊单栏（居中版心 + 发丝章节线；单列滚动） ── */}
+      {/* ── 主体：期刊封面版式（加宽版心 1200 + 封面刊眉线；单列滚动） ── */}
       <div className="mol-scroll relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1080px] px-4 pb-16 sm:px-8">
+        <div className="mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-8">
 
-          {/* ══ 扉页 hero：刊眉 + 衬线大标题 + 进样表单 ｜ 图版 A/B ══ */}
-          <section className="grid gap-10 pb-14 pt-8 sm:pt-12 lg:grid-cols-12 lg:gap-12">
-            {/* 左：排印主体（<lg 单列——进样表单先于图版，核心流程最短路径） */}
-            <div className="order-1 flex flex-col lg:col-span-7">
-              {/* 卷期元数据行（原遥测板信息的排印化：版本/引擎/数据源/图式数） */}
-              <div className="welcome-in journal-kicker text-muted-foreground" style={{ animationDelay: '80ms' }}>
+          {/* ══ 封面：卷期刊眉线 + 混合字号大标题 + 进样表单 ｜ 主导竖幅图版 A ══ */}
+          <section className="pb-14 pt-6 sm:pt-8">
+            {/* 卷期刊眉线（dateline）：元数据坐进双发丝线之间——封面的第一道
+                排印结构（修 r124 遗留「kicker 悬浮无根」） */}
+            <div
+              className="welcome-in journal-kicker flex items-center gap-4 border-y border-foreground/15 py-2 text-muted-foreground"
+              style={{ animationDelay: '80ms' }}
+            >
+              <span className="hidden shrink-0 sm:inline">2026</span>
+              <span className="min-w-0 flex-1 truncate text-center">
                 VOL.16<span className="jk-sep">·</span>WEBGL<span className="jk-sep">·</span>RCSB&nbsp;LIVE<span className="jk-sep">·</span>{allTemplates.length}&nbsp;STYLES
-              </div>
+              </span>
+              <span className="hidden shrink-0 md:inline">{t({ zh: '分子图式期刊', en: 'THE JOURNAL OF MOLECULAR FIGURES' })}</span>
+            </div>
 
+            <div className="grid gap-10 pt-8 sm:pt-10 lg:grid-cols-2 lg:gap-12">
+            {/* 左：排印主体（<lg 单列——进样表单先于图版，核心流程最短路径）。
+                r126-b 封面版式：左右各半（对开跨页）——图版侧与文字侧等宽，
+                主导图版 A 得以占据整幅半版（视觉锚点最大化） */}
+            <div className="order-1 flex min-w-0 flex-col">
+              {/* 封面大标题：混合字号（重点词 1.28em 放大）+ 墨线绘入 */}
               <h1
-                className="welcome-in font-serif-editorial mt-5 text-[clamp(28px,4.4vw,50px)] font-medium leading-[1.16] tracking-[-0.012em]"
+                className={cn(
+                  'welcome-in font-serif-editorial text-balance font-medium tracking-[-0.015em]',
+                  locale === 'zh'
+                    ? 'text-[clamp(30px,4.2vw,46px)] leading-[1.18]'
+                    : 'text-[clamp(30px,4vw,44px)] leading-[1.16]',
+                )}
                 style={{ animationDelay: '120ms' }}
               >
                 {locale === 'zh' ? (
-                  <>把蛋白质、核酸与配体，<br />排成<span className="accent-ink text-primary">值得发表的图</span>。</>
+                  <>把蛋白质、核酸与配体，<br />排成<span className="accent-ink whitespace-nowrap text-[1.28em] text-primary dark:text-foreground">值得发表的图</span>。</>
                 ) : (
-                  <>Proteins, nucleic acids &amp; ligands,<br />set as <span className="accent-ink italic text-primary">publication-worthy</span> figures.</>
+                  <>Proteins, nucleic acids &amp; ligands, set as <span className="accent-ink whitespace-nowrap text-[1.18em] italic text-primary dark:text-foreground">publication-worthy</span> figures.</>
                 )}
               </h1>
-              <p className="welcome-in mt-5 max-w-md text-[13px] leading-relaxed text-muted-foreground" style={{ animationDelay: '160ms' }}>
+              {/* 导语（standfirst）：衬线字族（英文斜体——期刊封面导语惯例；
+                  中文保持正体——CJK 伪斜体排印禁忌），封面大标题下的呼吸位 */}
+              <p
+                className={cn(
+                  'welcome-in font-serif-editorial mt-5 max-w-[520px] text-[15px] text-foreground/80 dark:text-foreground/90',
+                  locale === 'zh' ? 'leading-[1.9]' : 'italic leading-[1.85]',
+                )}
+                style={{ animationDelay: '160ms' }}
+              >
                 {t({
                   zh: '在浏览器中探索蛋白质 · 核酸 · 配体与电子密度——渲染、测量、排版一气呵成。',
                   en: 'Explore proteins · nucleic acids · ligands & electron density in the browser — render, measure, and typeset in one flow.',
                 })}
               </p>
 
-              {/* 进样表单：大号等宽字 + 墨色下划线 + 墨块 CTA（期刊语态的「投稿」行） */}
-              <form
-                onSubmit={e => { e.preventDefault(); submitId() }}
-                className="welcome-in mt-9 flex w-full max-w-md items-end gap-3"
-                style={{ animationDelay: '200ms' }}
-              >
-                <label className="min-w-0 flex-1">
-                  <span className="journal-kicker block text-muted-foreground">
+              {/* 进样格（r126-b）：hairline 盒 + 2px 墨线基线——可交互性不再
+                  暧昧；焦点时主色墨线自左绘入；n/4 计数即时反馈；CTA「墨已
+                  研好」——合法 4 位编号时由描边态整块填充为墨块 */}
+              <div className="welcome-in mt-10 w-full max-w-[520px]" style={{ animationDelay: '200ms' }}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="journal-kicker text-muted-foreground">
                     {t({ zh: 'PDB 编号 · RCSB 实时', en: 'PDB ID · RCSB LIVE' })}
                   </span>
-                  <input
-                    ref={inputRef}
-                    value={id}
-                    onChange={e => setId(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
-                    maxLength={4}
-                    placeholder={t({ zh: '如 4HHB', en: 'e.g. 4HHB' })}
-                    aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="mt-2 h-11 w-full border-0 border-b-2 border-foreground/25 bg-transparent font-mono text-[22px] font-medium uppercase leading-none tracking-[0.3em] text-foreground caret-primary outline-none transition-[border-color] duration-200 placeholder:font-sans placeholder:text-[12px] placeholder:font-normal placeholder:normal-case placeholder:tracking-[0.06em] placeholder:text-muted-foreground/70 hover:border-foreground/45 focus-visible:border-primary dark:border-white/20 dark:hover:border-white/35"
-                  />
-                </label>
-                <button
-                  type="submit"
-                  disabled={loading || id.length !== 4}
-                  className="flex h-[46px] shrink-0 select-none items-center gap-2 bg-foreground px-5 font-mono text-[12.5px] font-semibold uppercase tracking-[0.08em] text-background transition-[background-color,color,translate] duration-150 hover:bg-primary hover:text-primary-foreground active:translate-y-px disabled:pointer-events-none disabled:opacity-35 dark:bg-foreground dark:text-background dark:hover:bg-primary dark:hover:text-primary-foreground"
+                  {id.length > 0 && (
+                    <span
+                      className={cn(
+                        'journal-kicker tabular-nums transition-colors duration-200',
+                        id.length === 4 ? 'text-primary' : 'text-muted-foreground/60',
+                      )}
+                    >
+                      {id.length}/4
+                    </span>
+                  )}
+                </div>
+                <form
+                  onSubmit={e => { e.preventDefault(); submitId() }}
+                  className="mt-2 flex w-full items-stretch"
                 >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {t({ zh: '载入', en: 'Load' })}
-                  {!loading && <ArrowRight className="h-3.5 w-3.5" aria-hidden />}
-                </button>
-              </form>
+                  {/* 进样仪器（r126-b 收口版）：输入格 + 墨钮统一为同一台仪器——
+                      共享 hairline 外框与 2px 墨线基线（「双按钮混淆」与「CTA
+                      悬空」的根治：CTA 即进样格的右舱，等高贴合无 gap） */}
+                  <span className="group relative flex min-w-0 flex-1 items-center border border-r-0 border-b-2 border-b-foreground/75 bg-foreground/[0.05] shadow-[inset_0_1px_0_oklch(0.25_0.01_80/0.06)] transition-colors duration-200 hover:border-foreground/55 hover:border-b-foreground/90 focus-within:border-foreground/55 focus-within:bg-foreground/[0.07] dark:border-white/[0.45] dark:border-r-0 dark:border-b-white/[0.7] dark:bg-white/[0.09] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] dark:hover:border-white/[0.55] dark:hover:border-b-white/80 dark:focus-within:border-white/[0.55] dark:focus-within:bg-white/[0.11]">
+                    {/* 终端式进样提示符（与状态行「> 待发」同一语态——字段可
+                        键入的可见邀约） */}
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute left-3.5 font-mono text-[15px] leading-none text-muted-foreground/70"
+                    >
+                      &gt;
+                    </span>
+                    <input
+                      ref={inputRef}
+                      value={id}
+                      onChange={e => setId(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
+                      maxLength={4}
+                      placeholder={t({ zh: '如 4HHB', en: 'e.g. 4HHB' })}
+                      aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="h-[56px] w-full bg-transparent px-4 pl-9 font-mono text-[24px] font-medium uppercase leading-none tracking-[0.22em] text-foreground caret-primary outline-none placeholder:font-serif-editorial placeholder:text-[13.5px] placeholder:italic placeholder:font-normal placeholder:normal-case placeholder:tracking-[0.02em] placeholder:text-muted-foreground placeholder:dark:text-foreground/60"
+                    />
+                    {/* 焦点墨线绘入（accent-ink 的焦点态姊妹篇——2px 主色线覆写基线） */}
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-x-0 bottom-[-2px] h-[2px] origin-left scale-x-0 bg-primary transition-transform duration-300 ease-out motion-reduce:transition-none group-focus-within:scale-x-100"
+                    />
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={loading || id.length !== 4}
+                    className={cn(
+                      'flex shrink-0 select-none items-center gap-2.5 border-2 px-7 font-mono text-[14px] font-bold uppercase tracking-[0.12em] transition-[background-color,border-color,color,translate] duration-200 active:translate-y-px disabled:pointer-events-none',
+                      /* 「墨已研好」两态：休眠 = 整块墨钮（封面级存在感）；合法
+                         4 位编号 = 整块主色墨填充（accent 态 unmistakable） */
+                      id.length === 4
+                        ? 'border-primary bg-primary text-primary-foreground hover:brightness-110'
+                        : 'border-foreground bg-foreground text-background dark:border-white/90 dark:bg-white dark:text-black',
+                    )}
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {t({ zh: '载入', en: 'Load' })}
+                    {!loading && <ArrowRight className="h-3.5 w-3.5" aria-hidden />}
+                  </button>
+                </form>
+              </div>
 
               {/* 状态行：固定高度避免加载态布局位移；r124 终端式就绪反馈——
                   合法 4 位编号即时回显待发目标（期刊排印 × 仪器终端的交叉语态） */}
-              <div className="welcome-in mt-3 flex h-4 w-full max-w-md items-center" style={{ animationDelay: '240ms' }}>
+              <div className="welcome-in mt-3 flex h-4 w-full max-w-[520px] items-center" style={{ animationDelay: '240ms' }}>
                 {loading ? (
                   <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary">
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -495,25 +594,20 @@ export function WelcomeScreen() {
               </div>
 
               {/* 本地文件：排印链接（正字重 + 下划线偏移），格式族等宽小学注 */}
-              <div className="welcome-in mt-5 flex w-full max-w-md flex-wrap items-baseline gap-x-4 gap-y-2" style={{ animationDelay: '280ms' }}>
+              <div className="welcome-in mt-5 flex w-full max-w-[520px] flex-wrap items-baseline gap-x-4 gap-y-2" style={{ animationDelay: '280ms' }}>
                 <button
                   onClick={() => fileRef.current?.click()}
                   disabled={loading}
-                  className="group inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-medium text-foreground/85 underline decoration-foreground/25 underline-offset-4 transition-colors duration-150 hover:text-primary hover:decoration-primary/60 disabled:pointer-events-none disabled:opacity-50"
+                  className="group inline-flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold text-foreground underline decoration-foreground/35 underline-offset-4 transition-colors duration-150 hover:text-primary hover:decoration-primary/60 disabled:pointer-events-none disabled:opacity-50"
                 >
                   <FolderOpen className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-px" aria-hidden />
                   {t({ zh: '打开本地文件…', en: 'Open local file…' })}
                 </button>
-                <span className="font-mono text-[9.5px] tracking-wide text-muted-foreground/80">
+                <span className="font-mono text-[9.5px] tracking-wide text-muted-foreground/90">
                   PDB / CIF / CCP4 / .molvision
                 </span>
               </div>
 
-              {/* 会话区：恢复卡（有存档时挂载）+ r86 分享链接粘贴卡 */}
-              <div className="welcome-in mt-7 flex w-full max-w-md flex-col gap-2.5" style={{ animationDelay: '320ms' }}>
-                <SessionResumeSlot />
-                <ShareLinkLoadCard />
-              </div>
               <input
                 ref={fileRef}
                 type="file"
@@ -528,22 +622,24 @@ export function WelcomeScreen() {
               />
             </div>
 
-            {/* 右：图版 A/B（引擎真实渲染的代表作品；<lg 移至进样表单之后） */}
-            <div className="order-2 lg:col-span-5 lg:pt-1">
+            {/* 右：主导竖幅图版 A（4:5 封面构图——引擎真实渲染的代表作品为
+                视觉锚点）+ 图版 B 与图库索引栏；<lg 移至进样表单之后 */}
+            <div className="order-2 min-w-0">
               <HeroPlate
                 tpl={plateA}
-                label={{ zh: '图版 A', en: 'PLATE A' }}
-                aspect="aspect-[4/3]"
+                label={{ zh: '图版 A · 封面', en: 'PLATE A · COVER' }}
+                aspect="aspect-[4/5]"
                 delay="360ms"
                 busy={busyId === plateA.id || loading}
                 onDemo={() => void demo(plateA)}
+                feature
               />
-              <div className="mt-4 flex items-stretch gap-4 lg:mt-5">
+              <div className="mt-5 flex items-stretch gap-4">
                 <HeroPlate
                   tpl={plateB}
                   label={{ zh: '图版 B', en: 'PLATE B' }}
                   aspect="aspect-[4/3]"
-                  className="w-[72%] shrink-0"
+                  className="w-[62%] shrink-0"
                   delay="400ms"
                   busy={busyId === plateB.id || loading}
                   onDemo={() => void demo(plateB)}
@@ -551,11 +647,11 @@ export function WelcomeScreen() {
                 {/* 图库索引栏（sm+）：计数 + 衬线小标 + 引导至画廊章节 */}
                 <a
                   href="#welcome-gallery"
-                  className="welcome-in group hidden flex-col items-start gap-1.5 self-st border-l border-foreground/12 pl-4 sm:flex"
+                  className="welcome-in group hidden flex-col items-start gap-1.5 self-stretch border-l border-foreground/15 pl-4 sm:flex"
                   style={{ animationDelay: '440ms' }}
                 >
-                  <span className="font-mono text-[11px] font-bold tabular-nums leading-none text-primary">{allTemplates.length}</span>
-                  <span className="font-serif-editorial text-[13.5px] font-semibold leading-tight">
+                  <span className="font-mono text-[12px] font-bold tabular-nums leading-none text-primary">{allTemplates.length}</span>
+                  <span className="font-serif-editorial text-[14px] font-semibold leading-tight">
                     {t({ zh: '图式全库', en: 'Full library' })}
                   </span>
                   <span className="text-[9.5px] leading-relaxed text-muted-foreground">
@@ -563,6 +659,25 @@ export function WelcomeScreen() {
                   </span>
                   <ArrowDown className="mt-auto h-3.5 w-3.5 text-muted-foreground transition-[color,translate] duration-200 group-hover:translate-y-0.5 group-hover:text-primary" aria-hidden />
                 </a>
+              </div>
+            </div>
+            </div>
+          </section>
+
+          {/* ══ 存档带：会话恢复 + 分享链接粘贴（r126-b 封面之下的「存档启事」
+              横带——原左栏内嵌块移出，封面左栏收敛为标题+进样的纯排印；
+              恢复卡缺席时分享卡独占左格，期刊式非对称） ══ */}
+          <section aria-label={t({ zh: '存档与会话恢复', en: 'Archive and session resume' })} className="pb-12">
+            <div className="welcome-in" style={{ animationDelay: '320ms' }}>
+              <div className="mb-2.5 flex items-center gap-2.5">
+                <span className="journal-kicker shrink-0 text-muted-foreground">
+                  {t({ zh: '存档 · 会话 · 分享', en: 'ARCHIVE · SESSION · SHARED' })}
+                </span>
+                <span aria-hidden className="h-px min-w-0 flex-1 bg-foreground/15" />
+              </div>
+              <div className="grid items-stretch gap-2.5 sm:grid-cols-2">
+                <SessionResumeSlot />
+                <ShareLinkLoadCard />
               </div>
             </div>
           </section>
@@ -627,7 +742,7 @@ export function WelcomeScreen() {
                   type="button"
                   data-welcome-create-template
                   onClick={() => { setUi({ templateOpen: true }); window.dispatchEvent(new CustomEvent('open-template-upload')) }}
-                  className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 text-[11.5px] font-semibold text-primary transition-colors duration-150 hover:text-primary/75"
+                  className="link-ink inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 text-[11.5px] font-semibold text-primary transition-colors duration-150 hover:text-primary/75"
                   title={t({ zh: '上传论文图，AI 解析图式生成你的自定义模板', en: 'Upload a paper figure — the AI parses it into your custom template' })}
                 >
                   <ImagePlus className="h-3.5 w-3.5" aria-hidden />
@@ -636,7 +751,7 @@ export function WelcomeScreen() {
                 <button
                   type="button"
                   onClick={() => setUi({ templateOpen: true })}
-                  className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 text-[11.5px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                  className="link-ink inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 text-[11.5px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground"
                   title={t({ zh: '打开完整模板库（可应用到已加载结构）', en: 'Open the full template library (applies to loaded structures)' })}
                 >
                   {t({ zh: '在库中浏览', en: 'Browse library' })}
@@ -808,19 +923,19 @@ export function WelcomeScreen() {
         </div>
       </div>
 
-      {/* AI 助手悬浮入口（素雅胶囊：⌘J 快捷键；面板打开时让位隐藏） */}
+      {/* AI 助手悬浮入口（r126-b 纯排印藏书标签：直角发丝描边 + 方形状态灯
+          + 等宽微大型——零图标零投影零圆角；快捷键语义只留 footer 学注
+          （kbd 组合在两轮 VLM 中被误读为 SaaS 开关——本体征退役）；
+          ⌘J 快捷键行为保留；面板打开时让位隐藏） */}
       {!agentOpen && (
         <button
           onClick={() => setUi({ agentOpen: true })}
-          className="welcome-in welcome-float-chip group bottom-5 right-5 z-20 flex h-9 select-none items-center gap-2 border-border bg-background/92 px-3.5 text-foreground/85 shadow-[0_1px_10px_oklch(0.25_0.01_80/0.1)] hover:border-primary/50 hover:text-foreground dark:shadow-[0_1px_10px_oklch(0_0_0/0.4)]"
+          className="welcome-in welcome-float-chip group bottom-5 right-5 z-20 flex h-10 select-none items-center gap-2.5 border border-foreground/30 bg-background px-4 text-foreground/85 transition-colors duration-200 hover:border-primary/60 hover:text-foreground dark:border-white/[0.35] dark:bg-background dark:text-foreground/85 dark:hover:border-primary/60 dark:hover:text-foreground"
           style={{ animationDelay: '500ms' }}
           aria-keyshortcuts="Control+J"
         >
-          <Bot className="h-3.5 w-3.5 text-primary" aria-hidden />
-          <span className="text-[11.5px] font-semibold tracking-wide">{t({ zh: 'AI 助手', en: 'AI Assistant' })}</span>
-          <span className="hidden items-center gap-0.5 font-mono text-[9px] font-medium text-muted-foreground/80 sm:flex">
-            <kbd className="border border-foreground/15 bg-transparent px-1 py-px leading-none">⌘</kbd>J
-          </span>
+          <span aria-hidden className="h-1.5 w-1.5 shrink-0 bg-primary" />
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em]">{t({ zh: 'AI 助手', en: 'AI Assistant' })}</span>
         </button>
       )}
 

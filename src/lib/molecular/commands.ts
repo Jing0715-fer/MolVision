@@ -139,7 +139,7 @@ export const COMMAND_HELP: { cmd: string; cmdEn?: string; desc: DualText; exampl
   { cmd: 'view <front|top|left|right|back|bottom|x|y|z>', desc: { zh: '正交视角预设（保持距离平滑转）', en: 'Orthographic view presets (smooth, distance preserved)' }, example: 'view top · view front' },
   { cmd: 'activate <名|编号>', cmdEn: 'activate <name|index>', desc: { zh: '切换活动结构（多结构工作流）', en: 'Switch active structure (multi-structure workflows)' }, example: 'activate 1BQL' },
   { cmd: 'disable|enable [名]', desc: { zh: '隐藏/恢复整个结构对象（缺省活动结构；morph 模板收尾清理源构象）', en: 'Hide/restore a whole structure object (defaults to the active one; morph templates clean up source conformers)' }, example: 'disable 4ake · enable m1' },
-  { cmd: 'orient [sel]', desc: { zh: '主轴对齐视角（PCA）', en: 'Principal-axis aligned view (PCA)' }, example: 'orient chain A' },
+  { cmd: 'orient [sel|membrane]', desc: { zh: '主轴对齐视角（PCA）；orient membrane = 膜法线竖直（水平膜板侧视）', en: 'Principal-axis aligned view (PCA); orient membrane = membrane normal vertical (horizontal-slab side view)' }, example: 'orient chain A · orient membrane' },
   { cmd: 'get_view / set_view', desc: { zh: '视角导出/恢复（JSON）', en: 'Export/restore camera view (JSON)' }, example: 'get_view' },
   { cmd: 'view save|go|del|list…', desc: { zh: '视角书签（缩略图+平滑跳转，数字键 1-9）', en: 'View bookmarks (thumbnails + smooth jumps, number keys 1-9)' }, example: 'view save 口袋', exampleEn: 'view save pocket' },
   { cmd: 'tour [id]|stop', desc: { zh: '引导式演示场景（逐步自动操作）', en: 'Guided demo scenes (stepwise auto-operation)' }, example: 'tour quickstart' },
@@ -1215,6 +1215,24 @@ export function runCommand(raw: string): void {
     return ok(n > 0 ? tt({ zh: `已清空所有结构（${n} 个；彻底重置含书签/时间轴用 session new）`, en: `Cleared all structures (${n}; use session new to also reset bookmarks/timeline)` }) : tt({ zh: '当前没有已加载的结构', en: 'No structures loaded' }))
   }
 
+  // r126：orient membrane —— 膜法线（poreAxis 三级：链间对称→BIOMT 装配元数据→PCA）
+  // 钉到屏幕竖直：脂双层板水平、胞外朝上的标准膜蛋白侧视构图。膜类模板族 r92
+  // 「orient polymer + turn z 90」依赖 PCA≈膜法线的巧合——1PHO 轴修复后分叉 25.8°，
+  // 巧合不再成立（模板已同步切换）。【必须先于主 orient 块】——主块把 'membrane'
+  // 当选择表达式解析会提前 return（E2E 实测坑：分支排在主块后永不达）。
+  if (cmd === 'orient' && (parts[1] ?? '').toLowerCase() === 'membrane') {
+    const s = useMolStore.getState()
+    const eng = engineRef.current
+    if (!s.activeId) return err(tt({ zh: '没有活动结构（先加载膜蛋白，如 load 1pho / load 1bl8 / load 1fx8）', en: 'No active structure (load a membrane protein first, e.g. load 1pho / load 1bl8 / load 1fx8)' }))
+    if (!eng) {
+      // 视图切换窗口（与 orient 同语义）：入队等待冲刷
+      whenEngineReady(() => engineRef.current?.orient(undefined, 'membrane'))
+    } else {
+      eng.orient(undefined, 'membrane')
+    }
+    return ok(tt({ zh: '视角已对齐膜法线（竖直：膜板水平、胞外朝上；对称轴/装配轴优先，PCA 兜底）', en: 'View aligned to the membrane normal (vertical: slab horizontal, extracellular up; symmetry / assembly axis first, PCA fallback)' }))
+  }
+
   if (cmd === 'orient') {
     // 主轴对齐（PyMOL orient：PCA）；可带选择表达式（容忍逗号写法 orient ligand, 5）
     const rest = input.slice(parts[0].length).trim().replace(/,/g, ' ')
@@ -1835,7 +1853,9 @@ export function runCommand(raw: string): void {
     const nWide = result.samples.filter(x => x.r >= HOLE_MAX_GREEN).length
     const axLabel = result.method === 'symmetry'
       ? tt({ zh: '对称轴（同构亚基刚体旋转轴，自动检测）', en: 'symmetry axis (rigid-body rotation between homologous subunits, auto-detected)' })
-      : tt({ zh: '主方差轴（PCA）', en: 'principal-variance axis (PCA)' })
+      : result.method === 'bio'
+        ? tt({ zh: '装配对称轴（生物装配 BIOMT 元数据，自动检测）', en: 'assembly symmetry axis (BIOMT biological-assembly metadata, auto-detected)' })
+        : tt({ zh: '主方差轴（PCA）', en: 'principal-variance axis (PCA)' })
     ok(tt({ zh: `孔道剖面完成：通道轴 = ${axLabel} · 蛋白跨度 ${result.span.toFixed(1)} Å${result.zone ? ` · 跨膜腰窗 [${(result.zone.center - result.zone.halfWidth).toFixed(0)}, ${(result.zone.center + result.zone.halfWidth).toFixed(0)}] Å（采样聚焦腰窗±两端腔）` : ''} · ${result.nAtoms.toLocaleString(loc())} 原子 · ${result.ms.toFixed(0)} ms`, en: `Pore profile done: channel axis = ${axLabel} · protein span ${result.span.toFixed(1)} Å${result.zone ? ` · TM waist [${(result.zone.center - result.zone.halfWidth).toFixed(0)}, ${(result.zone.center + result.zone.halfWidth).toFixed(0)}] Å (sampling focused on waist ± vestibules)` : ''} · ${result.nAtoms.toLocaleString(loc())} atoms · ${result.ms.toFixed(0)} ms` }))
     ok(tt({ zh: `收缩点（最窄）半径 ${result.constriction.r.toFixed(2)} Å @ 轴向 ${result.constriction.t.toFixed(1)} Å——分区：红(过窄<${HOLE_NARROW}) ${nNarrow} 点 · 绿(可过) ${nMid} 点 · 蓝(宽敞>${HOLE_MAX_GREEN}) ${nWide} 点；视口右侧剖面卡可读图，pore off 清除`, en: `Constriction (narrowest) radius ${result.constriction.r.toFixed(2)} Å at axial ${result.constriction.t.toFixed(1)} Å — zones: red(narrow<${HOLE_NARROW}) ${nNarrow} pts · green(passable) ${nMid} pts · blue(wide>${HOLE_MAX_GREEN}) ${nWide} pts; read the chart in the viewport profile card; pore off clears` }))
     ok(tt({ zh: '适合离子通道/膜蛋白（如 load 1bl8 KcsA / load 9p6b 人源 TRPV1 / load 1fx8 GlpF）；叠合或 morph 后请重算；配 membrane 命令画脂双层语境（膜心自动对准跨膜腰窗）', en: 'Best for ion channels / membrane proteins (e.g. load 1bl8 KcsA / load 9p6b human TRPV1 / load 1fx8 GlpF); recompute after superpose or morph; pair with the membrane command for the bilayer context (slab auto-centered on the TM waist)' }))
@@ -1851,10 +1871,10 @@ export function runCommand(raw: string): void {
       s.updateSettings({ showMembrane: false })
       return ok(tt({ zh: '脂双层板已关闭', en: 'Lipid bilayer slab off' }))
     }
-    if (!s.activeId) return err(tt({ zh: '当前没有结构——先加载膜蛋白（如 load 1bl8 KcsA / load 1fx8 GlpF）', en: 'No structure loaded — load a membrane protein first (e.g. load 1bl8 KcsA / load 1fx8 GlpF)' }))
+    if (!s.activeId) return err(tt({ zh: '当前没有结构——先加载膜蛋白（如 load 1bl8 KcsA / load 1fx8 GlpF / load 1pho PhoE porin）', en: 'No structure loaded — load a membrane protein first (e.g. load 1bl8 KcsA / load 1fx8 GlpF / load 1pho PhoE porin)' }))
     const th = !isNaN(parseFloat(rest[0])) ? clampNum(parseFloat(rest[0]), 20, 60, 34) : 34
     s.updateSettings({ showMembrane: true, membraneThickness: th })
-    return ok(tt({ zh: `脂双层板已开启（厚度 ${th.toFixed(0)} Å：橙色磷脂头基双板 + 灰疏水核心，沿主轴定向贴合蛋白）——典型生物膜 ~30-40 Å；膜蛋白作图语境标配`, en: `Lipid bilayer on (thickness ${th.toFixed(0)} Å: orange headgroup slabs + gray hydrophobic core, aligned to the principal axis) — typical biomembranes ~30-40 Å; the standard context for membrane-protein figures` }))
+    return ok(tt({ zh: `脂双层板已开启（厚度 ${th.toFixed(0)} Å：橙色磷脂头基双板 + 灰疏水核心；膜法线 = 通道/装配对称轴三级检测，膜心锚定跨膜腰窗/疏水带）——典型生物膜 ~30-40 Å；orient membrane 可得水平膜侧视`, en: `Lipid bilayer on (thickness ${th.toFixed(0)} Å: orange headgroup slabs + gray hydrophobic core; normal via 3-tier axis detection, center anchored to the TM waist / hydrophobic belt) — typical biomembranes ~30-40 Å; orient membrane for the horizontal side view` }))
   }
 
   if (cmd === 'symmetry' || cmd === 'symmates') {

@@ -649,20 +649,17 @@ canvas {
    r69：语言控件形态统一（轨道驻留开关全应用化）配套资产
    ============================================================ */
 
-/* —— 欢迎页浮动胶囊（右上语言 / 右下 AI 助手对角双胶囊共享行为核心）：
-      几何定位 / 配色 / 阴影由各胶囊 Tailwind 类自定，此处只收敛
-      「悬浮 + 毛玻璃 + 悬停浮起 + 按压回落」的行为一致性。
-      注意：浮起用 translate 属性而非 transform —— welcome-in 入场动画
-      以 fill-mode:both 持续占用 transform，transform 声明会被其覆盖。 */
+/* —— 欢迎页浮动芯片（右下 AI 助手）：几何定位/边框骨架由本类收敛，
+      配色/墨块由 Tailwind 类自定。r126-b：圆角胶囊退役——直角墨块与
+      进样 CTA/图版同族印刷语态；translate 悬浮微升保留（transform 属性
+      被 welcome-in 入场动画 fill-mode:both 占用，浮起用 translate 属性）。 */
 .welcome-float-chip {
   position: absolute;
   z-index: 20;
-  border-radius: 9999px;
   border-width: 1px;
   border-style: solid;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  transition: translate 200ms, box-shadow 200ms, border-color 200ms;
+  transition: translate 200ms, box-shadow 200ms, border-color 200ms,
+    background-color 200ms, color 200ms;
 }
 .welcome-float-chip:hover { translate: 0 -2px; }
 .welcome-float-chip:active { translate: 0 0; }
@@ -713,15 +710,19 @@ canvas {
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
 }
-.journal-kicker .jk-sep { opacity: 0.4; padding: 0 0.55em; }
+.journal-kicker .jk-sep { opacity: 0.4; padding: 0 0.7em; }
 
-/* —— 标题斜体重点词：墨线下划线绘入（排印师手绘一划；一次性） —— */
+/* —— 标题斜体重点词：墨线下划线绘入（排印师手绘一划；一次性）。
+      r126-b：下划线降为 45% 墨——满饱和色线会被读作超链接；减淡后
+      读作手绘强调（VLM 评审「1998 超链接」误读的根治） —— */
 @keyframes ink-draw {
   from { background-size: 0% 1px; }
   to   { background-size: 100% 1px; }
 }
 .accent-ink {
-  background-image: linear-gradient(currentColor, currentColor);
+  background-image: linear-gradient(
+    color-mix(in oklab, currentColor 45%, transparent),
+    color-mix(in oklab, currentColor 45%, transparent));
   background-repeat: no-repeat;
   background-position: 0 96%;
   background-size: 100% 1px;
@@ -749,16 +750,20 @@ canvas {
   border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
 }
 /* 图版悬停态（承载 button 内）：未分层 CSS 压过 Tailwind 工具类——
-   hover 边框/投影直接定义于此，组件侧不再写冲突的 group-hover 类 */
+   hover 边框/投影直接定义于此，组件侧不再写冲突的 group-hover 类；
+   r126-b：悬停微升 -2px（印刷品被拈起）+ 缓出曲线 */
 button:hover:not(:disabled) .plate-frame {
   border-color: color-mix(in oklab, var(--primary) 45%, transparent);
   box-shadow: 0 2px 8px oklch(0.25 0.01 80 / 0.1), 0 10px 26px -10px oklch(0.25 0.01 80 / 0.14);
+  transform: translateY(-2px);
 }
 .dark button:hover:not(:disabled) .plate-frame {
   box-shadow: 0 1px 6px oklch(0 0 0 / 0.5);
+  transform: translateY(-2px);
 }
 .plate-frame, button .plate-frame {
-  transition: border-color 200ms ease, box-shadow 200ms ease;
+  transition: border-color 200ms ease, box-shadow 200ms ease,
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* —— 画廊下划线过滤页签（坐在发丝基线上；激活页签的墨线覆盖基线） —— */
@@ -784,3 +789,31 @@ button:hover:not(:disabled) .plate-frame {
 }
 
 /* r124a: watcher nudge */
+
+/* ============================================================
+   r126-b：欢迎页二次重构「期刊封面」级冲击力
+   —— r124 扉页语态进化为封面语态：卷期刊眉线（dateline 双发丝线）/
+     混合字号封面大标题 / 进样格（hairline 盒 + 微底填充 + 2px 墨线基线
+     + 焦点墨线绘入）/ 「墨已研好」CTA（合法编号 → 墨块填充，描边休眠态）/
+     主导竖幅图版 A（4:5 封面构图）/ 墨块直角 AI 芯片（去圆角去毛玻璃）。
+   ============================================================ */
+
+/* —— 排印链接：悬停墨线自左绘入（局部下划线替代整词变色） —— */
+.link-ink {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  padding-bottom: 1px;
+  transition: background-size 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.link-ink:hover,
+.link-ink:focus-visible {
+  background-size: 100% 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link-ink { transition: none; }
+}
+
+/* r126-b: watcher nudge v2 (accent-ink 45% ink + input affordance round) */

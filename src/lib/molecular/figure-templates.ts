@@ -319,11 +319,14 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     figure: { ref: 'HOLE 剖面图版', shows: { zh: '孔道剖面图：半径沿轴曲线 + 收缩点/选择性滤波器标注', en: 'Pore profile: radius-vs-axis curve with constriction / selectivity filter' } },
     citation: { journal: 'Science', year: 1998, title: 'The Structure of the Potassium Channel: Molecular Basis of K+ Conduction and Selectivity', doi: '10.1126/science.280.5360.69' },
     demo: '1BL8',
-    // 差异点（分析模板）：membrane 34 脂双层 + pore 计算环带（红/绿/蓝）+ 主轴对齐竖排视角
+    // 差异点（分析模板）：membrane 34 脂双层 + pore 计算环带（红/绿/蓝）+ 膜法线竖排视角
     // r92：orient → orient polymer——膜板/孔道轴的 PCA 只算聚合物原子，裸 orient 连
     // 晶体水/配体一起算（1FX8 类富水结构轴被带偏 ~45°，膜板斜跨屏幕）；同源原子集
-    // 才能保证 turn z 90 后膜法线纯竖直（环带纯竖排）
-    commands: ['preset cartoon', 'util cbc', 'bg white', 'membrane 34', 'pore', 'orient polymer', 'turn z 90', 'outline on 1.1 1.0'],
+    // 才能保证轴一致。
+    // r126：orient polymer + turn z 90 → orient membrane——r92 流依赖「PCA≈膜法线」
+    // 巧合，1PHO 轴修复后全局分叉；orient membrane 直接把 poreAxis 三级检测的膜法线
+    // 钉到屏幕竖直（环带纯竖排不变，构图对轴分叉鲁棒）。
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'membrane 34', 'pore', 'orient membrane', 'outline on 1.1 1.0'],
     accent: 'slate',
   },
   {
@@ -342,14 +345,17 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // 橙膜边界一图清晰；SASA 梯度语义由 electrostatic/hydration 模板分工）
     // r92 几何修复：view front → orient polymer + turn z 90。1FX8 沉积坐标 TM 轴
     // 近 Z 向，front 视角正对膜法线——看到的是膜板正面大矩形（「蛋白没在膜中间」
-    // 的视觉根因）；orient polymer 与 membrane 命令同源（仅聚合物 PCA）+ turn z 90
-    // 竖排法线 → 膜板纯水平双板、蛋白跨膜居中（E2E 实测屏幕投影 (0,-1,0)）。
+    // 的视觉根因）。
+    // r126 轴根修：1FX8 同为单链沉积（四聚体靠晶体 C4 生成）——旧 PCA 轴实测偏
+    // 真膜法线 ~23°，r92 流的自洽（orient 与膜同用 PCA）掩盖了偏差；BIOMT 轴
+    // 修复后 orient membrane 直钉真法线（膜板纯水平双板、蛋白跨膜居中），
+    // 疏水带中位接管膜心。
     // r92 构图修复：+ hide ballstick——preset surface 的 ligand 球棍层把晶体学
     // 去污剂/甘油云（散布 ~180Å）也画进来，蓝色团块远大于聚合物本体、膜板
     // 显得「没包住蛋白」且视口裁切；语境图要的是蛋白+膜，隐藏配体层。
     // r99 打磨：VLM 审计 6.5「表面着水泥泞」→ + ssao on（跨膜桶与膜板交界的
     // 遮蔽塑形——表面沟壑与膜的贴合线在阴影里清晰）
-    commands: ['preset surface', 'hide ballstick', 'color #94a9c0', 'bg #f5f7fa', 'membrane 32', 'orient polymer', 'turn z 90', 'ssao on'],
+    commands: ['preset surface', 'hide ballstick', 'color #94a9c0', 'bg #f5f7fa', 'membrane 32', 'orient membrane', 'ssao on'],
     accent: 'orange',
   },
 
@@ -1218,8 +1224,11 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // （1F88 为 A/B 二聚体——symmetryAxis 会检出平行膜面的 C2 轴把膜转 90°）：
     // create 提取链 A 单体（RET 20 原子随链入对象）+ disable 源；40° 俯角让口袋朝向
     // 镜头。adapt：无 RET 结构退化为链 A 单体仍正确（膜/口袋命令 resn RET 空选诚实
-    // 报错）；首个 GPCR 晶体结构原文取材（Nobel 级图式源流）
-    commands: ['create rhodo = chain A and (polymer or resn RET)', 'preset cartoon', 'color #94a9c0, polymer', 'bg white', 'hide ballstick', 'disable 1F88', 'hide cartoon, byres(within 5.5 of (resn RET))', 'show sticks, byres(within 4.5 of (resn RET)) and polymer', 'show spheres, resn RET', 'color #e0761f, resn RET', 'membrane 36', 'orient polymer', 'turn z 90', 'turn x 40', 'zoom byres(within 6 of (resn RET)), 6', 'outline on 1.1 1.0'],
+    // 报错）；首个 GPCR 晶体结构原文取材（Nobel 级图式源流）。r126：create 子集不
+    // 携带 bioRotations（装配元数据不继承）——单体稳定走 PCA≈膜法线；构图换
+    // orient membrane + turn x 40（膜法线竖直后再俯角，语义与 r92 流等价但不再依赖
+    // PCA 巧合）
+    commands: ['create rhodo = chain A and (polymer or resn RET)', 'preset cartoon', 'color #94a9c0, polymer', 'bg white', 'hide ballstick', 'disable 1F88', 'hide cartoon, byres(within 5.5 of (resn RET))', 'show sticks, byres(within 4.5 of (resn RET)) and polymer', 'show spheres, resn RET', 'color #e0761f, resn RET', 'membrane 36', 'orient membrane', 'turn x 40', 'zoom byres(within 6 of (resn RET)), 6', 'outline on 1.1 1.0'],
     accent: 'violet',
   },
   {
@@ -1233,12 +1242,15 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     citation: { journal: 'Nature', year: 1992, title: 'Crystal structures explain functional properties of two E. coli porins', doi: '10.1038/358727a0' },
     demo: '1PHO',
     // 差异点：β-桶与 α-螺旋束两大跨膜架构的对照图式（与 pore-analysis 构成膜类
-    // 「螺旋通道/β-桶」两档）。1PHO 单链沉积（三聚体靠晶体对称生成）——symmetry
-    // 方案 E2E 实测弃用（晶格邻居成「packed lattice」杂乱场）；pore 方案弃用（单桶
-    // PCA 轴收缩点 0.00Å 封堵、环带不可读）；纯侧视 + membrane 30 夹层为 VLM 8/10
-    // 「properly sandwiched」实证。青绿 #0f766e 单色 + AO 塑形（桶板条沟壑在阴影里
-    // 可读）；Cowan 1992 原文结构（deposit 引文即此——porin 图式奠基论文）
-    commands: ['preset cartoon', 'color #0f766e, polymer', 'bg white', 'hide ballstick', 'membrane 30', 'orient polymer', 'turn z 90', 'ssao on', 'outline on 1.1 1.0'],
+    // 「螺旋通道/β-桶」两档）。r126 轴根修：1PHO 单链沉积（三聚体靠 P321 晶体学
+    // 3-fold 生成）——旧链间 Kabsch 不可达（单链）→ PCA 兜底把倾斜 ~25.8° 的单体
+    // 长轴当膜法线，膜板斜插桶身（用户实测报障）；现在 parser 提取 REMARK 350
+    // BIOMT、bioSymmetryAxis 投票命中晶体学三重轴 = 真膜法线（porin 晶体膜面 ∥ ab
+    // 的教科书结论），膜心锚定疏水带中位。构图换 orient membrane：膜板水平、胞外
+    // 朝上、桶身真实外倾 ~12.5°（三聚体内三桶对称外倾的实然姿态）。青绿 #0f766e
+    // 单色 + AO 塑形（桶板条沟壑在阴影里可读）；Cowan 1992 原文结构（deposit
+    // 引文即此——porin 图式奠基论文）
+    commands: ['preset cartoon', 'color #0f766e, polymer', 'bg white', 'hide ballstick', 'membrane 30', 'orient membrane', 'ssao on', 'outline on 1.1 1.0'],
     accent: 'teal',
   },
   {
@@ -1255,8 +1267,12 @@ export const FIGURE_TEMPLATES: FigureTemplate[] = [
     // 孔径展开 + 膜面同框「蛋白嵌膜盘」读法）。pore 活体实测 SYM 七重轴自动检测
     // （收缩点 5.08Å@11.0Å、跨度 102Å、20,324 原子 145ms）；util cbc 七链虹彩
     // （装配语义：七个相同亚基围成孔）；与 pore-analysis（KcsA 侧视）构成「侧视/
-    // 顶视」两档；αHL 为可溶性成孔毒素（茎部插入靶膜——膜板语境图式正确）
-    commands: ['preset cartoon', 'util cbc', 'bg white', 'hide ballstick', 'pore', 'membrane 30', 'orient polymer', 'turn z 90', 'turn x 90', 'outline on 1.1 1.0'],
+    // 顶视」两档；αHL 为可溶性成孔毒素（茎部插入靶膜——膜板语境图式正确）。
+    // r126：orient polymer + turn z 90 + turn x 90 → orient membrane + turn x 90
+    // ——七重轴蘑菇的 PCA 主轴与孔轴近垂直（横向宽>轴向高），r92 流的对齐链路
+    // 靠 turn 组合硬拼；新流把膜法线竖直后再俯 90°（顶视等价、语义直达），
+    // 膜心由 r126 疏水带中位接管（7AHL 无双向腰，盒中点实偏 13.1Å 进帽区）
+    commands: ['preset cartoon', 'util cbc', 'bg white', 'hide ballstick', 'pore', 'membrane 30', 'orient membrane', 'turn x 90', 'outline on 1.1 1.0'],
     accent: 'rose',
   },
 ]

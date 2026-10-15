@@ -15,7 +15,7 @@ export interface PoreResult {
   origin: [number, number, number]
   dir: [number, number, number]
   /** r100 轴检测方法：symmetry=同构链对 Kabsch 对称轴 / pca=主方差轴兜底 */
-  method?: 'symmetry' | 'pca'
+  method?: 'symmetry' | 'bio' | 'pca'
   /** r100 跨膜腰窗（沿轴 t，相对 origin）：剖面卡膜区背景与 HOLE 采样区间语境 */
   zone?: { center: number; halfWidth: number }
   samples: PoreSample[]

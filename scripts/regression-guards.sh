@@ -421,7 +421,7 @@ check "跨域回环白名单"            "127.0.0.1"                     "next.c
 
 # ---- r92：旋转毒化根治（存档恢复强制解限）+ 膜模板几何五层修复 + 表面引擎域映射根治 + 取景一致性 + 剖面模板重造 + 管线防陈旧 ----
 check "存档恢复解除俯仰限位"      "orbitClamp: false"             "src/lib/molecular/session.ts" 1
-check "膜模板确定性侧视对"        "'orient polymer', 'turn z 90'" "src/lib/molecular/figure-templates.ts" 2
+check "膜模板确定性侧视对"        "'orient membrane'"          "src/lib/molecular/figure-templates.ts" 5
 check "膜模板隐藏配体云"          "'preset surface', 'hide ballstick'" "src/lib/molecular/figure-templates.ts" 1
 check "膜板盒中定心（对称板缘）"  "const uc = \(uLo \+ uHi\) / 2" "src/lib/molecular/engine.ts" 1
 check "表面 MC 域映射根治（2×镜像偏移）" "mc.scale.set\(L / 2, L / 2, L / 2\)" "src/lib/molecular/representations.ts" 1
@@ -1925,6 +1925,25 @@ check "图版hero A/B 选目"          "PLATE_A = 'ink-night-cover'|PLATE_B = 'p
 check "墨线绘入强调"               "accent-ink"                      "src/components/studio/WelcomeScreen.tsx" 2
 check "排版系统CSS载体"            "journal-kicker|accent-ink|plate-frame|journal-tab" "src/app/globals.css" 10
 check0 "死脚手架API已删"           "Hello, world"                    "src/app/api/"
+
+# ---- r126：膜轴三级检测（BIOMT 生物装配元数据）+ 疏水带膜心 + orient membrane ----
+# 1PH0 β桶 porin 用户实测报障根修：单链沉积（三聚体靠 P321 晶体学 3-fold 生成）链间
+# Kabsch 不可达 → PCA 兜底把倾斜 25.8° 的单体长轴当膜法线；1FX8 同病（C4 晶体对称，
+# PCA 偏 23°）。BIOMT 装配元数据投票 + C2 二义性拒绝（1F88 先例）+ 疏水带中位膜心
+# （7AHL 无双向腰盒中点偏 13.1Å 根修）。
+check "BIOMT 装配旋转解析"         "bioRotations"                  "src/lib/molecular/parser.ts" 5
+check "生物装配轴投票（Cn≥3 门）"  "bioSymmetryAxis"               "src/lib/molecular/pore.ts" 2
+check "疏水带中位膜心"             "membraneBeltCenter"            "src/lib/molecular/pore.ts" 1
+check "三级轴检测入口"             "bioSymmetryAxis\(data\)"         "src/lib/molecular/pore.ts" 1
+check "C2 二义性拒绝门"            "Math\.abs\(deg\) > 170"         "src/lib/molecular/pore.ts" 1
+check "膜心第三级回落"             "waist \? waist\.center : \(belt \?\? \(tLo \+ tHi\) / 2\)" "src/lib/molecular/engine.ts" 1
+check "orient membrane 引擎模式"   "mode: 'pca' | 'membrane'"       "src/lib/molecular/engine.ts" 1
+check "orient membrane 命令分支"  "orient\(undefined, 'membrane'\)" "src/lib/molecular/commands.ts" 2
+check "膜法线回执"                 "视角已对齐膜法线"               "src/lib/molecular/commands.ts" 1
+check "porin 模板轴根修注释"      "r126 轴根修：1PHO 单链沉积"     "src/lib/molecular/figure-templates.ts" 1
+check "剖面膜法线标签三态"         "result.method === 'bio'"        "src/components/studio/PoreProfile.tsx" 2
+check "技能膜法线工作流"           "orient membrane"               "src/lib/molecular/agent/skills.ts" 1
+check "非膜模板保留 PCA 构图流"   "'orient polymer', 'turn z 90'" "src/lib/molecular/figure-templates.ts" 1
 
 # ---- 汇总 ----
 # r100：TOTAL 改进程内计数（PASSES+FAILS）——历史静态 TOTAL=445 与实际执行 468 条

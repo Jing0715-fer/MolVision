@@ -3,8 +3,8 @@
 // r86 从分享链接加载（接收侧发现性教育入口）：欢迎页会话区常显粘贴卡——
 // 接收方拿到链接文本（IM/邮件里拷贝的完整 URL 或裸 #s= 片段）可直接贴入加载，
 // 不必知道「把链接粘到地址栏再回车」这一隐式约定。
-// 视觉族：与 SessionResumeCard 同构（panel-card + 左缘刻线 + 32px 图标盒 +
-// hover 浮起），色相区分语义——恢复=主色 / 分享接收=翡翠（r85 分享链接色系）。
+// 视觉族：与 SessionResumeCard 同构（r126-b 直角发丝卡 + 翡翠色相区分——
+// 恢复=主色 / 分享接收=翡翠（r85 分享链接色系））。
 // 副作用诚实：与「打开分享链接」同替换语义（欢迎页本就是空场景，无覆盖风险）；
 // 剪贴板读取按钮在权限拒绝时降级为聚焦输入框引导手动 Ctrl+V，不硬失败。
 import { useRef, useState, type FormEvent } from 'react'
@@ -54,7 +54,7 @@ export function ShareLinkLoadCard() {
       onSubmit={onSubmit}
       data-qa="share-load-card"
       aria-label={t({ zh: '从分享链接加载会话', en: 'Load session from share link' })}
-      className="welcome-in panel-card group flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-[border-color] duration-200 hover:border-emerald-500/40!"
+      className="welcome-in group flex w-full items-center gap-2.5 border border-foreground/15 bg-transparent px-3 py-2.5 text-left transition-colors duration-200 hover:border-emerald-500/40 focus-within:border-emerald-500/45"
       style={{ animationDelay: '215ms' }}
     >
       <Link2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
@@ -67,7 +67,7 @@ export function ShareLinkLoadCard() {
         autoComplete="off"
         spellCheck={false}
         data-qa="share-link-input"
-        className="h-8 min-w-0 flex-1 rounded-md border border-foreground/15 bg-transparent px-2.5 font-mono text-[12px] leading-none text-foreground outline-none transition-[border-color] duration-150 placeholder:font-sans placeholder:text-[11px] placeholder:font-normal placeholder:tracking-[0.02em] placeholder:text-muted-foreground hover:border-foreground/30 focus-visible:border-emerald-500/60 dark:border-white/[0.14] dark:hover:border-white/25 dark:focus-visible:border-emerald-400/60"
+        className="h-8 min-w-0 flex-1 border border-foreground/15 bg-transparent px-2.5 font-mono text-[12px] leading-none text-foreground outline-none transition-[border-color] duration-150 placeholder:font-sans placeholder:text-[11px] placeholder:font-normal placeholder:tracking-[0.02em] placeholder:text-muted-foreground hover:border-foreground/30 focus-visible:border-emerald-500/60 dark:border-white/[0.14] dark:hover:border-white/25 dark:focus-visible:border-emerald-400/60"
       />
       <button
         type="button"
@@ -75,7 +75,7 @@ export function ShareLinkLoadCard() {
         disabled={loading}
         aria-label={t({ zh: '从剪贴板粘贴', en: 'Paste from clipboard' })}
         title={t({ zh: '从剪贴板粘贴（权限受限时请手动 Ctrl+V）', en: 'Paste from clipboard (or Ctrl+V manually if permission is restricted)' })}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-foreground/15 text-muted-foreground transition-colors duration-150 hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.14] dark:hover:border-white/25"
+        className="flex h-8 w-8 shrink-0 items-center justify-center border border-foreground/15 text-muted-foreground transition-colors duration-150 hover:border-foreground/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-40 dark:border-white/[0.14] dark:hover:border-white/25"
       >
         <ClipboardPaste className="h-3.5 w-3.5" />
       </button>
@@ -84,7 +84,7 @@ export function ShareLinkLoadCard() {
         disabled={!canSubmit}
         data-qa="share-load-apply"
         aria-label={t({ zh: '加载分享会话', en: 'Load the shared session' })}
-        className="flex h-8 w-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-emerald-600/50 text-emerald-700 transition-[background-color,translate] duration-150 hover:bg-emerald-500/10 active:translate-y-px disabled:pointer-events-none disabled:opacity-40 sm:w-auto sm:px-3.5 dark:border-emerald-400/50 dark:text-emerald-300 dark:hover:bg-emerald-400/10"
+        className="flex h-8 w-9 shrink-0 items-center justify-center gap-1.5 border border-emerald-600/50 text-emerald-700 transition-[background-color,translate] duration-150 hover:bg-emerald-500/10 active:translate-y-px disabled:pointer-events-none disabled:opacity-40 sm:w-auto sm:px-3.5 dark:border-emerald-400/50 dark:text-emerald-300 dark:hover:bg-emerald-400/10"
       >
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
         {/* r87：<sm 图标化提交（释放约 36px 给输入框——r86 遗留的 139px 窄输入问题）；
