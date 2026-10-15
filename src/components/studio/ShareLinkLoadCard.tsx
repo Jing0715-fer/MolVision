@@ -54,17 +54,10 @@ export function ShareLinkLoadCard() {
       onSubmit={onSubmit}
       data-qa="share-load-card"
       aria-label={t({ zh: '从分享链接加载会话', en: 'Load session from share link' })}
-      className="welcome-in panel-card group relative flex w-full items-center gap-2.5 overflow-hidden px-3.5 py-2.5 text-left shadow-[0_2px_10px_oklch(0.25_0.01_80/0.04)] transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-emerald-500/40! hover:shadow-[0_5px_16px_oklch(0.25_0.01_80/0.08)] dark:shadow-none dark:hover:shadow-[0_5px_16px_oklch(0_0_0/0.35)]"
+      className="welcome-in panel-card group flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-[border-color] duration-200 hover:border-emerald-500/40!"
       style={{ animationDelay: '215ms' }}
     >
-      {/* 左缘翡翠刻线锚（与恢复卡同族「通电」暗示，色相区分语义） */}
-      <span
-        aria-hidden
-        className="absolute left-0 top-1/2 h-[38%] w-[2px] -translate-y-1/2 rounded-r-sm bg-emerald-500/75 shadow-[0_0_8px_oklch(0.65_0.14_160/0.4)] transition-[height,background-color] duration-200 group-hover:h-[62%] group-hover:bg-emerald-500"
-      />
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-emerald-500/25 bg-emerald-500/[0.08] transition-colors duration-200 group-hover:border-emerald-500/40 group-hover:bg-emerald-500/[0.14]">
-        <Link2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-      </span>
+      <Link2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
       <input
         ref={inputRef}
         value={text}
@@ -74,7 +67,7 @@ export function ShareLinkLoadCard() {
         autoComplete="off"
         spellCheck={false}
         data-qa="share-link-input"
-        className="h-8 min-w-0 flex-1 rounded-md border border-foreground/15 bg-transparent px-2.5 font-mono text-[12px] leading-none text-foreground outline-none transition-[border-color,box-shadow] duration-150 placeholder:font-sans placeholder:text-[11px] placeholder:font-normal placeholder:tracking-[0.02em] placeholder:text-muted-foreground hover:border-foreground/30 focus-visible:border-emerald-500/60 focus-visible:shadow-[0_0_0_3px_oklch(0.65_0.14_160/0.12)] dark:border-white/[0.14] dark:hover:border-white/25 dark:focus-visible:border-emerald-400/60 dark:focus-visible:shadow-[0_0_0_3px_oklch(0.65_0.14_160/0.14)]"
+        className="h-8 min-w-0 flex-1 rounded-md border border-foreground/15 bg-transparent px-2.5 font-mono text-[12px] leading-none text-foreground outline-none transition-[border-color] duration-150 placeholder:font-sans placeholder:text-[11px] placeholder:font-normal placeholder:tracking-[0.02em] placeholder:text-muted-foreground hover:border-foreground/30 focus-visible:border-emerald-500/60 dark:border-white/[0.14] dark:hover:border-white/25 dark:focus-visible:border-emerald-400/60"
       />
       <button
         type="button"
@@ -91,7 +84,7 @@ export function ShareLinkLoadCard() {
         disabled={!canSubmit}
         data-qa="share-load-apply"
         aria-label={t({ zh: '加载分享会话', en: 'Load the shared session' })}
-        className="flex h-8 w-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-0 text-white shadow-[inset_0_1px_0_oklch(1_0_0/0.25),0_1px_3px_oklch(0.5_0.12_160/0.3)] transition-[background-color,box-shadow,translate] duration-150 hover:bg-emerald-500 active:translate-y-px disabled:pointer-events-none disabled:opacity-40 sm:w-auto sm:px-3.5 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400 dark:shadow-none"
+        className="flex h-8 w-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-emerald-600/50 text-emerald-700 transition-[background-color,translate] duration-150 hover:bg-emerald-500/10 active:translate-y-px disabled:pointer-events-none disabled:opacity-40 sm:w-auto sm:px-3.5 dark:border-emerald-400/50 dark:text-emerald-300 dark:hover:bg-emerald-400/10"
       >
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
         {/* r87：<sm 图标化提交（释放约 36px 给输入框——r86 遗留的 139px 窄输入问题）；

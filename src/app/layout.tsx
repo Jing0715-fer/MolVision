@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -15,6 +15,15 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+/* r124 欢迎页「学术期刊扉页」重设计：Newsreader 衬线（正文+斜体）——
+   期刊排印的显示字族；中文回退宋体系（Songti SC / Noto Serif SC / SimSun） */
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  display: "swap",
 });
 
 /** 服务端语言检测：cookie（用户显式选择）> Accept-Language（首次访问自动适配） */
@@ -73,7 +82,7 @@ export default async function RootLayout({
   return (
     <html lang={locale === "en" ? "en" : "zh-CN"} suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} antialiased bg-background text-foreground`}
       >
         <I18nProvider initialLocale={locale}>
           <ThemeProvider

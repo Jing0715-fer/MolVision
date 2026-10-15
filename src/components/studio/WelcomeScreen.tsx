@@ -1,53 +1,35 @@
 'use client'
 
-// 欢迎页（r74 Open-design 风格重设计；r80 左舱打磨 + 语言入口去重；r87 窄屏密度重构）：未加载
-// 结构时的「仪器待机 + 作品橱窗」大屏
+// 欢迎页 r124「学术期刊扉页」全面重设计：
 // ─────────────────────────────────────────────────────────────────────────────
-// r74 用户需求：「首页也需要展示模板加载示例等，优化欢迎页美观度，做成类似
-// open design 那种风格」——现代设计工具官网（open design / gallery showcase）
-// 的经典布局语言落位：
-//   · 顶栏：品牌 monogram + 版本徽章 + 右侧主题 / GitHub
-//     （r80：语言切换入口去重——顶栏重复入口删除，全应用仅保留右下角
-//      两处：欢迎页页脚 instrument-bar + 工作台状态栏）
-//   · 大屏分栏（lg+）：左 hero 加载舱（仪器语义全保留：轨道背景 / 晶体按键
-//     CTA / 会话恢复 / 示例卡片）｜右模板画廊（引擎真实渲染缩略图，
-//     点击卡片即刻「演示加载」——未加载结构时模板库的最短体验路径）
-//   · 移动端（<lg）：垂直堆叠整页滚动（hero → 画廊 → 仪表条）
-//   · 双栏各自独立滚动（lg+）：作品橱窗的应用分栏感；画廊 sticky 区头
-//     毛玻璃常驻（gallery-head-blur）
+// 设计概念：MolVision 的灵魂是复现 Cell/Nature/Science 的论文图式——那么欢迎页
+// 本身就该被排印成一页期刊。概念驱动（而非装饰驱动）是去「AI 味」的根本：
+//   · 刊眉顶栏：六角铭印 + 衬线字标 MolVision + 小写字距副题
+//   · 扉页 hero：卷期元数据行（VOL.16 · WEBGL · RCSB LIVE · N STYLES——原遥测
+//     板的信息以排印形式保留）+ 衬线大标题（斜体重点词 + 墨线绘入）+ 进样表单
+//     （大号等宽字 + 墨色下划线 + 墨块 CTA）+ 右侧「图版 A/B」hero 构图
+//     （引擎真实渲染的作品，配期刊溯源图注；点击即演示加载）
+//   · §01 经典结构：索引式列表（期刊目次惯例——等宽编号 + PDB 号 + 条目行）
+//   · §02 论文图式：下划线过滤页签（坐在发丝基线上）+ Fig. 编号画廊卡
+//     （硬角发丝图版框 + 三行图注：名称/图注/溯源）+ 移动端分类横滚行
+//   · 诚实脚注（细小学注）+ 素纸页脚（待机 · 快捷键 · 语言）
 //
-// r80 左舱打磨（用户反馈「右侧还可以，左侧不够美观」）：
-//   · hero 六角芯片加主色晕染（open-design hero 焦点光）
-//   · 单枚版本徽章 → 三格遥测读数板（图式模板数动态 / WebGL 引擎 LED /
-//     RCSB 实时源——信息密度与设计感兼得）
-//   · 加载区收拢为「加载舱」面板（表单 + 或分隔 + 本地文件同座）
-//   · 示例芯片 → 双列卡片（启用 desc 副行——此前从未上屏）
+// 去噪清单（r45/r68/r74 时代装饰资产退役）：三轨道电子巡航 / 六角 halo 呼吸 /
+// 原子核呼吸 / LED 待机脉冲 / 晶体按键 CTA / 遥测读数板 / 墨色仪表底座 /
+// 毛玻璃卡片堆叠 / 取景框角刻度。保留：welcome-in 错峰入场（克制的 460ms 上浮）
+// 与 gallery 错峰淡入。
 //
-// r87 窄屏密度重构（用户反馈「窄屏幕欢迎页太空了」——DOM 实测器宣：375px 首屏
-// 全文本表单、画廊缩略图要滚 1.3 屏才出现）：
-//   · hero 全链间距响应式收紧（<lg：py-7 / 徽章 64px / h1 29px / 各段间距减档）
-//     ——logo→输入框核心流程压回一屏
-//   · 画廊过滤 chips <lg 改横向滑动（mol-toolbar-scroll 隐滚动条），不再换行堆叠
-//
-// r89 窄屏画廊重构（用户反馈「窄屏幕时模板重复出现了」——r87 速览条 + 画廊双份
-// 展示是重复根源，重新设计）：
-//   · 速览条整条退役：模板在窄屏页面上只出现一次（重复根治）
-//   · 画廊上移：左栏载体 <lg display:contents（part1 表单舱 / part2 示例舱直接
-//     成为主容器 flex 项）——画廊以 order-2 插到「加载表单之后 · 示例之前」，作品
-//     图像紧贴核心流程填充首屏（r85「太空」与 r89「重复」双诉求同时满足）
-//   · 画廊本体 <lg 改「分类横滚行」（App Store Today 模式）：每类一行横滑缩略卡
-//     （snap 对齐）+ 行头「查看全部」切该类过滤网格；lg+ 完整网格原样不动
-//   · 过滤网格 <lg 收紧为 2 列紧凑卡（信息条 <sm 隐藏期刊溯源行——r87 遗留清偿）
-//
-// 历史资产保留（r45/r68/r69 打磨成果）：轨道电子巡航 / 六角 halo 呼吸 /
-// 原子核呼吸 / LED 待机脉冲 / CTA 晶体按键 / welcome-in 错峰入场 /
-// welcome-float-chip（右下 AI 胶囊）/ 取景框四角刻度 / 墨色仪表底座
+// 功能全量保留：PDB 表单校验 / 本地文件（r99 value 清空）/ 全页拖放 /
+// 会话恢复 / 分享链接粘贴卡 / 6 经典示例 / 画廊分类过滤 / 移动端分类横滚行
+// （r89 去重架构）/ 返回分类锚点（r90）/ 自定义模板行与直编（r85）/
+// 从图片创建 / 在库中浏览 / 空态引导 / 诚实版权脚注 / AI 胶囊与面板 /
+// 主题 · GitHub · 语言切换 / 精确指针自动聚焦。
 import { useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import {
-  ArrowLeft, ArrowUpRight, BookOpenText, Bot, ChevronRight, FileUp, FolderOpen, Github, ImagePlus, Loader2, Moon,
-  Pencil, Play, Sun, Wand2,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUpRight, BookOpenText, Bot, ChevronRight,
+  FileUp, FolderOpen, Github, ImagePlus, Loader2, Moon, Pencil, Play, Sun, Wand2,
 } from 'lucide-react'
 import { useMolStore } from '@/lib/molecular/store'
 import { useI18n, tt, type DualText } from '@/i18n'
@@ -67,77 +49,133 @@ import { cn } from '@/lib/utils'
 /** 欢迎页示例精选（6 个均衡覆盖小蛋白/酶/四聚体/DNA/药物靶点；完整列表在加载对话框） */
 const WELCOME_EXAMPLES = EXAMPLE_STRUCTURES.filter(ex => ex.id !== '1D3Z')
 
-/** 背景大轨道电子巡航路径（椭圆 cx240 cy240 rx232 ry88） */
-const ORBIT_PATH = 'M 472 240 A 232 88 0 1 1 8 240 A 232 88 0 1 1 472 240'
-/** 品牌 monogram 内电子巡航路径（20×20 视图，rx8.2 ry3.1；一条原始角 + 一条 60° 角） */
-const MINI_ORBIT_A = 'M 18.2 10 A 8.2 3.1 0 1 1 1.8 10 A 8.2 3.1 0 1 1 18.2 10'
-const MINI_ORBIT_B = 'M 14.1 17.1 A 8.2 3.1 60 1 1 5.9 2.9 A 8.2 3.1 60 1 1 14.1 17.1'
+/** 扉页图版选目：墨夜封面（深底封面语态）+ 白瓷影棚（单柔光棚拍语态）——明暗两极
+ *  的代表作品，且缩略图为引擎真实渲染产物 */
+const PLATE_A = 'ink-night-cover'
+const PLATE_B = 'porcelain-studio'
 
-// ── 画廊卡片（作品橱窗形态：点击整卡 = 演示加载——欢迎页无结构语境下
-//    模板库的最短体验路径；hover 浮起 + 缩略图轻放大 + 演示徽章浮现） ──────────
-
-/** r89 紧凑缩略图（分类横滚行卡片用；与 GalleryCard 同源降级策略：管线 PNG 缺图 → 强调色渐变占位） */
-function CompactThumb({ tpl }: { tpl: FigureTemplate }) {
-  const { t } = useI18n()
+// ── 共用缩略图（引擎真实渲染 PNG；缺图 → 强调色渐变占位；自定义模板为 dataURL） ──
+function PlateImg({ tpl, alt, className }: { tpl: FigureTemplate; alt: string; className?: string }) {
   const [imgOk, setImgOk] = useState(true)
   const a = ACCENT[tpl.accent]
   if (!imgOk) {
     return (
-      <span aria-hidden className={cn('absolute inset-0 flex items-center justify-center bg-gradient-to-br', a.grad)}>
-        <BookOpenText className={cn('h-6 w-6 opacity-60', a.text)} />
+      <span aria-hidden className={cn('plate-fallback absolute inset-0 flex items-center justify-center bg-gradient-to-br', a.grad)}>
+        <BookOpenText className={cn('h-8 w-8 opacity-60', a.text)} />
       </span>
     )
   }
   return (
-    // 静态资源缩略图（管线产物，非内容图）；自定义模板为 dataURL（同一 img 元素直接消费）
+    // 静态资源缩略图（管线产物，非内容图）
     <img
       src={tpl.custom && tpl.thumb ? tpl.thumb : `/templates/${tpl.id}.png`}
-      alt={t(tpl.tagline)}
+      alt={alt}
       loading="lazy"
       decoding="async"
       onError={() => setImgOk(false)}
-      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+      className={className}
     />
   )
 }
 
-/** r89 分类横滚行卡片（紧凑型：缩略图 + 名称行；行内浏览以图像为主角——画廊
- *  网格卡的三行信息条在窄屏行内太重；与 GalleryCard 同一 demo 流与降级占位策略） */
-function RowCard({ tpl, busy, onDemo }: {
+// ── 扉页图版（Plate）：装裱印版（发丝框 + 印刷留白边）+ 期刊图注；点击即演示 ──
+function HeroPlate({ tpl, label, aspect, className, delay, busy, onDemo }: {
   tpl: FigureTemplate
+  label: DualText
+  aspect: string
+  className?: string
+  delay: string
   busy: boolean
   onDemo: () => void
 }) {
   const { t } = useI18n()
-  const a = ACCENT[tpl.accent]
+  return (
+    <figure className={cn('journal-row-in m-0', className)} style={{ animationDelay: delay }}>
+      <button
+        type="button"
+        onClick={onDemo}
+        disabled={busy}
+        title={t({
+          zh: `加载演示结构 ${tpl.demo} 并应用「${t(tpl.name)}」图式`,
+          en: `Load demo structure ${tpl.demo} with the "${t(tpl.name)}" style applied`,
+        })}
+        className="plate-frame group block w-full cursor-pointer text-left disabled:pointer-events-none disabled:opacity-60"
+      >
+        <span className={cn('relative block w-full overflow-hidden', aspect)}>
+          <PlateImg
+            tpl={tpl}
+            alt={t(tpl.tagline)}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+          />
+          {/* 演示徽章（常显——触屏无 hover；PDB 号即「点会发生什么」的说明） */}
+          <span className="absolute bottom-1.5 right-1.5 flex h-5 items-center gap-1 border border-foreground/15 bg-background/85 px-1.5 font-mono text-[9px] font-semibold leading-none backdrop-blur-sm">
+            <Play className="h-2 w-2" aria-hidden />
+            {tpl.demo}
+          </span>
+          {tpl.custom && (
+            <span className="absolute left-1.5 top-1.5 bg-violet-500/85 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-white">
+              {t({ zh: '自定义', en: 'CUSTOM' })}
+            </span>
+          )}
+          {busy && (
+            <span className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </span>
+          )}
+        </span>
+      </button>
+      <figcaption className="mt-2 flex items-baseline gap-2">
+        <span className="journal-kicker shrink-0 text-primary">{t(label)}</span>
+        <span className="font-serif-editorial truncate text-[12.5px] font-semibold leading-tight">{t(tpl.name)}</span>
+        <span className="ml-auto shrink-0 font-mono text-[9px] tabular-nums text-muted-foreground">
+          {tpl.citation.journal} · {tpl.citation.year}
+        </span>
+      </figcaption>
+    </figure>
+  )
+}
+
+// ── r89 移动端分类横滚行卡片（紧凑图版：缩略图 + 名称行；行内以图像为主角） ──
+function RowCard({ tpl, delay, busy, onDemo }: {
+  tpl: FigureTemplate
+  delay: string
+  busy: boolean
+  onDemo: () => void
+}) {
+  const { t } = useI18n()
   const Icon = TPL_ICONS[tpl.id] ?? BookOpenText
+  const a = ACCENT[tpl.accent]
   return (
     <button
       type="button"
       data-welcome-row-card={tpl.id}
       onClick={onDemo}
       disabled={busy}
-      /* r98：移除 role="listitem"——显式 role 会压掉隐式 button 角色，读屏器丢失
-         可操作语义；父容器 role="list" 的条目改由 ARIA 包裹（listbox/listitem 在
-         button 上均非法）。键盘/焦点行为由原生 button 语义承担 */
+      /* r98：无显式 role——显式 role 会压掉隐式 button 语义；父 list 的条目语义
+         由 ARIA 包裹承担（listbox/listitem 在 button 上均非法） */
       title={t({
         zh: `加载演示结构 ${tpl.demo} 并应用「${t(tpl.name)}」图式`,
         en: `Load demo structure ${tpl.demo} with the "${t(tpl.name)}" style applied`,
       })}
       className={cn(
-        'group relative w-[124px] shrink-0 cursor-pointer snap-start overflow-hidden rounded-lg border border-border bg-card text-left transition-[border-color,translate] duration-150 hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-60 sm:w-[136px]',
-        a.border,
+        'journal-row-in group relative w-[124px] shrink-0 cursor-pointer snap-start border border-foreground/12 bg-card text-left transition-[border-color] duration-150 hover:border-primary/45 sm:w-[136px]',
+        a.text,
       )}
+      style={{ animationDelay: delay }}
     >
       <span className="relative block aspect-[16/10] w-full overflow-hidden bg-muted/40">
-        <CompactThumb tpl={tpl} />
-        {/* 演示徽章（缩略项常显——触屏无 hover；PDB 号即「点会发生什么」的说明） */}
-        <span className="absolute bottom-1.5 right-1.5 flex h-5 items-center gap-1 rounded-full border border-border bg-background/85 px-1.5 text-[9px] font-semibold leading-none backdrop-blur-sm">
+        <PlateImg
+          tpl={tpl}
+          alt={t(tpl.tagline)}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+        />
+        {/* 演示徽章（常显——触屏无 hover） */}
+        <span className="absolute bottom-1.5 right-1.5 flex h-5 items-center gap-1 border border-foreground/15 bg-background/85 px-1.5 font-mono text-[9px] font-semibold leading-none backdrop-blur-sm">
           <Play className="h-2 w-2" aria-hidden />
-          <span className="font-mono">{tpl.demo}</span>
+          {tpl.demo}
         </span>
         {tpl.custom && (
-          <span className="absolute left-1.5 top-1.5 rounded bg-violet-500/85 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-white">
+          <span className="absolute left-1.5 top-1.5 bg-violet-500/85 px-1.5 py-0.5 font-mono text-[8px] font-bold tracking-[0.1em] text-white">
             {t({ zh: '自定义', en: 'CUSTOM' })}
           </span>
         )}
@@ -149,36 +187,28 @@ function RowCard({ tpl, busy, onDemo }: {
       </span>
       <span className="flex items-center gap-1 px-2 py-1.5">
         <Icon className={cn('h-3 w-3 shrink-0', a.text)} aria-hidden />
-        <span className="truncate text-[11px] font-semibold leading-tight">{t(tpl.name)}</span>
+        <span className="truncate text-[11px] font-semibold leading-tight text-foreground">{t(tpl.name)}</span>
       </span>
     </button>
   )
 }
 
+// ── 画廊图版卡（Fig. 编号 + 三行图注：名称/图注/溯源——期刊图版惯例） ──
 function GalleryCard({ tpl, index, busy, onDemo, onEdit }: {
   tpl: FigureTemplate
   index: number
   busy: boolean
   onDemo: () => void
-  /** r85：自定义模板管理排的编辑入口（仅 custom 卡渲染；直通弹窗编辑视图） */
+  /** r85：自定义模板编辑入口（仅 custom 卡渲染；直通弹窗编辑视图） */
   onEdit?: () => void
 }) {
   const { t } = useI18n()
-  const [imgOk, setImgOk] = useState(true)
-  const a = ACCENT[tpl.accent]
   const Icon = TPL_ICONS[tpl.id] ?? BookOpenText
-  // r79：自定义模板缩略图 = 上传图缩存 dataURL；内置 = 管线 PNG
-  const thumbSrc = tpl.custom && tpl.thumb ? tpl.thumb : `/templates/${tpl.id}.png`
+  const a = ACCENT[tpl.accent]
+  const figLabel = t({ zh: `图 ${String(index + 1).padStart(2, '0')}`, en: `Fig. ${String(index + 1).padStart(2, '0')}` })
 
   return (
-    <article
-      className={cn(
-        'gallery-card-in group relative overflow-hidden rounded-xl border border-border bg-card transition-[border-color,translate,box-shadow] duration-200',
-        a.border, 'hover:-translate-y-0.5 hover:shadow-[0_8px_24px_oklch(0.25_0.01_80/0.14)] dark:hover:shadow-[0_8px_24px_oklch(0_0_0/0.45)]',
-        busy && 'pointer-events-none',
-      )}
-      style={{ animationDelay: `${320 + index * 25}ms` }}
-    >
+    <article className="journal-row-in group relative" style={{ animationDelay: `${320 + index * 25}ms` }}>
       <button
         type="button"
         onClick={onDemo}
@@ -189,104 +219,68 @@ function GalleryCard({ tpl, index, busy, onDemo, onEdit }: {
         })}
         className="block w-full cursor-pointer text-left disabled:pointer-events-none"
       >
-        {/* 缩略图（引擎真实渲染产物；缺图渐变占位） */}
-        <span className="relative block aspect-[16/10] w-full overflow-hidden bg-muted/40">
-          {imgOk ? (
-            // 静态资源缩略图（管线产物，非内容图）；next/image 对 public 静态占位无增益。
-            // r79：自定义模板为 dataURL（同一 img 元素直接消费）
-            <img
-              src={thumbSrc}
+        {/* 装裱图版：发丝外框 + 印刷留白边 + 发丝内框（悬停态由 .plate-frame 的
+            未分层 CSS 直供——Tailwind group-hover 会被其压过） */}
+        <span className="plate-frame relative block">
+          <span className="relative block aspect-[16/10] w-full overflow-hidden bg-muted/40">
+            <PlateImg
+              tpl={tpl}
               alt={t(tpl.tagline)}
-              loading="lazy"
-              decoding="async"
-              onError={() => setImgOk(false)}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
             />
-          ) : (
-            <span aria-hidden className={cn('absolute inset-0 flex items-center justify-center bg-gradient-to-br', a.grad)}>
-              <BookOpenText className={cn('h-8 w-8 opacity-60', a.text)} />
+            {/* 自定义紫印（语义标记保留）；内置卡无角标——图号移至图注行 */}
+            {tpl.custom && (
+              <span className="absolute left-1.5 top-1.5 bg-violet-500/85 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-white">
+                {t({ zh: '自定义', en: 'CUSTOM' })}
+              </span>
+            )}
+            {/* 演示徽章（hover 浮现；触屏恒显） */}
+            <span className={cn(
+              'absolute bottom-1.5 right-1.5 flex h-6 items-center gap-1 border border-foreground/15 bg-background/85 px-2 font-mono text-[10px] font-semibold backdrop-blur-sm transition-opacity duration-200',
+              'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100',
+            )}>
+              <Play className="h-2.5 w-2.5" aria-hidden />
+              {tpl.demo}
             </span>
-          )}
-          {/* r75 hover 信息浮层（open-design 作品揭示惯例）：顶部渐变显用途 + 命令数
-              ——与底部演示徽章上下分置不冲突；触屏不依赖 hover（tap 即演示）。
-              r77 重叠修复：浮层文字 pl-10 起排——为左上序号角标（右缘≈33px）清出
-              同排空间，标题与序号各居其位不再叠压（用户点名 hover 重叠问题） */}
-          <span
-            data-welcome-tpl-purpose
-            className="pointer-events-none absolute inset-x-0 top-0 flex items-center gap-2 bg-gradient-to-b from-background/92 via-background/55 to-transparent pl-10 pr-3 pb-9 pt-2.5 opacity-0 transition-opacity duration-200 sm:group-hover:opacity-100"
-          >
-            <span className="mol-micro truncate text-foreground/80">{t(tpl.purpose)}</span>
-            <span className="ml-auto shrink-0 rounded-full border border-border bg-background/85 px-1.5 py-px font-mono text-[9px] font-semibold text-muted-foreground">
-              {tpl.commands.length} {t({ zh: '条命令', en: 'cmds' })}
-            </span>
-          </span>
-          {/* 序号角标（仪器簇编号惯例，与模板库对话框同源）；自定义模板换紫印 */}
-          {tpl.custom ? (
-            <span className="absolute left-2 top-2 rounded bg-violet-500/85 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em] text-white">
-              {t({ zh: '自定义', en: 'CUSTOM' })}
-            </span>
-          ) : (
-            <span className={cn('absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.1em]', a.chip)}>
-              {String(index + 1).padStart(2, '0')}
-            </span>
-          )}
-          {/* 演示徽章（hover 浮现；触屏恒显——作品集 hover 提示惯例） */}
-          <span className={cn(
-            'absolute bottom-2 right-2 flex h-6 items-center gap-1 rounded-full border border-border bg-background/85 px-2 text-[10px] font-semibold backdrop-blur-sm transition-opacity duration-200',
-            'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100',
-          )}>
-            <Play className="h-2.5 w-2.5" aria-hidden />
-            {t({ zh: '演示', en: 'Demo' })}
-            <span className="font-mono text-[9px] font-medium text-muted-foreground">{tpl.demo}</span>
-          </span>
-          {/* busy 覆盖（fetch + 应用期间） */}
-          {busy && (
-            <span className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            </span>
-          )}
-        </span>
-
-        {/* 信息条：名称 + 期刊溯源（open-design 作品说明行） */}
-        <span className="block px-3 py-2.5">
-          <span className="flex items-center gap-1.5">
-            <Icon className={cn('h-3.5 w-3.5 shrink-0', a.text)} aria-hidden />
-            <span className="truncate text-[13px] font-semibold leading-tight">{t(tpl.name)}</span>
-            <span className="ml-auto shrink-0 font-mono text-[9px] font-medium text-muted-foreground">{tpl.demo}</span>
-          </span>
-          <span className="mt-1 block truncate text-[10.5px] leading-relaxed text-muted-foreground" title={t(tpl.tagline)}>
-            {t(tpl.tagline)}
-          </span>
-          <span className="mt-1.5 hidden items-center gap-1.5 sm:flex">
-            <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', a.text.replace('text-', 'bg-'))} aria-hidden />
-            <span className="truncate text-[9.5px] text-muted-foreground">
-              {t({ zh: '图式参考', en: 'Style ref.' })} · {tpl.citation.journal} {tpl.citation.year}
-            </span>
-            {tpl.category === 'membrane' && (
-              <span className="ml-auto shrink-0 rounded bg-foreground/[0.06] px-1.5 py-px text-[9px] font-semibold text-foreground/70">
-                {t({ zh: '特定类型', en: 'Type-specific' })}
+            {busy && (
+              <span className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
               </span>
             )}
           </span>
         </span>
+
+        {/* 图注三行（期刊图版说明） */}
+        <span className="mt-2.5 flex items-baseline gap-2">
+          <span className="font-serif-editorial truncate text-[15px] font-semibold leading-snug">{t(tpl.name)}</span>
+          <span className="ml-auto shrink-0 font-mono text-[10px] font-medium text-muted-foreground">{tpl.demo}</span>
+        </span>
+        <span className="mt-1 block truncate text-[11px] leading-relaxed text-muted-foreground" title={t(tpl.tagline)}>
+          {t(tpl.tagline)}
+        </span>
+        <span className="mt-1.5 flex items-center gap-1.5">
+          <span className="shrink-0 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/75">{figLabel}</span>
+          <span className="shrink-0 font-mono text-[9px] text-muted-foreground/75">· {tpl.citation.journal} {tpl.citation.year}</span>
+          <span className={cn('ml-auto shrink-0 font-mono text-[9px] text-muted-foreground/60', a.text)}>
+            {tpl.commands.length} {t({ zh: '条命令', en: 'cmds' })}
+          </span>
+        </span>
       </button>
-      {/* r85：自定义模板管理排（主 button 的兄弟节点——嵌套 button 不合法）。
-          编辑直通模板弹窗的编辑视图（open-template-edit 广播），与「从图片创建」
-          入口同一事件语汇；管理排也扩大触控命中面（整排可点） */}
+      {/* r85：自定义模板管理排（主 button 兄弟节点——嵌套 button 不合法） */}
       {tpl.custom && onEdit && (
         <div
           role="group"
           aria-label={t({ zh: '自定义模板管理', en: 'Custom template management' })}
-          className="flex items-center gap-1.5 border-t border-border/70 bg-violet-500/[0.04] px-3 py-1.5"
+          className="mt-2 flex items-center gap-1.5 border-t border-foreground/10 pt-2"
         >
-          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-violet-500/90">UGC</span>
+          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-violet-500/90">UGC</span>
           <span className="truncate text-[10px] text-muted-foreground">{t({ zh: '自定义模板', en: 'Custom template' })}</span>
           <button
             type="button"
             data-welcome-tpl-edit
             onClick={onEdit}
             title={t({ zh: '编辑这张模板的命令序列与元数据', en: 'Edit this template\'s command recipe and metadata' })}
-            className="ml-auto flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-violet-500/40 bg-violet-500/10 px-2.5 text-[10.5px] font-semibold text-violet-600 transition-colors hover:bg-violet-500/20 dark:text-violet-400"
+            className="ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 text-[10.5px] font-semibold text-violet-600 transition-colors hover:text-violet-500 dark:text-violet-400 dark:hover:text-violet-300"
           >
             <Pencil className="h-3 w-3" aria-hidden />
             {t({ zh: '编辑', en: 'Edit' })}
@@ -298,7 +292,7 @@ function GalleryCard({ tpl, index, busy, onDemo, onEdit }: {
 }
 
 export function WelcomeScreen() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { resolvedTheme, setTheme } = useTheme()
   const loading = useMolStore(s => s.loading)
   const loadingMsg = useMolStore(s => s.loadingMsg)
@@ -317,8 +311,7 @@ export function WelcomeScreen() {
     filter === 'all' ? allTemplates
     : filter === 'mine' ? customs
     : allTemplates.filter(x => x.category === filter)
-  // r89：移动端分类横滚行数据（<lg 且 filter='all' 时渲染——每支模板恰好出现一次；
-  // 自定义模板行附加在尾，紫印与画廊网格同源）
+  // r89：移动端分类横滚行数据（<lg 且 filter='all'——每支模板恰好出现一次）
   const catRows: { key: string; label: DualText; tpls: FigureTemplate[] }[] = [
     ...FIGURE_CATEGORIES.filter(c => c.key !== 'all').map(c => ({
       key: c.key as string,
@@ -331,6 +324,9 @@ export function WelcomeScreen() {
       tpls: customs,
     }] : []),
   ]
+  // 扉页图版（缺图时渐变占位兜底）
+  const plateA = FIGURE_TEMPLATES.find(x => x.id === PLATE_A) ?? FIGURE_TEMPLATES[0]
+  const plateB = FIGURE_TEMPLATES.find(x => x.id === PLATE_B) ?? FIGURE_TEMPLATES[1]
 
   // 精确指针设备才自动聚焦（触屏避免弹出键盘）
   useEffect(() => {
@@ -347,10 +343,8 @@ export function WelcomeScreen() {
     void fetchPdbId(v)
   }
 
-  // 画廊卡片 → 演示加载（demoThenApply：加载代表结构 + 应用图式命令序列；
-  // 成功后结构就位，欢迎页整体卸载交棒工作台）。
-  // r98：返回值感知——失败/超时不再弹「演示就绪」假成功（fetch 失败已由
-  // fetchPdbId 内部 toast，此处不重复报错只沉默不报成功）
+  // 图版/画廊卡 → 演示加载（demoThenApply：加载代表结构 + 应用图式命令序列）
+  // r98：返回值感知——失败/超时不弹「演示就绪」假成功
   const demo = async (tpl: FigureTemplate) => {
     if (busyId || loading) return
     setBusyId(tpl.id)
@@ -379,60 +373,28 @@ export function WelcomeScreen() {
         if (e.dataTransfer.files?.length) loadFiles(e.dataTransfer.files)
       }}
     >
-      {/* 背景：三轨道原子线稿缓慢旋转（电子沿轨巡航）+ 径向晕影；
-          深入两栏之下若隐若现（栏背景透明，卡片后轨道可见） */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-        {/* 径向晕影（浅色专属：边缘极淡冷灰，中心让位 hero） */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_65%_at_38%_40%,transparent_38%,color-mix(in_oklab,var(--foreground)_3.5%,transparent)_100%)] dark:hidden" />
-        <svg
-          viewBox="0 0 480 480"
-          className="welcome-orbit h-[min(76vh,600px,92vw)] w-[min(76vh,600px,92vw)] text-foreground/[0.075] dark:text-foreground/[0.055] [mask-image:radial-gradient(circle,transparent_18%,black_52%,black_64%,transparent_86%)]"
-        >
-          <g fill="none" stroke="currentColor" strokeWidth="1">
-            <ellipse cx="240" cy="240" rx="232" ry="88" />
-            <ellipse cx="240" cy="240" rx="232" ry="88" transform="rotate(60 240 240)" />
-            <ellipse cx="240" cy="240" rx="232" ry="88" transform="rotate(120 240 240)" />
-            <polygon points="240,12 437.5,126 437.5,354 240,468 42.5,354 42.5,126" strokeOpacity="0.55" />
-          </g>
-          {/* 轨道电子：沿最外椭圆巡航（SVG 原生 animateMotion；reduced-motion 由 UA 策略停用） */}
-          <circle r="2.5" className="fill-primary">
-            <animateMotion dur="16s" repeatCount="indefinite" path={ORBIT_PATH} />
-          </circle>
-          <circle r="1.8" className="fill-primary" opacity="0.65">
-            <animateMotion dur="16s" begin="-8s" repeatCount="indefinite" path={ORBIT_PATH} />
-          </circle>
-        </svg>
-      </div>
-
-      {/* ── 顶栏（r74：品牌 + 全局动作——open-design 导航惯例；语言浮动位迁入） ── */}
+      {/* ── 刊眉顶栏：六角铭印 + 衬线字标 + 小写字距副题；右：主题 · GitHub ── */}
       <header
         data-welcome-topbar
-        className="welcome-in relative z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border/60 bg-background/70 px-4 backdrop-blur-sm sm:px-5"
+        className="welcome-in relative z-30 flex h-12 shrink-0 items-center gap-3 border-b border-foreground/12 px-4 sm:px-6"
         style={{ animationDelay: '40ms' }}
       >
-        <div className="flex min-w-0 items-center gap-2.5">
-          {/* 品牌 monogram（静态小六角 + 双轨道线——hero 大徽章的缩影） */}
-          <svg viewBox="0 0 28 28" className="h-[22px] w-[22px] shrink-0" aria-hidden>
-            <polygon points="14,1 25.1,7.25 25.1,20.75 14,27 2.9,20.75 2.9,7.25" className="fill-primary" />
-            <g fill="none" stroke="currentColor" strokeWidth="1" className="text-primary-foreground" opacity="0.9">
-              <ellipse cx="14" cy="14" rx="8" ry="3" />
-              <ellipse cx="14" cy="14" rx="8" ry="3" transform="rotate(60 14 14)" />
-            </g>
-          </svg>
-          <span className="text-[15px] font-bold leading-none tracking-[-0.01em]">MolVision</span>
-          <span className="hidden rounded-full border border-foreground/[0.16] px-1.5 py-px font-mono text-[9px] font-semibold tracking-wide text-muted-foreground sm:inline dark:border-white/15">
-            v1.6
-          </span>
-        </div>
+        <svg viewBox="0 0 28 28" className="h-[18px] w-[18px] shrink-0" aria-hidden>
+          <polygon points="14,1 25.1,7.25 25.1,20.75 14,27 2.9,20.75 2.9,7.25" className="fill-primary" />
+          <g fill="none" stroke="currentColor" strokeWidth="1" className="text-primary-foreground" opacity="0.9">
+            <ellipse cx="14" cy="14" rx="8" ry="3" />
+            <ellipse cx="14" cy="14" rx="8" ry="3" transform="rotate(60 14 14)" />
+          </g>
+        </svg>
+        <span className="font-serif-editorial text-[17px] font-semibold leading-none tracking-[-0.01em]">MolVision</span>
+        <span className="journal-kicker hidden text-muted-foreground/80 lg:block">Molecular Visualization Studio</span>
         <div className="flex-1" />
-        {/* 右侧动作：主题 · GitHub（r80：语言入口去重——顶栏重复入口删除，
-            欢迎页唯一语言入口在页脚右下角 instrument-bar） */}
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
             suppressHydrationWarning
             aria-label={t({ zh: '切换深浅主题', en: 'Toggle light/dark theme' })}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.05] hover:text-foreground"
           >
             <Sun className="h-4 w-4 hidden dark:block" />
             <Moon className="h-4 w-4 dark:hidden" />
@@ -442,490 +404,459 @@ export function WelcomeScreen() {
             target="_blank"
             rel="noreferrer"
             aria-label={t({ zh: 'GitHub 仓库', en: 'GitHub repository' })}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground"
+            className="flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.05] hover:text-foreground"
           >
             <Github className="h-4 w-4" />
           </a>
         </div>
       </header>
 
-      {/* ── 主体：lg+ 左右分栏各自独立滚动；<lg 垂直堆叠整页滚动 ── */}
-      <div className="mol-scroll relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+      {/* ── 主体：期刊单栏（居中版心 + 发丝章节线；单列滚动） ── */}
+      <div className="mol-scroll relative z-10 min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-[1080px] px-4 pb-16 sm:px-8">
 
-        {/* 取景框四角刻度线（仪器签名细节；锚在主体区——顶栏/仪表条之外） */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-10">
-          <span className="corner-tick tl" />
-          <span className="corner-tick tr" />
-          <span className="corner-tick bl" />
-          <span className="corner-tick br" />
-        </div>
+          {/* ══ 扉页 hero：刊眉 + 衬线大标题 + 进样表单 ｜ 图版 A/B ══ */}
+          <section className="grid gap-10 pb-14 pt-8 sm:pt-12 lg:grid-cols-12 lg:gap-12">
+            {/* 左：排印主体（<lg 单列——进样表单先于图版，核心流程最短路径） */}
+            <div className="order-1 flex flex-col lg:col-span-7">
+              {/* 卷期元数据行（原遥测板信息的排印化：版本/引擎/数据源/图式数） */}
+              <div className="welcome-in journal-kicker text-muted-foreground" style={{ animationDelay: '80ms' }}>
+                VOL.16<span className="jk-sep">·</span>WEBGL<span className="jk-sep">·</span>RCSB&nbsp;LIVE<span className="jk-sep">·</span>{allTemplates.length}&nbsp;STYLES
+              </div>
 
-        {/* —— 左栏载体：<lg display:contents（part1 表单舱 / part2 示例舱直接成为
-             主容器 flex 项——画廊 order-2 插中间，r89 画廊上移地基）；lg+ 恢复实体
-             左栏（独立滚动 + 右边框） —— */}
-        <div className="mol-scroll w-full [display:contents] lg:flex lg:w-[400px] lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:border-r lg:border-border/60 xl:w-[448px]">
-          {/* part1：hero 加载舱（仪器语义原样；lg+ 组内上锚垂直居中；r87 <lg 密度收紧；
-               r90 <sm 全宽化——解除 368px 盒宽上限 + 边距 px-5→px-3，窄屏内容占满屏幅） */}
-          <div className="order-1 mx-auto flex w-full flex-col items-center px-3 pb-6 pt-7 sm:max-w-[368px] sm:px-6 sm:pt-9 lg:order-none lg:mt-auto lg:px-7 lg:pb-0 [&:has(.panel-card)_.load-sep]:mt-5">
-
-            {/* —— 品牌 hero（六角芯片：弹性入场 + halo 呼吸 + 双电子巡航 + 原子核呼吸；
-                 r80 主色晕染——open-design hero 焦点光；r87 <lg 缩 64px 压首屏） —— */}
-            <div className="hero-badge-in relative flex h-16 w-16 items-center justify-center sm:h-[76px] sm:w-[76px]" aria-hidden>
-              <div className="absolute -inset-7 rounded-full bg-[radial-gradient(circle,color-mix(in_oklab,var(--primary)_15%,transparent),transparent_70%)] blur-xl sm:-inset-9" />
-              <svg viewBox="0 0 28 28" className="hero-halo absolute inset-0 h-full w-full">
-                <polygon points="14,1 25.1,7.25 25.1,20.75 14,27 2.9,20.75 2.9,7.25" className="fill-primary" />
-              </svg>
-              <svg
-                viewBox="0 0 20 20"
-                className="relative h-[40px] w-[40px] text-primary-foreground sm:h-[46px] sm:w-[46px]"
-                fill="none" stroke="currentColor" strokeWidth="1.1"
+              <h1
+                className="welcome-in font-serif-editorial mt-5 text-[clamp(28px,4.4vw,50px)] font-medium leading-[1.16] tracking-[-0.012em]"
+                style={{ animationDelay: '120ms' }}
               >
-                <ellipse cx="10" cy="10" rx="8.2" ry="3.1" />
-                <ellipse cx="10" cy="10" rx="8.2" ry="3.1" transform="rotate(60 10 10)" />
-                <ellipse cx="10" cy="10" rx="8.2" ry="3.1" transform="rotate(120 10 10)" />
-                <circle className="nucleus-breathe" cx="10" cy="10" r="1.4" fill="currentColor" stroke="none" />
-                <circle r="0.95" fill="#fff" stroke="none">
-                  <animateMotion dur="7s" repeatCount="indefinite" path={MINI_ORBIT_A} />
-                </circle>
-                <circle r="0.75" fill="#fff" stroke="none" opacity="0.75">
-                  <animateMotion dur="10.5s" begin="-3.5s" repeatCount="indefinite" path={MINI_ORBIT_B} />
-                </circle>
-              </svg>
-            </div>
-            <h1 className="welcome-in mt-4 text-[29px] font-extrabold leading-none tracking-[-0.022em] sm:mt-5 sm:text-[34px] lg:text-[38px]" style={{ animationDelay: '60ms' }}>
-              MolVision
-            </h1>
-            <div
-              className="welcome-in mol-micro mt-2.5 text-muted-foreground sm:mt-4"
-              style={{ animationDelay: '110ms', letterSpacing: '0.24em' }}
-            >
-              Molecular Visualization Studio
-            </div>
-            <p className="welcome-in mt-2 text-center text-[11px] leading-relaxed text-muted-foreground sm:mt-2.5" style={{ animationDelay: '150ms' }}>
-              {t({ zh: '在浏览器中探索蛋白质 · 核酸 · 配体与电子密度', en: 'Explore proteins · nucleic acids · ligands & electron density in the browser' })}
-            </p>
+                {locale === 'zh' ? (
+                  <>把蛋白质、核酸与配体，<br />排成<span className="accent-ink text-primary">值得发表的图</span>。</>
+                ) : (
+                  <>Proteins, nucleic acids &amp; ligands,<br />set as <span className="accent-ink italic text-primary">publication-worthy</span> figures.</>
+                )}
+              </h1>
+              <p className="welcome-in mt-5 max-w-md text-[13px] leading-relaxed text-muted-foreground" style={{ animationDelay: '160ms' }}>
+                {t({
+                  zh: '在浏览器中探索蛋白质 · 核酸 · 配体与电子密度——渲染、测量、排版一气呵成。',
+                  en: 'Explore proteins · nucleic acids · ligands & electron density in the browser — render, measure, and typeset in one flow.',
+                })}
+              </p>
 
-            {/* r80 遥测读数板（取代单枚版本徽章——open-design hero 统计行 ×
-                仪器遥测语义：动态模板数 / 引擎就绪 LED / 数据源实况；
-                版本号仍由顶栏徽章 + 页脚承载） */}
-            <div
-              className="welcome-in mt-4 grid w-full grid-cols-3 overflow-hidden rounded-lg border border-foreground/[0.14] bg-card/60 backdrop-blur-[2px] sm:mt-5 dark:border-white/[0.12] dark:bg-white/[0.035]"
-              style={{ animationDelay: '185ms' }}
-              role="group"
-              aria-label={t({ zh: '平台遥测读数', en: 'Platform telemetry' })}
-            >
-              <div className="flex flex-col items-center gap-1 border-r border-foreground/[0.1] py-2.5 dark:border-white/[0.08]">
-                <span className="font-mono text-[15px] font-bold leading-none tabular-nums text-primary">{allTemplates.length}</span>
-                <span className="mol-micro text-[8px] leading-none">{t({ zh: '图式模板', en: 'Figure styles' })}</span>
-              </div>
-              <div className="flex flex-col items-center gap-1 border-r border-foreground/[0.1] py-2.5 dark:border-white/[0.08]">
-                <span className="flex items-center gap-1.5 font-mono text-[15px] font-bold leading-none text-foreground">
-                  <span className="led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-                  WebGL
-                </span>
-                <span className="mol-micro text-[8px] leading-none">{t({ zh: '引擎就绪', en: 'Engine ready' })}</span>
-              </div>
-              <div className="flex flex-col items-center gap-1 py-2.5">
-                <span className="font-mono text-[15px] font-bold leading-none text-foreground">RCSB</span>
-                <span className="mol-micro text-[8px] leading-none">{t({ zh: '实时数据源', en: 'Live source' })}</span>
-              </div>
-            </div>
-
-            {/* —— 会话区：恢复卡（有存档时挂载，无则 null）+ r86 分享链接粘贴卡
-                 （常显——接收侧发现性：贴入完整 URL 或裸 #s= 片段即可加载，
-                 不必知道「粘到地址栏」的隐式约定；同一锚 + 卡间 gap） —— */}
-            <div className="mt-6 flex w-full flex-col gap-2.5 sm:mt-9">
-              <SessionResumeSlot />
-              <ShareLinkLoadCard />
-            </div>
-
-            {/* —— 加载结构（fieldset 式图例分隔；:has 自适应——恢复卡挂载后收紧间距） —— */}
-            <div
-              className="load-sep welcome-in mt-6 flex w-full items-center gap-2.5 sm:mt-10"
-              style={{ animationDelay: '240ms' }}
-            >
-              <span className="h-px flex-1 bg-foreground/[0.14] dark:bg-foreground/[0.13]" />
-              <span className="mol-micro text-muted-foreground">{t({ zh: '加载结构', en: 'Load structure' })}</span>
-              <span className="h-px flex-1 bg-foreground/[0.14] dark:bg-foreground/[0.13]" />
-            </div>
-
-            {/* r80 加载舱（open-design 主 CTA 面板化：表单 + 或分隔 + 本地文件
-                同座——仪器语义的「进样舱」分组，内部元素随面板整体入场） */}
-            <div
-              className="welcome-in mt-3.5 w-full rounded-xl border border-foreground/[0.14] bg-card/65 p-3.5 shadow-[inset_0_1px_0_oklch(1_0_0/0.45),0_1px_10px_oklch(0.25_0.01_80/0.05)] backdrop-blur-[2px] sm:mt-4 dark:border-white/[0.12] dark:bg-white/[0.035] dark:shadow-none"
-              style={{ animationDelay: '280ms' }}
-            >
+              {/* 进样表单：大号等宽字 + 墨色下划线 + 墨块 CTA（期刊语态的「投稿」行） */}
               <form
                 onSubmit={e => { e.preventDefault(); submitId() }}
-                className="flex w-full gap-2"
+                className="welcome-in mt-9 flex w-full max-w-md items-end gap-3"
+                style={{ animationDelay: '200ms' }}
               >
-                <input
-                  ref={inputRef}
-                  value={id}
-                  onChange={e => setId(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
-                  maxLength={4}
-                  placeholder={t({ zh: 'PDB 编号 · 如 4HHB', en: 'PDB ID · e.g. 4HHB' })}
-                  aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="h-12 w-full min-w-0 flex-1 rounded-md border border-foreground/20 bg-card text-center font-mono text-[15px] font-medium uppercase tracking-[0.28em] text-foreground shadow-[inset_0_1px_2px_oklch(0.25_0.01_80/0.07)] outline-none transition-[border-color,box-shadow] duration-150 placeholder:font-sans placeholder:text-[11.5px] placeholder:font-normal placeholder:tracking-[0.1em] placeholder:text-muted-foreground hover:border-foreground/35 focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_24%,transparent),inset_0_1px_2px_oklch(0.25_0.01_80/0.04)] dark:border-white/[0.16] dark:bg-white/[0.045] dark:shadow-none dark:hover:border-white/25 dark:focus-visible:border-primary dark:focus-visible:shadow-[0_0_0_3px_color-mix(in_oklab,var(--primary)_26%,transparent)]"
-                />
+                <label className="min-w-0 flex-1">
+                  <span className="journal-kicker block text-muted-foreground">
+                    {t({ zh: 'PDB 编号 · RCSB 实时', en: 'PDB ID · RCSB LIVE' })}
+                  </span>
+                  <input
+                    ref={inputRef}
+                    value={id}
+                    onChange={e => setId(e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''))}
+                    maxLength={4}
+                    placeholder={t({ zh: '如 4HHB', en: 'e.g. 4HHB' })}
+                    aria-label={t({ zh: 'PDB 编号', en: 'PDB ID' })}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="mt-2 h-11 w-full border-0 border-b-2 border-foreground/25 bg-transparent font-mono text-[22px] font-medium uppercase leading-none tracking-[0.3em] text-foreground caret-primary outline-none transition-[border-color] duration-200 placeholder:font-sans placeholder:text-[12px] placeholder:font-normal placeholder:normal-case placeholder:tracking-[0.06em] placeholder:text-muted-foreground/70 hover:border-foreground/45 focus-visible:border-primary dark:border-white/20 dark:hover:border-white/35"
+                  />
+                </label>
                 <button
                   type="submit"
                   disabled={loading || id.length !== 4}
-                  className="welcome-cta flex h-12 shrink-0 select-none items-center gap-2 rounded-md bg-primary px-5 text-[13px] font-semibold text-primary-foreground disabled:pointer-events-none disabled:opacity-40"
+                  className="flex h-[46px] shrink-0 select-none items-center gap-2 bg-foreground px-5 font-mono text-[12.5px] font-semibold uppercase tracking-[0.08em] text-background transition-[background-color,color,translate] duration-150 hover:bg-primary hover:text-primary-foreground active:translate-y-px disabled:pointer-events-none disabled:opacity-35 dark:bg-foreground dark:text-background dark:hover:bg-primary dark:hover:text-primary-foreground"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {t({ zh: '获取结构', en: 'Fetch' })}
+                  {t({ zh: '载入', en: 'Load' })}
+                  {!loading && <ArrowRight className="h-3.5 w-3.5" aria-hidden />}
                 </button>
               </form>
 
-              {/* 状态行：固定高度避免加载态布局位移 */}
-              <div className="mt-2.5 flex h-4 w-full items-center justify-center">
+              {/* 状态行：固定高度避免加载态布局位移；r124 终端式就绪反馈——
+                  合法 4 位编号即时回显待发目标（期刊排印 × 仪器终端的交叉语态） */}
+              <div className="welcome-in mt-3 flex h-4 w-full max-w-md items-center" style={{ animationDelay: '240ms' }}>
                 {loading ? (
                   <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     {loadingMsg || t({ zh: '处理中…', en: 'Processing…' })}
                   </span>
+                ) : /^[0-9][A-Z0-9]{3}$/.test(id) ? (
+                  <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-primary/90">
+                    <span aria-hidden>&gt;</span>
+                    {t({ zh: `待发 ${id} · RCSB 实时`, en: `ready: fetch ${id} from RCSB` })}
+                  </span>
                 ) : (
-                  <span className="text-center text-[10px] text-muted-foreground">
-                    {t({ zh: 'RCSB 实时获取 · 可拖放文件到页面', en: 'Live from RCSB PDB · drag & drop files anywhere' })}
+                  <span className="text-[10.5px] text-muted-foreground">
+                    {t({ zh: 'RCSB 实时获取 · 可拖放文件到页面任意位置', en: 'Live from RCSB PDB · drag & drop files anywhere' })}
                   </span>
                 )}
               </div>
 
-              {/* 或分隔（在线编号 ↔ 本地文件两路进样方式） */}
-              <div className="mt-1.5 flex items-center gap-2.5">
-                <span className="h-px flex-1 bg-foreground/[0.1] dark:bg-foreground/[0.1]" />
-                <span className="mol-micro text-muted-foreground/85">{t({ zh: '或本地文件', en: 'or local file' })}</span>
-                <span className="h-px flex-1 bg-foreground/[0.1] dark:bg-foreground/[0.1]" />
-              </div>
-
-              {/* —— 本地文件（含 .molvision 会话）：容器化底座提升可点击暗示 —— */}
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={loading}
-                className="group mt-2.5 flex h-11 w-full items-center justify-center gap-2 rounded-md border border-foreground/[0.16] bg-secondary/50 text-xs font-medium text-foreground/85 shadow-[inset_0_1px_0_oklch(1_0_0/0.5)] transition-[border-color,background-color,transform] duration-150 hover:border-foreground/30 hover:bg-secondary/80 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 dark:border-white/[0.13] dark:bg-white/[0.035] dark:shadow-none dark:hover:border-white/25 dark:hover:bg-white/[0.06]"
-              >
-                <FolderOpen className="h-3.5 w-3.5 text-primary/80 transition-transform duration-200 group-hover:-translate-y-px" />
-                {t({ zh: '打开本地文件…', en: 'Open local file…' })}
-                <span className="font-mono text-[9.5px] font-normal tracking-wide text-muted-foreground">
+              {/* 本地文件：排印链接（正字重 + 下划线偏移），格式族等宽小学注 */}
+              <div className="welcome-in mt-5 flex w-full max-w-md flex-wrap items-baseline gap-x-4 gap-y-2" style={{ animationDelay: '280ms' }}>
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  disabled={loading}
+                  className="group inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-medium text-foreground/85 underline decoration-foreground/25 underline-offset-4 transition-colors duration-150 hover:text-primary hover:decoration-primary/60 disabled:pointer-events-none disabled:opacity-50"
+                >
+                  <FolderOpen className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-px" aria-hidden />
+                  {t({ zh: '打开本地文件…', en: 'Open local file…' })}
+                </button>
+                <span className="font-mono text-[9.5px] tracking-wide text-muted-foreground/80">
                   PDB / CIF / CCP4 / .molvision
                 </span>
-              </button>
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept=".pdb,.ent,.cif,.mmcif,.txt,.molvision,.json,.ccp4,.map,.mrc"
-              className="hidden"
-              onChange={e => {
-                if (e.target.files?.length) loadFiles(e.target.files)
-                // r99-main：清 value——解析失败后重选同一文件不派发 change（重试静默失效）
-                e.target.value = ''
-              }}
-            />
-          </div>
+              </div>
 
-          {/* part2：经典示例舱（<lg 排在画廊之后——展示优先的移动流；lg+ 并回左栏
-               组内下锚垂直居中；pb-24 为悬浮 AI 胶囊让位——移动端它成了页尾） */}
-          <div className="order-3 mx-auto flex w-full flex-col items-center px-3 pb-24 sm:max-w-[368px] sm:px-6 lg:order-none lg:mb-auto lg:px-7 lg:pb-7">
-
-            {/* —— 经典示例（r80 双列卡片：ID 主色等宽 + 名称 + desc 副行——启用
-                loader 中此前从未上屏的描述字段，卡片比芯片更有作品感；r87 <lg 收紧） —— */}
-            <div className="welcome-in mt-6 flex w-full items-center gap-2.5 sm:mt-8" style={{ animationDelay: '380ms' }}>
-              <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
-              <span className="mol-micro text-muted-foreground">{t({ zh: '经典示例', en: 'Classic examples' })}</span>
-              <span className="h-px flex-1 bg-foreground/[0.18] dark:bg-foreground/[0.16]" />
+              {/* 会话区：恢复卡（有存档时挂载）+ r86 分享链接粘贴卡 */}
+              <div className="welcome-in mt-7 flex w-full max-w-md flex-col gap-2.5" style={{ animationDelay: '320ms' }}>
+                <SessionResumeSlot />
+                <ShareLinkLoadCard />
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept=".pdb,.ent,.cif,.mmcif,.txt,.molvision,.json,.ccp4,.map,.mrc"
+                className="hidden"
+                onChange={e => {
+                  if (e.target.files?.length) loadFiles(e.target.files)
+                  // r99：清 value——解析失败后重选同一文件不派发 change（重试静默失效）
+                  e.target.value = ''
+                }}
+              />
             </div>
-            <div className="welcome-in mt-3 grid w-full grid-cols-2 gap-2 sm:mt-3.5" style={{ animationDelay: '420ms' }}>
-              {WELCOME_EXAMPLES.map(ex => (
-                <button
-                  key={ex.id}
-                  onClick={() => void fetchPdbId(ex.id)}
-                  disabled={loading}
-                  className="group flex flex-col gap-1 rounded-lg border border-foreground/[0.16] bg-secondary/55 px-3 py-2.5 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/45 hover:bg-primary/[0.06] hover:shadow-[0_2px_10px_color-mix(in_oklab,var(--primary)_13%,transparent)] active:translate-y-0 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 dark:border-white/[0.11] dark:bg-white/[0.03] dark:hover:border-primary/50 dark:hover:bg-primary/[0.09]"
+
+            {/* 右：图版 A/B（引擎真实渲染的代表作品；<lg 移至进样表单之后） */}
+            <div className="order-2 lg:col-span-5 lg:pt-1">
+              <HeroPlate
+                tpl={plateA}
+                label={{ zh: '图版 A', en: 'PLATE A' }}
+                aspect="aspect-[4/3]"
+                delay="360ms"
+                busy={busyId === plateA.id || loading}
+                onDemo={() => void demo(plateA)}
+              />
+              <div className="mt-4 flex items-stretch gap-4 lg:mt-5">
+                <HeroPlate
+                  tpl={plateB}
+                  label={{ zh: '图版 B', en: 'PLATE B' }}
+                  aspect="aspect-[4/3]"
+                  className="w-[72%] shrink-0"
+                  delay="400ms"
+                  busy={busyId === plateB.id || loading}
+                  onDemo={() => void demo(plateB)}
+                />
+                {/* 图库索引栏（sm+）：计数 + 衬线小标 + 引导至画廊章节 */}
+                <a
+                  href="#welcome-gallery"
+                  className="welcome-in group hidden flex-col items-start gap-1.5 self-st border-l border-foreground/12 pl-4 sm:flex"
+                  style={{ animationDelay: '440ms' }}
                 >
-                  <span className="flex items-baseline gap-1.5">
-                    <span className="font-mono text-[11px] font-bold leading-none tracking-[0.08em] text-primary/90 transition-colors duration-150 group-hover:text-primary">
-                      {ex.id}
-                    </span>
-                    <span className="truncate text-[11.5px] font-semibold leading-none text-foreground/90" title={t(ex.title)}>
-                      {t(ex.title)}
-                    </span>
+                  <span className="font-mono text-[11px] font-bold tabular-nums leading-none text-primary">{allTemplates.length}</span>
+                  <span className="font-serif-editorial text-[13.5px] font-semibold leading-tight">
+                    {t({ zh: '图式全库', en: 'Full library' })}
                   </span>
-                  <span className="truncate text-[9.5px] leading-none text-muted-foreground" title={t(ex.desc)}>
-                    {t(ex.desc)}
+                  <span className="text-[9.5px] leading-relaxed text-muted-foreground">
+                    {t({ zh: '同类多风格 · 可上传你的论文图', en: 'Same-type variants · upload your own figure' })}
                   </span>
-                </button>
-              ))}
+                  <ArrowDown className="mt-auto h-3.5 w-3.5 text-muted-foreground transition-[color,translate] duration-200 group-hover:translate-y-0.5 group-hover:text-primary" aria-hidden />
+                </a>
+              </div>
             </div>
-          </div>
-        </div>
+          </section>
 
-        {/* —— 画廊（open-design 作品橱窗）：<lg 以 order-2 插在表单舱与示例舱
-             之间（r89 上移）；lg+ 右栏独立滚动 —— */}
-        <section
-          aria-label={t({ zh: '论文图模板画廊', en: 'Paper-figure template gallery' })}
-          className="mol-scroll order-2 flex w-full flex-col lg:order-none lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
-        >
-          {/* 区头（sticky 毛玻璃常驻）：标题 + 计数 + 分类过滤 + 库入口 */}
-          <div className="gallery-head-blur welcome-in sticky top-0 z-10 border-b border-border/50 px-3 py-3.5 sm:px-7" style={{ animationDelay: '260ms' }}>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <BookOpenText className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-              <h2 className="text-[15px] font-bold leading-none tracking-[-0.01em]">
-                {t({ zh: '论文图模板', en: 'Paper-figure styles' })}
+          {/* ══ §01 经典结构：索引式列表（期刊目次惯例） ══ */}
+          <section aria-label={t({ zh: '经典结构索引', en: 'Classic structures index' })}>
+            <header
+              className="welcome-in flex items-baseline gap-3 border-b border-foreground/15 pb-3"
+              style={{ animationDelay: '380ms' }}
+            >
+              <span className="font-mono text-[11px] font-semibold tabular-nums text-primary">§01</span>
+              <h2 className="font-serif-editorial text-[21px] font-semibold leading-none tracking-[-0.01em]">
+                {t({ zh: '经典结构', en: 'Classic structures' })}
               </h2>
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[9.5px] font-bold text-primary">
-                {allTemplates.length}
+              <span className="ml-auto font-mono text-[10px] tabular-nums text-muted-foreground">
+                {WELCOME_EXAMPLES.length} {t({ zh: '条目', en: 'entries' })}
               </span>
-              <div
-                role="group"
-                aria-label={t({ zh: '画廊分类', en: 'Gallery categories' })}
-                className="mol-toolbar-scroll ml-auto flex min-w-0 items-center gap-1.5 overflow-x-auto lg:flex-wrap lg:overflow-x-visible"
-              >
-                {FIGURE_CATEGORIES.map(c => {
-                  const n = c.key === 'all' ? allTemplates.length : allTemplates.filter(x => x.category === c.key).length
-                  const active = filter === c.key
-                  return (
-                    <button
-                      key={c.key}
-                      type="button"
-                      onClick={() => setFilter(c.key)}
-                      aria-pressed={active}
-                      className={cn(
-                        'cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors',
-                        active
-                          ? 'border-primary/60 bg-primary/10 text-primary'
-                          : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground',
-                      )}
-                    >
-                      {t(c.label)}
-                      <span className="ml-1 font-mono text-[9px] opacity-70">{n}</span>
-                    </button>
-                  )
-                })}
-                {customs.length > 0 && (
+            </header>
+            <ol className="m-0 list-none p-0" role="list">
+              {WELCOME_EXAMPLES.map((ex, i) => (
+                <li key={ex.id} role="listitem">
                   <button
+                    onClick={() => void fetchPdbId(ex.id)}
+                    disabled={loading}
+                    className="journal-row-in group grid w-full cursor-pointer grid-cols-[2rem_4rem_1fr_auto] items-baseline gap-x-3 border-b border-foreground/10 py-3.5 text-left transition-colors duration-150 hover:bg-foreground/[0.035] disabled:pointer-events-none disabled:opacity-50 dark:hover:bg-white/[0.04]"
+                    style={{ animationDelay: `${400 + i * 35}ms` }}
+                  >
+                    <span className="font-mono text-[10px] tabular-nums leading-none text-muted-foreground/70">
+                      {String(i + 1).padStart(2, '0')}
+                    </span>
+                    <span className="font-mono text-[13px] font-bold leading-none tracking-[0.06em] text-primary">{ex.id}</span>
+                    <span className="flex min-w-0 items-baseline gap-2.5 leading-none">
+                      <span className="truncate text-[14px] font-semibold leading-none" title={t(ex.title)}>{t(ex.title)}</span>
+                      <span className="hidden truncate text-[11.5px] leading-none text-muted-foreground sm:inline" title={t(ex.desc)}>{t(ex.desc)}</span>
+                    </span>
+                    <ArrowRight
+                      className="h-3.5 w-3.5 -translate-x-1 text-primary opacity-0 transition-[opacity,translate] duration-200 group-hover:translate-x-0 group-hover:opacity-100"
+                      aria-hidden
+                    />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </section>
+
+          {/* ══ §02 论文图式：过滤页签 + Fig. 编号画廊 ══ */}
+          <section id="welcome-gallery" aria-label={t({ zh: '论文图模板画廊', en: 'Paper-figure template gallery' })} className="scroll-mt-2 pt-12">
+            <header
+              className="welcome-in flex flex-wrap items-baseline gap-x-3 gap-y-2 border-b border-foreground/15 pb-3"
+              style={{ animationDelay: '420ms' }}
+            >
+              <span className="font-mono text-[11px] font-semibold tabular-nums text-primary">§02</span>
+              <h2 className="font-serif-editorial text-[21px] font-semibold leading-none tracking-[-0.01em]">
+                {t({ zh: '论文图式', en: 'Figure styles' })}
+              </h2>
+              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                {allTemplates.length} {t({ zh: '式', en: 'styles' })}
+              </span>
+              {/* 右：图库动作（排印链接族——主链接 + 次链接） */}
+              <div className="ml-auto flex items-center gap-4">
+                <button
+                  type="button"
+                  data-welcome-create-template
+                  onClick={() => { setUi({ templateOpen: true }); window.dispatchEvent(new CustomEvent('open-template-upload')) }}
+                  className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 text-[11.5px] font-semibold text-primary transition-colors duration-150 hover:text-primary/75"
+                  title={t({ zh: '上传论文图，AI 解析图式生成你的自定义模板', en: 'Upload a paper figure — the AI parses it into your custom template' })}
+                >
+                  <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+                  {t({ zh: '从图片创建', en: 'From image' })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUi({ templateOpen: true })}
+                  className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 text-[11.5px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                  title={t({ zh: '打开完整模板库（可应用到已加载结构）', en: 'Open the full template library (applies to loaded structures)' })}
+                >
+                  {t({ zh: '在库中浏览', en: 'Browse library' })}
+                  <ArrowUpRight className="h-3 w-3" aria-hidden />
+                </button>
+              </div>
+            </header>
+            <p className="welcome-in mt-2.5 max-w-2xl text-[11px] leading-relaxed text-muted-foreground" style={{ animationDelay: '450ms' }}>
+              {t({
+                zh: 'Cell / Nature / Science 结构文章的经典图式——缩略图由引擎真实渲染，点击卡片即刻加载演示结构并应用；同类多风格（明暗/键连/立体/剖切/线描/灰度/静电/水合…）与上传你自己的论文图 AI 解析为新模板均可。',
+                en: 'Classic figure styles from Cell / Nature / Science papers — thumbnails are genuine engine renders; click a card to load the demo structure with the style applied. Same-type variants (dark / bonding / stereo / cutaway / wire / grayscale / electrostatic / hydration…) and AI-parsed uploads included.',
+              })}
+            </p>
+
+            {/* 过滤页签（下划线坐发丝基线；sticky 毛玻璃常驻便于长画廊随手过滤） */}
+            <div
+              role="group"
+              aria-label={t({ zh: '画廊分类', en: 'Gallery categories' })}
+              className="gallery-head-blur mol-toolbar-scroll sticky top-0 z-10 mt-5 flex items-center gap-5 overflow-x-auto border-b border-foreground/15"
+            >
+              {FIGURE_CATEGORIES.map(c => {
+                const n = c.key === 'all' ? allTemplates.length : allTemplates.filter(x => x.category === c.key).length
+                const active = filter === c.key
+                return (
+                  <button
+                    key={c.key}
                     type="button"
-                    onClick={() => setFilter('mine')}
-                    aria-pressed={filter === 'mine'}
-                    data-welcome-mine-chip
+                    onClick={() => setFilter(c.key)}
+                    aria-pressed={active}
+                    data-active={active}
                     className={cn(
-                      'cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors',
-                      filter === 'mine'
-                        ? 'border-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-400'
-                        : 'border-violet-500/30 bg-violet-500/[0.06] text-violet-600/80 hover:bg-violet-500/12 dark:text-violet-400/80',
+                      'journal-tab cursor-pointer pb-2.5 text-[12.5px] font-medium leading-none transition-colors',
+                      active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
                     )}
                   >
-                    {t({ zh: '我的模板', en: 'My templates' })}
-                    <span className="ml-1 font-mono text-[9px] opacity-70">{customs.length}</span>
+                    {t(c.label)}
+                    <span className="ml-1.5 font-mono text-[9px] tabular-nums opacity-60">{n}</span>
                   </button>
-                )}
-              </div>
-              {/* r79：上传论文图 → AI 解析自定义模板（画廊一级入口） */}
-              <button
-                type="button"
-                data-welcome-create-template
-                onClick={() => { setUi({ templateOpen: true }); window.dispatchEvent(new CustomEvent('open-template-upload')) }}
-                className="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-primary/45 bg-primary/10 px-3 text-[11px] font-semibold text-primary transition-[border-color,background-color] duration-150 hover:bg-primary/15"
-                title={t({ zh: '上传论文图，AI 解析图式生成你的自定义模板', en: 'Upload a paper figure — the AI parses it into your custom template' })}
-              >
-                <ImagePlus className="h-3 w-3" aria-hidden />
-                {t({ zh: '从图片创建', en: 'From image' })}
-              </button>
-              <button
-                type="button"
-                onClick={() => setUi({ templateOpen: true })}
-                className="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border bg-card px-3 text-[11px] font-semibold text-foreground/85 transition-[border-color,background-color] duration-150 hover:border-primary/45 hover:bg-primary/[0.06] hover:text-foreground"
-                title={t({ zh: '打开完整模板库（可应用到已加载结构）', en: 'Open the full template library (applies to loaded structures)' })}
-              >
-                {t({ zh: '在库中浏览', en: 'Browse library' })}
-                <ArrowUpRight className="h-3 w-3 text-primary" aria-hidden />
-              </button>
-            </div>
-            <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted-foreground">
-              {t({
-                zh: 'Cell / Nature / Science 结构文章的经典图式——缩略图由引擎真实渲染，点击卡片即刻加载演示结构并应用；同类多风格（明暗/键连/立体/剖切/线描/灰度/静电/水合…）与上传你自己的论文图 AI 解析为新模板均可',
-                en: 'Classic figure styles from Cell / Nature / Science papers — thumbnails are genuine engine renders; click a card to load the demo structure with the style applied. Same-type variants (dark / bonding / stereo / cutaway / wire / grayscale / electrostatic / hydration…) and AI-parsed uploads included',
+                )
               })}
-            </p>
-          </div>
+              {customs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilter('mine')}
+                  aria-pressed={filter === 'mine'}
+                  data-welcome-mine-chip
+                  data-active={filter === 'mine'}
+                  className={cn(
+                    'journal-tab shrink-0 cursor-pointer pb-2.5 text-[12.5px] font-medium leading-none transition-colors',
+                    filter === 'mine' ? 'text-violet-600 dark:text-violet-400' : 'text-violet-600/70 hover:text-violet-600 dark:text-violet-400/70 dark:hover:text-violet-400',
+                  )}
+                  style={filter === 'mine' ? { borderBottomColor: 'var(--color-violet-500, #8b5cf6)' } : undefined}
+                >
+                  {t({ zh: '我的模板', en: 'My templates' })}
+                  <span className="ml-1.5 font-mono text-[9px] tabular-nums opacity-60">{customs.length}</span>
+                </button>
+              )}
+            </div>
 
-          {/* —— r89 移动端分类横滚行（<lg 且 filter='all'）：画廊本体直接上移——每支
-               模板在页面上恰好出现一次（r87「速览条 + 画廊」双份展示的重复根治）；
-               行内 snap 横滑 + 行头「查看全部」切该类过滤网格；lg+ 走完整网格 —— */}
-          {filter === 'all' && (
-            <div data-welcome-cat-rows className="pb-3 lg:hidden">
-              {catRows.map(row => row.tpls.length > 0 && (
-                <div key={row.key} data-welcome-cat-row={row.key}>
-                  <div className="flex items-center gap-2 px-3 pt-4 sm:px-7">
-                    <h3 className="text-[13px] font-bold leading-none tracking-[-0.01em]">{t(row.label)}</h3>
-                    <span className="font-mono text-[9px] font-semibold tabular-nums text-muted-foreground">{row.tpls.length}</span>
+            {/* —— r89 移动端分类横滚行（<lg 且 filter='all'）：每支模板恰好出现一次 —— */}
+            {filter === 'all' && (
+              <div data-welcome-cat-rows className="pb-3 lg:hidden">
+                {catRows.map(row => row.tpls.length > 0 && (
+                  <div key={row.key} data-welcome-cat-row={row.key}>
+                    <div className="flex items-baseline gap-2 pt-5">
+                      <h3 className="font-serif-editorial text-[15px] font-semibold leading-none tracking-[-0.01em]">{t(row.label)}</h3>
+                      <span className="font-mono text-[9px] font-semibold tabular-nums leading-none text-muted-foreground">{row.tpls.length}</span>
+                      <button
+                        type="button"
+                        data-welcome-row-all={row.key}
+                        onClick={() => setFilter(row.key === 'mine' ? 'mine' : row.key as FigureCategory)}
+                        className={cn(
+                          'ml-auto inline-flex h-6 shrink-0 cursor-pointer items-center gap-0.5 text-[10.5px] font-semibold leading-none',
+                          row.key === 'mine'
+                            ? 'text-violet-600 hover:text-violet-500 dark:text-violet-400'
+                            : 'text-primary hover:text-primary/75',
+                        )}
+                      >
+                        {t({ zh: '查看全部', en: 'See all' })}
+                        <ChevronRight className="h-2.5 w-2.5" aria-hidden />
+                      </button>
+                    </div>
+                    <div
+                      role="list"
+                      aria-label={`${t(row.label)} · ${t({ zh: '横向滑动', en: 'swipe' })}`}
+                      className="mol-toolbar-scroll flex snap-x gap-2.5 overflow-x-auto pb-1.5 pt-3"
+                    >
+                      {row.tpls.map((tpl, i) => (
+                        <RowCard
+                          key={tpl.id}
+                          tpl={tpl}
+                          delay={`${360 + i * 25}ms`}
+                          busy={busyId === tpl.id || loading}
+                          onDemo={() => void demo(tpl)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 画廊网格（过滤切换时 key 变化重播 stagger 入场；r89：<lg 仅特定过滤渲染） */}
+            <div className="pb-4 pt-5 lg:pb-8">
+              {/* r90：移动端过滤网格的显式返回入口 */}
+              {filter !== 'all' && (
+                <button
+                  type="button"
+                  data-welcome-back-rows
+                  onClick={() => setFilter('all')}
+                  className="mb-4 inline-flex h-7 cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-primary transition-colors hover:text-primary/75 lg:hidden"
+                >
+                  <ArrowLeft className="h-3 w-3" aria-hidden />
+                  {t({ zh: '返回分类浏览', en: 'Back to categories' })}
+                </button>
+              )}
+              <div
+                key={filter}
+                data-welcome-gallery
+                className={cn(
+                  'gap-x-6 gap-y-8',
+                  filter === 'all'
+                    ? 'hidden grid-cols-2 xl:grid-cols-3 lg:grid'
+                    : 'grid grid-cols-2 lg:grid-cols-3',
+                )}
+              >
+                {shown.map(tpl => (
+                  <GalleryCard
+                    key={tpl.id}
+                    tpl={tpl}
+                    index={allTemplates.indexOf(tpl)}
+                    busy={busyId === tpl.id || loading}
+                    onDemo={() => void demo(tpl)}
+                    onEdit={tpl.custom ? () => {
+                      // r85：画廊卡直编入口——先开弹窗，再广播 open-template-edit 直达编辑视图
+                      setUi({ templateOpen: true })
+                      window.dispatchEvent(new CustomEvent('open-template-edit', { detail: { id: tpl.id } }))
+                    } : undefined}
+                  />
+                ))}
+                {filter === 'mine' && customs.length === 0 && (
+                  <div className="col-span-full flex flex-col items-center gap-2 border border-dashed border-foreground/20 py-12 text-center">
+                    <ImagePlus className="h-7 w-7 text-muted-foreground/50" aria-hidden />
+                    <p className="font-serif-editorial text-[15px] font-semibold">{t({ zh: '还没有自定义模板', en: 'No custom templates yet' })}</p>
+                    <p className="max-w-sm text-[11px] leading-relaxed text-muted-foreground">
+                      {t({ zh: '上传一张论文/科研分子图，AI 将解析其图式配方并生成可编辑命令模板', en: 'Upload a paper or scientific molecular figure — the AI parses its style recipe into an editable command template' })}
+                    </p>
                     <button
                       type="button"
-                      data-welcome-row-all={row.key}
-                      onClick={() => setFilter(row.key === 'mine' ? 'mine' : row.key as FigureCategory)}
-                      className={cn(
-                        'ml-auto flex h-6 cursor-pointer items-center gap-0.5 rounded-full border px-2.5 text-[10.5px] font-semibold transition-colors',
-                        row.key === 'mine'
-                          ? 'border-violet-500/40 bg-violet-500/[0.08] text-violet-600 hover:bg-violet-500/15 dark:text-violet-400'
-                          : 'border-border bg-muted/40 text-primary hover:bg-primary/10',
-                      )}
+                      onClick={() => { setUi({ templateOpen: true }); window.dispatchEvent(new CustomEvent('open-template-upload')) }}
+                      className="mt-1 inline-flex h-8 cursor-pointer items-center gap-1.5 border border-primary/45 px-3.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/10"
                     >
-                      {t({ zh: '查看全部', en: 'See all' })}
-                      <ChevronRight className="h-2.5 w-2.5" aria-hidden />
+                      <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+                      {t({ zh: '上传第一张图', en: 'Upload your first image' })}
                     </button>
                   </div>
-                  <div
-                    role="list"
-                    aria-label={`${t(row.label)} · ${t({ zh: '横向滑动', en: 'swipe' })}`}
-                    className="mol-toolbar-scroll flex snap-x gap-2.5 overflow-x-auto px-3 pb-1.5 pt-2 sm:px-7"
-                  >
-                    {row.tpls.map(tpl => (
-                      <RowCard
-                        key={tpl.id}
-                        tpl={tpl}
-                        busy={busyId === tpl.id || loading}
-                        onDemo={() => void demo(tpl)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
+                )}
+              </div>
+              {/* 诚实版权脚注（细小学注；与模板库对话框同口径） */}
+              <p className="journal-row-in mt-8 flex max-w-2xl items-start gap-1.5 border-t border-foreground/10 pt-4 text-[10px] leading-relaxed text-muted-foreground" style={{ animationDelay: '700ms' }}>
+                <Wand2 className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                {t({
+                  zh: '模板复现的是图式视觉配方（表示法·配色·视角·灯光·轮廓）与分析命令（孔道剖面/脂双层），不含论文原图；缩略图由 MolVision 引擎对代表结构真实渲染。',
+                  en: 'Templates reproduce figure-style recipes (representations · coloring · camera · lighting · outlines) and analysis commands (pore profiles / bilayers), not original artwork; thumbnails are genuine MolVision engine renders.',
+                })}
+              </p>
             </div>
-          )}
-
-          {/* 画廊网格（过滤切换时 key 变化重播 stagger 入场；r89：<lg 仅在特定过滤下
-               渲染——'all' 走分类横滚行去重——并收紧为 2 列紧凑卡） */}
-          <div className="px-3 pb-6 pt-4 sm:px-7 lg:pb-20">
-            {/* r90：移动端过滤网格的显式返回入口（r89 建议①——「查看全部」切进特定类后，
-                 此前只能靠 chips 行首「全部」返航；<lg 网格前给一枚「返回分类」锚点降门槛） */}
-            {filter !== 'all' && (
-              <button
-                type="button"
-                data-welcome-back-rows
-                onClick={() => setFilter('all')}
-                className="mb-3 flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 text-[11px] font-semibold text-foreground/85 transition-[border-color,background-color,color] duration-150 hover:border-primary/45 hover:bg-primary/[0.06] hover:text-foreground lg:hidden"
-              >
-                <ArrowLeft className="h-3 w-3 text-primary" aria-hidden />
-                {t({ zh: '返回分类浏览', en: 'Back to categories' })}
-              </button>
-            )}
-            <div
-              key={filter}
-              data-welcome-gallery
-              className={cn(
-                'gap-3.5',
-                filter === 'all'
-                  ? 'hidden min-[420px]:grid-cols-2 lg:grid xl:grid-cols-3'
-                  : 'grid grid-cols-2 xl:grid-cols-3',
-              )}
-            >
-              {shown.map(tpl => (
-                <GalleryCard
-                  key={tpl.id}
-                  tpl={tpl}
-                  index={allTemplates.indexOf(tpl)}
-                  busy={busyId === tpl.id || loading}
-                  onDemo={() => void demo(tpl)}
-                  onEdit={tpl.custom ? () => {
-                    // r85：画廊卡直编入口——与「从图片创建」同一事件语汇：
-                    // 先开弹窗，再广播 open-template-edit 直达编辑视图（预填）
-                    setUi({ templateOpen: true })
-                    window.dispatchEvent(new CustomEvent('open-template-edit', { detail: { id: tpl.id } }))
-                  } : undefined}
-                />
-              ))}
-              {filter === 'mine' && customs.length === 0 && (
-                <div className="col-span-full flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-border bg-muted/30 px-6 py-12 text-center">
-                  <ImagePlus className="h-9 w-9 text-muted-foreground/50" aria-hidden />
-                  <p className="text-[12.5px] font-semibold">{t({ zh: '还没有自定义模板', en: 'No custom templates yet' })}</p>
-                  <p className="max-w-sm text-[11px] leading-relaxed text-muted-foreground">
-                    {t({ zh: '上传一张论文/科研分子图，AI 将解析其图式配方并生成可编辑命令模板', en: 'Upload a paper or scientific molecular figure — the AI parses its style recipe into an editable command template' })}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => { setUi({ templateOpen: true }); window.dispatchEvent(new CustomEvent('open-template-upload')) }}
-                    className="mt-1 flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-primary/45 bg-primary/10 px-3.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/15"
-                  >
-                    <ImagePlus className="h-3.5 w-3.5" aria-hidden />
-                    {t({ zh: '上传第一张图', en: 'Upload your first image' })}
-                  </button>
-                </div>
-              )}
-            </div>
-            {/* 诚实版权脚注（与模板库对话框同口径） */}
-            <p className="gallery-card-in mt-5 flex max-w-xl items-start gap-1.5 text-[10px] leading-relaxed text-muted-foreground" style={{ animationDelay: '700ms' }}>
-              <Wand2 className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-              {t({
-                zh: '模板复现的是图式视觉配方（表示法·配色·视角·灯光·轮廓）与分析命令（孔道剖面/脂双层），不含论文原图；缩略图由 MolVision 引擎对代表结构真实渲染。',
-                en: 'Templates reproduce figure-style recipes (representations · coloring · camera · lighting · outlines) and analysis commands (pore profiles / bilayers), not original artwork; thumbnails are genuine MolVision engine renders.',
-              })}
-            </p>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
 
-      {/* AI 助手悬浮入口（仪器胶囊：LED 待机 + ⌘J 快捷键；面板打开时让位隐藏）
-          r74：锚在根级非滚动层（曾嵌在滚动主体内——移动端会随内容滚走） */}
+      {/* AI 助手悬浮入口（素雅胶囊：⌘J 快捷键；面板打开时让位隐藏） */}
       {!agentOpen && (
-          <button
-            onClick={() => setUi({ agentOpen: true })}
-            className="welcome-in welcome-float-chip group bottom-5 right-5 z-20 flex h-10 select-none items-center gap-2.5 border-primary/30 bg-card/92 pl-3 pr-3.5 shadow-[0_2px_14px_color-mix(in_oklab,var(--primary)_22%,transparent)] hover:border-primary/55 hover:shadow-[0_5px_20px_color-mix(in_oklab,var(--primary)_36%,transparent)] active:scale-[0.97]"
-            style={{ animationDelay: '460ms' }}
-            aria-keyshortcuts="Control+J"
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/12 text-primary transition-transform duration-200 group-hover:scale-105">
-              <Bot className="h-3.5 w-3.5" />
-            </span>
-            <span className="text-xs font-semibold tracking-wide">{t({ zh: 'AI 助手', en: 'AI Assistant' })}</span>
-            <span className="hidden items-center gap-0.5 font-mono text-[9px] font-medium text-muted-foreground/80 sm:flex">
-              <kbd className="rounded border border-border bg-background px-1 py-px leading-none">⌘</kbd>J
-            </span>
-            <span className="led-dot led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-          </button>
-        )}
+        <button
+          onClick={() => setUi({ agentOpen: true })}
+          className="welcome-in welcome-float-chip group bottom-5 right-5 z-20 flex h-9 select-none items-center gap-2 border-border bg-background/92 px-3.5 text-foreground/85 shadow-[0_1px_10px_oklch(0.25_0.01_80/0.1)] hover:border-primary/50 hover:text-foreground dark:shadow-[0_1px_10px_oklch(0_0_0/0.4)]"
+          style={{ animationDelay: '500ms' }}
+          aria-keyshortcuts="Control+J"
+        >
+          <Bot className="h-3.5 w-3.5 text-primary" aria-hidden />
+          <span className="text-[11.5px] font-semibold tracking-wide">{t({ zh: 'AI 助手', en: 'AI Assistant' })}</span>
+          <span className="hidden items-center gap-0.5 font-mono text-[9px] font-medium text-muted-foreground/80 sm:flex">
+            <kbd className="border border-foreground/15 bg-transparent px-1 py-px leading-none">⌘</kbd>J
+          </span>
+        </button>
+      )}
 
-      {/* 面板打开时背景聚焦遮罩（极淡压暗：视觉重心让位 AI 对话；不拦截交互） */}
+      {/* 面板打开时背景聚焦遮罩（极淡压暗；不拦截交互） */}
       <div
-          aria-hidden
-          className={`pointer-events-none absolute inset-0 z-10 bg-background/35 opacity-0 transition-opacity duration-300 motion-reduce:transition-none ${agentOpen ? 'opacity-100' : ''}`}
-        />
+        aria-hidden
+        className={`pointer-events-none absolute inset-0 z-10 bg-background/35 opacity-0 transition-opacity duration-300 motion-reduce:transition-none ${agentOpen ? 'opacity-100' : ''}`}
+      />
 
-      {/* AI 助手面板（悬浮变体：与右下胶囊同一悬浮语言；加载结构后随工作台重挂载并还原历史） */}
+      {/* AI 助手面板（悬浮变体；加载结构后随工作台重挂载并还原历史） */}
       <AgentPanel float />
 
-      {/* 墨色仪表底座（待机遥测读数；r80 起语言切换唯一入口——右下角，
-          顶栏重复入口已按用户指令删除） 主题/GitHub 在顶栏（r74） */}
-      <footer className="instrument-bar relative z-30 flex h-9 shrink-0 items-center gap-3 px-4">
-        <span className="status-val font-bold tracking-wide" style={{ color: 'var(--status-hot)' }}>MolVision <span className="opacity-70">v1.6</span></span>
-        <span className="status-sep" />
-        <span className="status-val flex items-center gap-1.5">
-          <span className="led-dot led-pulse h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+      {/* 素纸页脚（待机遥测的排印化：版本 · 状态 · 快捷键 · 语言） */}
+      <footer className="relative z-30 flex h-10 shrink-0 items-center gap-3 border-t border-foreground/12 px-4 sm:px-6">
+        <span className="font-mono text-[10.5px] font-bold tracking-wide">
+          MolVision <span className="font-normal text-muted-foreground">v1.6</span>
+        </span>
+        <span className="h-3 w-px shrink-0 bg-foreground/15" aria-hidden />
+        <span className="truncate text-[11px] text-muted-foreground">
           {t({ zh: '待机 · 等待结构加载', en: 'Standby · awaiting structure' })}
         </span>
-        <span className="status-sep hidden md:block" />
-        <span className="status-val hidden md:block">{t({ zh: 'WebGL 引擎', en: 'WebGL engine' })}</span>
-        <span className="status-sep hidden lg:block" />
-        <span className="status-val hidden lg:block">© 2026</span>
-        <span className="status-sep hidden xl:block" />
-        <span className="status-val hidden truncate text-[color:var(--status-dim)] xl:block">
-          {t({ zh: '拖放 PDB / CIF / .molvision 文件即可加载 · ⌘K 命令面板 · ⌘J AI 助手', en: 'Drop PDB / CIF / .molvision files to load · ⌘K command palette · ⌘J AI assistant' })}
+        <span className="ml-auto hidden shrink-0 font-mono text-[9.5px] tracking-wide text-muted-foreground/70 md:block">
+          {t({ zh: '⌘K 命令面板 · ⌘J AI 助手', en: '⌘K palette · ⌘J AI assistant' })}
         </span>
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5 md:ml-3">
           <LanguageToggle variant="default" />
         </div>
       </footer>
 
-      {/* 拖放遮罩（松手提示；pointer-events-none 让 drop 落到根元素） */}
+      {/* 拖放遮罩（松手提示；期刊语态：虚线墨框 + 学注格式族） */}
       {dragOver && (
-        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-background/[0.92] ring-1 ring-primary/45 ring-inset">
-          <div className="flex flex-col items-center gap-2">
-            <FileUp className="h-6 w-6 text-primary" />
-            <span className="text-[13px] font-medium">{t({ zh: '松开以加载文件', en: 'Drop to load files' })}</span>
-            <span className="font-mono text-[10px] tracking-wide text-muted-foreground">
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-background/[0.94]">
+          <div className="border border-dashed border-primary/60 px-10 py-8 text-center">
+            <FileUp className="mx-auto h-6 w-6 text-primary" aria-hidden />
+            <span className="mt-3 block text-[13px] font-semibold">{t({ zh: '松开以加载文件', en: 'Drop to load files' })}</span>
+            <span className="mt-1.5 block font-mono text-[10px] tracking-wide text-muted-foreground">
               {t({ zh: '.pdb / .cif / .ccp4 密度图 / .molvision 会话', en: '.pdb / .cif / .ccp4 maps / .molvision sessions' })}
             </span>
           </div>

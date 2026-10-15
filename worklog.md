@@ -5215,3 +5215,31 @@ Stage Summary:
   6. 【低】生产部署前置清单（多轮挂起：middlewareClientMaxBodySize / Caddyfile XTransformPort / ignoreBuildErrors——沙箱 bun run build 红线不变）
 
 （r123 段 cron 补记，2026-10-14）15min webDevReview 巡检任务 #459319 创建（23:21:54，expr 0 */15 * * * ? 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 37 次实证：r85-r122 连续 36 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r123 开发纪律（基线 176a0d3 / guards 925 / 六道门禁链 / E2E 铁律含 r123 四新坑：UI teal 污染 DOMrect 裁剪+delta 口径、aria-expanded 容器限定、裸双引号分词错乱转义、菜单词 i18n 实测 / 下轮优先级六条）——配额恢复后可直接重建。巡检缺席期防线：devd（3000 采纳模式+内存双闸）+ mockd（3999 两级探活+mtime 编辑监听+单例重启）双守护 + 守护标记行 daemon.log 独立落盘 + 四级 CI 门禁（guards 925 + smoke 6 + visual-baseline 7）。
+
+---
+Task ID: r124
+Agent: main
+Task: 用户指令「重构欢迎页的 ui 界面，根据目前内容重新设计和排版，要有设计感避免ai味」——WelcomeScreen 全面视觉重设计（保留全部功能与数据流）
+
+Work Log:
+- 【读基】WelcomeScreen.tsx 937 行（r74 open-design 仪器风 + r80/r87/r89/r90 多轮补丁）+ globals.css 711 行（仪器语言资产：轨道动画/LED 脉冲/halo 呼吸/晶体按键 CTA）+ SessionResumeCard/ShareLinkLoadCard + layout.tsx 字体（Geist Sans/Mono）+ figure-templates 数据面（56 模板/6 分类/ACCENT/TPL_ICONS）——「AI 味」诊断：装饰堆叠过多（5 种并存动效）、毛玻璃卡片堆、彩色边框悬浮、遥测板/仪表底座信息噪音
+- 【设计定稿】概念驱动替代装饰驱动：「学术期刊扉页」编辑风——MolVision 灵魂是复现 CNS 论文图式 → 欢迎页本身排印成一页期刊：衬线大标题（斜体重点词+墨线绘入）· 卷期元数据行（VOL.16·WEBGL·RCSB LIVE·N STYLES——遥测板信息排印化）· §01/§02 编号章节 · 索引式示例列表（等宽编号+PDB 号目次行）· 图版 A/B hero 构图（墨夜封面+白瓷影棚真实渲染，期刊溯源图注，点击即演示）· Fig. 编号画廊卡（装裱图版框+三行图注）· 下划线过滤页签（坐发丝基线）
+- 【字体】layout.tsx 接入 Newsreader 衬线（normal+italic，--font-newsreader）+ CSS 回退链（Georgia/Songti SC/Noto Serif SC/SimSun——中文保持衬线语态）
+- 【重写】WelcomeScreen.tsx 937→860 行全新（功能全量保留：PDB 表单校验/r99 value 清空/全页拖放/会话恢复/分享链接卡/6 示例/画廊过滤/移动端 r89 分类横滚行去重/r90 返回锚点/r85 自定义模板直编/从图片创建/在库中浏览/空态/诚实脚注/AI 胶囊与面板/主题·GitHub·语言）；去噪退役：三轨道电子巡航/六角 halo 呼吸/原子核呼吸/LED 待机脉冲/晶体按键 CTA/遥测读数板/墨色仪表底座/取景框角刻度
+- 【配套】globals.css +90 行（.font-serif-editorial/.journal-kicker/.accent-ink 墨线绘入/.plate-frame 装裱图版/.journal-tab 下划线页签/.journal-row-in 入场）+ SessionResumeCard/ShareLinkLoadCard 降噪重皮（去光晕刻线/去图标盒/去投影浮起——发丝卡+纯图标）
+- 【VLM 双评审】桌面暗色 8.5/10（「极具辨识度……严谨克制的学术排印，成功避开通用 AI 落地页审美」）+ 浅色（「完美复刻 Nature/Science 顶刊排版美学」）；采纳 4 点：副标题间距 mt-4→mt-5/状态行 mt-2.5→mt-3/Load 按钮等宽大写字距/合法 4 位编号即时回显「> 待发 4HHB · RCSB 实时」终端式就绪反馈/浅色图版纸张层叠投影+深色框 26%
+- 【级联陷阱攻坚】.plate-frame 未分层 CSS 压过 Tailwind group-hover 工具类（globals.css 既有 panel-card 先例同款）→ hover 边框/投影移入 CSS 直供（button:hover:not(:disabled) .plate-frame），组件侧移除冲突类
+- 【Turbopack 增量编译丢更攻坚】最后一次 globals.css 编辑（hover/transition 规则）未被 watcher 捕获——磁盘有/服务无（curl 对比字节级实证）；追加注释 nudge 触发重编译后规则注入成功（教训入档：连续快速编辑同一 CSS 文件后必须服务端字节级复核，GET 200/compile ✓ 不代表内容最新）
+- 【E2E 全链验证】agent-browser：桌面 1440（对齐像素级实测：input/localBtn/shareCard/h1 左缘全 212px，Load 底边=输入框底边=524.3px）· PDB 输入 4HHB→按钮 enabled · 画廊页签 Membrane 56→6 卡（返回按钮 lg:hidden 正确）· 示例行 1CRN 点击→结构加载→欢迎页卸载→工作台挂载 canvas 渲染（黄金路径全通）· 窄屏 375（无横向溢出/6 分类行 56 卡去重/'all' 下网格 display:none/CTA 底部 y=427px 首屏可达——VLM「不可达」误报以实测数据纠正）· hover 行为级验证（transition border-color,box-shadow 0.2s + 边框转主青 45%）· console/errors 零污染 · lint 0
+
+Stage Summary:
+- 设计资产：期刊编辑风设计系统（Newsreader 衬线显示字族 + 卷期元数据行 + §编号章节 + 索引列表 + 图版装裱 + Fig. 图注 + 下划线页签 + 墨块 CTA + 墨线绘入动画）——概念与产品灵魂（论文图式复现）同构，非装饰驱动
+- 文件交付：WelcomeScreen.tsx 重写（860 行）· globals.css r124 段（+90 行）· layout.tsx（Newsreader）· SessionResumeCard/ShareLinkLoadCard（降噪）
+- 验证交付：VLM 双主题评审（暗 8.5/10 + 浅「顶刊美学」）+ 像素级对齐实测 + 六组交互 E2E + Turbopack 丢更坑入档
+- 风险与建议（下轮优先级）：
+  1. 【中】中文衬线回退在无 CJK 衬线字体环境（Linux headless）退化为无衬线——生产可评估 next/font 接 Noto Serif SC 子集（中文大标题更稳的排印一致性）
+  2. 【中】r124 移动端 VLM 建议未采纳项：本地文件/会话卡/分享卡三入口折叠为「更多选项」菜单（当前实测 CTA 427px 首屏可达，密度可接受；若后续用户反馈拥挤可实施）
+  3. 【低】图版 A/B 选目可做成每周轮换（56 支模板的策展位）——内容运营位预留
+  4. 【低】kicker「VOL.16」与版本 v1.6 的双关依赖版本手动同步
+
+（r124 段 cron 补记，2026-10-15）15min webDevReview 巡检任务 #460409 创建（10:53:34，expr `0 */15 * * * ?` 6 段式 15 分钟，tz Asia/Shanghai）——create 返回 success 但 get 详情 execution.info = "Disabled due to exec limits exceeded"（账户级执行配额硬限第 38 次实证：r85-r123 连续 37 次 + 本轮；r114 教训「create 成功 ≠ 任务生效——判定以 execution.info 为准」持续应验），已删除清理。任务书已内嵌 r124 交接基线（期刊扉页重设计完成态 + 下轮优先级四条 + 开发纪律三条：bun run build 红线 / Turbopack CSS 丢更服务端字节级复核 / plate-frame 未分层 CSS hover 直供）——配额恢复后可直接重建。巡检缺席期防线沿用：devd（3000 双闸守护）+ mockd（3999 探活）双守护 + 守卫测试基线。

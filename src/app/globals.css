@@ -709,3 +709,99 @@ canvas {
   .welcome-float-chip:hover, .welcome-float-chip:active { translate: none; }
   .lang-lock::after { animation: none; }
 }
+
+/* ============================================================
+   r124：欢迎页「学术期刊扉页」重设计配套
+   —— 概念：MolVision 复现 CNS 论文图式，欢迎页本身即一页期刊：
+     衬线大标题 / 小写字距元数据行 / §编号章节 / 索引式示例列表 /
+     图版（Plate A/B）hero 构图 / Fig. 编号画廊。
+     去噪：轨道电子 · LED 脉冲 · halo 呼吸 · 晶体按键 · 遥测板全部退役。
+   ============================================================ */
+
+/* —— 编辑衬线字族（Newsreader 优先；中文回退宋体系保持衬线语态） —— */
+.font-serif-editorial {
+  font-family: var(--font-newsreader), Georgia, 'Times New Roman', 'Songti SC',
+    'Noto Serif SC', 'Noto Serif CJK SC', SimSun, serif;
+  font-feature-settings: 'liga' 1, 'kern' 1;
+}
+
+/* —— 期刊元数据行（小写字距等宽——扉页卷期行惯例） —— */
+.journal-kicker {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+.journal-kicker .jk-sep { opacity: 0.4; padding: 0 0.55em; }
+
+/* —— 标题斜体重点词：墨线下划线绘入（排印师手绘一划；一次性） —— */
+@keyframes ink-draw {
+  from { background-size: 0% 1px; }
+  to   { background-size: 100% 1px; }
+}
+.accent-ink {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 96%;
+  background-size: 100% 1px;
+  animation: ink-draw 640ms 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  padding-bottom: 0.04em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .accent-ink { animation: none; background-size: 100% 1px; }
+}
+
+/* —— 期刊图版（Plate）：硬角 + 发丝框 + 印刷留白边（像装裱的印版）；
+      浅色下加一档纸张层叠投影（r124 VLM 浅色评审：米白图版需与纸底分离） —— */
+.plate-frame {
+  border: 1px solid color-mix(in oklab, var(--foreground) 16%, transparent);
+  background: var(--card);
+  padding: 6px;
+  box-shadow: 0 1px 3px oklch(0.25 0.01 80 / 0.07), 0 6px 18px -8px oklch(0.25 0.01 80 / 0.1);
+}
+.dark .plate-frame {
+  border-color: color-mix(in oklab, var(--foreground) 26%, transparent);
+  box-shadow: none;
+}
+.plate-frame img, .plate-frame .plate-fallback {
+  display: block;
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+/* 图版悬停态（承载 button 内）：未分层 CSS 压过 Tailwind 工具类——
+   hover 边框/投影直接定义于此，组件侧不再写冲突的 group-hover 类 */
+button:hover:not(:disabled) .plate-frame {
+  border-color: color-mix(in oklab, var(--primary) 45%, transparent);
+  box-shadow: 0 2px 8px oklch(0.25 0.01 80 / 0.1), 0 10px 26px -10px oklch(0.25 0.01 80 / 0.14);
+}
+.dark button:hover:not(:disabled) .plate-frame {
+  box-shadow: 0 1px 6px oklch(0 0 0 / 0.5);
+}
+.plate-frame, button .plate-frame {
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+/* —— 画廊下划线过滤页签（坐在发丝基线上；激活页签的墨线覆盖基线） —— */
+.journal-tab {
+  position: relative;
+  flex-shrink: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.journal-tab[data-active='true'] {
+  border-bottom-color: var(--primary);
+}
+
+/* —— 索引行 / 图版卡入场（纯 opacity——transform 终态交给 hover 过渡） —— */
+@keyframes journal-row-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.journal-row-in { animation: journal-row-in 420ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .journal-row-in { animation: none; }
+}
+
+/* r124a: watcher nudge */
